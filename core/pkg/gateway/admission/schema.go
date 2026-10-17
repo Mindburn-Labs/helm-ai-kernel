@@ -70,6 +70,9 @@ var migrations = []migration{
 	{9, "durable provision limit membership", func() (string, error) {
 		return withRowSecurity("", "schema/009_provision_limits.sql", []string{"authority_provision_limits"})
 	}},
+	{10, "unique provider evidence per attempt", func() (string, error) {
+		return withRowSecurity("", "schema/010_observation_evidence.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

@@ -167,6 +167,7 @@ type Service struct {
 	db            *sql.DB
 	cfg           Config
 	adapters      map[string]adapters.Adapter
+	fixedQuotes   map[string][]adapters.Amount
 	resultSchemas map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
@@ -193,6 +194,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 		cfg.MaxTransaction = MaxTransaction
 	}
 	byType := map[string]adapters.Adapter{}
+	fixedQuotes := map[string][]adapters.Amount{}
 	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
@@ -200,6 +202,14 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			seenUnits := map[string]bool{}
+			for _, q := range d.Quote {
+				if !unitPattern.MatchString(q.Unit) || q.Amount <= 0 || seenUnits[q.Unit] {
+					return nil, fmt.Errorf("%s has an invalid fixed quote for %q", d.EffectType, q.Unit)
+				}
+				seenUnits[q.Unit] = true
+			}
+			fixedQuotes[d.EffectType] = append([]adapters.Amount(nil), d.Quote...)
 			resultSchema, err := adapters.CompileResultSchema(d)
 			if err != nil {
 				return nil, fmt.Errorf("%s result contract: %w", d.EffectType, err)
@@ -210,7 +220,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType, resultSchemas: resultSchemas}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, fixedQuotes: fixedQuotes, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
@@ -260,6 +270,9 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	if err != nil {
 		return Attempt{}, false, err
 	}
+	if err := s.requireFixedQuote(in); err != nil {
+		return Attempt{}, false, err
+	}
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
@@ -294,6 +307,30 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
+}
+
+// requireFixedQuote prevents an API caller from omitting or lowering the
+// adapter-owned charge. Additional units may be required by a mandate's sum
+// limits; their validation remains in the admission transaction.
+func (s *Service) requireFixedQuote(in ProposeInput) error {
+	for _, fixed := range s.fixedQuotes[in.EffectType] {
+		found := false
+		for _, quoted := range in.Quote {
+			if quoted.Unit != fixed.Unit {
+				continue
+			}
+			found = true
+			if quoted.Amount != fixed.Amount {
+				return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+					"quote for %s must be the adapter's fixed %d %s", in.EffectType, fixed.Amount, fixed.Unit)
+			}
+		}
+		if !found {
+			return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+				"quote for %s must include the adapter's fixed %d %s", in.EffectType, fixed.Amount, fixed.Unit)
+		}
+	}
+	return nil
 }
 
 // proposeTx is Propose's transaction body, in tx: the attempt ID, and whether

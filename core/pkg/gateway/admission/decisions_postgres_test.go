@@ -200,7 +200,7 @@ func TestPostgresStepUpAndExpiryFailClosed(t *testing.T) {
 	f.rootMandate(tenantA, "human-c", terms)
 	requester := human
 	requester.PrincipalID = "human-c"
-	merge := f.propose(requester, proposal("merge-1", "github.pull_request.merge", repo, []byte(`{"merge_method":"squash"}`)))
+	merge := f.propose(requester, proposal("merge-1", "github.pull_request.merge", repo, mergeEffectArguments()))
 	wantState(t, "high risk", merge, "ESCALATED", contracts.ReasonApprovalRequired)
 	_, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(merge, ""))
 	wantRefusal(t, "a high-risk approval without step-up", err, CodePermissionDenied, contracts.ReasonStepUpRequired)

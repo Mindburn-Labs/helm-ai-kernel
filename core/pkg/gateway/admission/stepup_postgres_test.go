@@ -57,9 +57,50 @@ func (f *fixture) stepUpRequester() Caller {
 // its risk class.
 func (f *fixture) escalatedEffect(requester Caller, key, effectType string) Attempt {
 	f.t.Helper()
-	a := f.propose(requester, proposal(key, effectType, repo, []byte(`{"merge_method":"squash"}`)))
+	args := []byte(`{"merge_method":"squash"}`)
+	if effectType == highType {
+		args = mergeEffectArguments()
+	}
+	a := f.propose(requester, proposal(key, effectType, repo, args))
 	wantState(f.t, key, a, "ESCALATED", contracts.ReasonApprovalRequired)
 	return a
+}
+
+func mergeEffectArguments() []byte {
+	return []byte(`{"schema":"helm.github.pull_request.merge.v1","pull_number":17,"head_sha":"1111111111111111111111111111111111111111","base":"main","merge_method":"squash"}`)
+}
+
+func TestPostgresPullRequestMergeRiskFloorAndBoundApproval(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	// Tenant configuration may not downgrade the immutable merge risk floor.
+	must(t, f.rows.CreateEffectType(ctx, tenantA, highType, authorityrows.RiskLow))
+	f.rootMandate(tenantA, "human-c", authorityrows.Terms{
+		EffectTypes: []string{highType}, ValidFrom: f.now.Add(-time.Hour), ValidUntil: f.now.Add(time.Hour),
+	})
+	requester := human
+	requester.PrincipalID = "human-c"
+	in := proposal("merge-risk-floor", highType, repo, mergeEffectArguments())
+	a := f.propose(requester, in)
+	wantState(t, "catalog low remains approval-required", a, "ESCALATED", contracts.ReasonApprovalRequired)
+	if a.Permit != nil {
+		t.Fatal("merge got a permit before approval")
+	}
+	_, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(a, ""))
+	wantRefusal(t, "catalog low still requires step-up", err, CodePermissionDenied, contracts.ReasonStepUpRequired)
+	f.wantStillEscalated("missing proof", a)
+	proof := stepUpProof()
+	approved, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), withProof(approval(a, "approved exact head"), proof))
+	must(t, err)
+	wantState(t, "bound high-risk approval", approved, "ADMITTED", "")
+	if approved.Permit == nil {
+		t.Fatal("valid bound approval did not issue a permit")
+	}
+	f.wantProofRecord(a.ID, proof)
+	replayed := f.propose(requester, in)
+	if replayed.ID != a.ID || replayed.Permit == nil || replayed.Permit.ID != approved.Permit.ID {
+		t.Fatal("retry allocated a new attempt or permit")
+	}
 }
 
 // replayRows counts the recorded uses of the given jtis.

@@ -52,7 +52,15 @@ func TestEffectToolsAreTheGrantableEffectsThatCarryASchema(t *testing.T) {
 	for name := range tools {
 		names = append(names, name)
 	}
-	want := []string{"github_branch_create_from_changes", "github_pull_request_create_draft", "github_repository_get", "helm_work_report"}
+	want := []string{
+		"github_branch_create_from_changes",
+		"github_git_push",
+		"github_pull_request_create",
+		"github_pull_request_create_draft",
+		"github_pull_request_merge",
+		"github_repository_get",
+		"helm_work_report",
+	}
 	if len(names) != len(want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}

@@ -12,7 +12,10 @@ import (
 // repository root.
 var publishedSchemas = map[string]string{
 	GitHubBranchCreateFromChanges: "protocols/json-schemas/effects/github/branch_create_from_changes.v1.json",
+	GitHubGitPush:                 "protocols/json-schemas/effects/github/git_push.v1.json",
 	GitHubPullRequestCreateDraft:  "protocols/json-schemas/effects/github/pull_request_create_draft.v1.json",
+	GitHubPullRequestCreate:       "protocols/json-schemas/effects/github/pull_request_create.v1.json",
+	GitHubPullRequestMerge:        "protocols/json-schemas/effects/github/pull_request_merge.v1.json",
 	GitHubRepositoryGet:           "protocols/json-schemas/effects/github/repository_get.v1.json",
 	AuthorityProvision:            "protocols/json-schemas/effects/authority/provision.v1.json",
 	AuthorityNarrow:               "protocols/json-schemas/effects/authority/narrow.v1.json",

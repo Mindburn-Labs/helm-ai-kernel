@@ -30,12 +30,15 @@ import (
 )
 
 // AdapterVersion is the version qualification records name.
-const AdapterVersion = "2.0.0"
+const AdapterVersion = "2.2.0"
 
 // The effect types this adapter performs.
 const (
 	EffectBranchCreateFromChanges = "github.branch.create_from_changes"
+	EffectGitPush                 = "github.git.push"
 	EffectPullRequestCreateDraft  = "github.pull_request.create_draft"
+	EffectPullRequestCreate       = "github.pull_request.create"
+	EffectPullRequestMerge        = "github.pull_request.merge"
 	EffectRepositoryGet           = "github.repository.get"
 )
 
@@ -112,6 +115,17 @@ var declarations = []adapters.Declaration{
 		Description:    "Creates a branch from a base commit with one commit that adds or changes files.",
 		ArgumentSchema: schemaOf(EffectBranchCreateFromChanges),
 		Grantable:      true,
+		Quote:          []adapters.Amount{{Unit: "count", Amount: 1}},
+	},
+	{
+		EffectType: EffectGitPush,
+		RiskClass:  adapters.RiskMedium, Idempotent: adapters.IdempotentConditional,
+		Observable: adapters.ObservableYes, Reversible: adapters.ReversibleYes,
+		Mediation: adapters.MediationEnforced, Grantable: true,
+		Quote:      []adapters.Amount{{Unit: "count", Amount: 1}},
+		TargetForm: targetForm, ArgumentSchema: schemaOf(EffectGitPush),
+		Description: "Advances an existing feature branch by one non-force commit at its exact expected head SHA.",
+		Notes:       "Dispatch refuses the default branch and uses updateRefs beforeOid plus force=false to reject stale heads. Readback checks the new parent, paths and blobs.",
 	},
 	{
 		EffectType: EffectPullRequestCreateDraft,
@@ -129,6 +143,27 @@ var declarations = []adapters.Declaration{
 		Description:    "Opens a draft pull request from an existing branch.",
 		ArgumentSchema: schemaOf(EffectPullRequestCreateDraft),
 		Grantable:      true,
+		Quote:          []adapters.Amount{{Unit: "count", Amount: 1}},
+	},
+	{
+		EffectType: EffectPullRequestCreate,
+		RiskClass:  adapters.RiskMedium, Idempotent: adapters.IdempotentConditional,
+		Observable: adapters.ObservableYes, Reversible: adapters.ReversibleYes,
+		Mediation: adapters.MediationEnforced, Grantable: true,
+		Quote:      []adapters.Amount{{Unit: "count", Amount: 1}},
+		TargetForm: targetForm, ArgumentSchema: schemaOf(EffectPullRequestCreate),
+		Description: "Opens a ready pull request from a successfully observed governed branch.",
+		Notes:       "Exact head SHA and branch attempt; one open pull request per head/base. Observe verifies a non-draft result.",
+	},
+	{
+		EffectType: EffectPullRequestMerge,
+		RiskClass:  adapters.RiskHigh, Idempotent: adapters.IdempotentConditional,
+		Observable: adapters.ObservableYes, Reversible: adapters.ReversibleNo,
+		Mediation: adapters.MediationEnforced, Grantable: true,
+		Quote:      []adapters.Amount{{Unit: "count", Amount: 1}},
+		TargetForm: targetForm, ArgumentSchema: schemaOf(EffectPullRequestMerge),
+		Description: "Merges one owner-approved pull request at its exact approved head SHA.",
+		Notes:       "Always high risk with WebAuthn step-up. Uses the repository merge queue/rules without bypass; queued is UNKNOWN until authoritative merged readback.",
 	},
 	{
 		EffectType:     EffectRepositoryGet,
@@ -181,13 +216,28 @@ func (a *Adapter) Prepare(ctx context.Context, creds adapters.TokenSource, effec
 			return nil, err
 		}
 		check = func(ctx context.Context, c *client, info repoInfo) error { return c.prepareBranch(ctx, info, args) }
-	case EffectPullRequestCreateDraft:
-		args, err := parsePullRequestArgs(effect.Arguments)
+	case EffectGitPush:
+		args, err := parseBranchArgsFor(effect.EffectType, effect.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		check = func(ctx context.Context, c *client, info repoInfo) error { return c.preparePush(ctx, info, args) }
+	case EffectPullRequestCreateDraft, EffectPullRequestCreate:
+		args, err := parsePullRequestArgsFor(effect.EffectType, effect.Arguments)
 		if err != nil {
 			return nil, err
 		}
 		check = func(ctx context.Context, c *client, _ repoInfo) error {
 			return c.checkHeadAt(ctx, args.Head, args.HeadSHA)
+		}
+	case EffectPullRequestMerge:
+		args, err := parseMergeArgs(effect.Target, effect.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		check = func(ctx context.Context, c *client, _ repoInfo) error {
+			_, err := c.checkMerge(ctx, args)
+			return err
 		}
 	default:
 		if _, err := parseRepositoryArgs(effect.Arguments); err != nil {
@@ -209,7 +259,7 @@ func (a *Adapter) Prepare(ctx context.Context, creds adapters.TokenSource, effec
 	return &adapters.Preparation{
 		Declaration: decl,
 		Target:      effect.Target,
-		Quote:       []adapters.Amount{{Unit: "count", Amount: 1}},
+		Quote:       append([]adapters.Amount(nil), decl.Quote...),
 		Resolved:    map[string]string{"default_branch": info.DefaultBranch},
 	}, nil
 }
@@ -234,8 +284,18 @@ func (a *Adapter) Dispatch(ctx context.Context, creds adapters.TokenSource, effe
 			return notSent(err)
 		}
 		return c.dispatchBranch(ctx, args)
-	case EffectPullRequestCreateDraft:
-		args, err := parsePullRequestArgs(effect.Arguments)
+	case EffectGitPush:
+		args, err := parseBranchArgsFor(effect.EffectType, effect.Arguments)
+		if err != nil {
+			return notSent(err)
+		}
+		c, err := a.newClient(ctx, creds, repo)
+		if err != nil {
+			return notSent(err)
+		}
+		return c.dispatchPush(ctx, args)
+	case EffectPullRequestCreateDraft, EffectPullRequestCreate:
+		args, err := parsePullRequestArgsFor(effect.EffectType, effect.Arguments)
 		if err != nil {
 			return notSent(err)
 		}
@@ -244,6 +304,16 @@ func (a *Adapter) Dispatch(ctx context.Context, creds adapters.TokenSource, effe
 			return notSent(err)
 		}
 		return c.dispatchPullRequest(ctx, args)
+	case EffectPullRequestMerge:
+		args, err := parseMergeArgs(effect.Target, effect.Arguments)
+		if err != nil {
+			return notSent(err)
+		}
+		c, err := a.newClient(ctx, creds, repo)
+		if err != nil {
+			return notSent(err)
+		}
+		return c.dispatchMerge(ctx, args)
 	case EffectRepositoryGet:
 		args, err := parseRepositoryArgs(effect.Arguments)
 		if err != nil {
@@ -276,8 +346,18 @@ func (a *Adapter) Observe(ctx context.Context, creds adapters.TokenSource, effec
 			return unknown(err)
 		}
 		return c.observeBranch(ctx, args)
-	case EffectPullRequestCreateDraft:
-		args, err := parsePullRequestArgs(effect.Arguments)
+	case EffectGitPush:
+		args, err := parseBranchArgsFor(effect.EffectType, effect.Arguments)
+		if err != nil {
+			return unknown(err)
+		}
+		c, err := a.newClient(ctx, creds, repo)
+		if err != nil {
+			return unknown(err)
+		}
+		return c.observePush(ctx, args)
+	case EffectPullRequestCreateDraft, EffectPullRequestCreate:
+		args, err := parsePullRequestArgsFor(effect.EffectType, effect.Arguments)
 		if err != nil {
 			return unknown(err)
 		}
@@ -286,6 +366,16 @@ func (a *Adapter) Observe(ctx context.Context, creds adapters.TokenSource, effec
 			return unknown(err)
 		}
 		return c.observePullRequest(ctx, args)
+	case EffectPullRequestMerge:
+		args, err := parseMergeArgs(effect.Target, effect.Arguments)
+		if err != nil {
+			return unknown(err)
+		}
+		c, err := a.newClient(ctx, creds, repo)
+		if err != nil {
+			return unknown(err)
+		}
+		return c.observeMerge(ctx, args)
 	case EffectRepositoryGet:
 		args, err := parseRepositoryArgs(effect.Arguments)
 		if err != nil {

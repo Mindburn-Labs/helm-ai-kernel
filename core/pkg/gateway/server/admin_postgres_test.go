@@ -447,7 +447,8 @@ func TestPostgresListEffectTypesOnTheWire(t *testing.T) {
 		names = append(names, e.GetEffectType())
 		byName[e.GetEffectType()] = e
 	}
-	want := []string{"github.branch.create_from_changes", "github.pull_request.create_draft", "github.repository.get",
+	want := []string{"github.branch.create_from_changes", "github.git.push", "github.pull_request.create",
+		"github.pull_request.create_draft", "github.pull_request.merge", "github.repository.get",
 		effectargs.AuthorityNarrow, effectargs.AuthorityProvision}
 	if fmt.Sprint(names) != fmt.Sprint(want) {
 		t.Fatalf("catalog = %v, want %v", names, want)

@@ -75,7 +75,7 @@ class GitHubEffectArgumentFixturesTest(unittest.TestCase):
         import jsonschema
 
         schemas = sorted(GITHUB_EFFECTS.glob("*.v1.json"))
-        self.assertEqual(len(schemas), 3, "expected the repository, branch and draft pull request schemas")
+        self.assertEqual(len(schemas), 6, "expected all six governed GitHub effect schemas")
         for schema_path in schemas:
             stem = schema_path.name.removesuffix(".json")
             schema = json.loads(schema_path.read_text())

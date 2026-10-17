@@ -80,6 +80,9 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	if strings.Contains(path, "/pulls/") {
+		req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	}
 	req.Header.Set("User-Agent", "helm-gateway-github-adapter/"+AdapterVersion)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -99,10 +102,23 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 	if int64(len(raw)) > limit {
 		return tooLarge(method, path, resp.StatusCode, limit)
 	}
+	// Async merge409 returns the existing pending request, not a definite
+	// refusal. Decode only this documented endpoint's result, then validate
+	// the pending SHA/options in dispatchMerge before treating it as sent.
+	if _, ok := out.(*mergeReply); ok && resp.StatusCode == http.StatusConflict && method == http.MethodPut && strings.HasSuffix(path, "/merge-async") {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return &providerError{Reason: contracts.ReasonConnectorContractDrift, Status: resp.StatusCode, Detail: "invalid async merge conflict response"}
+		}
+		out.(*mergeReply).HTTPStatus = resp.StatusCode
+		return nil
+	}
 	switch status := resp.StatusCode; {
 	case status >= 200 && status < 300:
 		if err := json.Unmarshal(raw, out); err != nil {
 			return &providerError{Reason: contracts.ReasonConnectorContractDrift, Status: status, Detail: fmt.Sprintf("%s %s: the answer is not the expected JSON", method, path)}
+		}
+		if reply, ok := out.(*mergeReply); ok {
+			reply.HTTPStatus = status
 		}
 		if method == http.MethodGet {
 			c.evidence = append(c.evidence, raw)
@@ -151,6 +167,7 @@ func isNotFound(err error) bool {
 // The GitHub objects the adapter reads. Only the fields it checks.
 
 type repoInfo struct {
+	NodeID        string `json:"node_id"`
 	FullName      string `json:"full_name"`
 	DefaultBranch string `json:"default_branch"`
 }
@@ -164,8 +181,9 @@ type gitRef struct {
 }
 
 type gitCommit struct {
-	SHA  string `json:"sha"`
-	Tree struct {
+	SHA     string `json:"sha"`
+	Message string `json:"message"`
+	Tree    struct {
 		SHA string `json:"sha"`
 	} `json:"tree"`
 	Parents []struct {
@@ -186,13 +204,16 @@ type comparison struct {
 }
 
 type pullRequest struct {
-	HTMLURL string `json:"html_url"`
-	Number  int64  `json:"number"`
-	NodeID  string `json:"node_id"`
-	State   string `json:"state"`
-	Title   string `json:"title"`
-	Draft   bool   `json:"draft"`
-	Head    struct {
+	HTMLURL        string          `json:"html_url"`
+	Number         int64           `json:"number"`
+	NodeID         string          `json:"node_id"`
+	State          string          `json:"state"`
+	Title          string          `json:"title"`
+	Draft          bool            `json:"draft"`
+	Merged         bool            `json:"merged"`
+	MergeCommitSHA string          `json:"merge_commit_sha"`
+	Stack          json.RawMessage `json:"stack"`
+	Head           struct {
 		Ref  string `json:"ref"`
 		SHA  string `json:"sha"`
 		Repo *struct {
@@ -200,7 +221,10 @@ type pullRequest struct {
 		} `json:"repo"`
 	} `json:"head"`
 	Base struct {
-		Ref string `json:"ref"`
+		Ref  string `json:"ref"`
+		Repo *struct {
+			FullName string `json:"full_name"`
+		} `json:"repo"`
 	} `json:"base"`
 }
 

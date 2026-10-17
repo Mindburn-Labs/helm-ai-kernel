@@ -167,6 +167,7 @@ func isNotFound(err error) bool {
 // The GitHub objects the adapter reads. Only the fields it checks.
 
 type repoInfo struct {
+	NodeID        string `json:"node_id"`
 	FullName      string `json:"full_name"`
 	DefaultBranch string `json:"default_branch"`
 }

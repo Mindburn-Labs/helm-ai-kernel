@@ -323,9 +323,10 @@ the same commit reconciles to SUCCEEDED and a different one is
 
 **Push.** `github.git.push` advances an existing non-default branch. Its
 `base_sha` must equal that branch's current head at Prepare and Dispatch. The
-adapter creates a commit with `base_sha` as its sole parent, then updates the
-ref with `force=false`. A concurrent head move cannot be overwritten because
-that commit is not a fast-forward from the moved head. The `base` branch is a
+adapter creates a commit with `base_sha` as its sole parent, then uses the
+atomic GitHub `updateRefs` mutation with `beforeOid=base_sha` and `force=false`.
+The expected OID check refuses concurrent head changes, including rewinds.
+The `base` branch is a
 distinct existing branch in the same repository. Readback uses the same parent,
 proposed-path and blob checks as branch creation. After a lost reply, replay
 first checks whether that exact change is already present and sends no second

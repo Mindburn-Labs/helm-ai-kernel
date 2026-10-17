@@ -27,7 +27,7 @@ func (c *client) checkHeadAt(ctx context.Context, head, sha string) error {
 }
 
 // dispatchPullRequest re-reads the head, so a push after approval is caught,
-// and then opens the draft pull request. An open pull request for the same
+// and then opens the requested draft or ready pull request. An open pull request for the same
 // head and base is not opened again: the dispatch is SENT without a write,
 // and Observe decides whether it is this one.
 func (c *client) dispatchPullRequest(ctx context.Context, args pullRequestArgs) adapters.DispatchResult {
@@ -54,7 +54,7 @@ func (c *client) dispatchPullRequest(ctx context.Context, args pullRequestArgs) 
 }
 
 // observePullRequest finds the pull request by head and base, preferring an
-// open one. SUCCEEDED needs a draft from this repository, at head_sha, into
+// open one. SUCCEEDED needs the requested draft state from this repository, at head_sha, into
 // base, with the proposed title; its state is recorded, not judged, because
 // closing it later does not undo the effect. Anything else found is READBACK_MISMATCH
 // with the URL recorded; none found is READBACK_MISMATCH with an empty

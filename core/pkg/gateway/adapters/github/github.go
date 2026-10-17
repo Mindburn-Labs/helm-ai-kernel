@@ -125,7 +125,7 @@ var declarations = []adapters.Declaration{
 		Quote:      []adapters.Amount{{Unit: "count", Amount: 1}},
 		TargetForm: targetForm, ArgumentSchema: schemaOf(EffectGitPush),
 		Description: "Advances an existing feature branch by one non-force commit at its exact expected head SHA.",
-		Notes:       "Dispatch refuses the default branch and stale head, then uses force=false. Readback checks the new parent, paths and blobs.",
+		Notes:       "Dispatch refuses the default branch and uses updateRefs beforeOid plus force=false to reject stale heads. Readback checks the new parent, paths and blobs.",
 	},
 	{
 		EffectType: EffectPullRequestCreateDraft,

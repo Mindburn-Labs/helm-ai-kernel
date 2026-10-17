@@ -658,7 +658,7 @@ func TestQualificationFake(t *testing.T) {
 		baseURL: fake.URL(), owner: fake.Owner(), repo: fake.Repository(), token: fake.Token(),
 		baseBranch: "main", baseSHA: fake.Head("main"), headPrefix: "helm/qual/",
 		limitations: []string{
-			"The fake models the REST endpoints the adapter calls; it is not GitHub. Only a live run qualifies the adapter against the provider.",
+			"The fake models the API endpoints the adapter calls; it is not GitHub. Only a live run qualifies the adapter against the provider.",
 		},
 		markReady: func(t *testing.T, pr *adapters.GitHubPullRequestResult) { fake.MarkReady(pr.Number) },
 		markDraft: func(t *testing.T, pr *adapters.GitHubPullRequestResult) {

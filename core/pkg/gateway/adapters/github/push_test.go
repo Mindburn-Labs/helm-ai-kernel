@@ -94,7 +94,7 @@ func TestGitPushPermitMismatchAndLostAnswer(t *testing.T) {
 		t.Fatal("permit mismatch made a provider call")
 	}
 	lossy, _ := env.adapter(func(rt http.RoundTripper) http.RoundTripper {
-		return dropAnswer{base: rt, method: http.MethodPatch, suffix: "/git/refs/heads/" + "helm/push/work-1"}
+		return dropAnswer{base: rt, method: http.MethodPost, suffix: "/graphql"}
 	})
 	wantDispatch(t, lossy.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchIndefinite, contracts.ReasonProviderError)
 	wantObserve(t, a.Observe(context.Background(), env.creds(), effect), adapters.OutcomeSucceeded, "")
@@ -104,15 +104,20 @@ func TestGitPushPermitMismatchAndLostAnswer(t *testing.T) {
 	}
 }
 
-type moveBeforePatch struct {
-	base http.RoundTripper
-	fake *githubtest.GitHub
-	head string
+type moveBeforeMutation struct {
+	base   http.RoundTripper
+	fake   *githubtest.GitHub
+	head   string
+	rewind bool
 }
 
-func (m moveBeforePatch) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.Method == http.MethodPatch {
-		m.fake.AdvanceBranch(m.head)
+func (m moveBeforeMutation) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method == http.MethodPost && r.URL.Path == "/graphql" {
+		if m.rewind {
+			m.fake.RewindBranch(m.head)
+		} else {
+			m.fake.AdvanceBranch(m.head)
+		}
 	}
 	return m.base.RoundTrip(r)
 }
@@ -121,7 +126,7 @@ func TestGitPushConcurrentMoveCannotForceOverwrite(t *testing.T) {
 	fake, env, effect := pushFixture(t)
 	args, _ := parseBranchArgsFor(EffectGitPush, effect.Arguments)
 	a, _ := env.adapter(func(rt http.RoundTripper) http.RoundTripper {
-		return moveBeforePatch{base: rt, fake: fake, head: args.Head}
+		return moveBeforeMutation{base: rt, fake: fake, head: args.Head}
 	})
 	got := a.Dispatch(context.Background(), env.creds(), effect, permit(effect))
 	if got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonPreconditionFailed {
@@ -131,6 +136,21 @@ func TestGitPushConcurrentMoveCannotForceOverwrite(t *testing.T) {
 	wantObserve(t, readback.Observe(context.Background(), env.creds(), effect), adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
 	if fake.PushRequests() != 1 || fake.Head(args.Head) == args.BaseSHA {
 		t.Fatalf("concurrent update was not tested: writes=%d head=%s", fake.PushRequests(), fake.Head(args.Head))
+	}
+}
+
+func TestGitPushConcurrentRewindRejectsExactHeadMismatch(t *testing.T) {
+	fake, env, effect := pushFixture(t)
+	args, _ := parseBranchArgsFor(EffectGitPush, effect.Arguments)
+	a, _ := env.adapter(func(rt http.RoundTripper) http.RoundTripper {
+		return moveBeforeMutation{base: rt, fake: fake, head: args.Head, rewind: true}
+	})
+	got := a.Dispatch(context.Background(), env.creds(), effect, permit(effect))
+	if got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonPreconditionFailed {
+		t.Fatalf("concurrent rewind did not fail the beforeOid check: %+v", got)
+	}
+	if fake.PushRequests() != 1 || fake.Head(args.Head) != env.baseSHA {
+		t.Fatalf("rewound branch was overwritten: writes=%d head=%s", fake.PushRequests(), fake.Head(args.Head))
 	}
 }
 

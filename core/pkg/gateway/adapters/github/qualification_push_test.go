@@ -67,9 +67,8 @@ func qualifyPushDuplicate(t *testing.T, env *qualEnv) {
 
 func qualifyPushLost(t *testing.T, env *qualEnv) {
 	effect := pushQualificationEffect(t, env, "lost")
-	args, _ := parseBranchArgsFor(EffectGitPush, effect.Arguments)
 	lossy, _ := env.adapter(func(rt http.RoundTripper) http.RoundTripper {
-		return dropAnswer{base: rt, method: http.MethodPatch, suffix: "/git/refs/heads/" + args.Head}
+		return dropAnswer{base: rt, method: http.MethodPost, suffix: "/graphql"}
 	})
 	wantDispatch(t, lossy.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchIndefinite, contracts.ReasonProviderError)
 	a, _ := env.adapter(nil)

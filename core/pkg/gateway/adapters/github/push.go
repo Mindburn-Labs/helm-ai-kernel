@@ -41,8 +41,8 @@ func (c *client) checkPushScope(ctx context.Context, info repoInfo, args branchA
 }
 
 // dispatchPush creates unreachable Git objects, then advances the existing ref
-// only by a fast-forward PATCH with force=false. The new commit's only parent
-// is base_sha, so a concurrent head move cannot be overwritten by that PATCH.
+// by an atomic GraphQL updateRefs mutation. beforeOid requires the ref to be
+// exactly base_sha at the write, while force=false also requires fast-forward.
 func (c *client) dispatchPush(ctx context.Context, args branchArgs) adapters.DispatchResult {
 	info, err := c.getRepo(ctx)
 	if err != nil {
@@ -50,6 +50,9 @@ func (c *client) dispatchPush(ctx context.Context, args branchArgs) adapters.Dis
 	}
 	if err := c.checkPushScope(ctx, info, args); err != nil {
 		return notSent(err)
+	}
+	if info.NodeID == "" {
+		return notSent(adapters.Refuse(contracts.ReasonConnectorContractDrift, "repository has no node_id for conditional ref update"))
 	}
 	head, err := c.getBranchHead(ctx, args.Head)
 	if isNotFound(err) {
@@ -74,31 +77,50 @@ func (c *client) dispatchPush(ctx context.Context, args branchArgs) adapters.Dis
 	if err != nil {
 		return notSent(err)
 	}
-	// GitHub checks fast-forward at the mutation, closing the read/write race.
-	var updated gitRef
-	err = c.call(ctx, http.MethodPatch, c.repoPath("/git/refs/heads/"+args.Head), nil,
-		map[string]any{"sha": commit.SHA, "force": false}, &updated, c.a.maxResponseBytes)
+	// GitHub checks both the expected old OID and fast-forward at the mutation.
+	var updated struct {
+		Data struct {
+			UpdateRefs *struct {
+				ClientMutationID string `json:"clientMutationId"`
+			} `json:"updateRefs"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	err = c.call(ctx, http.MethodPost, "/graphql", nil, map[string]any{
+		"query": `mutation($input: UpdateRefsInput!) { updateRefs(input: $input) { clientMutationId } }`,
+		"variables": map[string]any{"input": map[string]any{
+			"clientMutationId": commit.SHA,
+			"repositoryId":     info.NodeID,
+			"refUpdates": []map[string]any{{
+				"name":      "refs/heads/" + args.Head,
+				"beforeOid": args.BaseSHA,
+				"afterOid":  commit.SHA,
+				"force":     false,
+			}},
+		}},
+	}, &updated, c.a.maxResponseBytes)
 	if err != nil {
-		pe := asProviderError(err)
-		if pe.Refused && (pe.Status == http.StatusConflict || pe.Status == http.StatusUnprocessableEntity) {
-			// A fast-forward refusal is definite, but a concurrent writer may
-			// have applied these exact bytes. Read the ref before classifying it.
-			current, readErr := c.getBranchHead(ctx, args.Head)
-			if readErr != nil {
-				return indefinite(readErr)
-			}
-			if current == commit.SHA {
-				return adapters.DispatchResult{Status: adapters.DispatchSent, Detail: "approved commit already occupies the ref"}
-			}
-			if current != args.BaseSHA {
-				return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "refs/heads/%s moved during the conditional push", args.Head))
-			}
-			return notSent(pe)
-		}
 		return writeResult(err)
 	}
-	if updated.Ref != "refs/heads/"+args.Head || updated.Object.SHA != commit.SHA || updated.Object.Type != "commit" {
-		return indefinite(adapters.Refuse(contracts.ReasonConnectorContractDrift, "push acknowledgement did not name the approved ref and commit"))
+	if len(updated.Errors) != 0 {
+		// updateRefs is atomic. A rejected beforeOid leaves this mutation
+		// unapplied, but the ref can concurrently be moved by another writer.
+		current, readErr := c.getBranchHead(ctx, args.Head)
+		if readErr != nil {
+			return indefinite(readErr)
+		}
+		if current == commit.SHA {
+			return adapters.DispatchResult{Status: adapters.DispatchSent, Detail: "approved commit already occupies the ref"}
+		}
+		if current != args.BaseSHA {
+			return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "refs/heads/%s moved during the conditional push", args.Head))
+		}
+		return notSent(adapters.Refuse(contracts.ReasonProviderError, "GitHub rejected the conditional ref update: %s", updated.Errors[0].Message))
+	}
+	if updated.Data.UpdateRefs == nil || updated.Data.UpdateRefs.ClientMutationID != commit.SHA {
+		return indefinite(adapters.Refuse(contracts.ReasonConnectorContractDrift, "push acknowledgement did not echo the mutation identity"))
 	}
 	return adapters.DispatchResult{Status: adapters.DispatchSent}
 }

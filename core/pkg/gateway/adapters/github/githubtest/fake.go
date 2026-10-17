@@ -1,4 +1,4 @@
-// Package githubtest provides the single in-process GitHub REST double for
+// Package githubtest provides the single in-process GitHub API double for
 // adapter and gateway conformance. It has no external credentials or I/O.
 package githubtest
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-// GitHub is an httptest GitHub that models the REST endpoints the adapter
+// GitHub is an httptest GitHub that models the endpoints the adapter
 // uses, with git's content addressing for blobs: a blob's ID is its real
 // SHA-1, so the adapter's blob checks are exercised for real. Trees and
 // commits get stable made-up IDs, and every commit is unique, as on GitHub,
@@ -136,6 +136,10 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 		f.fail(w, http.StatusUnauthorized, "Bad credentials")
 		return
 	}
+	if r.Method == http.MethodPost && r.URL.Path == "/graphql" {
+		f.updateRefs(w, r)
+		return
+	}
 	prefix := "/repos/" + f.owner + "/" + f.name
 	rest, ok := strings.CutPrefix(r.URL.Path, prefix)
 	if !ok {
@@ -194,8 +198,6 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.refs[name] = sha
 			f.write(w, http.StatusCreated, f.refJSON(name, sha))
 		}
-	case r.Method == http.MethodPatch && strings.HasPrefix(rest, "/git/refs/heads/"):
-		f.updateRef(w, strings.TrimPrefix(rest, "/git/refs/"), body)
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
 		f.compare(w, strings.TrimPrefix(rest, "/compare/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/pulls/"):
@@ -211,17 +213,44 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *GitHub) updateRef(w http.ResponseWriter, name string, body map[string]any) {
-	f.pushRequests++
-	old, exists := f.refs[name]
-	sha, _ := body["sha"].(string)
-	commit, valid := f.commits[sha]
-	if !exists || !valid || body["force"] != false || len(commit.Parents) != 1 || commit.Parents[0] != old {
-		f.fail(w, http.StatusUnprocessableEntity, "non-fast-forward or invalid ref update")
+func (f *GitHub) updateRefs(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Query     string `json:"query"`
+		Variables struct {
+			Input struct {
+				ClientMutationID string `json:"clientMutationId"`
+				RepositoryID     string `json:"repositoryId"`
+				RefUpdates       []struct {
+					Name      string `json:"name"`
+					BeforeOid string `json:"beforeOid"`
+					AfterOid  string `json:"afterOid"`
+					Force     bool   `json:"force"`
+				} `json:"refUpdates"`
+			} `json:"input"`
+		} `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		f.fail(w, http.StatusBadRequest, "Problems parsing JSON")
 		return
 	}
-	f.refs[name] = sha
-	f.write(w, http.StatusOK, f.refJSON(name, sha))
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pushRequests++
+	input := request.Variables.Input
+	if !strings.Contains(request.Query, "updateRefs") || input.RepositoryID != "R_kgDOfake" || len(input.RefUpdates) != 1 {
+		f.write(w, http.StatusOK, map[string]any{"errors": []map[string]string{{"message": "invalid updateRefs input"}}})
+		return
+	}
+	update := input.RefUpdates[0]
+	name, validName := strings.CutPrefix(update.Name, "refs/")
+	old, exists := f.refs[name]
+	commit, validCommit := f.commits[update.AfterOid]
+	if !validName || !exists || !validCommit || update.Force || old != update.BeforeOid || len(commit.Parents) != 1 || commit.Parents[0] != old {
+		f.write(w, http.StatusOK, map[string]any{"errors": []map[string]string{{"message": "beforeOid mismatch or non-fast-forward update"}}})
+		return
+	}
+	f.refs[name] = update.AfterOid
+	f.write(w, http.StatusOK, map[string]any{"data": map[string]any{"updateRefs": map[string]string{"clientMutationId": input.ClientMutationID}}})
 }
 
 func (f *GitHub) refJSON(name, sha string) map[string]any {
@@ -450,6 +479,19 @@ func (f *GitHub) AdvanceBranch(branch string) string {
 	sha := f.putCommit(fakeCommit{Tree: f.commits[old].Tree, Parents: []string{old}, Message: "other writer"})
 	f.refs["heads/"+branch] = sha
 	return sha
+}
+
+// RewindBranch models a concurrent forced move to the current commit's parent.
+func (f *GitHub) RewindBranch(branch string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, ok := f.refs["heads/"+branch]
+	if !ok || len(f.commits[old].Parents) != 1 {
+		f.t.Fatalf("missing rewindable fake branch %s", branch)
+	}
+	parent := f.commits[old].Parents[0]
+	f.refs["heads/"+branch] = parent
+	return parent
 }
 
 // SetMergeMode selects an acknowledged queue, pending request, or actual merge.

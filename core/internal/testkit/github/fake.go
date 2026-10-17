@@ -1,11 +1,11 @@
 package testkit
 
 import (
+	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // git object IDs
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -75,8 +75,12 @@ func NewFakeGitHub(t *testing.T) *FakeGitHub {
 }
 
 func NewFakeGitHubFor(t *testing.T, owner, name string) *FakeGitHub {
+	var tokenBytes [16]byte
+	if _, err := rand.Read(tokenBytes[:]); err != nil {
+		t.Fatalf("fake GitHub: generate token: %v", err)
+	}
 	f := &FakeGitHub{
-		t: t, owner: owner, name: name, token: "ghs_fake_installation_token",
+		t: t, owner: owner, name: name, token: hex.EncodeToString(tokenBytes[:]),
 		blobs: map[string]string{}, trees: map[string]map[string]fakeEntry{},
 		commits: map[string]fakeCommit{}, refs: map[string]string{},
 		refWrites: map[string]int{}, pullWrites: map[string]int{},
@@ -154,12 +158,8 @@ func dropAnswer(w http.ResponseWriter) {
 }
 
 func fakeID(parts ...string) string {
-	h := sha1.New() //nolint:gosec // made-up object IDs
-	for _, p := range parts {
-		io.WriteString(h, p)
-		h.Write([]byte{0})
-	}
-	return hex.EncodeToString(h.Sum(nil))
+	sum := sha1.Sum([]byte(strings.Join(append(parts, ""), "\x00"))) //nolint:gosec // made-up object IDs
+	return hex.EncodeToString(sum[:])
 }
 
 func blobSHA1(content string) string {

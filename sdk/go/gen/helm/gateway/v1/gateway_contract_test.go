@@ -47,7 +47,7 @@ func service(t *testing.T) protoreflect.ServiceDescriptor {
 // The six operations of rev 3.4 §4.2 as eight unary RPCs, plus Cancel and
 // GetAttemptContent from WS-B's review.
 func TestServiceHasTheSixOperations(t *testing.T) {
-	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "Lift"}
+	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "GetStopOutcome", "Lift"}
 	methods := service(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -65,7 +65,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		}
 		level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel()
 		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
-		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" {
+		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" || name == "GetStopOutcome" {
 			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
 		}
 		if level != wantLevel {
@@ -88,6 +88,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		EffectGatewayServiceGetAttemptContentProcedure: "GetAttemptContent",
 		EffectGatewayServiceListAttemptsProcedure:      "ListAttempts",
 		EffectGatewayServiceStopProcedure:              "Stop",
+		EffectGatewayServiceGetStopOutcomeProcedure:    "GetStopOutcome",
 		EffectGatewayServiceLiftProcedure:              "Lift",
 	}
 	if len(procedures) != len(want) {
@@ -448,6 +449,7 @@ func TestRPCTokenScopes(t *testing.T) {
 		"GetAttemptContent": {"helm.gateway.read"},
 		"ListAttempts":      {"helm.gateway.read"},
 		"Stop":              {"helm.gateway.stop"},
+		"GetStopOutcome":    {"helm.gateway.read"},
 		"Lift":              {"helm.gateway.stop"},
 	}
 

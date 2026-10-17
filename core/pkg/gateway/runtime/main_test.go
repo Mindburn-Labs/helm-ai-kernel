@@ -182,6 +182,14 @@ func TestServeOverDevInsecureLoopbackAnswersGRPC(t *testing.T) {
 	if _, err := activity.GetCoverage(context.Background(), connect.NewRequest(&gatewayv1.GetCoverageRequest{Repository: "github.com/Acme/widget"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("an unauthenticated activity read = %v, want unauthenticated", err)
 	}
+	counter, err := http.Post("http://"+api+"/v1/authority/team-counter:read", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = counter.Body.Close()
+	if counter.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("an unauthenticated team counter read = %d, want 401", counter.StatusCode)
+	}
 }
 
 type pki struct {

@@ -271,6 +271,7 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	if activity.webhook != nil {
 		mux.Handle("POST /internal/github/activity", activity.webhook)
 	}
+	mux.Handle(admin.TeamCounterHandler())
 	plain := cfg.devInsecureListen != ""
 
 	// The model gateway: on the main listener for the Control Plane's calls,

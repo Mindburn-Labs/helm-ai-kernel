@@ -215,3 +215,5 @@ pkg/gateway/activitytrail TestPostgresReenableRequiresFreshPolls 1 race
 pkg/gateway/activitytrail TestPostgresRepositoryEventsSkipHistoryBeforeEnable 1 race
 pkg/gateway/activitytrail TestPostgresSignedPushDeliveryDedupAndEventsEnrichment 1 race
 pkg/gateway/activitytrail TestPostgresSignedPushRejectsInvalidSignatureAndDisabledSource 1 race
+pkg/gateway/adapters/provision TestPostgresTeamCounterReadsOnlyCurrentTeamWindow 1 race
+pkg/gateway/server TestPostgresTeamCounterAuthenticatedExactRead 1 race

@@ -39,6 +39,13 @@
 | `event_envelope.schema.json`  | L1          | normative | Kernel event envelope              |
 | `prng_config.schema.json`     | L2          | normative | PRNG configuration for determinism |
 
+### Gateway (`gateway/`)
+
+| Schema | Conformance | Status | Description |
+| --- | --- | --- | --- |
+| `team_counter_request.v1.schema.json` | L2 | preview | Exact applied TEAM limit binding for a read only counter sample |
+| `team_counter_response.v1.schema.json` | L2 | preview | Native TEAM counter values and PostgreSQL observation point |
+
 ### Boundary (`boundary/`)
 
 | Schema | Conformance | Status | Description |

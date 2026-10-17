@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/gateway/team_counter_request.v1.schema.json",
+  "title": "Team counter read request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["binding"],
+  "properties": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["org_ref", "version_ref", "plan_digest", "revision", "team_node", "mandate_id", "limit_id", "limit_version", "unit", "measure", "window", "span"],
+      "properties": {
+        "org_ref": {"type": "string", "pattern": "^org:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "version_ref": {"type": "string", "minLength": 1},
+        "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "revision": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "team_node": {"type": "string", "pattern": "^team:.+$"},
+        "mandate_id": {"type": "string", "format": "uuid"},
+        "limit_id": {"type": "string", "format": "uuid"},
+        "limit_version": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "unit": {"type": "string", "minLength": 1},
+        "measure": {"enum": ["sum", "count", "distinct"]},
+        "window": {"enum": ["none", "hour", "day", "month"]},
+        "span": {"type": "integer", "minimum": 1, "maximum": 744}
+      }
+    }
+  }
+}

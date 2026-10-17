@@ -268,6 +268,15 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- if and $g.github.apiURL (not $g.github.existingSecret) -}}
 {{- fail "gateway.github.apiURL requires gateway.github.existingSecret and gateway.github.installationsFile" -}}
 {{- end -}}
+{{- if and $g.activity.sourcesFile (not $g.github.existingSecret) -}}
+{{- fail "gateway.activity.sourcesFile requires gateway.github.existingSecret and gateway.github.installationsFile" -}}
+{{- end -}}
+{{- if and $g.activity.webhookSecretKey (or (not $g.activity.sourcesFile) (not $g.github.existingSecret)) -}}
+{{- fail "gateway.activity.webhookSecretKey requires activity sources and the GitHub App secret" -}}
+{{- end -}}
+{{- with $g.activity.sourcesFile -}}
+{{- include "helm-ai-kernel.gatewayValidateActivitySources" . -}}
+{{- end -}}
 {{- with $g.github.installationsFile -}}
 {{- include "helm-ai-kernel.gatewayValidateInstallations" . -}}
 {{- end -}}
@@ -280,6 +289,31 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- end -}}
 {{- else if .Values.helm.production -}}
 {{- fail "helm.production=true requires gateway.networkPolicy.enabled=true" -}}
+{{- end -}}
+{{- end }}
+
+{{/* Activity source mappings are operator-owned and must be explicit. */}}
+{{- define "helm-ai-kernel.gatewayValidateActivitySources" -}}
+{{- $doc := fromJson (toString .) -}}
+{{- if hasKey $doc "Error" -}}
+{{- fail (printf "gateway.activity.sourcesFile is not a JSON object: %s" (get $doc "Error")) -}}
+{{- end -}}
+{{- if or (ne (keys $doc | sortAlpha | join ",") "sources") (not (kindIs "slice" (get $doc "sources"))) (empty (get $doc "sources")) -}}
+{{- fail "gateway.activity.sourcesFile must be a JSON object with a non-empty sources array only" -}}
+{{- end -}}
+{{- if gt (len (get $doc "sources")) 100 -}}
+{{- fail "gateway.activity.sourcesFile may contain at most 100 sources" -}}
+{{- end -}}
+{{- range $entry := get $doc "sources" -}}
+{{- if not (kindIs "map" $entry) -}}
+{{- fail "gateway.activity.sourcesFile: every source must be an object" -}}
+{{- end -}}
+{{- if ne (keys $entry | sortAlpha | join ",") "enabled,repository,tenant_id,workspace_id" -}}
+{{- fail "gateway.activity.sourcesFile: each source needs exactly tenant_id, workspace_id, repository and enabled" -}}
+{{- end -}}
+{{- if or (not (kindIs "string" (get $entry "tenant_id"))) (empty (get $entry "tenant_id")) (not (kindIs "string" (get $entry "workspace_id"))) (empty (get $entry "workspace_id")) (not (kindIs "string" (get $entry "repository"))) (empty (get $entry "repository")) (not (kindIs "bool" (get $entry "enabled"))) -}}
+{{- fail "gateway.activity.sourcesFile: source fields have invalid types or empty values" -}}
+{{- end -}}
 {{- end -}}
 {{- end }}
 

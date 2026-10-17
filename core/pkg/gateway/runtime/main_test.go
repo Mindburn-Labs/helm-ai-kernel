@@ -178,6 +178,18 @@ func TestServeOverDevInsecureLoopbackAnswersGRPC(t *testing.T) {
 	if _, err := admin.ListEffectTypes(context.Background(), connect.NewRequest(&gatewayv1.ListEffectTypesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("an unauthenticated ListEffectTypes = %v, want unauthenticated", err)
 	}
+	activity := gatewayv1.NewActivityTrailServiceClient(h2c, "http://"+api, connect.WithGRPC())
+	if _, err := activity.GetCoverage(context.Background(), connect.NewRequest(&gatewayv1.GetCoverageRequest{Repository: "github.com/Acme/widget"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an unauthenticated activity read = %v, want unauthenticated", err)
+	}
+	counter, err := http.Post("http://"+api+"/v1/authority/team-counter:read", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = counter.Body.Close()
+	if counter.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("an unauthenticated team counter read = %d, want 401", counter.StatusCode)
+	}
 }
 
 type pki struct {
@@ -323,6 +335,15 @@ func TestPostgresGatewayMigrateAndReadiness(t *testing.T) {
 	// Known good: at head.
 	if code, body := ready(); code != http.StatusOK {
 		t.Fatalf("readyz after migrate = %d %q", code, body)
+	}
+	if _, err := admin.Exec(`INSERT INTO ` + schema + `.gateway_activity_schema_migrations (version, name) VALUES (999, 'future')`); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := ready(); code != http.StatusServiceUnavailable {
+		t.Fatal("readyz is ready on an activity trail schema newer than the binary")
+	}
+	if _, err := admin.Exec(`DELETE FROM ` + schema + `.gateway_activity_schema_migrations WHERE version=999`); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := admin.Exec(`INSERT INTO ` + schema + `.gateway_schema_migrations (version, name) VALUES (999, 'future')`); err != nil {
 		t.Fatal(err)

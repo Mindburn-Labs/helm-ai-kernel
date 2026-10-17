@@ -83,6 +83,10 @@ func validateProposal(in ProposeInput) (map[string]any, error) {
 	}
 	args, err := validateArguments(in.EffectType, in.Target, in.Arguments)
 	if err != nil {
+		var refusal *adapters.Refusal
+		if errors.As(err, &refusal) {
+			return nil, refuse(CodeInvalidArgument, refusal.Reason, "effect.arguments: %s", refusal.Detail)
+		}
 		return nil, bad("effect.arguments: %v", err)
 	}
 	return args, nil
@@ -103,6 +107,9 @@ func validateArguments(effectType, target string, raw []byte) (map[string]any, e
 		var refusal *adapters.Refusal
 		if errors.As(err, &refusal) {
 			detail = refusal.Detail
+		}
+		if refusal != nil {
+			return nil, fmt.Errorf("%w: %w", effectargs.ErrInvalid, refusal)
 		}
 		return nil, fmt.Errorf("%w: %s", effectargs.ErrInvalid, detail)
 	}

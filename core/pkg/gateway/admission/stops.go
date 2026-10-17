@@ -207,27 +207,44 @@ func stopDigest(caller Caller, in StopInput) []byte {
 func (s *Service) getStop(ctx context.Context, tenantID, stopID string) (Stop, error) {
 	var out Stop
 	err := s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		var expires, lifted sql.NullTime
-		if err := tx.QueryRowContext(ctx, `SELECT stop_id::text, scope_kind, scope_key, reason, issued_by, created_at, expires_at, lifted_at
-			FROM authority_stops WHERE tenant_id = $1 AND stop_id = $2`, tenantID, stopID).Scan(&out.ID, &out.ScopeKind,
-			&out.ScopeKey, &out.Reason, &out.IssuedBy, &out.CreatedAt, &expires, &lifted); err != nil {
-			return err
-		}
-		out.CreatedAt = out.CreatedAt.UTC()
-		if out.ScopeKind == "tenant" {
-			out.ScopeKey = ""
-		}
-		if expires.Valid {
-			t := expires.Time.UTC()
-			out.ExpiresAt = &t
-		}
-		if lifted.Valid {
-			t := lifted.Time.UTC()
-			out.LiftedAt = &t
-		}
-		return nil
+		var err error
+		out, _, err = readStop(ctx, tx, tenantID, stopID)
+		return err
 	})
 	return out, err
+}
+
+// readStop reads the stop and its current active state from one transaction.
+// StopOutcome uses it with the attempt read under one repeatable-read snapshot.
+func readStop(ctx context.Context, tx *sql.Tx, tenantID, stopID string) (Stop, bool, error) {
+	var out Stop
+	var expires, lifted sql.NullTime
+	var active bool
+	err := tx.QueryRowContext(ctx, `SELECT stop_id::text, scope_kind, scope_key, reason, issued_by,
+		created_at, expires_at, lifted_at,
+		(lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now()))
+		FROM authority_stops WHERE tenant_id = $1 AND stop_id = $2`, tenantID, stopID).
+		Scan(&out.ID, &out.ScopeKind, &out.ScopeKey, &out.Reason, &out.IssuedBy,
+			&out.CreatedAt, &expires, &lifted, &active)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Stop{}, false, refuse(CodeNotFound, "", "no such stop in the tenant")
+	}
+	if err != nil {
+		return Stop{}, false, err
+	}
+	out.CreatedAt = out.CreatedAt.UTC()
+	if out.ScopeKind == "tenant" {
+		out.ScopeKey = ""
+	}
+	if expires.Valid {
+		t := expires.Time.UTC()
+		out.ExpiresAt = &t
+	}
+	if lifted.Valid {
+		t := lifted.Time.UTC()
+		out.LiftedAt = &t
+	}
+	return out, active, nil
 }
 
 // Lift proposes lifting a stop. Lifting widens authority, so it is a

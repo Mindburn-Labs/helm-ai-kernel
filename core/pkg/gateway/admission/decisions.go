@@ -182,7 +182,7 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 // never approved). A medium effect a mandate escalates is approved without it.
 func needsStepUp(risk, effectType string) bool {
 	return risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||
-		effectargs.WidensAuthority(effectType)
+		effectargs.WidensAuthority(effectType) || effectType == effectargs.GitHubPullRequestMerge
 }
 
 var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,

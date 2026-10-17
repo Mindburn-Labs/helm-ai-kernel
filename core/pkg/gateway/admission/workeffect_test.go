@@ -33,6 +33,25 @@ func TestWorkEffectIdentitySurvivesEpisodeSeatAndJSONRepresentation(t *testing.T
 	}
 }
 
+func TestWorkEffectGitPushIdentityFoldsRepositoryCase(t *testing.T) {
+	caller := Caller{TenantID: "t", WorkspaceID: "w", PrincipalID: "agt:seat",
+		Episode: &Episode{EpisodeID: "ep", WorkItemID: "work"}}
+	args := []byte(`{"schema":"helm.github.git.push.v1","base":"main","base_sha":"1111111111111111111111111111111111111111","head":"helm/feature","message":"change","files":[{"path":"README.md","mode":"100644","content_utf8":"change"}]}`)
+	in := ProposeInput{EffectType: effectargs.GitHubGitPush, Target: "github.com/Acme/App", Arguments: args}
+	first, err := prepareWorkEffect(caller, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Target = "github.com/acme/app"
+	again, err := prepareWorkEffect(caller, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.IdempotencyKey != again.IdempotencyKey || first.Target != "github.com/Acme/App" || again.Target != "github.com/acme/app" {
+		t.Fatalf("push work identity changed with repository case: %q vs %q", first.IdempotencyKey, again.IdempotencyKey)
+	}
+}
+
 func TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent(t *testing.T) {
 	c := Caller{TenantID: "t", WorkspaceID: "w", PrincipalID: "agt:seat",
 		Episode: &Episode{EpisodeID: "ep", WorkItemID: "work"}}

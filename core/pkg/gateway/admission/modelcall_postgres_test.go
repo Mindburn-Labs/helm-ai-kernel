@@ -80,6 +80,44 @@ func sha(b []byte) []byte {
 	return sum[:]
 }
 
+func TestPostgresModelCallKeyLookupStaysWithinPrincipalAndEpisode(t *testing.T) {
+	f := newFixture(t)
+	f.modelFixture(10_000)
+	ctx := context.Background()
+	episode := worker
+	episode.Episode = &Episode{EpisodeID: "ep-budget", WorkItemID: "work-1", OrganizationVersionID: "ver-1"}
+	key := "mi:scope:episode:0"
+	a, _, err := f.svc.Propose(ctx, episode, modelProposal(key, modelRoute, 1))
+	must(t, err)
+	if found, err := f.svc.ModelCallAttemptByKey(ctx, episode, key); err != nil || found == nil || found.ID != a.ID {
+		t.Fatalf("same episode lookup: %+v, %v", found, err)
+	}
+	for name, caller := range map[string]Caller{
+		"main listener": worker,
+		"other episode": func() Caller {
+			c := episode
+			c.Episode = &Episode{EpisodeID: "ep-other", WorkItemID: "work-1"}
+			return c
+		}(),
+		"other principal": func() Caller { c := episode; c.PrincipalID = "human-a"; return c }(),
+		"other workspace": func() Caller { c := episode; c.WorkspaceID = "ws-b"; return c }(),
+		"other tenant":    func() Caller { c := episode; c.TenantID = tenantB; return c }(),
+	} {
+		if found, err := f.svc.ModelCallAttemptByKey(ctx, caller, key); err != nil || found != nil {
+			t.Fatalf("%s lookup crossed scope: %+v, %v", name, found, err)
+		}
+	}
+	plainKey := "mi:scope:plain:0"
+	plain, _, err := f.svc.Propose(ctx, worker, modelProposal(plainKey, modelRoute, 1))
+	must(t, err)
+	if found, err := f.svc.ModelCallAttemptByKey(ctx, worker, plainKey); err != nil || found == nil || found.ID != plain.ID {
+		t.Fatalf("main-listener lookup: %+v, %v", found, err)
+	}
+	if found, err := f.svc.ModelCallAttemptByKey(ctx, episode, plainKey); err != nil || found != nil {
+		t.Fatalf("episode read a main-listener attempt: %+v, %v", found, err)
+	}
+}
+
 func TestPostgresModelCallConfirmedSettlesTheReportedUsage(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

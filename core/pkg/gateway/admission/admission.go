@@ -167,6 +167,7 @@ type Service struct {
 	db            *sql.DB
 	cfg           Config
 	adapters      map[string]adapters.Adapter
+	fixedQuotes   map[string][]adapters.Amount
 	resultSchemas map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
@@ -193,6 +194,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 		cfg.MaxTransaction = MaxTransaction
 	}
 	byType := map[string]adapters.Adapter{}
+	fixedQuotes := map[string][]adapters.Amount{}
 	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
@@ -200,6 +202,14 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			seenUnits := map[string]bool{}
+			for _, q := range d.Quote {
+				if !unitPattern.MatchString(q.Unit) || q.Amount <= 0 || seenUnits[q.Unit] {
+					return nil, fmt.Errorf("%s has an invalid fixed quote for %q", d.EffectType, q.Unit)
+				}
+				seenUnits[q.Unit] = true
+			}
+			fixedQuotes[d.EffectType] = append([]adapters.Amount(nil), d.Quote...)
 			resultSchema, err := adapters.CompileResultSchema(d)
 			if err != nil {
 				return nil, fmt.Errorf("%s result contract: %w", d.EffectType, err)
@@ -210,7 +220,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType, resultSchemas: resultSchemas}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, fixedQuotes: fixedQuotes, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
@@ -260,6 +270,9 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	if err != nil {
 		return Attempt{}, false, err
 	}
+	if err := s.requireFixedQuote(in); err != nil {
+		return Attempt{}, false, err
+	}
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
@@ -296,6 +309,30 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	return attempt, existing, err
 }
 
+// requireFixedQuote prevents an API caller from omitting or lowering the
+// adapter-owned charge. Additional units may be required by a mandate's sum
+// limits; their validation remains in the admission transaction.
+func (s *Service) requireFixedQuote(in ProposeInput) error {
+	for _, fixed := range s.fixedQuotes[in.EffectType] {
+		found := false
+		for _, quoted := range in.Quote {
+			if quoted.Unit != fixed.Unit {
+				continue
+			}
+			found = true
+			if quoted.Amount != fixed.Amount {
+				return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+					"quote for %s must be the adapter's fixed %d %s", in.EffectType, fixed.Amount, fixed.Unit)
+			}
+		}
+		if !found {
+			return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+				"quote for %s must include the adapter's fixed %d %s", in.EffectType, fixed.Amount, fixed.Unit)
+		}
+	}
+	return nil
+}
+
 // proposeTx is Propose's transaction body, in tx: the attempt ID, and whether
 // the idempotency key already named this request.
 func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput, args map[string]any) (string, bool, error) {
@@ -329,18 +366,24 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if e := caller.Episode; e != nil {
 		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
 	}
+	// Migration 11 fences older model gateways at INSERT. Their binaries omit
+	// this column and retain its default of 1; this binary writes protocol 2.
+	modelWriterProtocol := 1
+	if in.EffectType == effectargs.ModelInference {
+		modelWriterProtocol = 2
+	}
 	// 1. Idempotency first. A duplicate never locks or changes anything.
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, episode_id, organization_version_id, state)
+			 distinct_values, episode_id, organization_version_id, model_writer_protocol, state)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
-			NULLIF($16, ''), NULLIF($17, ''), 'PROPOSED')
+			NULLIF($16, ''), NULLIF($17, ''), $18, 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
 		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
-		episodeID, organizationVersionID).Scan(&attemptID)
+		episodeID, organizationVersionID, modelWriterProtocol).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -360,7 +403,7 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 		caller.TenantID, attemptID, in.Arguments); err != nil {
 		return "", false, err
 	}
-	if in.EffectType == effectargs.GitHubPullRequestCreateDraft {
+	if in.EffectType == effectargs.GitHubPullRequestCreateDraft || in.EffectType == effectargs.GitHubPullRequestCreate {
 		if err := checkBranchAttempt(ctx, tx, caller, in); err != nil {
 			return "", false, err
 		}
@@ -421,6 +464,10 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	auth, err := lockAuthority(ctx, tx, caller, in.EffectType, leaf, chain)
 	if err != nil {
 		return err
+	}
+	// Merge remains high risk even if a tenant catalog row is lowered.
+	if in.EffectType == effectargs.GitHubPullRequestMerge && auth.riskClass != mandates.RiskIrreversible {
+		auth.riskClass = mandates.RiskHigh
 	}
 	if auth.principalFound && auth.principalKind == string(mandates.PrincipalHuman) && caller.ActorID == "" {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
@@ -944,8 +991,8 @@ func (s *Service) condition(text string) *authority.Snapshot {
 	return snapshot
 }
 
-// checkBranchAttempt is the draft pull request's Propose precondition
-// (HELM-753): branch_attempt_id names a github.branch.create_from_changes
+// checkBranchAttempt is the pull request create Propose precondition
+// (HELM-753): branch_attempt_id names a branch create or git push
 // attempt of this tenant and target in OBSERVED or RECONCILED with outcome
 // SUCCEEDED, whose head
 // and base equal the pull request's, and whose read-back commit is head_sha.
@@ -977,7 +1024,7 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	if err != nil {
 		return err
 	}
-	if effectType != effectargs.GitHubBranchCreateFromChanges || target != in.Target {
+	if (effectType != effectargs.GitHubBranchCreateFromChanges && effectType != effectargs.GitHubGitPush) || target != in.Target {
 		return unusable("the attempt is not a branch of this repository")
 	}
 	// OBSERVED(SUCCEEDED) or RECONCILED(SUCCEEDED) (HELM-753, #1058).
@@ -1005,7 +1052,7 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	err = github.CheckBranchAttempt(github.BranchAttemptView{
 		AttemptID: *pr.BranchAttemptID, TenantID: tenantID, EffectType: effectType, Target: target,
 		State: state, Outcome: outcome.String, Arguments: raw, CommitSHA: commit.String,
-	}, github.PullRequestProposal{TenantID: tenantID, Target: in.Target, Arguments: in.Arguments})
+	}, github.PullRequestProposal{TenantID: tenantID, Target: in.Target, EffectType: in.EffectType, Arguments: in.Arguments})
 	var refusal *adapters.Refusal
 	if errors.As(err, &refusal) {
 		return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "%s", refusal.Detail)

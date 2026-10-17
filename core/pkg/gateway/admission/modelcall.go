@@ -103,6 +103,10 @@ type LeafGrant struct {
 	// Targets is the intersection of the links' target lists.
 	AnyTarget bool
 	Targets   []string
+	// RemainingUSDMicros is the smallest available sum budget on this
+	// chain, including tenant limits. It is a sizing hint only: Propose
+	// re-reads and locks the counters before it authorizes a hold.
+	RemainingUSDMicros *int64
 }
 
 // MandateFor returns the first mandate whose chain lets the principal act on
@@ -126,11 +130,125 @@ func (g Grants) Allows(target string) bool {
 	return ok
 }
 
+// BudgetRemainingFor returns the money left on the chain Propose would
+// select for target. An unbounded chain has no value to return.
+func (g Grants) BudgetRemainingFor(target string) (int64, bool) {
+	if !g.PrincipalActive {
+		return 0, false
+	}
+	for _, l := range g.Leaves {
+		if l.Active && (l.AnyTarget || slices.Contains(l.Targets, target)) {
+			if l.RemainingUSDMicros == nil {
+				return 0, false
+			}
+			return *l.RemainingUSDMicros, true
+		}
+	}
+	return 0, false
+}
+
+// ModelCallAttemptByKey finds a model attempt belonging to this principal and
+// workspace. The model gateway uses this read to replay an unchanged client
+// request whose affordable default output cap changed after settlement. The
+// key is derived from the authenticated episode scope and original request;
+// this read grants no authority to dispatch or change the attempt.
+func (s *Service) ModelCallAttemptByKey(ctx context.Context, caller Caller, key string) (*Attempt, error) {
+	if err := checkCaller(caller); err != nil {
+		return nil, err
+	}
+	var found *Attempt
+	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		var id string
+		err := tx.QueryRowContext(ctx, `SELECT attempt_id::text FROM authority_effect_attempts
+			WHERE tenant_id=$1 AND workspace_id=$2 AND requester_principal_id=$3
+			AND idempotency_key=$4 AND effect_type=$5
+			AND (($6 = '' AND episode_id IS NULL) OR episode_id=$6)`, caller.TenantID, caller.WorkspaceID,
+			caller.PrincipalID, key, effectargs.ModelInference, episodeScope(caller)).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		a, err := loadAttempt(ctx, tx, caller, id)
+		if err == nil {
+			found = &a
+		}
+		return err
+	})
+	return found, err
+}
+
+// ModelCallAttemptsByKeys reads a bounded set of earlier idempotency keys in
+// one tenant-scoped transaction. It lets the gateway recognize calls admitted
+// before its default-cap key format changed, including a retry that occupied
+// a later key after a collision. The caller, workspace and episode filters are
+// the same as ModelCallAttemptByKey.
+func (s *Service) ModelCallAttemptsByKeys(ctx context.Context, caller Caller, keys []string) ([]Attempt, error) {
+	if err := checkCaller(caller); err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	if len(keys) > 32 {
+		return nil, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "at most 32 model call keys may be read")
+	}
+	var attempts []Attempt
+	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT attempt_id::text FROM authority_effect_attempts
+			WHERE tenant_id=$1 AND workspace_id=$2 AND requester_principal_id=$3
+			AND idempotency_key=ANY($4::text[]) AND effect_type=$5
+			AND (($6 = '' AND episode_id IS NULL) OR episode_id=$6)
+			ORDER BY idempotency_key`, caller.TenantID, caller.WorkspaceID, caller.PrincipalID,
+			pq.Array(keys), effectargs.ModelInference, episodeScope(caller))
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			a, err := loadAttempt(ctx, tx, caller, id)
+			if err != nil {
+				return err
+			}
+			attempts = append(attempts, a)
+		}
+		return nil
+	})
+	return attempts, err
+}
+
 // maxLeafGrants bounds the mandates a grants read follows.
 const maxLeafGrants = 32
 
 // ModelGrants reads the caller's grants for effectType in one transaction.
 func (s *Service) ModelGrants(ctx context.Context, caller Caller, effectType string) (Grants, error) {
+	return s.modelGrants(ctx, caller, effectType, false)
+}
+
+// ModelGrantsWithBudget also reads current money headroom to size a model
+// request whose client supplied no output maximum. Explicitly capped calls
+// need only ModelGrants; admission checks their quote under counter locks.
+func (s *Service) ModelGrantsWithBudget(ctx context.Context, caller Caller, effectType string) (Grants, error) {
+	return s.modelGrants(ctx, caller, effectType, true)
+}
+
+func (s *Service) modelGrants(ctx context.Context, caller Caller, effectType string, withBudget bool) (Grants, error) {
 	if err := checkCaller(caller); err != nil {
 		return Grants{}, err
 	}
@@ -189,6 +307,13 @@ func (s *Service) ModelGrants(ctx context.Context, caller Caller, effectType str
 				}
 				grant.Targets = slices.DeleteFunc(grant.Targets, func(t string) bool { return !slices.Contains(m.Terms.Targets, t) })
 			}
+			if withBudget {
+				remaining, err := modelBudgetRemaining(ctx, tx, caller.TenantID, chainIDs[len(chainIDs)-len(chain):], now)
+				if err != nil {
+					return err
+				}
+				grant.RemainingUSDMicros = remaining
+			}
 			if !grant.AnyTarget {
 				sort.Strings(grant.Targets)
 				grant.Targets = slices.Compact(grant.Targets)
@@ -215,6 +340,57 @@ func (s *Service) ModelGrants(ctx context.Context, caller Caller, effectType str
 		return units.Err()
 	})
 	return g, err
+}
+
+// modelBudgetRemaining mirrors admission's bucket selection without taking
+// authority over admission. A concurrent spend may make this read stale;
+// Propose still checks the final quote under its counter locks.
+func modelBudgetRemaining(ctx context.Context, tx *sql.Tx, tenant string, chainIDs []string, now time.Time) (*int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT limit_id::text, window_kind, limit_value, span FROM authority_limits
+		WHERE tenant_id = $1 AND unit = $2 AND measure = 'sum'
+		AND (mandate_id = ANY ($3::uuid[]) OR mandate_id IS NULL)
+		ORDER BY limit_id`, tenant, UnitUSDMicros, pq.Array(chainIDs))
+	if err != nil {
+		return nil, err
+	}
+	type budgetLimit struct {
+		id, window string
+		value      int64
+		span       int
+	}
+	var limits []budgetLimit
+	for rows.Next() {
+		var l budgetLimit
+		if err := rows.Scan(&l.id, &l.window, &l.value, &l.span); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		limits = append(limits, l)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	var smallest *int64
+	for _, l := range limits {
+		buckets := make([]time.Time, l.span)
+		for i := range buckets {
+			buckets[i] = bucketStart(l.window, now, i)
+		}
+		var used, reserved int64
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(sum(used), 0), COALESCE(sum(reserved), 0)
+			FROM authority_counters WHERE tenant_id = $1 AND limit_id = $2 AND bucket_start = ANY ($3::timestamptz[])`,
+			tenant, l.id, pq.Array(buckets)).Scan(&used, &reserved); err != nil {
+			return nil, err
+		}
+		available := int64(0)
+		if used <= l.value && reserved <= l.value-used {
+			available = l.value - used - reserved
+		}
+		if smallest == nil || available < *smallest {
+			smallest = &available
+		}
+	}
+	return smallest, nil
 }
 
 // ModelCallClaim is a committed dispatch claim on a model call: the permit is
@@ -449,7 +625,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 	}
 	observe := func(outcome adapters.Outcome, trust string) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome, evidence_digest)
-			VALUES ($1, $2, $3, $4, $5, $6)`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (tenant_id, attempt_id, evidence_digest) WHERE evidence_digest IS NOT NULL
+			DO NOTHING`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence)
 		return err
 	}
 	setCall := func(state string, estimated, confirmed *int64, billable int64) error {

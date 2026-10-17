@@ -1,0 +1,7 @@
+{
+  "schema": "helm.github.pull_request.merge.v1",
+  "pull_number": 42,
+  "head_sha": "123",
+  "base": "main",
+  "merge_method": "squash"
+}

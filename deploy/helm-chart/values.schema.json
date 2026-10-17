@@ -1285,6 +1285,28 @@
             }
           }
         },
+        "activity": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Operator-bound observed-only GitHub activity sources and optional signed ingress.",
+          "properties": {
+            "sourcesFile": {
+              "type": "string",
+              "default": "",
+              "description": "JSON file contents: {\"sources\":[{\"tenant_id\":\"...\",\"workspace_id\":\"...\",\"repository\":\"github.com/owner/name\",\"enabled\":true}]}"
+            },
+            "pollInterval": {
+              "type": "string",
+              "default": "1m",
+              "description": "Interval for source polling, between 15s and 1h."
+            },
+            "webhookSecretKey": {
+              "type": "string",
+              "default": "",
+              "description": "Optional key in the gateway GitHub App secret containing the HMAC secret for signed push delivery."
+            }
+          }
+        },
         "networkPolicy": {
           "type": "object",
           "additionalProperties": false,

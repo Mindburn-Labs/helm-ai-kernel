@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,23 @@ func TestCheckPermitDigest(t *testing.T) {
 	}
 }
 
+func TestLegacyPullRequestResultKeepsItsContentAddressedJSON(t *testing.T) {
+	// These are the pre-merge-result bytes retained with existing result_ref
+	// values. Decoding and re-encoding must not add zero-valued new fields.
+	raw := []byte(`{"url":"https://github.com/o/r/pull/7","number":7,"node_id":"PR_7","head_ref":"helm/x","head_sha":"1111111111111111111111111111111111111111","base_ref":"main","draft":true,"state":"open"}`)
+	var result GitHubPullRequestResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != string(raw) {
+		t.Fatalf("legacy result bytes changed: got %s, want %s", encoded, raw)
+	}
+}
+
 // The typed results mirror the proto messages field for field, in field
 // order, so the gateway can convert them without a mapping table.
 func TestResultTypesMirrorTheProto(t *testing.T) {
@@ -59,7 +77,8 @@ func TestResultTypesMirrorTheProto(t *testing.T) {
 		}
 		var goFields []string
 		for i := 0; i < typ.NumField(); i++ {
-			goFields = append(goFields, typ.Field(i).Tag.Get("json"))
+			name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+			goFields = append(goFields, name)
 		}
 		if !reflect.DeepEqual(protoFields, goFields) || len(goFields) == 0 {
 			t.Errorf("%s: proto fields %v, Go fields %v", message, protoFields, goFields)

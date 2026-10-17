@@ -21,6 +21,9 @@ spec:
         {{- if $g.github.installationsFile }}
         checksum/github-installations: {{ $g.github.installationsFile | sha256sum }}
         {{- end }}
+        {{- if $g.activity.sourcesFile }}
+        checksum/activity-sources: {{ $g.activity.sourcesFile | sha256sum }}
+        {{- end }}
         {{- with $g.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -147,6 +150,16 @@ spec:
             - name: HELM_GATEWAY_GITHUB_API_URL
               value: {{ $g.github.apiURL | quote }}
             {{- end }}
+            {{- if $g.activity.sourcesFile }}
+            - name: HELM_GATEWAY_ACTIVITY_SOURCES_FILE
+              value: "/etc/helm-gateway/activity/sources.json"
+            - name: HELM_GATEWAY_ACTIVITY_POLL_INTERVAL
+              value: {{ $g.activity.pollInterval | quote }}
+            {{- end }}
+            {{- if $g.activity.webhookSecretKey }}
+            - name: HELM_GATEWAY_ACTIVITY_WEBHOOK_SECRET_FILE
+              value: "/var/run/secrets/helm-gateway-github/activity-webhook-secret"
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -189,6 +202,11 @@ spec:
             {{- if $g.github.installationsFile }}
             - name: github-installations
               mountPath: /etc/helm-gateway/github
+              readOnly: true
+            {{- end }}
+            {{- if $g.activity.sourcesFile }}
+            - name: activity-sources
+              mountPath: /etc/helm-gateway/activity
               readOnly: true
             {{- end }}
             {{- if $g.models.routesConfigMap }}
@@ -248,11 +266,20 @@ spec:
                 path: app-id
               - key: {{ $g.github.privateKeyKey | quote }}
                 path: private-key.pem
+              {{- if $g.activity.webhookSecretKey }}
+              - key: {{ $g.activity.webhookSecretKey | quote }}
+                path: activity-webhook-secret
+              {{- end }}
         {{- end }}
         {{- if $g.github.installationsFile }}
         - name: github-installations
           configMap:
             name: {{ include "helm-ai-kernel.gatewayName" . }}-github-installations
+        {{- end }}
+        {{- if $g.activity.sourcesFile }}
+        - name: activity-sources
+          configMap:
+            name: {{ include "helm-ai-kernel.gatewayName" . }}-activity-sources
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

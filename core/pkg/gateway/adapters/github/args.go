@@ -18,6 +18,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // The limits of the v1 argument schemas
@@ -100,6 +101,26 @@ type pullRequestArgs struct {
 	HeadSHA         string
 	Title           string
 	Body            string
+	Draft           bool
+}
+
+type mergeArgs struct {
+	Number      int64
+	HeadSHA     string
+	Base        string
+	MergeMethod string
+}
+
+func parseMergeArgs(target string, raw []byte) (mergeArgs, error) {
+	// Share the admission validator, including the exact repository target.
+	if _, err := effectargs.Validate(EffectPullRequestMerge, target, raw); err != nil {
+		return mergeArgs{}, schemaViolation("%v", err)
+	}
+	var a effectargs.PullRequestMerge
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return mergeArgs{}, schemaViolation("%v", err)
+	}
+	return mergeArgs{Number: *a.PullNumber, HeadSHA: *a.HeadSHA, Base: *a.Base, MergeMethod: *a.MergeMethod}, nil
 }
 
 func schemaViolation(format string, args ...any) *adapters.Refusal {
@@ -213,6 +234,13 @@ func (o object) branchName(field string) (string, error) {
 }
 
 func parseBranchArgs(raw []byte) (branchArgs, error) {
+	return parseBranchArgsFor(EffectBranchCreateFromChanges, raw)
+}
+
+func parseBranchArgsFor(effectType string, raw []byte) (branchArgs, error) {
+	if effectType != EffectBranchCreateFromChanges && effectType != EffectGitPush {
+		return branchArgs{}, schemaViolation("not a GitHub branch write effect")
+	}
 	obj, err := decodeObject(raw)
 	if err != nil {
 		return branchArgs{}, err
@@ -220,18 +248,26 @@ func parseBranchArgs(raw []byte) (branchArgs, error) {
 	if err := obj.fields("arguments", "schema", "base", "base_sha", "head", "message", "files"); err != nil {
 		return branchArgs{}, err
 	}
-	if err := obj.schemaConst("helm.github.branch.create_from_changes.v1"); err != nil {
+	if err := obj.schemaConst("helm." + effectType + ".v1"); err != nil {
 		return branchArgs{}, err
 	}
 	var a branchArgs
 	if a.Base, err = obj.str("base", 1, 200); err != nil {
 		return branchArgs{}, err
 	}
+	if effectType == EffectGitPush {
+		if a.Base, err = obj.branchName("base"); err != nil {
+			return branchArgs{}, err
+		}
+	}
 	if a.BaseSHA, err = obj.match("base_sha", shaRE, 40); err != nil {
 		return branchArgs{}, err
 	}
 	if a.Head, err = obj.headName(); err != nil {
 		return branchArgs{}, err
+	}
+	if effectType == EffectGitPush && a.Head == a.Base {
+		return branchArgs{}, schemaViolation("head and base must differ")
 	}
 	if a.Message, err = obj.str("message", 1, 1000); err != nil {
 		return branchArgs{}, err
@@ -284,7 +320,10 @@ func parseBranchArgs(raw []byte) (branchArgs, error) {
 	return a, nil
 }
 
-func parsePullRequestArgs(raw []byte) (pullRequestArgs, error) {
+func parsePullRequestArgsFor(effectType string, raw []byte) (pullRequestArgs, error) {
+	if effectType != EffectPullRequestCreateDraft && effectType != EffectPullRequestCreate {
+		return pullRequestArgs{}, schemaViolation("not a pull request create effect")
+	}
 	obj, err := decodeObject(raw)
 	if err != nil {
 		return pullRequestArgs{}, err
@@ -292,10 +331,10 @@ func parsePullRequestArgs(raw []byte) (pullRequestArgs, error) {
 	if err := obj.fields("arguments", "schema", "branch_attempt_id", "base", "head", "head_sha", "title", "body"); err != nil {
 		return pullRequestArgs{}, err
 	}
-	if err := obj.schemaConst("helm.github.pull_request.create_draft.v1"); err != nil {
+	if err := obj.schemaConst("helm." + effectType + ".v1"); err != nil {
 		return pullRequestArgs{}, err
 	}
-	var a pullRequestArgs
+	a := pullRequestArgs{Draft: effectType == EffectPullRequestCreateDraft}
 	if a.BranchAttemptID, err = obj.match("branch_attempt_id", attemptRE, 36); err != nil {
 		return pullRequestArgs{}, err
 	}
@@ -446,19 +485,24 @@ type BranchAttemptView struct {
 
 // PullRequestProposal is the draft pull request being proposed.
 type PullRequestProposal struct {
-	TenantID  string
-	Target    string
-	Arguments []byte
+	TenantID   string
+	Target     string
+	EffectType string
+	Arguments  []byte
 }
 
-// CheckBranchAttempt is the draft pull request's Propose precondition
-// (gateway-effect-api.md): the named branch attempt is in the same tenant and
-// target, is github.branch.create_from_changes observed to succeed, has the
-// same head and base, and its commit is head_sha. It returns a *Refusal with
+// CheckBranchAttempt is the pull request's Propose precondition
+// (gateway-effect-api.md): the named branch-create or push attempt is in the
+// same tenant and target, observed to succeed, has the same head and base,
+// and its commit is head_sha. It returns a *Refusal with
 // PRECONDITION_FAILED, or SCHEMA_VIOLATION for unreadable arguments. The
 // gateway calls it; it does no I/O.
 func CheckBranchAttempt(branch BranchAttemptView, pr PullRequestProposal) error {
-	prArgs, err := parsePullRequestArgs(pr.Arguments)
+	effectType := pr.EffectType
+	if effectType == "" { // Compatibility for existing draft-only callers.
+		effectType = EffectPullRequestCreateDraft
+	}
+	prArgs, err := parsePullRequestArgsFor(effectType, pr.Arguments)
 	if err != nil {
 		return err
 	}
@@ -470,12 +514,12 @@ func CheckBranchAttempt(branch BranchAttemptView, pr PullRequestProposal) error 
 		return failed("the view is of another attempt")
 	case branch.TenantID == "" || branch.TenantID != pr.TenantID:
 		return failed("not an attempt of this tenant")
-	case branch.EffectType != EffectBranchCreateFromChanges || branch.Target != pr.Target:
+	case (branch.EffectType != EffectBranchCreateFromChanges && branch.EffectType != EffectGitPush) || branch.Target != pr.Target:
 		return failed("not a branch of this repository")
 	case branch.Outcome != "SUCCEEDED" || (branch.State != "OBSERVED" && branch.State != "RECONCILED" && branch.State != "SETTLED"):
 		return failed("the branch attempt has not been observed to succeed")
 	}
-	branchArgs, err := parseBranchArgs(branch.Arguments)
+	branchArgs, err := parseBranchArgsFor(branch.EffectType, branch.Arguments)
 	if err != nil {
 		return failed("the branch attempt's arguments are unreadable")
 	}

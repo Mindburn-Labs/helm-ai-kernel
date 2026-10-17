@@ -978,11 +978,17 @@ helm_runner template "$RELEASE" "$CHART" \
     --set gateway.github.existingSecret=gw-github-app \
     --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations.json" \
     --set gateway.github.apiURL=https://ghe.example.internal/api/v3 \
+    --set-file gateway.activity.sourcesFile="$GATEWAY_TESTDATA/activity-sources.json" \
+    --set gateway.activity.pollInterval=45s \
+    --set gateway.activity.webhookSecretKey=activity-secret \
     --set gateway.dispatchTimeout=90s \
     --set gateway.controlPlaneIdentity.caBundleConfigMap=cp-jwks-ca >"$gateway_rendered"
 assert_contains "$gateway_rendered" "name: HELM_GATEWAY_GITHUB_API_URL"
 assert_contains "$gateway_rendered" 'value: "https://ghe.example.internal/api/v3"'
 assert_contains "$gateway_rendered" "name: HELM_GATEWAY_DISPATCH_TIMEOUT"
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_ACTIVITY_SOURCES_FILE"
+assert_contains "$gateway_rendered" 'value: "45s"'
+assert_contains "$gateway_rendered" "path: activity-webhook-secret"
 assert_contains "$gateway_rendered" 'value: "90s"'
 assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"example/repo\"]'
 # Secret file modes (s3a review L2): the GitHub App Secret, the TLS key and

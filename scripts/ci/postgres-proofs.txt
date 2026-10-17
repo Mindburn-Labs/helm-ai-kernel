@@ -87,6 +87,9 @@ pkg/gateway/admission TestPostgresPlanOnAMovedBaseIsNotApplied 1 race
 pkg/gateway/admission TestPostgresPlanProposalsAreRefusedBeforeAnApproverIsAsked 1 race
 pkg/gateway/admission TestPostgresPlanRequesterMustBeARegisteredServicePrincipal 1 race
 pkg/gateway/admission TestPostgresPrincipalEffectsFollowTheLiveMandateChain 1 race
+pkg/gateway/admission TestPostgresPrincipalStopFencesAdmissionAndVoidsAtClaim 1 race
+pkg/gateway/admission TestPostgresPrincipalStopKeepsDispatchedAndUnknownUntilReadback 1 race
+pkg/gateway/admission TestPostgresPrincipalStopOutcomeScopeAndHumanReview 1 race
 pkg/gateway/admission TestPostgresPrincipalStopCoversTheWorkloadAndTheDispatcher 1 race
 pkg/gateway/admission TestPostgresProposeAdmitsDeniesAndEscalates 1 race
 pkg/gateway/admission TestPostgresProposeIsIdempotent 3 race
@@ -154,6 +157,7 @@ pkg/gateway/server TestPostgresGatewayDecisionsOnTheWire 1 race
 pkg/gateway/server TestPostgresStepUpProofOnTheWire 1 race
 pkg/gateway/server TestPostgresStepUpProofRefusalsOnTheWireSpendNothing 1 race
 pkg/gateway/server TestPostgresListAttemptsOnTheWire 1 race
+pkg/gateway/server TestPostgresPrincipalStopOutcomeOnTheWire 1 race
 pkg/gateway/server TestPostgresStopLiftAndCancelOnTheWire 1 race
 pkg/gateway/server TestPostgresWalkingSkeletonOnTheWire 1 race
 pkg/gateway/server TestPostgresEnsurePrincipalsOnTheWire 1 race

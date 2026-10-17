@@ -27,6 +27,8 @@ var (
 	ErrTeamCounterInvalid = errors.New("the team counter cannot be reported")
 )
 
+const maxTeamCounterSpan = 744
+
 // TeamCounterBinding is copied from a GetProvisioning readback. The caller
 // supplies the exact team node and limit, including the limit's dimensions;
 // tenant and workspace come only from its authenticated credential.
@@ -57,7 +59,7 @@ func (b TeamCounterBinding) valid() bool {
 		m.String() == b.MandateID && l.String() == b.LimitID &&
 		b.Unit != "" && (b.Measure == "sum" || b.Measure == "count" || b.Measure == "distinct") &&
 		(b.Window == "none" || b.Window == "hour" || b.Window == "day" || b.Window == "month") &&
-		b.Span >= 1 && b.Span <= 744 && (b.Window != "none" || b.Span == 1)
+		b.Span >= 1 && b.Span <= maxTeamCounterSpan && (b.Window != "none" || b.Span == 1)
 }
 
 type TeamCounterBucket struct {
@@ -90,7 +92,7 @@ func GetTeamCounter(ctx context.Context, store *authorityrows.Store, tenant, wor
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out := &TeamCounterSnapshot{Binding: b, Buckets: make([]TeamCounterBucket, 0, b.Span)}
+	out := &TeamCounterSnapshot{Binding: b, Buckets: []TeamCounterBucket{}}
 	err := store.ReadInTenant(ctx, tenant, func(tx *authorityrows.Tx) error {
 		if err := tx.SQL().QueryRowContext(ctx, `SELECT clock_timestamp(), pg_current_snapshot()::text`).
 			Scan(&out.ObservedAt, &out.SnapshotID); err != nil {
@@ -178,17 +180,17 @@ func GetTeamCounter(ctx context.Context, store *authorityrows.Store, tenant, wor
 			return err
 		}
 		out.Cap = limit.Spec.Value
-		starts := make([]time.Time, b.Span)
-		for back := range starts {
+		var starts [maxTeamCounterSpan]time.Time
+		for back := 0; back < b.Span; back++ {
 			starts[back] = teamBucketStart(b.Window, out.ObservedAt, back)
 		}
 		rows, err := tx.SQL().QueryContext(ctx, `SELECT bucket_start, used, reserved FROM authority_counters
 			WHERE tenant_id=$1 AND limit_id=$2 AND bucket_start = ANY ($3::timestamptz[])`,
-			tenant, b.LimitID, pq.Array(starts))
+			tenant, b.LimitID, pq.Array(starts[:b.Span]))
 		if err != nil {
 			return err
 		}
-		found := make(map[int64]TeamCounterBucket, b.Span)
+		found := map[int64]TeamCounterBucket{}
 		for rows.Next() {
 			var bucket TeamCounterBucket
 			if err := rows.Scan(&bucket.Start, &bucket.Used, &bucket.Reserved); err != nil {

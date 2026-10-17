@@ -255,6 +255,7 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(admin.Handler())
+	mux.Handle(admin.TeamCounterHandler())
 	plain := cfg.devInsecureListen != ""
 
 	// The model gateway: on the main listener for the Control Plane's calls,

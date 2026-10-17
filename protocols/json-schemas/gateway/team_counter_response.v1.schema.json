@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/gateway/team_counter_response.v1.schema.json",
+  "title": "Team counter read response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["binding", "observed_at", "db_snapshot", "cap", "used", "reserved", "within_cap", "buckets"],
+  "properties": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["org_ref", "version_ref", "plan_digest", "revision", "team_node", "mandate_id", "limit_id", "limit_version", "unit", "measure", "window", "span"],
+      "properties": {
+        "org_ref": {"type": "string", "pattern": "^org:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "version_ref": {"type": "string", "minLength": 1},
+        "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "revision": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "team_node": {"type": "string", "pattern": "^team:.+$"},
+        "mandate_id": {"type": "string", "format": "uuid"},
+        "limit_id": {"type": "string", "format": "uuid"},
+        "limit_version": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "unit": {"type": "string", "minLength": 1},
+        "measure": {"enum": ["sum", "count", "distinct"]},
+        "window": {"enum": ["none", "hour", "day", "month"]},
+        "span": {"type": "integer", "minimum": 1, "maximum": 744}
+      }
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "db_snapshot": {"type": "string", "minLength": 1},
+    "cap": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+    "used": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+    "reserved": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+    "within_cap": {"type": "boolean"},
+    "buckets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 744,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["start", "used", "reserved"],
+        "properties": {
+          "start": {"type": "string", "format": "date-time"},
+          "used": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+          "reserved": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"}
+        }
+      }
+    }
+  }
+}

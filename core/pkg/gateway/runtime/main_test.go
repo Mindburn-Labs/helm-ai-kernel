@@ -178,6 +178,14 @@ func TestServeOverDevInsecureLoopbackAnswersGRPC(t *testing.T) {
 	if _, err := admin.ListEffectTypes(context.Background(), connect.NewRequest(&gatewayv1.ListEffectTypesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("an unauthenticated ListEffectTypes = %v, want unauthenticated", err)
 	}
+	counter, err := http.Post("http://"+api+"/v1/authority/team-counter:read", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = counter.Body.Close()
+	if counter.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("an unauthenticated team counter read = %d, want 401", counter.StatusCode)
+	}
 }
 
 type pki struct {

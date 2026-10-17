@@ -111,4 +111,12 @@ func TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly(t *testing.T) {
 	if got := send(http.MethodPost, main, mainToken, "", initialize); got.status != http.StatusNotFound {
 		t.Fatalf("/mcp on the main listener: %d, want 404", got.status)
 	}
+	counter, err := http.Post("http://"+worker+"/v1/authority/team-counter:read", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = counter.Body.Close()
+	if counter.StatusCode != http.StatusNotFound {
+		t.Fatalf("team counter on the worker listener: %d, want 404", counter.StatusCode)
+	}
 }

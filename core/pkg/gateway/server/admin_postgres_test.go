@@ -45,8 +45,10 @@ const (
 )
 
 type adminWire struct {
-	t      *testing.T
-	client gatewayv1.AuthorityAdminServiceClient
+	t          *testing.T
+	client     gatewayv1.AuthorityAdminServiceClient
+	httpClient *http.Client
+	baseURL    string
 	// effects is the effect API of the same gateway, which dispatches the
 	// authority plans through the adapter.
 	effects gatewayv1.EffectGatewayServiceClient
@@ -115,12 +117,14 @@ func newAdminWire(t *testing.T) *adminWire {
 	effects := &Server{Admission: svc, Auth: auth}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
+	mux.Handle(api.TeamCounterHandler())
 	mux.Handle(effects.Handler())
 	srv := httptest.NewUnstartedServer(mux)
 	srv.EnableHTTP2 = true
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return &adminWire{t: t, client: gatewayv1.NewAuthorityAdminServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
+		httpClient: srv.Client(), baseURL: srv.URL,
 		effects: gatewayv1.NewEffectGatewayServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
 		iss:     iss, rows: adapter.Store(), adapter: adapter}
 }

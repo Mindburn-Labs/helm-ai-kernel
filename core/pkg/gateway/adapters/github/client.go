@@ -180,8 +180,9 @@ type gitRef struct {
 }
 
 type gitCommit struct {
-	SHA  string `json:"sha"`
-	Tree struct {
+	SHA     string `json:"sha"`
+	Message string `json:"message"`
+	Tree    struct {
 		SHA string `json:"sha"`
 	} `json:"tree"`
 	Parents []struct {

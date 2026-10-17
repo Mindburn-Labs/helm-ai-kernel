@@ -38,6 +38,7 @@ type GitHub struct {
 	seq           int
 	mergeMode     string
 	mergeRequests int
+	pushRequests  int
 }
 
 type fakeEntry struct{ Mode, Blob string }
@@ -144,7 +145,7 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var body map[string]any
-	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			f.fail(w, http.StatusBadRequest, "Problems parsing JSON")
 			return
@@ -193,6 +194,8 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.refs[name] = sha
 			f.write(w, http.StatusCreated, f.refJSON(name, sha))
 		}
+	case r.Method == http.MethodPatch && strings.HasPrefix(rest, "/git/refs/heads/"):
+		f.updateRef(w, strings.TrimPrefix(rest, "/git/refs/"), body)
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
 		f.compare(w, strings.TrimPrefix(rest, "/compare/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/pulls/"):
@@ -206,6 +209,19 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		f.fail(w, http.StatusNotFound, "Not Found")
 	}
+}
+
+func (f *GitHub) updateRef(w http.ResponseWriter, name string, body map[string]any) {
+	f.pushRequests++
+	old, exists := f.refs[name]
+	sha, _ := body["sha"].(string)
+	commit, valid := f.commits[sha]
+	if !exists || !valid || body["force"] != false || len(commit.Parents) != 1 || commit.Parents[0] != old {
+		f.fail(w, http.StatusUnprocessableEntity, "non-fast-forward or invalid ref update")
+		return
+	}
+	f.refs[name] = sha
+	f.write(w, http.StatusOK, f.refJSON(name, sha))
 }
 
 func (f *GitHub) refJSON(name, sha string) map[string]any {
@@ -419,6 +435,22 @@ func (f *GitHub) Head(branch string) string {
 
 // MergeRequests counts attempted provider merge writes, including refusals.
 func (f *GitHub) MergeRequests() int { f.mu.Lock(); defer f.mu.Unlock(); return f.mergeRequests }
+
+// PushRequests counts attempted ref updates, including refused ones.
+func (f *GitHub) PushRequests() int { f.mu.Lock(); defer f.mu.Unlock(); return f.pushRequests }
+
+// AdvanceBranch models another writer advancing a branch after preparation.
+func (f *GitHub) AdvanceBranch(branch string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, ok := f.refs["heads/"+branch]
+	if !ok {
+		f.t.Fatalf("missing fake branch %s", branch)
+	}
+	sha := f.putCommit(fakeCommit{Tree: f.commits[old].Tree, Parents: []string{old}, Message: "other writer"})
+	f.refs["heads/"+branch] = sha
+	return sha
+}
 
 // SetMergeMode selects an acknowledged queue, pending request, or actual merge.
 func (f *GitHub) SetMergeMode(mode string) {

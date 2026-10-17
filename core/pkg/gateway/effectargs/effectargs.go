@@ -32,6 +32,7 @@ const MaxBytes = 65536
 // The skeleton's effect types.
 const (
 	GitHubBranchCreateFromChanges = "github.branch.create_from_changes"
+	GitHubGitPush                 = "github.git.push"
 	GitHubPullRequestCreateDraft  = "github.pull_request.create_draft"
 	GitHubPullRequestCreate       = "github.pull_request.create"
 	GitHubPullRequestMerge        = "github.pull_request.merge"
@@ -90,7 +91,7 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		return nil, invalid("arguments are not one JSON object")
 	}
 	switch effectType {
-	case GitHubBranchCreateFromChanges:
+	case GitHubBranchCreateFromChanges, GitHubGitPush:
 		if err := checkGitHubTarget(target); err != nil {
 			return nil, err
 		}
@@ -104,7 +105,7 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		if err := strictDecode(raw, &args); err != nil {
 			return nil, err
 		}
-		if err := args.validate(); err != nil {
+		if err := args.validateSchema("helm." + effectType + ".v1"); err != nil {
 			return nil, err
 		}
 	case GitHubRepositoryGet:
@@ -287,11 +288,23 @@ var (
 const maxContentBytes = 49152
 
 func (a BranchCreateFromChanges) validate() error {
-	if err := constant("schema", a.Schema, "helm.github.branch.create_from_changes.v1"); err != nil {
+	return a.validateSchema("helm.github.branch.create_from_changes.v1")
+}
+
+func (a BranchCreateFromChanges) validateSchema(schema string) error {
+	if err := constant("schema", a.Schema, schema); err != nil {
 		return err
 	}
 	if err := length("base", a.Base, 1, 200); err != nil {
 		return err
+	}
+	if schema == "helm.github.git.push.v1" {
+		if err := checkHead(a.Base); err != nil {
+			return err
+		}
+		if a.Head != nil && a.Base != nil && *a.Head == *a.Base {
+			return invalid("head and base must differ")
+		}
 	}
 	if err := match("base_sha", a.BaseSHA, shaPattern); err != nil {
 		return err

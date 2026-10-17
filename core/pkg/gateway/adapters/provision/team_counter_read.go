@@ -121,6 +121,9 @@ func GetTeamCounter(ctx context.Context, store *authorityrows.Store, tenant, wor
 		if provisionWorkspace != workspace {
 			return ErrNotProvisioned
 		}
+		if principal != applied.Provisioner && principal != b.TeamNode {
+			return ErrBudgetReader
+		}
 		var node AppliedNode
 		matches := 0
 		for _, candidate := range applied.Nodes {

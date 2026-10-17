@@ -22,7 +22,7 @@ func TestPostgresTeamCounterAuthenticatedExactRead(t *testing.T) {
 	w := newAdminWire(t)
 	ctx := context.Background()
 	for _, tenant := range []string{"tenant-a", "tenant-b"} {
-		_, err := w.ensure(tenant, serviceSpec(adminProvision), humanSpec(adminOwner, adminOwner))
+		_, err := w.ensure(tenant, serviceSpec(adminProvision), serviceSpec("svc:other-reader"), humanSpec(adminOwner, adminOwner))
 		must(t, err)
 	}
 	var plan map[string]any
@@ -108,6 +108,12 @@ func TestPostgresTeamCounterAuthenticatedExactRead(t *testing.T) {
 		if !bytes.Contains(reply, []byte(`"used":"12"`)) || !bytes.Contains(reply, []byte(`"cap":"1000"`)) {
 			t.Fatalf("wire amounts are not decimal strings: %s", reply)
 		}
+	}
+	if status, reply := readAt(w.token("tenant-a", adminTeam, ScopeRead), body); status != http.StatusOK {
+		t.Fatalf("team principal read = %d %s", status, reply)
+	}
+	if status, _ := readAt(w.token("tenant-a", "svc:other-reader", ScopeRead), body); status != http.StatusForbidden {
+		t.Fatalf("unrelated service principal read = %d", status)
 	}
 	wrongWorkspace := w.iss.token(t, testAudience, "tenant-a", adminProvision, ScopeRead, func(c *tokenClaims) { c.WorkspaceID = "ws-b" })
 	foreignStatus, foreignBody := readAt(wrongWorkspace, body)

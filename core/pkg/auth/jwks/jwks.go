@@ -116,6 +116,9 @@ type OAuthTokenClaims struct {
 	Episode *EpisodeClaim
 	// Executor is the signed public-executor provenance, never seat authority.
 	Executor *ExecutorClaim
+	// Continuation grants bounded read and exact-intent replay of listed
+	// predecessor attempts to this verified successor executor episode.
+	Continuation *ContinuationClaim
 }
 
 type ExecutorClaim struct {
@@ -175,7 +178,8 @@ type jwksClaims struct {
 		WorkItemID            string `json:"work_item_id"`
 		OrganizationVersionID string `json:"organization_version_id"`
 	} `json:"helm_episode,omitempty"`
-	HelmExecutor *ExecutorClaim `json:"helm_executor,omitempty"`
+	HelmExecutor     *ExecutorClaim     `json:"helm_executor,omitempty"`
+	HelmContinuation *ContinuationClaim `json:"helm_continuation,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -336,6 +340,9 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 	if v.config.RejectExecutor && claims.HelmExecutor != nil {
 		return nil, &JWKSValidationError{Kind: JWKSErrInvalidAudience, Message: "executor credentials require the executor listener"}
 	}
+	if claims.HelmContinuation != nil && (!v.config.RequireExecutor || !claims.HelmContinuation.validFor(claims)) {
+		return nil, &JWKSValidationError{Kind: JWKSErrMalformedToken, Message: "continuation requires a bound successor executor credential"}
+	}
 	if v.config.RequireExecutor {
 		if len(claims.Audience) != 1 || claims.Audience[0] != v.config.Audience {
 			return nil, &JWKSValidationError{Kind: JWKSErrInvalidAudience, Message: "executor credentials must name only the executor audience"}
@@ -368,6 +375,7 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		WorkspaceID:      strings.TrimSpace(claims.WorkspaceID),
 		TransactionID:    strings.TrimSpace(claims.Txn),
 		Executor:         claims.HelmExecutor,
+		Continuation:     claims.HelmContinuation,
 	}
 	if len(claims.AuthorizationDetails) > 0 {
 		out.AuthorizationDetails = append(json.RawMessage(nil), claims.AuthorizationDetails...)

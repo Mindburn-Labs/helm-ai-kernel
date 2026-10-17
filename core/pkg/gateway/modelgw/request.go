@@ -27,6 +27,10 @@ type call struct {
 	Stream          bool
 	Body            []byte
 	MaxOutputTokens int64
+	// DefaultedOutput says the client supplied no positive output maximum.
+	// Only that default may be reduced to fit the current budget; an explicit
+	// maximum is quoted as requested and denied if it cannot be held.
+	DefaultedOutput bool
 	// MayWriteCache: the request carries a cache_control marker, so the
 	// provider may bill cache writes.
 	MayWriteCache bool
@@ -372,6 +376,51 @@ func clampMax(raw json.RawMessage, present bool, route *Route, name string) (val
 
 func number(v int64) json.RawMessage { return json.RawMessage(fmt.Sprint(v)) }
 
+// fitDefaultOutput lowers an injected route default to the largest positive
+// maximum whose full quote fits remaining. The quote includes the bytes of
+// the amended request, so the input and output terms use the same body that
+// will reach the provider. If even one token cannot fit, admission receives
+// the original quote and records its BUDGET_EXCEEDED denial.
+func (c *call) fitDefaultOutput(remaining int64) {
+	if !c.DefaultedOutput || remaining < 0 {
+		return
+	}
+	fields, err := parseObject(c.Body)
+	if err != nil {
+		return // inspect already validated this body
+	}
+	name := "max_output_tokens"
+	switch c.API {
+	case effectargs.APIOpenAIChat:
+		name = c.Route.ChatMaxTokensField
+	case effectargs.APIAnthropicMessages:
+		name = "max_tokens"
+	}
+	candidate := func(tokens int64) ([]byte, bool) {
+		body := rebuild(fields, map[string]json.RawMessage{name: number(tokens)}, nil)
+		quote, err := c.Route.Quote(int64(len(body)), tokens, c.MayWriteCache)
+		return body, err == nil && quote <= remaining
+	}
+	if _, fits := candidate(c.MaxOutputTokens); fits {
+		return
+	}
+	low, high := int64(1), c.MaxOutputTokens
+	best := int64(0)
+	for low <= high {
+		mid := low + (high-low)/2
+		if _, fits := candidate(mid); fits {
+			best = mid
+			low = mid + 1
+		} else {
+			high = mid - 1
+		}
+	}
+	if best > 0 {
+		c.Body, _ = candidate(best)
+		c.MaxOutputTokens = best
+	}
+}
+
 // OpenAI Responses ---------------------------------------------------------
 
 // responsesTools are the tool types the Responses API runs on the client's
@@ -400,6 +449,7 @@ func inspectResponses(c *call, route *Route, fields []field) (map[string]json.Ra
 		return nil, nil, e
 	}
 	raw, present := lookup(fields, "max_output_tokens")
+	c.DefaultedOutput = !present || isNull(raw)
 	limit, edit, e := clampMax(raw, present, route, "max_output_tokens")
 	if e != nil {
 		return nil, nil, e
@@ -437,6 +487,7 @@ func inspectChat(c *call, route *Route, fields []field) (map[string]json.RawMess
 	rawTokens, hasTokens := lookup(fields, "max_tokens")
 	hasCompletion = hasCompletion && !isNull(rawCompletion)
 	hasTokens = hasTokens && !isNull(rawTokens)
+	c.DefaultedOutput = !hasCompletion && !hasTokens
 	var effective int64
 	if !hasCompletion && !hasTokens {
 		effective = route.DefaultMaxOutputTokens
@@ -530,6 +581,7 @@ func inspectMessages(c *call, route *Route, fields []field) (map[string]json.Raw
 		return nil, nil, e
 	}
 	raw, present := lookup(fields, "max_tokens")
+	c.DefaultedOutput = !present || isNull(raw)
 	limit, edit, e := clampMax(raw, present, route, "max_tokens")
 	if e != nil {
 		return nil, nil, e

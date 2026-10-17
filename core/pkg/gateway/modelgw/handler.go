@@ -1,6 +1,7 @@
 package modelgw
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +31,8 @@ import (
 // other effect.
 type Ledger interface {
 	ModelGrants(ctx context.Context, caller admission.Caller, effectType string) (admission.Grants, error)
+	ModelGrantsWithBudget(ctx context.Context, caller admission.Caller, effectType string) (admission.Grants, error)
+	ModelCallAttemptByKey(ctx context.Context, caller admission.Caller, key string) (*admission.Attempt, error)
 	Propose(ctx context.Context, caller admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error)
 	Cancel(ctx context.Context, caller admission.Caller, token admission.Token, attemptID string) (admission.Attempt, bool, error)
 	ClaimModelCall(ctx context.Context, caller admission.Caller, attemptID string, fence time.Duration) (*admission.ModelCallClaim, admission.Attempt, error)
@@ -245,21 +249,26 @@ type modelArgs struct {
 
 // pending is a call being admitted: everything Propose needs but its key.
 type pending struct {
-	caller  admission.Caller
-	scope   string
-	digest  string
-	route   *Route
-	call    *call
-	args    []byte
-	quote   []admission.Amount
-	mandate string
-	held    int64
-	caseID  string
+	caller    admission.Caller
+	scope     string
+	digest    string
+	keyDigest string
+	route     *Route
+	call      *call
+	args      []byte
+	quote     []admission.Amount
+	mandate   string
+	held      int64
+	caseID    string
 }
 
 func (p *pending) input(n int) admission.ProposeInput {
+	digest := p.keyDigest
+	if digest == "" {
+		digest = p.digest
+	}
 	return admission.ProposeInput{
-		IdempotencyKey: fmt.Sprintf("mi:%s:%s:%d", keyScope(p.scope), p.digest, n),
+		IdempotencyKey: fmt.Sprintf("mi:%s:%s:%d", keyScope(p.scope), digest, n),
 		MandateID:      p.mandate,
 		CaseID:         p.caseID,
 		EffectType:     effectargs.ModelInference,
@@ -328,7 +337,11 @@ func (h *handler) call(api string) http.HandlerFunc {
 		ledger, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), ledgerTimeout)
 		defer cancel()
 		caller := callerOf(id)
-		grants, err := h.g.Ledger.ModelGrants(ledger, caller, effectargs.ModelInference)
+		readGrants := h.g.Ledger.ModelGrants
+		if c.DefaultedOutput {
+			readGrants = h.g.Ledger.ModelGrantsWithBudget
+		}
+		grants, err := readGrants(ledger, caller, effectargs.ModelInference)
 		if err != nil {
 			fail(h.ledgerError(ledger, "grants", err, ""))
 			return
@@ -337,8 +350,16 @@ func (h *handler) call(api string) http.HandlerFunc {
 			fail(aerr)
 			return
 		}
+		var keyDigest string
+		if c.DefaultedOutput {
+			intent := sha256.Sum256(append(append([]byte(api), 0), body...))
+			keyDigest = hex.EncodeToString(intent[:])
+		}
+		if remaining, bounded := grants.BudgetRemainingFor(c.Route.ID); bounded {
+			c.fitDefaultOutput(remaining)
+		}
 		digest := sha256.Sum256(c.Body)
-		p := &pending{caller: caller, scope: scope, caseID: caseID, digest: hex.EncodeToString(digest[:]), route: c.Route, call: c}
+		p := &pending{caller: caller, scope: scope, caseID: caseID, digest: hex.EncodeToString(digest[:]), keyDigest: keyDigest, route: c.Route, call: c}
 		args, _ := json.Marshal(modelArgs{Schema: "model.inference.v1", API: api, Route: c.Route.ID, RequestSHA256: p.digest,
 			InputBytes: int64(len(c.Body)), MaxOutputTokens: c.MaxOutputTokens, Stream: c.Stream})
 		p.args = args
@@ -391,6 +412,15 @@ func (h *handler) admitAndClaim(ctx context.Context, p *pending) (*admission.Mod
 	refreshed := false
 	claims := 0
 	for n := 0; n < maxAdmitAttempts; n++ {
+		if p.call.DefaultedOutput {
+			replay, aerr, skip := h.priorDefaultAttempt(ctx, p, n)
+			if replay != nil || aerr != nil {
+				return nil, replay, aerr
+			}
+			if skip {
+				continue
+			}
+		}
 		attempt, existing, err := h.g.Ledger.Propose(ctx, p.caller, p.input(n))
 		if err != nil {
 			var refusal *admission.Error
@@ -398,7 +428,15 @@ func (h *handler) admitAndClaim(ctx context.Context, p *pending) (*admission.Mod
 			case !errors.As(err, &refusal):
 				return nil, nil, h.ledgerError(ctx, "propose", err, "")
 			case refusal.Code == admission.CodeAlreadyExists:
-				continue // the key was used by a different request: the next one
+				if p.call.DefaultedOutput {
+					// A concurrent retry may have admitted the same raw call with
+					// a different affordable cap after our read.
+					replay, aerr, _ := h.priorDefaultAttempt(ctx, p, n)
+					if replay != nil || aerr != nil {
+						return nil, replay, aerr
+					}
+				}
+				continue // a non-reusable key takes the next slot
 			case refusal.Code == admission.CodeInvalidArgument && strings.Contains(refusal.Message, "quote carries no amount") && !refreshed:
 				// The chain gained a summed unit since the grants were read.
 				refreshed = true
@@ -494,6 +532,58 @@ func (h *handler) admitAndClaim(ctx context.Context, p *pending) (*admission.Mod
 	}
 	return nil, nil, refuse(http.StatusConflict, kindConflict, "too_many_attempts",
 		"the same request has failed too many times in this episode; change it")
+}
+
+// priorDefaultAttempt keeps a retry tied to its original client request even
+// when changing budget headroom would select another forwarded output cap.
+// The exact forwarded body still determines the quote and admission digest.
+func (h *handler) priorDefaultAttempt(ctx context.Context, p *pending, n int) (*replayed, *apiError, bool) {
+	a, err := h.g.Ledger.ModelCallAttemptByKey(ctx, p.caller, p.input(n).IdempotencyKey)
+	if err != nil {
+		return nil, h.ledgerError(ctx, "prior_model_call", err, ""), false
+	}
+	if a == nil {
+		return nil, nil, false
+	}
+	switch a.State {
+	case "DISPATCHING", "DISPATCHED":
+		e := refuse(http.StatusConflict, kindConflict, "request_in_flight",
+			"the same request is already in flight in this episode; retry once it settles")
+		e.AttemptID = a.ID
+		return nil, e, false
+	case "OBSERVED", "RECONCILED", "SETTLED":
+		if a.Outcome == "SUCCEEDED" {
+			r, err := h.g.Ledger.ModelCallReplay(ctx, p.caller, a.ID)
+			if err != nil {
+				return nil, h.ledgerError(ctx, "replay", err, a.ID), false
+			}
+			if r != nil {
+				return &replayed{AttemptID: a.ID, ModelCallReplay: r}, nil, false
+			}
+		}
+	case "ADMITTED":
+		argsDigest := sha256.Sum256(p.args)
+		if bytes.Equal(a.ArgumentDigest, argsDigest[:]) && slices.Equal(a.Quote, p.quote) &&
+			a.Target == p.route.ID && a.MandateID == p.mandate && a.CaseID == p.caseID {
+			return nil, nil, false // Propose recovers and claims the same quote.
+		}
+		// No provider call was claimed for the old cap. Release its hold
+		// before proposing the revised cap under the next key.
+		cancelled, _, err := h.g.Ledger.Cancel(ctx, p.caller, admission.Token{Scope: server.ScopePropose}, a.ID)
+		if err != nil {
+			var refusal *admission.Error
+			if errors.As(err, &refusal) && refusal.Code == admission.CodeFailedPrecondition {
+				e := refuse(http.StatusConflict, kindConflict, "request_in_flight", "the earlier call began dispatching; retry once it settles")
+				e.AttemptID = a.ID
+				return nil, e, false
+			}
+			return nil, h.ledgerError(ctx, "cancel_prior_model_call", err, a.ID), false
+		}
+		if cancelled.State == "CANCELLED" {
+			return nil, nil, true
+		}
+	}
+	return nil, nil, false
 }
 
 // denial is the 403 for a DENIED attempt, with its registry reason.

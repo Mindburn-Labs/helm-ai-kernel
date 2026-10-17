@@ -163,7 +163,7 @@ func TestPostgresAnthropicStreamPassesThroughAndSettles(t *testing.T) {
 	a := e.onlyAttempt()
 	// The attempt key follows the original client intent. The request digest
 	// inside its model arguments still follows the exact forwarded body.
-	keyDigest := sha256hex([]byte("anthropic-messages\x00" + messagesRequest))
+	keyDigest := sha256hex([]byte("anthropic-messages\x00work-ep-1\x00" + messagesRequest))
 	digest := sha256hex([]byte(wantBody))
 	if a.State != "SETTLED" || a.Outcome != "SUCCEEDED" || a.EffectType != "model.inference" || a.Target != routeSonnet ||
 		a.RequesterPrincipalID != "agt:seat-1" || a.RequesterActorID != cpActor || a.CaseID != "work-ep-1" ||

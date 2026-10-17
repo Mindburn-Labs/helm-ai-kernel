@@ -27,6 +27,9 @@ type call struct {
 	Stream          bool
 	Body            []byte
 	MaxOutputTokens int64
+	// MinOutputTokens is the lowest provider-valid cap for this body. An
+	// Anthropic thinking budget requires max_tokens above budget_tokens.
+	MinOutputTokens int64
 	// DefaultedOutput says the client supplied no positive output maximum.
 	// Only that default may be reduced to fit the current budget; an explicit
 	// maximum is quoted as requested and denied if it cannot be held.
@@ -404,7 +407,7 @@ func (c *call) fitDefaultOutput(remaining int64) {
 	if _, fits := candidate(c.MaxOutputTokens); fits {
 		return
 	}
-	low, high := int64(1), c.MaxOutputTokens
+	low, high := max(int64(1), c.MinOutputTokens), c.MaxOutputTokens
 	best := int64(0)
 	for low <= high {
 		mid := low + (high-low)/2
@@ -593,9 +596,12 @@ func inspectMessages(c *call, route *Route, fields []field) (map[string]json.Raw
 		}
 		if thinking, ok := object(rawThinking); ok {
 			kind, _ := stringOf(thinking["type"])
-			if budget, isInt := intOf(thinking["budget_tokens"]); kind == "enabled" && isInt && budget >= limit {
-				return nil, nil, refuse(http.StatusBadRequest, kindInvalidRequest, "thinking_budget_too_large",
-					fmt.Sprintf("thinking.budget_tokens (%d) must be less than max_tokens, which this route limits to %d", budget, limit))
+			if budget, isInt := intOf(thinking["budget_tokens"]); kind == "enabled" && isInt {
+				if budget >= limit {
+					return nil, nil, refuse(http.StatusBadRequest, kindInvalidRequest, "thinking_budget_too_large",
+						fmt.Sprintf("thinking.budget_tokens (%d) must be less than max_tokens, which this route limits to %d", budget, limit))
+				}
+				c.MinOutputTokens = budget + 1
 			}
 		}
 	}

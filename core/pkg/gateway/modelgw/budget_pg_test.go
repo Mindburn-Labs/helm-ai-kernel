@@ -5,11 +5,13 @@ package modelgw
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,128 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 	"github.com/google/uuid"
 )
+
+func TestPostgresDefaultRetryRecognizesLegacyInFlightAndSettledKeys(t *testing.T) {
+	e := newEnvWindow(t, 1_000_000, "none")
+	body := budgetMessage("legacy-key", 0)
+	c, refusal := inspect(e.cfg, effectargs.APIAnthropicMessages, []byte(body))
+	if refusal != nil {
+		t.Fatal(refusal)
+	}
+	forwardDigest := sha256hex(c.Body)
+	args, err := json.Marshal(modelArgs{Schema: "model.inference.v1", API: c.API, Route: c.Route.ID,
+		RequestSHA256: forwardDigest, InputBytes: int64(len(c.Body)), MaxOutputTokens: c.MaxOutputTokens, Stream: c.Stream})
+	must(t, err)
+	quote, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	must(t, err)
+	caller := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agt:seat-1", ActorID: cpActor,
+		Episode: &admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-1"}}
+	prior, existing, err := e.svc.Propose(context.Background(), caller, admission.ProposeInput{
+		IdempotencyKey: "mi:ep-1:" + forwardDigest + ":0", CaseID: "work-ep-1", EffectType: effectargs.ModelInference,
+		Target: c.Route.ID, Arguments: args, Quote: []admission.Amount{{Unit: admission.UnitUSDMicros, Amount: quote}},
+	})
+	must(t, err)
+	if existing || prior.State != "ADMITTED" {
+		t.Fatalf("legacy proposal = %+v existing=%t", prior, existing)
+	}
+	claim, _, err := e.svc.ClaimModelCall(context.Background(), caller, prior.ID, time.Minute)
+	must(t, err)
+	if claim == nil {
+		t.Fatal("legacy call did not claim")
+	}
+	e.anthropic.on(jsonHandler(budgetUsage(1)))
+	inFlight := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+	if inFlight.Status != 409 || inFlight.Header.Get(headerAttemptID) != prior.ID || e.anthropic.calls.Load() != 0 || len(e.attempts()) != 1 {
+		t.Fatalf("legacy in-flight call was duplicated: %s", inFlight)
+	}
+	responseBody := []byte(budgetUsage(1))
+	responseDigest := sha256.Sum256(responseBody)
+	cost, err := c.Route.Cost(Usage{InputTokens: 1, OutputTokens: 1})
+	must(t, err)
+	settled, err := e.svc.SettleModelCall(context.Background(), claim, admission.ModelCallOutcome{
+		Result: admission.ModelCallConfirmed, ConfirmedMicros: cost, Usage: []byte(`{"input_tokens":1,"output_tokens":1}`),
+		EvidenceDigest: responseDigest[:], Replay: &admission.ModelCallReplay{StatusCode: 200,
+			Headers: map[string]string{"Content-Type": "application/json"}, Body: responseBody,
+			BodySHA256: responseDigest[:], TTL: time.Hour},
+	})
+	must(t, err)
+	if settled.State != "SETTLED" {
+		t.Fatalf("legacy settlement = %+v", settled)
+	}
+	replay := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+	if replay.Status != 200 || replay.Header.Get(headerReplayed) != "true" || replay.Header.Get(headerAttemptID) != prior.ID ||
+		string(replay.Body) != string(responseBody) || e.anthropic.calls.Load() != 0 || len(e.attempts()) != 1 {
+		t.Fatalf("legacy stored response was not replayed: %s", replay)
+	}
+	e.ledgerBalances()
+}
+
+type failFirstModelClaim struct {
+	*admission.Service
+	failed atomic.Bool
+}
+
+func (l *failFirstModelClaim) ClaimModelCall(ctx context.Context, caller admission.Caller, id string, fence time.Duration) (*admission.ModelCallClaim, admission.Attempt, error) {
+	if l.failed.CompareAndSwap(false, true) {
+		return nil, admission.Attempt{}, errors.New("injected pre-claim failure")
+	}
+	return l.Service.ClaimModelCall(ctx, caller, id, fence)
+}
+
+func TestPostgresDefaultRetryRepricesAfterReleasingItsOwnUnclaimedHold(t *testing.T) {
+	e := newEnvWindow(t, 1_000, "none")
+	e.gw.Ledger = &failFirstModelClaim{Service: e.svc}
+	e.anthropic.on(jsonHandler(budgetUsage(1)))
+	body := budgetMessage("retry-own-hold", 0)
+	first := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+	if first.Status != 503 || e.anthropic.calls.Load() != 0 {
+		t.Fatalf("pre-claim failure: %s", first)
+	}
+	_, held := e.counters()
+	if held <= 0 {
+		t.Fatal("the first proposal did not leave a recoverable hold")
+	}
+	second := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+	if second.Status != 200 || e.anthropic.calls.Load() != 1 {
+		t.Fatalf("retry after release: first=%s second=%s", first, second)
+	}
+	attempts := e.attempts()
+	if len(attempts) != 2 || attempts[0].State != "CANCELLED" || attempts[1].State != "SETTLED" {
+		t.Fatalf("retry attempts = %+v", attempts)
+	}
+	if used, reserved := e.counters(); used <= 0 || used > 1_000 || reserved != 0 {
+		t.Fatalf("retry budget: used=%d reserved=%d", used, reserved)
+	}
+	e.ledgerBalances()
+}
+
+func TestPostgresDefaultReplayDoesNotCrossCaseInOneScope(t *testing.T) {
+	e := newEnvWindow(t, 1_000_000, "none")
+	e.anthropic.on(jsonHandler(budgetUsage(1)))
+	body := budgetMessage("same-body", 0)
+	headers := map[string]string{"Authorization": "Bearer " + tokenService, "X-Helm-Idempotency-Scope": "same-scope", "X-Helm-Case-Id": "case-a"}
+	first := post(t, e.main.URL, "/v1/messages", headers, body)
+	headers["X-Helm-Case-Id"] = "case-b"
+	second := post(t, e.main.URL, "/v1/messages", headers, body)
+	if first.Status != 200 || second.Status != 200 || second.Header.Get(headerReplayed) != "" ||
+		e.anthropic.calls.Load() != 2 || first.Header.Get(headerAttemptID) == second.Header.Get(headerAttemptID) {
+		t.Fatalf("different cases shared a result: first=%s second=%s", first, second)
+	}
+	e.ledgerBalances()
+}
+
+func TestPostgresThinkingBudgetCannotBeLoweredBelowItsProviderMinimum(t *testing.T) {
+	e := newEnvWindow(t, 1_000, "none")
+	e.anthropic.on(jsonHandler(budgetUsage(1)))
+	body := `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"thinking"}],"thinking":{"type":"enabled","budget_tokens":200}}`
+	response := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+	if response.Status != 403 || response.Header.Get("X-Helm-Reason-Code") != string(contracts.ReasonBudgetExceeded) || e.anthropic.calls.Load() != 0 {
+		t.Fatalf("unaffordable thinking request reached provider: %s", response)
+	}
+	if used, reserved := e.counters(); used != 0 || reserved != 0 {
+		t.Fatalf("thinking refusal held budget: %d+%d", used, reserved)
+	}
+}
 
 func budgetMessage(name string, maxTokens int64) string {
 	cap := ""

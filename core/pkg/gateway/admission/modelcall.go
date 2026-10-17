@@ -179,6 +179,60 @@ func (s *Service) ModelCallAttemptByKey(ctx context.Context, caller Caller, key 
 	return found, err
 }
 
+// ModelCallAttemptsByKeys reads a bounded set of earlier idempotency keys in
+// one tenant-scoped transaction. It lets the gateway recognize calls admitted
+// before its default-cap key format changed, including a retry that occupied
+// a later key after a collision. The caller, workspace and episode filters are
+// the same as ModelCallAttemptByKey.
+func (s *Service) ModelCallAttemptsByKeys(ctx context.Context, caller Caller, keys []string) ([]Attempt, error) {
+	if err := checkCaller(caller); err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	if len(keys) > 32 {
+		return nil, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "at most 32 model call keys may be read")
+	}
+	var attempts []Attempt
+	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT attempt_id::text FROM authority_effect_attempts
+			WHERE tenant_id=$1 AND workspace_id=$2 AND requester_principal_id=$3
+			AND idempotency_key=ANY($4::text[]) AND effect_type=$5
+			AND (($6 = '' AND episode_id IS NULL) OR episode_id=$6)
+			ORDER BY idempotency_key`, caller.TenantID, caller.WorkspaceID, caller.PrincipalID,
+			pq.Array(keys), effectargs.ModelInference, episodeScope(caller))
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			a, err := loadAttempt(ctx, tx, caller, id)
+			if err != nil {
+				return err
+			}
+			attempts = append(attempts, a)
+		}
+		return nil
+	})
+	return attempts, err
+}
+
 // maxLeafGrants bounds the mandates a grants read follows.
 const maxLeafGrants = 32
 

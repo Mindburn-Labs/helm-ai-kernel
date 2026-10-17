@@ -64,7 +64,7 @@ func (s *AdminServer) readTeamCounter(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, authorityrows.ErrInvalid):
 			teamCounterError(w, http.StatusBadRequest, "invalid_argument", "invalid team counter binding")
 		case errors.Is(err, provision.ErrBudgetReader):
-			teamCounterError(w, http.StatusForbidden, "permission_denied", "the reader is not an active service principal")
+			teamCounterError(w, http.StatusForbidden, "permission_denied", "the reader is not authorized for this team counter")
 		case errors.Is(err, provision.ErrNotProvisioned):
 			teamCounterError(w, http.StatusNotFound, "not_found", "the organization is not provisioned in this scope")
 		case errors.Is(err, provision.ErrTeamCounterBinding):

@@ -141,7 +141,7 @@ func (g *fakeGitHub) Observe(ctx context.Context, creds adapters.TokenSource, ef
 }
 
 // githubApp is the real custody against a fake GitHub App token endpoint.
-func githubApp(t *testing.T) *custody.GitHubApp {
+func githubApp(t *testing.T, installations ...[]byte) *custody.GitHubApp {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	must(t, err)
@@ -160,9 +160,14 @@ func githubApp(t *testing.T) *custody.GitHubApp {
 		_ = json.NewEncoder(w).Encode(map[string]any{"token": token, "expires_at": time.Now().Add(time.Hour).UTC()})
 	}))
 	t.Cleanup(api.Close)
-	app, err := custody.NewGitHubApp("1234", pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}),
-		[]byte(`{"installations":[{"tenant_id":"tenant-a","owner":"Mindburn-Labs","installation_id":7,"repositories":["Mindburn-Labs/example"]}]}`),
-		api.URL)
+	mapping := []byte(`{"installations":[{"tenant_id":"tenant-a","owner":"Mindburn-Labs","installation_id":7,"repositories":["Mindburn-Labs/example"]}]}`)
+	if len(installations) > 1 {
+		t.Fatal("the fixture accepts one explicit installation map")
+	}
+	if len(installations) == 1 {
+		mapping = installations[0]
+	}
+	app, err := custody.NewGitHubApp("1234", pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), mapping, api.URL)
 	must(t, err)
 	return app
 }

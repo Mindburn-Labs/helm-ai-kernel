@@ -1,5 +1,8 @@
 package admission
 
+// quantum_posture: consumes claims authenticated by the classical RS256 JWT
+// validator; this file adds no post-quantum cryptographic primitive.
+
 import (
 	"bytes"
 	"context"

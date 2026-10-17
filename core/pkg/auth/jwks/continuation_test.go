@@ -1,5 +1,8 @@
 package jwks
 
+// quantum_posture: tests classical RS256 JWT verification of continuation
+// claims; no post-quantum signature or protection is claimed.
+
 import (
 	"encoding/json"
 	"strconv"

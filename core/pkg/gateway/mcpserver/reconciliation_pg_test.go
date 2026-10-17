@@ -376,6 +376,9 @@ func TestPostgresGitHubApplyThenDropReplayAllDeclaredWrites(t *testing.T) {
 				s := setupGitHubWrite(t, e, fake, effectType, "helm/native-branch")
 				fake.SetApplyThenDrop(drop && s.refWrite, drop && !s.refWrite)
 				got := approveAndDispatch(t, e, s.tool, s.args, "attempt-"+effectType)
+				if len(got.Quote) != 1 || got.Quote[0].Unit != "count" || got.Quote[0].Amount != 1 {
+					t.Fatalf("the adapter-owned fixed quote was not charged once: %+v", got.Quote)
+				}
 				if s.writeCount() != s.baseline+1 {
 					t.Fatalf("provider applied %d visible writes after %d prerequisites, want one", s.writeCount(), s.baseline)
 				}
@@ -430,6 +433,74 @@ func TestPostgresGitHubApplyThenDropReplayAllDeclaredWrites(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestPostgresGitHubPushAttemptCanBackReadyPullRequest(t *testing.T) {
+	e, fake := realGitHubEnv(t)
+	head := "helm/push-backed-pull"
+	s := setupGitHubWrite(t, e, fake, effectargs.GitHubGitPush, head)
+	push := approveAndDispatch(t, e, s.tool, s.args, "push-before-ready-pull")
+	if push.State != "OBSERVED" || push.Outcome != "SUCCEEDED" || s.writeCount() != s.baseline+1 {
+		t.Fatalf("push prerequisite = %+v, ref writes=%d", push, s.writeCount())
+	}
+	var kind string
+	must(t, e.owner.QueryRow(`SELECT result_kind FROM authority_observations
+		WHERE tenant_id = $1 AND attempt_id = $2 AND outcome = 'SUCCEEDED'`, tenantA, push.ID).Scan(&kind))
+	if kind != "github_branch" {
+		t.Fatalf("push observation result kind = %q", kind)
+	}
+	ready := approveAndDispatch(t, e, "github_pull_request_create",
+		pullToolArgsFor(effectargs.GitHubPullRequestCreate, push.ID, head, fake.HeadSHA(head)), "ready-after-push")
+	if ready.State != "OBSERVED" || ready.Outcome != "SUCCEEDED" || fake.AppliedPull(head) != 1 {
+		t.Fatalf("ready pull from observed push = %+v, pull writes=%d", ready, fake.AppliedPull(head))
+	}
+}
+
+func TestPostgresGitHubMergeStepUpAndQueuedReadback(t *testing.T) {
+	e, fake := realGitHubEnv(t)
+	head := "helm/queued-merge"
+	s := setupGitHubWrite(t, e, fake, effectargs.GitHubPullRequestMerge, head)
+	fake.SetMergeMode("pending")
+	first, failed := e.callTool(t, tokenSeat1Ep1, "queued-merge", s.tool, s.args).structured(t)
+	if failed || first["status"] != "escalated" {
+		t.Fatalf("merge proposal = %v, error=%t", first, failed)
+	}
+	id := first["attempt_id"].(string)
+	attempt := e.attempt(tenantA, id)
+	approver := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "human-b", ActorID: cpActor}
+	decide := admission.Token{Issuer: "https://control-plane.test", ID: "queued-merge-decide",
+		Scope: "helm.gateway.decide", ExpiresAt: time.Now().Add(time.Minute)}
+	decision := admission.DecideInput{AttemptID: id, ApprovalDigest: attempt.ApprovalDigest, Reason: "approved exact merge"}
+	_, _, err := e.svc.Approve(context.Background(), approver, decide, decision)
+	var refusal *admission.Error
+	if !errors.As(err, &refusal) || refusal.Code != admission.CodePermissionDenied || refusal.Reason != "STEP_UP_REQUIRED" || fake.MergeRequests() != 0 {
+		t.Fatalf("approval without step-up = %v; merge writes=%d", err, fake.MergeRequests())
+	}
+	decision.StepUp = &admission.StepUp{Token: admission.Token{Issuer: "https://control-plane.test",
+		ID: "queued-merge-stepup", Scope: "helm.gateway.stepup", ExpiresAt: time.Now().Add(time.Minute)},
+		Method: "webauthn", Raw: "verified-queued-merge-stepup"}
+	approved, existing, err := e.svc.Approve(context.Background(), approver, decide, decision)
+	must(t, err)
+	if existing || approved.State != "ADMITTED" || fake.MergeRequests() != 0 {
+		t.Fatalf("proof-bound approval = %+v, existing=%t, merge writes=%d", approved, existing, fake.MergeRequests())
+	}
+	if n := e.count(tenantA, `SELECT count(*) FROM authority_approvals WHERE attempt_id = $1
+		AND step_up_method = 'webauthn' AND step_up_jti = 'queued-merge-stepup'`, id); n != 1 {
+		t.Fatalf("merge approval has %d retained step-up proofs", n)
+	}
+	cp := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: cpActor}
+	queued, existing, err := e.svc.Dispatch(context.Background(), cp, id)
+	must(t, err)
+	if existing || queued.State != "UNKNOWN" || queued.Outcome != "" || fake.MergeRequests() != 1 ||
+		len(queued.Exposures) != 1 || queued.Exposures[0].Kind != "held" {
+		t.Fatalf("queued merge was treated as complete: %+v, existing=%t, writes=%d", queued, existing, fake.MergeRequests())
+	}
+	fake.CompleteMerge(fake.PullNumber(head))
+	settled, _, err := e.svc.Observe(context.Background(), cp, id)
+	must(t, err)
+	if settled.State != "RECONCILED" || settled.Outcome != "SUCCEEDED" || settled.Exposures[0].Kind != "confirmed" || fake.MergeRequests() != 1 {
+		t.Fatalf("authoritative merge readback = %+v, writes=%d", settled, fake.MergeRequests())
 	}
 }
 

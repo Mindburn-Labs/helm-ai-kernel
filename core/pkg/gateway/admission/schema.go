@@ -73,6 +73,9 @@ var migrations = []migration{
 	{10, "unique provider evidence per attempt", func() (string, error) {
 		return withRowSecurity("", "schema/010_observation_evidence.sql", nil)
 	}},
+	{11, "fence legacy model gateway writers", func() (string, error) {
+		return withRowSecurity("", "schema/011_model_writer_fence.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

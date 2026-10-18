@@ -208,6 +208,8 @@ type fakeLedger struct {
 	dispatched, observed, read, grantsRead int
 	dispatch, observe                      func(id string) (admission.Attempt, error)
 	get                                    func(id string) (admission.Attempt, error)
+	retained                               func(in admission.ProposeInput) (admission.Attempt, bool, error)
+	retainedRead                           int
 	callers                                []admission.Caller
 }
 
@@ -224,6 +226,21 @@ func (l *fakeLedger) ModelGrants(context.Context, admission.Caller, string) (adm
 func (l *fakeLedger) ProposeWorkEffect(_ context.Context, _ admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error) {
 	l.proposed = append(l.proposed, in)
 	return l.propose(len(l.proposed)-1, in)
+}
+
+func (l *fakeLedger) FindRetainedWorkEffect(_ context.Context, _ admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error) {
+	l.retainedRead++
+	if l.retained != nil {
+		return l.retained(in)
+	}
+	return admission.Attempt{}, false, nil
+}
+
+func (l *fakeLedger) GetReassignment(_ context.Context, _ admission.Caller, id string) (admission.Attempt, error) {
+	if l.get != nil {
+		return l.get(id)
+	}
+	return admission.Attempt{}, &admission.Error{Code: admission.CodeNotFound}
 }
 
 func (l *fakeLedger) Dispatch(_ context.Context, _ admission.Caller, id string) (admission.Attempt, bool, error) {
@@ -363,6 +380,31 @@ func TestAdmittedCallsAreDispatchedAndObservedInTheSameCall(t *testing.T) {
 	got, _ = newGateway(t, l).Call(context.Background(), workerCaller(), call("3", repoCall))
 	if !got.IsError || got.StructuredContent["status"] != "failed" {
 		t.Fatalf("a failed read-back: %+v", got)
+	}
+}
+
+func TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls(t *testing.T) {
+	l := &fakeLedger{grants: admission.Grants{PrincipalKind: "agent"}}
+	l.retained = func(in admission.ProposeInput) (admission.Attempt, bool, error) {
+		if in.EffectType != effectargs.GitHubRepositoryGet || in.Target != "github.com/o/r" || len(in.Quote) != 0 {
+			t.Fatalf("retained lookup received a priced or changed request: %+v", in)
+		}
+		old := attemptIn("UNKNOWN", "")
+		old.RequesterPrincipalID = "agt:old"
+		old.Episode = &admission.Episode{EpisodeID: "episode-old", WorkItemID: "work", OrganizationVersionID: "version"}
+		return old, true, nil
+	}
+	c := workerCaller()
+	c.Caller.Reassignment = &admission.Reassignment{GrantID: "11111111-1111-7111-8111-111111111111",
+		Generation: 1, WorkItemID: "work", RecipientEpisodeID: "episode",
+		RecipientPrincipalID: "agt:seat", RecipientActorID: "cp", RecipientProfile: "worker"}
+	got, err := newGateway(t, l).Call(context.Background(), c, call("17", repoCall))
+	if err != nil || got.IsError || got.StructuredContent["status"] != "reconciling" ||
+		got.StructuredContent["attempt_id"] != "11111111-1111-7111-8111-111111111111" {
+		t.Fatalf("retained result = %+v, %v", got, err)
+	}
+	if l.retainedRead != 1 || l.grantsRead != 0 || len(l.proposed) != 0 || l.dispatched != 0 || l.observed != 0 {
+		t.Fatalf("replay mutated or priced an effect: %+v", l)
 	}
 }
 

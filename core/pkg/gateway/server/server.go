@@ -270,6 +270,9 @@ func (s *Server) GetAttempt(ctx context.Context, req *connect.Request[gatewayv1.
 	if canTryContinuationRead(err, id.Caller) {
 		attempt, err = s.Admission.GetContinuation(ctx, id.Caller, req.Msg.GetAttemptId())
 	}
+	if canTryReassignmentRead(err, id.Caller) {
+		attempt, err = s.Admission.GetReassignment(ctx, id.Caller, req.Msg.GetAttemptId())
+	}
 	if err != nil {
 		return nil, toRPCError(ctx, "GetAttempt", err)
 	}
@@ -295,6 +298,14 @@ func (s *Server) GetAttemptContent(ctx context.Context, req *connect.Request[gat
 
 func canTryContinuationRead(err error, caller admission.Caller) bool {
 	if caller.Continuation == nil {
+		return false
+	}
+	var refusal *admission.Error
+	return errors.As(err, &refusal) && refusal.Code == admission.CodeNotFound
+}
+
+func canTryReassignmentRead(err error, caller admission.Caller) bool {
+	if caller.Reassignment == nil {
 		return false
 	}
 	var refusal *admission.Error

@@ -23,6 +23,8 @@ type Ledger interface {
 	// is named for its first user and reads any.
 	ModelGrants(ctx context.Context, caller admission.Caller, effectType string) (admission.Grants, error)
 	ProposeWorkEffect(ctx context.Context, caller admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error)
+	FindRetainedWorkEffect(ctx context.Context, caller admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error)
+	GetReassignment(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, error)
 	Dispatch(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, bool, error)
 	Observe(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, bool, error)
 	Get(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, error)
@@ -107,6 +109,17 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 	if strictJSON(call.Arguments, &in) != nil || in.Target == "" || len(in.Arguments) == 0 || in.Arguments[0] != '{' {
 		return failed("invalid", contracts.ReasonSchemaViolation, `the arguments must be {"target": ..., "arguments": {...}}`), nil
 	}
+	if c.Caller.Reassignment != nil {
+		retained, found, err := g.ledger.FindRetainedWorkEffect(ctx, c.Caller, admission.ProposeInput{
+			EffectType: t.effectType, Target: in.Target, Arguments: []byte(in.Arguments),
+		})
+		if err != nil {
+			return g.refusal(err, "")
+		}
+		if found {
+			return resultFor(retained), nil
+		}
+	}
 	grants, err := g.ledger.ModelGrants(ctx, c.Caller, t.effectType)
 	if err != nil {
 		return Result{}, refusedOr(err)
@@ -183,6 +196,12 @@ func (g *Gateway) attemptGet(ctx context.Context, c Caller, call Call) (Result, 
 			}); ok {
 				attempt, err = reader.GetContinuation(ctx, c.Caller, in.AttemptID)
 			}
+		}
+	}
+	if err != nil && c.Caller.Reassignment != nil {
+		var refusal *admission.Error
+		if errors.As(err, &refusal) && refusal.Code == admission.CodeNotFound {
+			attempt, err = g.ledger.GetReassignment(ctx, c.Caller, in.AttemptID)
 		}
 	}
 	if err != nil {

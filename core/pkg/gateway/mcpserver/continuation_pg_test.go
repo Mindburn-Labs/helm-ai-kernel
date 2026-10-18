@@ -29,6 +29,7 @@ import (
 
 type signedContinuationIssuer struct {
 	key       *rsa.PrivateKey
+	keysURL   string
 	now       time.Time
 	validator *jwks.JWKSValidator
 }
@@ -41,7 +42,7 @@ func newSignedContinuationIssuer(t *testing.T) *signedContinuationIssuer {
 	must(t, err)
 	keys := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
 	t.Cleanup(keys.Close)
-	i := &signedContinuationIssuer{key: key, now: time.Now().UTC().Truncate(time.Second)}
+	i := &signedContinuationIssuer{key: key, keysURL: keys.URL, now: time.Now().UTC().Truncate(time.Second)}
 	i.validator = jwks.NewJWKSValidator(jwks.JWKSConfig{
 		JWKSURL: keys.URL, Issuer: "helm-continuation-proof", Audience: "helm-gateway-executor:proof",
 		Algorithms: []string{"RS256"}, RequiredActor: cpActor, RequireExecutor: true,

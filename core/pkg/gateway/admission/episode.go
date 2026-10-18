@@ -29,6 +29,7 @@ var claimIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 // validEpisode reports whether e is a claim the token layer can have produced.
 func validEpisode(e *Episode) bool {
 	return claimIDPattern.MatchString(e.EpisodeID) && claimIDPattern.MatchString(e.WorkItemID) &&
+		(e.Profile == "" || e.Profile == "worker" || e.Profile == "executor") &&
 		(e.OrganizationVersionID == "" || claimIDPattern.MatchString(e.OrganizationVersionID))
 }
 

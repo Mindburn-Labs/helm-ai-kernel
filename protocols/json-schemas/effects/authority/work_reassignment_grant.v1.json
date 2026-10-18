@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/authority/work_reassignment_grant.v1.json",
+  "title": "helm.authority.work_reassignment.grant.v1 arguments",
+  "description": "An exact CP-prepared work reassignment manifest. Kernel verifies complete native attempt membership, including a verified empty drain, and applies a distinct human approved, step-up bounded retained-result grant. Empty membership grants no retained reads. The grant never transfers approval, permit, budget hold, credential, dispatch or observation authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "reassignment_id", "manifest_digest", "drain_digest", "org_ref", "work_item_id", "organization_version_id", "commitment_id", "terms_digest", "plan_digest", "authority_revision", "expected_generation", "generation", "expires_at", "recipient", "sources"],
+  "properties": {
+    "schema": {"const": "helm.work-reassignment.v1"},
+    "reassignment_id": {"$ref": "#/$defs/uuid"},
+    "predecessor_reassignment_id": {"$ref": "#/$defs/uuid"},
+    "manifest_digest": {"$ref": "#/$defs/sha256ref"},
+    "drain_digest": {"$ref": "#/$defs/sha256ref"},
+    "org_ref": {"type": "string", "pattern": "^org:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "work_item_id": {"$ref": "#/$defs/id"},
+    "organization_version_id": {"$ref": "#/$defs/id"},
+    "commitment_id": {"$ref": "#/$defs/id"},
+    "terms_digest": {"$ref": "#/$defs/sha256ref"},
+    "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority_revision": {"type": "integer", "minimum": 1},
+    "expected_generation": {"type": "integer", "minimum": 0},
+    "generation": {"type": "integer", "minimum": 1},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "recipient": {"$ref": "#/$defs/recipient"},
+    "sources": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "#/$defs/source"}}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:/-]{1,256}$"},
+    "source_actor_id": {"type": "string", "pattern": "^$|^[A-Za-z0-9._:/-]{1,256}$"},
+    "sha256ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "recipient": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "seat_id", "principal_id", "actor_id", "profile", "client"],
+      "properties": {
+        "episode_id": {"$ref": "#/$defs/id"}, "seat_id": {"$ref": "#/$defs/id"},
+        "principal_id": {"$ref": "#/$defs/id"}, "actor_id": {"$ref": "#/$defs/actor_id"},
+        "profile": {"enum": ["worker", "executor"]},
+        "client": {"type": "string", "maxLength": 128}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "seat_id", "principal_id", "actor_id", "profile", "attempt_ids"],
+      "properties": {
+        "episode_id": {"$ref": "#/$defs/id"}, "seat_id": {"$ref": "#/$defs/id"},
+        "principal_id": {"$ref": "#/$defs/id"}, "actor_id": {"$ref": "#/$defs/source_actor_id"},
+        "profile": {"enum": ["worker", "executor"]},
+        "attempt_ids": {"type": "array", "maxItems": 48, "uniqueItems": true, "items": {"$ref": "#/$defs/uuid"}}
+      }
+    }
+  },
+  "x-helm": {"effect_type": "helm.authority.work_reassignment.grant.v1", "grantable": false}
+}

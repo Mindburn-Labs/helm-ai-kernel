@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 82,
-    "enforced": 42,
+    "total": 83,
+    "enforced": 43,
     "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -4169,6 +4169,79 @@
           "file": "core/pkg/auth/jwks/jwks.go",
           "tests": [
             "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-058",
+      "title": "Kernel bounded retained work reassignment",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A distinct-human-approved and stepped-up Kernel authority effect installs one current work reassignment generation after a locked, complete native attempt scan. A signed worker or executor successor claim resolves its exact grant and member in the tenant ledger on every retained status or replay read. The replay returns only the original result and cannot dispatch, observe, approve, copy a permit or move an exposure. The old episode is fenced for both new proposals and idempotent replay. A revoked, expired, stopped or superseded grant fails closed. An empty native drain has no retained members. This is the Kernel boundary; Control Plane preparation, assignment and issuance remain separate obligations.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/gateway/runtime.serve",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/server.Authenticator.Authenticate",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/mcpserver.Gateway.Call",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.FindRetainedWorkEffect",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.GetReassignment",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/reassignment.Adapter.Dispatch",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_GATEWAY_DATABASE_URL and gateway schema migration 12 for tenant-isolated current generation and member rows.",
+        "Worker and executor listener JWKS issuer, audience, actor and profile configuration; the signed helm_reassignment claim carries a reference, never member authority."
+      ],
+      "protected_operations": [
+        "The exact retained status/result of listed work attempts at MCP tools/call, helm_attempt_get and GetAttempt; original effect dispatch and authority stay on the original attempt."
+      ],
+      "bypass_assumptions": [
+        "The Control Plane issuer is trusted for recipient assignment and the application digest; Kernel checks its own grant and native attempt ledger, not the Control Plane database.",
+        "A valid grant is not evidence of the Control Plane's durable application, hosted issuance closure or live managed-client acceptance.",
+        "GetAttemptContent and ListAttempts retain ordinary episode isolation; the grant does not authorize raw historical content."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers",
+          "core/pkg/gateway/mcpserver.TestPostgresEmptyDrainGrantsNoRetainedHistory",
+          "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
+        ],
+        "forbidden": [
+          "core/pkg/auth/jwks.TestReassignmentClaimRequiresTheExactEpisodeAndListener",
+          "core/pkg/gateway/effectargs.TestWorkReassignmentGrantClosedAndBound",
+          "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"
+        ],
+        "removal": [
+          "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
+        ],
+        "bypass": [
+          "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
           ]
         }
       ]

@@ -1157,16 +1157,63 @@ episode as a `helm_episode` claim: `episode_id`, `work_item_id` and
   any other attempt of the same tenant, another episode's, another seat's under
   the same episode id and the Control Plane's, is `not_found` for it, the same
   answer as an attempt that does not exist. `Dispatch`, `Observe` and `Cancel`
-  find only those attempts too.
-- **Request digest.** The episode claim is part of the idempotency digest of a
-  request proposed under one, so the same key and request from another episode
-  is an `IDEMPOTENCY_CONFLICT`. A request with no claim digests as it always
-  did.
+  find only those attempts too. An installed work reassignment grant permits
+  only the exact retained status/result reads described below; it does not
+  expand ordinary content or list reads.
+- **Request digest.** Ordinary Propose binds the verified episode and principal
+  in its idempotency digest. Work-effect proposals use the canonical work item,
+  effect type, target and argument intent as their stable key across episodes;
+  access to an older attempt still needs the live reassignment grant below.
 - **Status.** Served: `helm-gateway` records the episode (schema version 8:
   `episode_id` and `organization_version_id` on the attempt row, with the work
   item as `case_id`), holds episode tokens to it, and honors the `episode_id`
   filter. The worker's MCP endpoint ([gateway-mcp.md](gateway-mcp.md)) and the
   model endpoints both propose under it.
+
+## Kernel retained work reassignment
+
+The Kernel accepts `helm.authority.work_reassignment.grant.v1` as a closed
+`helm.work-reassignment.v1` manifest through the ordinary effect admission
+path. A registered service principal proposes it. A distinct human approves
+its exact bytes with WebAuthn step-up. At dispatch, the Kernel checks the
+current organization plan and revision, active principals and Stops, the
+expected work generation, and complete native `work:` attempt membership under
+a work-item lock. The new recipient has the same worker or executor listener
+profile as every listed source. A zero-member manifest installs no retained
+read membership; it still requires a complete native drain that finds zero.
+
+The grant and its listed members live in tenant-isolated PostgreSQL rows.
+A successor token's closed `helm_reassignment` claim names the grant ID,
+generation, manifest digest, application digest and exact recipient. The
+Kernel resolves that reference against its current row on every retained
+status or replay read. Only a listed original attempt can be returned, and a
+replay must have the same canonical effect intent. It creates no attempt,
+permit, approval, hold, dispatch or observation. `GetAttempt` and the MCP
+attempt tool can return the original attempt's current status and result;
+`GetAttempt` also retains its original requester, episode, approval and permit
+references. `GetAttemptContent`, list,
+execute, observe and the original attempt's authority remain isolated.
+
+The recipient's new effect intent follows normal current admission. The work
+generation fences an old source from submitting or replaying work effects.
+`helm.authority.work_reassignment.revoke.v1` narrows one current generation
+without approval and makes even an unexpired successor token unusable. Plan
+revision, principal status, grant expiry and live Stop are checked again at
+retained read. An active service principal can call
+`AuthorityAdminService.GetCurrentWorkReassignment` with its read scope and
+exact organization/work item to read the native high-water generation, grant,
+recipient and revocation attempt. The tenant and workspace come from its
+token. The work row stays after revocation, so a later grant must CAS from
+that generation. A no-grant response is only a point-in-time absence; CP
+must separately settle or cancel any in-flight proposal before clearing a
+prepared transition. The manifest's `reassignment_id` is the native grant ID
+and CP's prepared reassignment ID; it is distinct from the grant and revoke
+attempt IDs. A recovery grant after explicit revocation must include
+`predecessor_reassignment_id` equal to that current revoked grant ID. The
+Kernel refuses an omitted or different predecessor under the native work
+generation lock. Control Plane preparation, durable assignment and token
+issuance are separate producer obligations; this Kernel path alone does not
+establish a completed cross-seat transition.
 
 ## Step-up proof
 

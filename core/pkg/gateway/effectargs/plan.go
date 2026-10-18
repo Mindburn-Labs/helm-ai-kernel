@@ -48,7 +48,7 @@ func ValidOrgRef(ref string) bool { return orgRefPattern.MatchString(ref) }
 // human's approval with step-up: every one but helm.authority.narrow.v1, which
 // only narrows and is admitted without approval.
 func WidensAuthority(effectType string) bool {
-	return strings.HasPrefix(effectType, "helm.authority.") && effectType != AuthorityNarrow
+	return strings.HasPrefix(effectType, "helm.authority.") && effectType != AuthorityNarrow && effectType != AuthorityWorkReassignmentRevoke
 }
 
 // Plan is a parsed authority plan. Every field is validated against the

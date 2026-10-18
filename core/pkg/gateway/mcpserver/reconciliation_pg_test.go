@@ -558,8 +558,27 @@ func TestPostgresGitHubFixedQuoteCannotBeUnderstatedByAPI(t *testing.T) {
 }
 
 func TestPostgresGitHubLateReconcileJobFourOutcomes(t *testing.T) {
-	for _, effectType := range []string{effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubGitPush,
-		effectargs.GitHubPullRequestCreateDraft, effectargs.GitHubPullRequestCreate, effectargs.GitHubPullRequestMerge} {
+	testPostgresGitHubLateReconcileJobFourOutcomes(t, []string{
+		effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubGitPush,
+	})
+}
+
+func TestPostgresGitHubLateReconcileJobPullRequestCreateFourOutcomes(t *testing.T) {
+	testPostgresGitHubLateReconcileJobFourOutcomes(t, []string{
+		effectargs.GitHubPullRequestCreateDraft, effectargs.GitHubPullRequestCreate,
+	})
+}
+
+func TestPostgresGitHubLateReconcileJobMergeFourOutcomes(t *testing.T) {
+	testPostgresGitHubLateReconcileJobFourOutcomes(t, []string{
+		effectargs.GitHubPullRequestMerge,
+	})
+}
+
+// Keep each native proof below the runner's per-test timeout while retaining
+// all four read-back outcomes for every declared GitHub write effect.
+func testPostgresGitHubLateReconcileJobFourOutcomes(t *testing.T, effectTypes []string) {
+	for _, effectType := range effectTypes {
 		for _, outcome := range []string{"matching", "mismatch", "inconclusive-12", "absent-after-fence"} {
 			t.Run(fmt.Sprintf("%s/%s", effectType, outcome), func(t *testing.T) {
 				e, fake := realGitHubEnv(t)

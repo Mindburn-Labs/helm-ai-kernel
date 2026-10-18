@@ -6,15 +6,15 @@ import (
 )
 
 // TestRouteFromPatternMirrorsOtelhttp pins the normaliser against the one the
-// instrumentation library applies to the same input, otelhttp v0.65.0
+// instrumentation library applies to the same input, otelhttp v0.71.0
 // internal/semconv/util.go:79-84 httpRoute():
 //
 //	if idx := strings.IndexByte(pattern, '/'); idx >= 0 { return pattern[idx:] }
 //	return ""
 //
 // The rule matters because http.route has to be the SAME string in three
-// places: the span attribute we stamp, the metric attribute we contribute, and
-// the value the library itself would produce. A method-scoped ServeMux pattern
+// places: the span attribute we stamp, the metric attribute the library derives,
+// and the route half of the span name. A method-scoped ServeMux pattern
 // carries its method ("GET /probe/{id}"), and stamping that verbatim bakes the
 // method into http.route — splitting one route across as many buckets as it has
 // verbs and making it disagree with the library's own output.

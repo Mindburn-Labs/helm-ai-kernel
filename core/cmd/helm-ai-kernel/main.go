@@ -917,10 +917,10 @@ func semanticThreatEscalationBPFromEnv() (int, error) {
 // The accepted cost of moving in is the CORS preflight, which CORSMiddleware
 // answers before the span starts and which therefore is no longer traced.
 //
-// Nothing here stamps http.route, and nothing here could. All three
-// route-bearing surfaces are supplied inside tracing.WrapEdgeHandler, but NOT
-// all three by the same mechanism — the split is what pins them to that
-// function rather than to this chain:
+// Nothing here stamps http.route, and nothing here could. The three
+// route-bearing surfaces are coordinated inside tracing.WrapEdgeHandler, but
+// by different mechanisms — the split pins them to that function rather than
+// to this chain:
 //
 //   - The span NAME needs an otelhttp OPTION (WithSpanNameFormatter). otelhttp
 //     re-runs its formatter after the inner handler returns (handler.go:180-181)
@@ -932,11 +932,10 @@ func semanticThreatEscalationBPFromEnv() (int, error) {
 //     INSIDE otelhttp.NewHandler, because from outside the span has already
 //     ended and the write is dropped — which is precisely why it lives in the
 //     wrapper and cannot be a layer of this chain.
-//   - The metric ATTRIBUTE has TWO post-routing hooks — otelhttp.Labeler and
-//     WithMetricAttributesFn — and the wrapper uses the option, because it
-//     belongs to the wrapper rather than to any handler and so covers edges we
-//     do not own. See tracing.WrapEdgeHandler for why, and use the Labeler for
-//     an attribute only one handler knows.
+//   - The metric ATTRIBUTE comes from otelhttp's post-routing read of Pattern.
+//     The wrapper clears a non-discriminating catch-all Pattern after the inner
+//     handler returns, so that metric and the span agree on its absence. Real
+//     routes retain their Pattern. See tracing.WrapEdgeHandler for the rule.
 //
 // The one requirement this chain owes that machinery is that every layer below
 // the wrapper pass the request through unchanged; the rate limiter does.

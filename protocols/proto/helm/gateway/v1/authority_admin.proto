@@ -12,6 +12,7 @@ syntax = "proto3";
 //     and approved (its approver is a registered human principal) at all;
 //   - GetProvisioning reads what a provision effect applied;
 //   - GetProvisionBudget reads the applied node's native lifetime USD usage;
+//   - GetCurrentWorkReassignment reads one work item's native grant generation;
 //   - ListEffectTypes reads the catalog of effect types the gateway performs,
 //     with their argument schemas.
 //
@@ -21,8 +22,9 @@ syntax = "proto3";
 //     message carries a tenant or a workspace.
 //   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
 //     Control Plane's issuer mints for its service principal only, and which no
-//     other RPC takes. GetProvisioning, GetProvisionBudget and ListEffectTypes take
-//     helm.gateway.read. ADR-0005 allows one scope per token.
+//     other RPC takes. GetProvisioning, GetProvisionBudget,
+//     GetCurrentWorkReassignment and ListEffectTypes take helm.gateway.read.
+//     ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque strings and
@@ -104,6 +106,18 @@ service AuthorityAdminService {
   //
   // Token scope: helm.gateway.read.
   rpc GetProvisionBudget(GetProvisionBudgetRequest) returns (GetProvisionBudgetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetCurrentWorkReassignment reads the Kernel's current high-water grant
+  // generation for one work item. It includes a revoked or expired grant, so
+  // the next installation can use the native expected_generation CAS. No
+  // attempt members, raw content or successor history are returned. Tenant and
+  // workspace are token-derived; an active service principal is required.
+  // No grant returns present=false and generation=0 for a provisioned org.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetCurrentWorkReassignment(GetCurrentWorkReassignmentRequest) returns (GetCurrentWorkReassignmentResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
@@ -250,6 +264,35 @@ message GetProvisioningRequest {
 message GetProvisioningResponse {
   // What the latest applied plan made.
   Provisioning provisioning = 1;
+}
+
+// GetCurrentWorkReassignmentRequest names one work item in a provisioned org.
+// Tenant and workspace are never accepted from a request body.
+message GetCurrentWorkReassignmentRequest {
+  string org_ref = 1;
+  string work_item_id = 2;
+}
+
+// GetCurrentWorkReassignmentResponse is the native current work fence. A
+// revoked grant retains its generation and grant ID; it never resets to zero.
+message GetCurrentWorkReassignmentResponse {
+  bool present = 1;
+  string org_ref = 2;
+  string work_item_id = 3;
+  int64 generation = 4;
+  string grant_id = 5;
+  string manifest_digest = 6;
+  string grant_attempt_id = 7;
+  bool revoked = 8;
+  string revoked_by_attempt_id = 9;
+  google.protobuf.Timestamp revoked_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+  string recipient_episode_id = 12;
+  string recipient_seat_id = 13;
+  string recipient_principal_id = 14;
+  string recipient_actor_id = 15;
+  string recipient_profile = 16;
+  string recipient_client = 17;
 }
 
 // Provisioning is the state a plan left an organization in.

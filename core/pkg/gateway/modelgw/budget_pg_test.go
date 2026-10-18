@@ -412,7 +412,8 @@ func TestPostgresTeamAndChildShareTheLastModelQuote(t *testing.T) {
 	fillTeam(t, e, teamLimit, limit-q+1)
 	before := e.anthropic.calls.Load()
 	denied := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenBudgetChild), childBody)
-	if denied.Status != 403 || denied.Header.Get("X-Helm-Reason-Code") != string(contracts.ReasonBudgetExceeded) || e.anthropic.calls.Load() != before {
+	if denied.Status != 403 || denied.Header.Get("X-Helm-Reason-Code") != string(contracts.ReasonBudgetExceeded) ||
+		!strings.Contains(string(denied.Body), "BUDGET_EXCEEDED") || e.anthropic.calls.Load() != before {
 		t.Fatalf("child crossed the team limit: %s", denied)
 	}
 	if used, reserved := teamAmounts(t, e, teamLimit); used != limit-q+1 || reserved != 0 {
@@ -491,6 +492,42 @@ func TestPostgresTrialBudgetCapsDefaultOutputAndConservesSettlement(t *testing.T
 	route, ok := e.cfg.Resolve("anthropic-messages", "claude-sonnet-5-5")
 	if !ok {
 		t.Fatal("the platform route is unavailable")
+	}
+	// A route without a tariff or output bound cannot enter the live route
+	// table. Requests naming either rejected route must stop before admission
+	// or provider I/O, even while a priced platform route remains available.
+	var file File
+	must(t, json.Unmarshal([]byte(routesJSON(e.anthropic.URL, e.openai.URL+"/v1", e.openrouter.URL+"/api/v1", e.keys)), &file))
+	for _, missing := range []struct {
+		name, want string
+		breakRoute func(*Route)
+	}{
+		{"unpriced-trial-route", "unpriced", func(r *Route) { r.Price.Output = nil }},
+		{"uncapped-trial-route", "default_max_output_tokens", func(r *Route) { r.MaxOutputTokens = 0 }},
+	} {
+		candidate := file
+		candidate.Routes = append([]Route(nil), file.Routes...)
+		invalid := *route
+		invalid.ID, invalid.Model = "anthropic/"+missing.name, missing.name
+		missing.breakRoute(&invalid)
+		candidate.Routes = append(candidate.Routes, invalid)
+		raw, err := json.Marshal(candidate)
+		must(t, err)
+		if _, err := ParseConfig(raw); err == nil || !strings.Contains(err.Error(), missing.want) {
+			t.Fatalf("route without a proven bound %s loaded: %v", missing.name, err)
+		}
+		beforeCalls := e.anthropic.calls.Load()
+		beforeAttempts := e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts`)
+		beforeUsed, beforeReserved := e.counters()
+		body := strings.Replace(budgetMessage(missing.name, 100), "claude-sonnet-5-5", missing.name, 1)
+		refused := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body)
+		if refused.Status != 404 || !strings.Contains(string(refused.Body), "not a route of this gateway") ||
+			e.anthropic.calls.Load() != beforeCalls || e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts`) != beforeAttempts {
+			t.Fatalf("unbounded route %s reached admission or provider: %s", missing.name, refused)
+		}
+		if used, reserved := e.counters(); used != beforeUsed || reserved != beforeReserved {
+			t.Fatalf("unbounded route %s held budget: %d+%d, was %d+%d", missing.name, used, reserved, beforeUsed, beforeReserved)
+		}
 	}
 	e.anthropic.on(jsonHandler(budgetUsage(60_000)))
 	for i := range 5 {

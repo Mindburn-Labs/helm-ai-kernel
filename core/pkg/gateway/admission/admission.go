@@ -94,6 +94,9 @@ type Caller struct {
 	// one proposes under its work item and reads only its own episode's
 	// attempts.
 	Episode *Episode
+	// Continuation is a signed successor-only grant for exact predecessor
+	// attempts. It never changes the episode used for a new proposal.
+	Continuation *Continuation
 }
 
 // Episode is a worker token's helm_episode claim (jwks.EpisodeClaim), and what
@@ -275,6 +278,7 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	}
 	var attemptID string
 	var existing bool
+	var workAttempt Attempt
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
 		if in.workEffect {
 			var activeAgent bool
@@ -289,21 +293,23 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 		}
 		var err error
 		attemptID, existing, err = s.proposeTx(ctx, tx, caller, in, args)
-		return err
+		if err != nil || !in.workEffect {
+			return err
+		}
+		workAttempt, err = loadAttemptScoped(ctx, tx, caller, attemptID, caller.Episode.WorkItemID, workEffectDigest(caller, in))
+		if err != nil {
+			return err
+		}
+		if !workAttemptIsOwn(caller, workAttempt) && !continuationAllows(caller, workAttempt) {
+			return errNotFound
+		}
+		return nil
 	})
 	if err != nil {
 		return Attempt{}, false, err
 	}
 	if in.workEffect {
-		// Only replay of this exact verified work intent may recover a result
-		// from an earlier episode. Get/GetContent/List remain episode-scoped.
-		var attempt Attempt
-		err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
-			var err error
-			attempt, err = loadAttemptScoped(ctx, tx, caller, attemptID, caller.Episode.WorkItemID, workEffectDigest(caller, in))
-			return err
-		})
-		return attempt, existing, err
+		return workAttempt, existing, nil
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
@@ -393,6 +399,11 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 		if string(stored) != string(digest) {
 			return "", false, refuse(CodeAlreadyExists, contracts.ReasonIdempotencyConflict,
 				"the idempotency key was used with a different request")
+		}
+		if in.workEffect {
+			if err := authorizeWorkReplay(ctx, tx, caller, in, attemptID, argumentDigest[:]); err != nil {
+				return "", false, err
+			}
 		}
 		return attemptID, true, nil
 	}
@@ -1067,6 +1078,9 @@ func checkCaller(c Caller) error {
 	}
 	if e := c.Episode; e != nil && !validEpisode(e) {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token's episode claim is not well formed")
+	}
+	if !validContinuationCaller(c) {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the continuation is not bound to this successor")
 	}
 	return nil
 }

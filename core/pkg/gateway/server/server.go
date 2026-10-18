@@ -267,6 +267,9 @@ func (s *Server) GetAttempt(ctx context.Context, req *connect.Request[gatewayv1.
 		return nil, err
 	}
 	attempt, err := s.Admission.Get(ctx, id.Caller, req.Msg.GetAttemptId())
+	if canTryContinuationRead(err, id.Caller) {
+		attempt, err = s.Admission.GetContinuation(ctx, id.Caller, req.Msg.GetAttemptId())
+	}
 	if err != nil {
 		return nil, toRPCError(ctx, "GetAttempt", err)
 	}
@@ -281,10 +284,21 @@ func (s *Server) GetAttemptContent(ctx context.Context, req *connect.Request[gat
 		return nil, err
 	}
 	content, err := s.Admission.GetContent(ctx, id.Caller, req.Msg.GetAttemptId())
+	if canTryContinuationRead(err, id.Caller) {
+		content, err = s.Admission.GetContentContinuation(ctx, id.Caller, req.Msg.GetAttemptId())
+	}
 	if err != nil {
 		return nil, toRPCError(ctx, "GetAttemptContent", err)
 	}
 	return connect.NewResponse(&gatewayv1.GetAttemptContentResponse{AttemptId: req.Msg.GetAttemptId(), Arguments: content}), nil
+}
+
+func canTryContinuationRead(err error, caller admission.Caller) bool {
+	if caller.Continuation == nil {
+		return false
+	}
+	var refusal *admission.Error
+	return errors.As(err, &refusal) && refusal.Code == admission.CodeNotFound
 }
 
 // ListAttempts lists the attempts of the token's tenant and workspace that

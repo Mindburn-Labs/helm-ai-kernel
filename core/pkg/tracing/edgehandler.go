@@ -21,8 +21,8 @@ import (
 //
 // The tracer is resolved PER REQUEST, not at wrap time: no WithTracerProvider
 // option is passed, so otelhttp reads otel.GetTracerProvider() inside
-// serveHTTP (otelhttp v0.65.0), and otel's global tracer is a forwarding
-// delegate that back-fills once SetTracerProvider runs (otel v1.45.0). Wrapping
+// serveHTTP (otelhttp v0.71.0), and otel's global tracer is a forwarding
+// delegate that back-fills once SetTracerProvider runs (otel v1.47.0). Wrapping
 // before OTel is configured is therefore fine — only wrapping after traffic has
 // started would lose spans. An earlier comment here claimed construction-time
 // resolution and sent an investigation down the wrong path; do not restore it.
@@ -48,24 +48,14 @@ import (
 //     withRouteAttribute below stamps it after the inner handler returns.
 //     Without it a span's only path discriminator is url.path, which embeds
 //     path parameters and therefore cannot be aggregated.
-//   - The http.route METRIC attribute. handler.go:198 builds
-//     semconv.MetricAttributes without ever populating its Route field, so
-//     http.server.request.duration carries no route either. Its
-//     AdditionalAttributes are `append(labeler.Get(), h.metricAttributesFromRequest(r)...)`,
-//     so there are TWO post-routing hooks, not one: otelhttp.Labeler, which a
-//     handler reaches through LabelerFromContext, and WithMetricAttributesFn,
-//     the option used here. Either would work — the Labeler was tried and the
-//     assertions pass with it.
-//     The option is chosen because it is a property of the WRAPPER rather than
-//     of a handler: it applies to every edge this function covers, including
-//     handlers we do not own, and no handler can forget to call it. The Labeler
-//     remains the right hook for an attribute only a specific handler knows,
-//     such as a tenant or an upstream identity.
-//     Because the library leaves MetricAttributes.Route empty, contributing the
-//     attribute here adds it exactly once.
+//   - The http.route METRIC attribute. otelhttp v0.71.0 derives it from
+//     r.Pattern after the handler returns. The same request is passed through
+//     withRouteAttribute, which clears a non-discriminating catch-all Pattern
+//     before otelhttp records metrics. Real routes retain their Pattern, so
+//     the library's normalizer produces the same route as edgeRoute.
 //
-// All three go through edgeRoute, so the span attribute, the metric attribute
-// and the route half of the span name are the same string by construction.
+// The span name and attribute use edgeRoute; the metric uses otelhttp's
+// matching normalizer on the request Pattern after catch-all filtering.
 //
 // A request stays unrouted from this wrapper's point of view in three different
 // ways, and only the first is obvious:
@@ -97,7 +87,6 @@ func WrapEdgeHandler(h http.Handler, operation string) http.Handler {
 		otelhttp.WithPropagators(propagation.TraceContext{}),
 		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		otelhttp.WithSpanNameFormatter(edgeSpanName),
-		otelhttp.WithMetricAttributesFn(edgeMetricAttributes),
 	)
 }
 
@@ -172,25 +161,12 @@ func edgeSpanName(operation string, r *http.Request) string {
 	return standardMethod(r.Method) + " " + route
 }
 
-// edgeMetricAttributes contributes http.route to the otelhttp server metrics
-// (http.server.request.duration and the body-size histograms). It runs after
-// the inner handler has returned, so r.Pattern is set for a routed request.
-//
-// An unrouted request contributes nothing: an empty http.route is worse than an
-// absent one, because it mints a bogus aggregation bucket that looks like a
-// real route. A catch-all route ("/", see edgeRoute) is the same failure with a
-// non-empty string — one bucket holding every path — and is dropped with it.
-func edgeMetricAttributes(r *http.Request) []attribute.KeyValue {
-	route := edgeRoute(r.Pattern)
-	if route == "" {
-		return nil
-	}
-	return []attribute.KeyValue{semconv.HTTPRoute(route)}
-}
-
 // withRouteAttribute stamps http.route onto the server span once the mux has
 // resolved the request to a registered pattern that discriminates on path (see
 // edgeRoute — the "/" catch-all does not, and is skipped like a miss).
+// It also clears a catch-all Pattern after the handler returns: otelhttp
+// v0.71.0 would otherwise add that useless route to the duration metric even
+// while the span keeps the edge operation name and has no route attribute.
 //
 // It must sit INSIDE otelhttp.NewHandler (it wraps the next handler, not the
 // otelhttp handler): from outside, the span is already ended by the time the
@@ -206,6 +182,10 @@ func edgeMetricAttributes(r *http.Request) []attribute.KeyValue {
 func withRouteAttribute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
+		if rootCatchAll(routeFromPattern(r.Pattern)) {
+			r.Pattern = ""
+			return
+		}
 		route := edgeRoute(r.Pattern)
 		if route == "" {
 			return

@@ -55,7 +55,15 @@ func TestBuildCatalogRendersTheDeclarationsByEffectType(t *testing.T) {
 		names = append(names, entry.GetEffectType())
 		byName[entry.GetEffectType()] = entry
 	}
-	want := []string{"github.branch.create_from_changes", "github.pull_request.create_draft", "github.repository.get", "helm.authority.provision.v1"}
+	want := []string{
+		"github.branch.create_from_changes",
+		"github.git.push",
+		"github.pull_request.create",
+		"github.pull_request.create_draft",
+		"github.pull_request.merge",
+		"github.repository.get",
+		"helm.authority.provision.v1",
+	}
 	if fmt.Sprint(names) != fmt.Sprint(want) {
 		t.Fatalf("catalog order = %v, want %v", names, want)
 	}
@@ -99,7 +107,7 @@ func TestListEffectTypesTakesTheReadScopeAndNoOther(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := admin.ListEffectTypes(ctx, withToken(&gatewayv1.ListEffectTypesRequest{}, iss.token(t, testAudience, "tenant-a", "svc:reader", ScopeRead)))
-	if err != nil || len(resp.Msg.GetEffectTypes()) != 3 {
+	if err != nil || len(resp.Msg.GetEffectTypes()) != 6 {
 		t.Fatalf("a read token: %d entries, %v", len(resp.Msg.GetEffectTypes()), err)
 	}
 	// The same for every tenant.

@@ -212,6 +212,27 @@ func (s *Server) Stop(ctx context.Context, req *connect.Request[gatewayv1.StopRe
 	return connect.NewResponse(&gatewayv1.StopResponse{Stop: stopProto(stop), Existing: existing}), nil
 }
 
+// GetStopOutcome reads one workspace's current principal Stop outcome
+// (token scope helm.gateway.read). No Stop is created or lifted by this read.
+func (s *Server) GetStopOutcome(ctx context.Context, req *connect.Request[gatewayv1.GetStopOutcomeRequest]) (*connect.Response[gatewayv1.GetStopOutcomeResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeRead)
+	if err != nil {
+		return nil, err
+	}
+	outcome, err := s.Admission.StopOutcome(ctx, id.Caller, req.Msg.GetStopId())
+	if err != nil {
+		return nil, toRPCError(ctx, "GetStopOutcome", err)
+	}
+	return connect.NewResponse(&gatewayv1.GetStopOutcomeResponse{
+		Stop: stopProto(outcome.Stop), Active: outcome.Active,
+		BlockedAdmissionAttemptIds: outcome.BlockedAdmissionAttemptIDs,
+		AwaitingClaimAttemptIds:    outcome.AwaitingClaimAttemptIDs,
+		VoidedAtClaimAttemptIds:    outcome.VoidedAtClaimAttemptIDs,
+		CheckingAttemptIds:         outcome.CheckingAttemptIDs,
+		HumanReviewAttemptIds:      outcome.HumanReviewAttemptIDs,
+	}), nil
+}
+
 // Lift proposes lifting a stop: a helm.authority.lift attempt, normally
 // ESCALATED (token scope helm.gateway.stop, single-use, bound to the stop by
 // its helm_stop_lift authorization_details entry).

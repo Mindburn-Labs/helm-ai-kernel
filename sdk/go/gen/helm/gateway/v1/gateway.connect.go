@@ -120,6 +120,9 @@ const (
 	// EffectGatewayServiceStopProcedure is the fully-qualified name of the EffectGatewayService's Stop
 	// RPC.
 	EffectGatewayServiceStopProcedure = "/helm.gateway.v1.EffectGatewayService/Stop"
+	// EffectGatewayServiceGetStopOutcomeProcedure is the fully-qualified name of the
+	// EffectGatewayService's GetStopOutcome RPC.
+	EffectGatewayServiceGetStopOutcomeProcedure = "/helm.gateway.v1.EffectGatewayService/GetStopOutcome"
 	// EffectGatewayServiceLiftProcedure is the fully-qualified name of the EffectGatewayService's Lift
 	// RPC.
 	EffectGatewayServiceLiftProcedure = "/helm.gateway.v1.EffectGatewayService/Lift"
@@ -323,6 +326,13 @@ type EffectGatewayServiceClient interface {
 	//
 	// with scope_kind in the lower-case form of StopScopeKind.
 	Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error)
+	// GetStopOutcome reads a principal Stop and the current attempt states in
+	// the token's workspace. The attempt sets are scope-matching snapshots,
+	// not causal attribution to this Stop when Stops overlap. A non-principal
+	// Stop returns failed_precondition. Episode tokens cannot read this view.
+	//
+	// Token scope: helm.gateway.read.
+	GetStopOutcome(context.Context, *connect.Request[GetStopOutcomeRequest]) (*connect.Response[GetStopOutcomeResponse], error)
 	// Lift proposes lifting a stop. Lifting widens authority, so it is an
 	// effect attempt of type helm.authority.lift that needs approval by
 	// another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
@@ -414,6 +424,13 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(effectGatewayServiceMethods.ByName("Stop")),
 			connect.WithClientOptions(opts...),
 		),
+		getStopOutcome: connect.NewClient[GetStopOutcomeRequest, GetStopOutcomeResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceGetStopOutcomeProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("GetStopOutcome")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		lift: connect.NewClient[LiftRequest, LiftResponse](
 			httpClient,
 			baseURL+EffectGatewayServiceLiftProcedure,
@@ -435,6 +452,7 @@ type effectGatewayServiceClient struct {
 	getAttemptContent *connect.Client[GetAttemptContentRequest, GetAttemptContentResponse]
 	listAttempts      *connect.Client[ListAttemptsRequest, ListAttemptsResponse]
 	stop              *connect.Client[StopRequest, StopResponse]
+	getStopOutcome    *connect.Client[GetStopOutcomeRequest, GetStopOutcomeResponse]
 	lift              *connect.Client[LiftRequest, LiftResponse]
 }
 
@@ -486,6 +504,11 @@ func (c *effectGatewayServiceClient) ListAttempts(ctx context.Context, req *conn
 // Stop calls helm.gateway.v1.EffectGatewayService.Stop.
 func (c *effectGatewayServiceClient) Stop(ctx context.Context, req *connect.Request[StopRequest]) (*connect.Response[StopResponse], error) {
 	return c.stop.CallUnary(ctx, req)
+}
+
+// GetStopOutcome calls helm.gateway.v1.EffectGatewayService.GetStopOutcome.
+func (c *effectGatewayServiceClient) GetStopOutcome(ctx context.Context, req *connect.Request[GetStopOutcomeRequest]) (*connect.Response[GetStopOutcomeResponse], error) {
+	return c.getStopOutcome.CallUnary(ctx, req)
 }
 
 // Lift calls helm.gateway.v1.EffectGatewayService.Lift.
@@ -692,6 +715,13 @@ type EffectGatewayServiceHandler interface {
 	//
 	// with scope_kind in the lower-case form of StopScopeKind.
 	Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error)
+	// GetStopOutcome reads a principal Stop and the current attempt states in
+	// the token's workspace. The attempt sets are scope-matching snapshots,
+	// not causal attribution to this Stop when Stops overlap. A non-principal
+	// Stop returns failed_precondition. Episode tokens cannot read this view.
+	//
+	// Token scope: helm.gateway.read.
+	GetStopOutcome(context.Context, *connect.Request[GetStopOutcomeRequest]) (*connect.Response[GetStopOutcomeResponse], error)
 	// Lift proposes lifting a stop. Lifting widens authority, so it is an
 	// effect attempt of type helm.authority.lift that needs approval by
 	// another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
@@ -779,6 +809,13 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		connect.WithSchema(effectGatewayServiceMethods.ByName("Stop")),
 		connect.WithHandlerOptions(opts...),
 	)
+	effectGatewayServiceGetStopOutcomeHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceGetStopOutcomeProcedure,
+		svc.GetStopOutcome,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("GetStopOutcome")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	effectGatewayServiceLiftHandler := connect.NewUnaryHandler(
 		EffectGatewayServiceLiftProcedure,
 		svc.Lift,
@@ -807,6 +844,8 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 			effectGatewayServiceListAttemptsHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceStopProcedure:
 			effectGatewayServiceStopHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceGetStopOutcomeProcedure:
+			effectGatewayServiceGetStopOutcomeHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceLiftProcedure:
 			effectGatewayServiceLiftHandler.ServeHTTP(w, r)
 		default:
@@ -856,6 +895,10 @@ func (UnimplementedEffectGatewayServiceHandler) ListAttempts(context.Context, *c
 
 func (UnimplementedEffectGatewayServiceHandler) Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.Stop is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) GetStopOutcome(context.Context, *connect.Request[GetStopOutcomeRequest]) (*connect.Response[GetStopOutcomeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetStopOutcome is not implemented"))
 }
 
 func (UnimplementedEffectGatewayServiceHandler) Lift(context.Context, *connect.Request[LiftRequest]) (*connect.Response[LiftResponse], error) {

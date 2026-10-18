@@ -479,7 +479,7 @@ func (s *Service) observeAttempt(ctx context.Context, tenantID, workspaceID, att
 		return nil
 	})
 	if err == nil && target != nil {
-		s.readBack(ctx, *target)
+		existing = s.readBack(ctx, *target)
 	}
 	return existing, fence, err
 }
@@ -494,7 +494,7 @@ type observeTarget struct {
 
 // readBack calls the adapter's Observe outside any transaction, then records
 // the result if the attempt is still in the state the read-back started from.
-func (s *Service) readBack(ctx context.Context, t observeTarget) {
+func (s *Service) readBack(ctx context.Context, t observeTarget) (existing bool) {
 	ctx = context.WithoutCancel(ctx)
 	call, cancel := context.WithTimeout(ctx, s.cfg.DispatchTimeout)
 	result := t.adapter.Observe(call, s.tokens(t.tenantID, t.effect), t.effect)
@@ -505,7 +505,23 @@ func (s *Service) readBack(ctx context.Context, t observeTarget) {
 			return err
 		}
 		if a.state != t.from {
-			return nil // another read-back got there first
+			existing = true
+			// Another read-back settled the attempt while this one was in
+			// flight. Keep a distinct provider fact, but never settle twice.
+			if a.state == "OBSERVED" || a.state == "RECONCILED" || a.state == "SETTLED" {
+				insideFence := !a.dispatchDeadline.Valid || a.now.Before(a.dispatchDeadline.Time)
+				if (result.Outcome == adapters.OutcomeSucceeded || result.Outcome == adapters.OutcomeFailed) &&
+					!(result.Absent && insideFence) {
+					kind, body, err := typedResult(t.effect.EffectType, t.resultSchema, result.Observation)
+					if err != nil {
+						slog.ErrorContext(ctx, "a late adapter observation breaks the contract", "attempt_id", t.attemptID, "error", err)
+						return nil
+					}
+					_, err = insertObservation(ctx, tx, t, result, kind, body)
+					return err
+				}
+			}
+			return nil
 		}
 		insideFence := !a.dispatchDeadline.Valid || a.now.Before(a.dispatchDeadline.Time)
 		return recordObservation(ctx, tx, t, result, insideFence)
@@ -513,6 +529,7 @@ func (s *Service) readBack(ctx context.Context, t observeTarget) {
 	if err != nil {
 		slog.ErrorContext(ctx, "recording an observation failed", "attempt_id", t.attemptID, "error", err)
 	}
+	return existing
 }
 
 // readBackVerdict is what one read-back establishes, pure. established is
@@ -558,6 +575,31 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 		}
 		return nil
 	}
+	if _, err := insertObservation(ctx, tx, t, result, kind, body); err != nil {
+		return err
+	}
+	cause := "observed"
+	to := "OBSERVED"
+	if t.from == "UNKNOWN" {
+		cause, to = "reconciled", "RECONCILED"
+	}
+	if consume {
+		if err := settleHeld(ctx, tx, t.tenantID, t.attemptID, "confirmed", cause); err != nil {
+			return err
+		}
+	} else if err := release(ctx, tx, t.tenantID, t.attemptID, cause); err != nil {
+		return err
+	}
+	if result.Outcome == adapters.OutcomeSucceeded {
+		return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeSucceeded, "")
+	}
+	return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeFailed, result.Reason)
+}
+
+// insertObservation writes one provider fact into the canonical observation
+// table. The attempt row is locked by each caller; the unique evidence index
+// is a second guard against concurrent delivery of identical facts.
+func insertObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, kind string, body []byte) (bool, error) {
 	o := result.Observation
 	// result_ref is the content address of the typed result, which the row
 	// keeps (§5.6): SHA-256 over its RFC 8785 (JCS) form, so it recomputes
@@ -582,28 +624,17 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	if observedAt.IsZero() {
 		observedAt = time.Now().UTC()
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO authority_observations
+	var observationID int64
+	err := tx.QueryRowContext(ctx, `INSERT INTO authority_observations
 			(tenant_id, attempt_id, source, trust_class, outcome, evidence_digest, observed_at, result_ref, result_kind, result)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		t.tenantID, t.attemptID, o.Source, o.TrustClass, string(result.Outcome), evidence, observedAt, ref, kind, resultCol); err != nil {
-		return err
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (tenant_id, attempt_id, evidence_digest) WHERE evidence_digest IS NOT NULL
+		DO NOTHING RETURNING observation_id`,
+		t.tenantID, t.attemptID, o.Source, o.TrustClass, string(result.Outcome), evidence, observedAt, ref, kind, resultCol).Scan(&observationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
-	cause := "observed"
-	to := "OBSERVED"
-	if t.from == "UNKNOWN" {
-		cause, to = "reconciled", "RECONCILED"
-	}
-	if consume {
-		if err := settleHeld(ctx, tx, t.tenantID, t.attemptID, "confirmed", cause); err != nil {
-			return err
-		}
-	} else if err := release(ctx, tx, t.tenantID, t.attemptID, cause); err != nil {
-		return err
-	}
-	if result.Outcome == adapters.OutcomeSucceeded {
-		return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeSucceeded, "")
-	}
-	return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeFailed, result.Reason)
+	return err == nil, err
 }
 
 // typedResult checks an established observation against the contract and
@@ -657,7 +688,10 @@ func typedResult(effectType string, schema *adapters.ResultSchema, o *adapters.O
 func fixedResultKind(effectType string) string {
 	return map[string]string{
 		effectargs.GitHubPullRequestCreateDraft:  "github_pull_request",
+		effectargs.GitHubPullRequestCreate:       "github_pull_request",
+		effectargs.GitHubPullRequestMerge:        "github_pull_request",
 		effectargs.GitHubBranchCreateFromChanges: "github_branch",
+		effectargs.GitHubGitPush:                 "github_branch",
 		effectargs.GitHubRepositoryGet:           "github_repository",
 	}[effectType]
 }

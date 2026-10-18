@@ -75,7 +75,7 @@ func workEffectDigest(caller Caller, in ProposeInput) []byte {
 
 func workEffectTarget(effectType, target string) string {
 	switch effectType {
-	case effectargs.GitHubRepositoryGet, effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubPullRequestCreateDraft:
+	case effectargs.GitHubRepositoryGet, effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubGitPush, effectargs.GitHubPullRequestCreateDraft, effectargs.GitHubPullRequestCreate, effectargs.GitHubPullRequestMerge:
 		// GitHub owner/repository names are case-insensitive. Do not change
 		// the stored target or the target against which mandates are evaluated.
 		target = strings.ToLower(target)

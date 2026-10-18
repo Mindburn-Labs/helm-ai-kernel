@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/activitytrail"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/pgscram"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
@@ -186,6 +187,7 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 	t.Cleanup(func() { _ = ownerDB.Close() })
 	ctx := context.Background()
 	must(t, Migrate(ctx, ownerDB))
+	must(t, activitytrail.Migrate(ctx, ownerDB))
 	for range 2 {
 		run.run(t, ownerDSN, "002_grants.sql")
 	}
@@ -286,6 +288,10 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 	// Exactly the grants the admission proofs run under, table by table, and
 	// every table Migrate creates has one.
 	want := map[string]string{"gateway_schema_migrations": "SELECT"}
+	want["gateway_activity_schema_migrations"] = "SELECT"
+	for _, table := range activitytrail.Tables {
+		want[table] = "INSERT,SELECT,UPDATE"
+	}
 	for _, table := range append(append([]string{}, mandates.Tables...), Tables...) {
 		want[table] = "INSERT,SELECT,UPDATE"
 	}

@@ -647,6 +647,34 @@ func (f *GitHub) AdvanceBranch(branch string) string {
 	return sha
 }
 
+// RewriteBranchFile models a concurrent force rewrite with the same parents
+// and a different blob, keeping content and parent mismatch controls distinct.
+func (f *GitHub) RewriteBranchFile(branch, path, content string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, ok := f.refs["heads/"+branch]
+	if !ok {
+		f.t.Fatalf("missing fake branch %s", branch)
+	}
+	commit := f.commits[old]
+	entries := make(map[string]fakeEntry, len(f.trees[commit.Tree]))
+	for name, entry := range f.trees[commit.Tree] {
+		entries[name] = entry
+	}
+	entry, ok := entries[path]
+	if !ok {
+		f.t.Fatalf("missing fake branch file %s", path)
+	}
+	entry.Blob = blobSHA1(content)
+	f.blobs[entry.Blob] = content
+	entries[path] = entry
+	commit.Tree = f.putTree(entries)
+	commit.Message = "concurrent content rewrite"
+	sha := f.putCommit(commit)
+	f.refs["heads/"+branch] = sha
+	return sha
+}
+
 // RewindBranch models a concurrent forced move to the current commit's parent.
 func (f *GitHub) RewindBranch(branch string) string {
 	f.mu.Lock()

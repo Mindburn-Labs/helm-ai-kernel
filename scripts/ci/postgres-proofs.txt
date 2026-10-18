@@ -6,6 +6,7 @@
 # <package dir under core> <test> <count> <race|plain>
 pkg/gateway/server TestPostgresApprovalBindsRepositoryAndBranchBase 3 race
 pkg/gateway/server TestPostgresDraftApprovalBindsReviewedDestination 3 race
+pkg/gateway/server TestPostgresDraftPrerequisiteRejectsActualParentAndContentMismatch 3 race
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
 pkg/gateway/admission TestPostgresModelCallLateUsageConcurrentDelivery 1 race
 pkg/gateway/admission TestPostgresModelCallLateUsageConfirmsEstimateOnce 1 race

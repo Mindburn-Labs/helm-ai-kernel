@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/authority/work_reassignment_revoke.v1.json",
+  "title": "helm.authority.work_reassignment.revoke.v1 arguments",
+  "description": "Narrow one exact retained-result grant. Revocation never lifts Stop or authorizes a replacement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "org_ref", "grant_id", "generation", "reason"],
+  "properties": {
+    "schema": {"const": "helm.authority.work_reassignment.revoke.v1"},
+    "org_ref": {"type": "string", "pattern": "^org:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "grant_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "generation": {"type": "integer", "minimum": 1},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 1024}
+  },
+  "x-helm": {"effect_type": "helm.authority.work_reassignment.revoke.v1", "grantable": false}
+}

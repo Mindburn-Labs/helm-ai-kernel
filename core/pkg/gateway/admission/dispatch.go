@@ -154,7 +154,7 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	// An authority plan has no mandate; every other admitted attempt has one.
 	var leaf uuid.UUID
 	var chain []mandates.Mandate
-	if !effectargs.IsAuthorityPlan(a.effectType) {
+	if !effectargs.IsMandateFreeAuthority(a.effectType) {
 		var err error
 		if leaf, err = uuid.Parse(a.mandateID); err != nil {
 			return nil, errors.New("an admitted attempt has no mandate")

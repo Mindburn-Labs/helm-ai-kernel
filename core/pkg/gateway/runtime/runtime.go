@@ -66,6 +66,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/reassignment"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
@@ -222,6 +223,11 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		return err
 	}
 	admissionConfig.Adapters = append(admissionConfig.Adapters, provisioner)
+	reassignmentAdapter, err := reassignment.New(db)
+	if err != nil {
+		return err
+	}
+	admissionConfig.Adapters = append(admissionConfig.Adapters, reassignmentAdapter)
 	for _, configure := range extensions {
 		if configure != nil {
 			if err := configure(ctx, db, &admissionConfig); err != nil {
@@ -263,7 +269,7 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		Admission: svc,
 		Auth:      &server.Authenticator{Validator: identity.Validator(false), Actor: identity.Actor, RequireCNF: identity.RequireCNF},
 	}
-	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Catalog: catalog}
+	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Admission: svc, Catalog: catalog}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(admin.Handler())

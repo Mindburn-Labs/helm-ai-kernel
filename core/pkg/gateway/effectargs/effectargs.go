@@ -91,6 +91,22 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		return nil, invalid("arguments are not one JSON object")
 	}
 	switch effectType {
+	case AuthorityWorkReassignmentRevoke:
+		revoke, err := ParseWorkReassignmentRevoke(raw)
+		if err != nil {
+			return nil, err
+		}
+		if target != revoke.OrgRef {
+			return nil, invalid("target must be the revocation's org_ref %q", revoke.OrgRef)
+		}
+	case AuthorityWorkReassignmentGrant:
+		grant, err := ParseWorkReassignmentGrant(raw)
+		if err != nil {
+			return nil, err
+		}
+		if target != grant.OrgRef {
+			return nil, invalid("target must be the grant's org_ref %q", grant.OrgRef)
+		}
 	case GitHubBranchCreateFromChanges, GitHubGitPush:
 		if err := checkGitHubTarget(target); err != nil {
 			return nil, err

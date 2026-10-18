@@ -23,6 +23,7 @@ jobs:
       contents: read
       actions: read
       pull-requests: read
-    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2.0.1
+    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2.0.8
     with:
+      check-timeout-minutes: 90
       setup-commands: bash scripts/ci/install_check_tools.sh

@@ -73,13 +73,51 @@ class KeysTest(unittest.TestCase):
         stream = "".join(
             json.dumps(m)
             for m in (
-                {"config": {"scanner_name": "govulncheck"}},
+                {"config": {"protocol_version": "v1.0.0", "scan_mode": "source", "scan_level": "symbol"}},
+                {"SBOM": {"roots": ["example.com/p"]}},
                 {"finding": {"osv": "GO-1", "trace": [{"module": "m"}]}},
                 {"finding": {"osv": "GO-2", "trace": [{"module": "m", "package": "m/p"}]}},
                 {"finding": {"osv": "GO-3", "trace": [{"module": "m", "package": "m/p", "function": "F"}]}},
             )
         )
         self.assertEqual(govulncheck_called(stream), ["GO-3"])
+
+    def test_govulncheck_config_only_is_not_a_completed_source_scan(self) -> None:
+        config = {"config": {"protocol_version": "v1.0.0", "scan_mode": "source", "scan_level": "symbol"}}
+        with self.assertRaises(ReportError):
+            govulncheck_called(json.dumps(config))
+
+    def test_govulncheck_requires_symbol_source_scan(self) -> None:
+        report = json.dumps({"config": {"protocol_version": "v1.0.0", "scan_mode": "query", "scan_level": "module"}})
+        report += json.dumps({"SBOM": {"roots": ["example.com/p"]}})
+        with self.assertRaises(ReportError):
+            govulncheck_called(report)
+
+    def test_govulncheck_rejects_malformed_messages(self) -> None:
+        config = json.dumps({"config": {"protocol_version": "v1.0.0", "scan_mode": "source", "scan_level": "symbol"}})
+        sbom = json.dumps({"SBOM": {"roots": ["example.com/p"]}})
+        with self.assertRaises(ReportError):
+            govulncheck_called(config + json.dumps({"SBOM": {"roots": []}}))
+        with self.assertRaises(ReportError):
+            govulncheck_called(config + sbom + "[]")
+        with self.assertRaises(ReportError):
+            govulncheck_called(config + sbom + json.dumps({"progress": None}))
+        with self.assertRaises(ReportError):
+            govulncheck_called(config + sbom + config)
+        for finding in ({"osv": "GO-1", "trace": []}, {"trace": [{"module": "m"}]}, {"osv": "GO-1"}):
+            with self.subTest(finding=finding), self.assertRaises(ReportError):
+                govulncheck_called(config + sbom + json.dumps({"finding": finding}))
+        for frame in ({}, {"module": "m", "function": 0}, {"module": 0}, {"module": "m", "package": None}):
+            with self.subTest(frame=frame), self.assertRaises(ReportError):
+                govulncheck_called(config + sbom + json.dumps({"finding": {"osv": "GO-1", "trace": [frame]}}))
+
+    def test_govulncheck_truncated_json_is_an_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = pathlib.Path(tmp, "truncated.json")
+            report.write_text('{"config":{"protocol_version":"v1.0.0","scan_mode":"source","scan_level":"symbol"}}{"SBOM":')
+            result = subprocess.run([sys.executable, str(SCRIPT), "govulncheck-called", str(report)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot read the scanner report", result.stderr)
 
     def test_govulncheck_empty_output_is_not_a_clean_scan(self) -> None:
         with self.assertRaises(ReportError):

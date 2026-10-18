@@ -162,6 +162,21 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 	if e := claims.Episode; e != nil {
 		id.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID}
 	}
+	if grant := claims.Continuation; grant != nil {
+		bound := &admission.Continuation{
+			TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, OrganizationID: grant.OrganizationID,
+			WorkItemID: grant.WorkItemID, OrganizationVersionID: grant.OrganizationVersionID,
+			SuccessorEpisodeID: grant.Successor.EpisodeID, SuccessorPrincipalID: grant.Successor.PrincipalID,
+			SuccessorActorID: grant.Successor.ActorID,
+		}
+		for _, source := range grant.Sources {
+			bound.Sources = append(bound.Sources, admission.ContinuationSource{
+				EpisodeID: source.EpisodeID, PrincipalID: source.PrincipalID, ActorID: source.ActorID,
+				AttemptIDs: append([]string(nil), source.AttemptIDs...),
+			})
+		}
+		id.Caller.Continuation = bound
+	}
 	if id.TenantID == "" || id.WorkspaceID == "" || id.PrincipalID == "" {
 		return Identity{}, unauthenticated("the token lacks its principal, tenant or workspace")
 	}

@@ -16,12 +16,15 @@ import (
 type stubLedger struct {
 	t *testing.T
 
-	OnGrants  func(admission.Caller) (admission.Grants, error)
-	OnPropose func(admission.Caller, admission.ProposeInput) (admission.Attempt, bool, error)
-	OnCancel  func(admission.Caller, string) (admission.Attempt, bool, error)
-	OnClaim   func(admission.Caller, string) (*admission.ModelCallClaim, admission.Attempt, error)
-	OnSettle  func(*admission.ModelCallClaim, admission.ModelCallOutcome) (admission.Attempt, error)
-	OnReplay  func(admission.Caller, string) (*admission.ModelCallReplay, error)
+	OnGrants         func(admission.Caller) (admission.Grants, error)
+	OnAttemptByKey   func(admission.Caller, string) (*admission.Attempt, error)
+	OnAttemptsByKeys func(admission.Caller, []string) ([]admission.Attempt, error)
+	OnContent        func(admission.Caller, string) ([]byte, error)
+	OnPropose        func(admission.Caller, admission.ProposeInput) (admission.Attempt, bool, error)
+	OnCancel         func(admission.Caller, string) (admission.Attempt, bool, error)
+	OnClaim          func(admission.Caller, string) (*admission.ModelCallClaim, admission.Attempt, error)
+	OnSettle         func(*admission.ModelCallClaim, admission.ModelCallOutcome) (admission.Attempt, error)
+	OnReplay         func(admission.Caller, string) (*admission.ModelCallReplay, error)
 
 	mu       sync.Mutex
 	proposed []admission.ProposeInput
@@ -35,6 +38,32 @@ func (s *stubLedger) ModelGrants(_ context.Context, c admission.Caller, _ string
 		return admission.Grants{}, context.Canceled
 	}
 	return s.OnGrants(c)
+}
+
+func (s *stubLedger) ModelGrantsWithBudget(ctx context.Context, c admission.Caller, effectType string) (admission.Grants, error) {
+	return s.ModelGrants(ctx, c, effectType)
+}
+
+func (s *stubLedger) ModelCallAttemptByKey(_ context.Context, c admission.Caller, key string) (*admission.Attempt, error) {
+	if s.OnAttemptByKey == nil {
+		return nil, nil
+	}
+	return s.OnAttemptByKey(c, key)
+}
+
+func (s *stubLedger) ModelCallAttemptsByKeys(_ context.Context, c admission.Caller, keys []string) ([]admission.Attempt, error) {
+	if s.OnAttemptsByKeys == nil {
+		return nil, nil
+	}
+	return s.OnAttemptsByKeys(c, keys)
+}
+
+func (s *stubLedger) GetContent(_ context.Context, c admission.Caller, id string) ([]byte, error) {
+	if s.OnContent == nil {
+		s.t.Errorf("an unexpected GetContent call")
+		return nil, context.Canceled
+	}
+	return s.OnContent(c, id)
 }
 
 func (s *stubLedger) Propose(_ context.Context, c admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error) {

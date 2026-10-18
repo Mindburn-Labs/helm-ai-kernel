@@ -45,8 +45,10 @@ const (
 )
 
 type adminWire struct {
-	t      *testing.T
-	client gatewayv1.AuthorityAdminServiceClient
+	t          *testing.T
+	client     gatewayv1.AuthorityAdminServiceClient
+	httpClient *http.Client
+	baseURL    string
 	// effects is the effect API of the same gateway, which dispatches the
 	// authority plans through the adapter.
 	effects gatewayv1.EffectGatewayServiceClient
@@ -115,12 +117,14 @@ func newAdminWire(t *testing.T) *adminWire {
 	effects := &Server{Admission: svc, Auth: auth}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
+	mux.Handle(api.TeamCounterHandler())
 	mux.Handle(effects.Handler())
 	srv := httptest.NewUnstartedServer(mux)
 	srv.EnableHTTP2 = true
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return &adminWire{t: t, client: gatewayv1.NewAuthorityAdminServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
+		httpClient: srv.Client(), baseURL: srv.URL,
 		effects: gatewayv1.NewEffectGatewayServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
 		iss:     iss, rows: adapter.Store(), adapter: adapter}
 }
@@ -447,7 +451,8 @@ func TestPostgresListEffectTypesOnTheWire(t *testing.T) {
 		names = append(names, e.GetEffectType())
 		byName[e.GetEffectType()] = e
 	}
-	want := []string{"github.branch.create_from_changes", "github.pull_request.create_draft", "github.repository.get",
+	want := []string{"github.branch.create_from_changes", "github.git.push", "github.pull_request.create",
+		"github.pull_request.create_draft", "github.pull_request.merge", "github.repository.get",
 		effectargs.AuthorityNarrow, effectargs.AuthorityProvision}
 	if fmt.Sprint(names) != fmt.Sprint(want) {
 		t.Fatalf("catalog = %v, want %v", names, want)

@@ -58,9 +58,11 @@ const (
 	tokenNoEpisode = "canary-worker-token-without-episode"
 	tokenOtherTen  = "canary-agent-token-tenant-b"
 	// Seats whose mandates differ from the first seat's in one term each.
-	tokenLimited  = "canary-episode-token-seat-limited"
-	tokenApproval = "canary-episode-token-seat-approval"
-	tokenHaiku    = "canary-episode-token-seat-haiku"
+	tokenLimited      = "canary-episode-token-seat-limited"
+	tokenApproval     = "canary-episode-token-seat-approval"
+	tokenHaiku        = "canary-episode-token-seat-haiku"
+	tokenBudgetParent = "canary-episode-token-budget-parent"
+	tokenBudgetChild  = "canary-episode-token-budget-child"
 )
 
 // stubProvider is a provider API on loopback whose behaviour a test sets.
@@ -185,6 +187,11 @@ func withSearchPath(t *testing.T, raw, schema, role string) string {
 // listeners and returns it. modelBudget is the daily usd_micros limit of the
 // agent's mandate.
 func newEnv(t *testing.T, modelBudget int64) *env {
+	return newEnvWindow(t, modelBudget, "day")
+}
+
+// newEnvWindow allows budget proofs to exercise a non-resetting trial cap.
+func newEnvWindow(t *testing.T, modelBudget int64, budgetWindow string) *env {
 	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
@@ -230,7 +237,7 @@ func newEnv(t *testing.T, modelBudget int64) *env {
 
 	e := &env{t: t, owner: owner, runtime: runtime, svc: svc, rows: rows, logs: &lockedBuffer{}}
 	must(t, owner.QueryRow(`SELECT now()`).Scan(&e.now))
-	e.seed(modelBudget)
+	e.seed(modelBudget, budgetWindow)
 
 	e.anthropic, e.openai, e.openrouter = newStubProvider(t), newStubProvider(t), newStubProvider(t)
 	e.keys = keyFiles(t, map[string]string{"anthropic": keyAnthropic, "openai": keyOpenAI, "openrouter": keyOpenRouter})
@@ -271,6 +278,8 @@ func (e *env) authenticator(worker bool) *server.Authenticator {
 			tokenLimited:          claims("agt:seat-limited", audience, server.ScopePropose, episode("ep-1")),
 			tokenApproval:         claims("agt:seat-approval", audience, server.ScopePropose, episode("ep-1")),
 			tokenHaiku:            claims("agt:seat-haiku", audience, server.ScopePropose, episode("ep-1")),
+			tokenBudgetParent:     claims("agt:budget-parent", audience, server.ScopePropose, episode("ep-1")),
+			tokenBudgetChild:      claims("agt:budget-child", audience, server.ScopePropose, episode("ep-1")),
 			"canary-human-worker": claims("human-a", audience, server.ScopePropose, episode("ep-1")),
 			"canary-svc-worker":   claims("svc:helm-org-compiler", audience, server.ScopePropose, episode("ep-1")),
 			"canary-propose-read-worker": func() *jwks.OAuthTokenClaims {
@@ -337,7 +346,7 @@ func writeFile(t *testing.T, path, content string) {
 
 // seed creates tenant A: the seat's agent principal with a mandate over the
 // routes it may use, a service principal for the compiler, and the effect type.
-func (e *env) seed(modelBudget int64) {
+func (e *env) seed(modelBudget int64, budgetWindow string) {
 	e.t.Helper()
 	ctx := context.Background()
 	for _, tenant := range []string{tenantA, tenantB} {
@@ -358,7 +367,7 @@ func (e *env) seed(modelBudget int64) {
 	}
 	seat, err := e.rows.CreateMandate(ctx, tenantA, "agt:seat-1", terms, authorityrows.WideningApproval{RequesterID: "human-a", ApproverID: "human-b"})
 	must(e.t, err)
-	_, err = e.rows.CreateLimit(ctx, tenantA, authorityrows.LimitSpec{MandateID: &seat.ID, Unit: admission.UnitUSDMicros, Measure: "sum", Window: "day", Value: modelBudget, Span: 1})
+	_, err = e.rows.CreateLimit(ctx, tenantA, authorityrows.LimitSpec{MandateID: &seat.ID, Unit: admission.UnitUSDMicros, Measure: "sum", Window: budgetWindow, Value: modelBudget, Span: 1})
 	must(e.t, err)
 	// Seats that differ in one term: a per-call limit, an approval rule, one route.
 	widen := authorityrows.WideningApproval{RequesterID: "human-a", ApproverID: "human-b"}

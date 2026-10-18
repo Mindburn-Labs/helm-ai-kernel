@@ -22,6 +22,7 @@ var toolNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 type effectTool struct {
 	Tool
 	effectType string
+	quote      []adapters.Amount
 }
 
 // toolName is an effect type's tool name: the dots become underscores, because
@@ -57,7 +58,7 @@ func effectTools(all []adapters.Adapter) (map[string]effectTool, error) {
 			if d.TargetForm != "" {
 				description += " Target: " + d.TargetForm + "."
 			}
-			tools[name] = effectTool{effectType: d.EffectType, Tool: Tool{
+			tools[name] = effectTool{effectType: d.EffectType, quote: append([]adapters.Amount(nil), d.Quote...), Tool: Tool{
 				Name: name, Description: strings.TrimSpace(description), InputSchema: schema,
 			}}
 		}

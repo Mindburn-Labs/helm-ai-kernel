@@ -163,6 +163,10 @@ type Declaration struct {
 	// Grantable is whether a mandate may grant the effect type. It is false for
 	// the gateway's own authority effects (helm.authority.*).
 	Grantable bool
+	// Quote is the fixed resource cost of one effect. It is declared by the
+	// gateway adapter, never by an MCP caller, and is stable across replay.
+	// Dynamic-price effects use their dedicated gateway route instead.
+	Quote []Amount
 }
 
 // Amount is one quote entry, as the proto's ResourceAmount.
@@ -258,14 +262,16 @@ type Observation struct {
 // the JSON names are the proto field names, and TestResultTypesMirrorTheProto
 // keeps them in step.
 type GitHubPullRequestResult struct {
-	URL     string `json:"url"`
-	Number  int64  `json:"number"`
-	NodeID  string `json:"node_id"`
-	HeadRef string `json:"head_ref"`
-	HeadSHA string `json:"head_sha"`
-	BaseRef string `json:"base_ref"`
-	Draft   bool   `json:"draft"`
-	State   string `json:"state"`
+	URL            string `json:"url"`
+	Number         int64  `json:"number"`
+	NodeID         string `json:"node_id"`
+	HeadRef        string `json:"head_ref"`
+	HeadSHA        string `json:"head_sha"`
+	BaseRef        string `json:"base_ref"`
+	Draft          bool   `json:"draft"`
+	State          string `json:"state"`
+	Merged         bool   `json:"merged,omitempty"`
+	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
 }
 
 // GitHubBranchResult mirrors helm.gateway.v1.GitHubBranchResult.

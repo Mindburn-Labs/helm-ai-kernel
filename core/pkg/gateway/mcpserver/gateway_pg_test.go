@@ -528,7 +528,7 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 	}
 }
 
-func TestPostgresLostToolResponseReplaysAcrossEpisodesWithoutRedispatch(t *testing.T) {
+func TestPostgresLostToolResponseNeedsSignedHandoffAcrossEpisodes(t *testing.T) {
 	for _, pending := range []bool{false, true} {
 		t.Run(fmt.Sprintf("unknown_%t", pending), func(t *testing.T) {
 			e := newEnv(t)
@@ -547,12 +547,8 @@ func TestPostgresLostToolResponseReplaysAcrossEpisodesWithoutRedispatch(t *testi
 			observed := e.adapter.observed.Load()
 			for _, token := range []string{tokenContinuation, tokenReassigned} {
 				got, failed := e.callTool(t, token, 901, "github_repository_get", getArgs(repoA)).structured(t)
-				want := "succeeded"
-				if pending {
-					want = "reconciling"
-				}
-				if failed || got["attempt_id"] != id || got["status"] != want {
-					t.Fatalf("lost-response recovery = %v error=%v", got, failed)
+				if !failed || got["status"] != "not_found" || got["attempt_id"] != nil {
+					t.Fatalf("unproven cross-episode replay = %v error=%v", got, failed)
 				}
 				// Knowing the retained id still grants no generic read access.
 				read, failed := e.callTool(t, token, "read", AttemptGetTool, map[string]any{"attempt_id": id}).structured(t)
@@ -571,15 +567,15 @@ func TestPostgresLostToolResponseReplaysAcrossEpisodesWithoutRedispatch(t *testi
 	}
 }
 
-func TestPostgresEscalationReplayKeepsOneApprovalAcrossEpisodes(t *testing.T) {
+func TestPostgresEscalationReplayNeedsSignedHandoffAcrossEpisodes(t *testing.T) {
 	e := newEnv(t)
 	first, failed := e.callTool(t, tokenSeat1Ep1, "lost", "github_branch_create_from_changes", branchCall(repoA, "helm/one")).structured(t)
 	if failed || first["status"] != "escalated" {
 		t.Fatalf("first = %v", first)
 	}
 	again, failed := e.callTool(t, tokenContinuation, 71, "github_branch_create_from_changes", branchCall(repoA, "helm/one")).structured(t)
-	if failed || again["status"] != "escalated" || again["attempt_id"] != first["attempt_id"] {
-		t.Fatalf("retry created another approval: %v", again)
+	if !failed || again["status"] != "not_found" || again["attempt_id"] != nil {
+		t.Fatalf("unproven retry exposed an approval: %v", again)
 	}
 	if e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts WHERE state = 'ESCALATED'`) != 1 || e.adapter.dispatched.Load() != 0 {
 		t.Fatal("escalation retry duplicated or executed the effect")

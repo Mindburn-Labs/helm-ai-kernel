@@ -36,6 +36,10 @@ func prepareWorkEffect(caller Caller, in ProposeInput) (ProposeInput, error) {
 	if caller.Episode == nil {
 		return ProposeInput{}, refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "a work effect requires a verified episode claim")
 	}
+	if in.MandateID != "" || in.CommitmentID != "" || len(in.Distinct) != 0 || in.ApprovalExpiresAt != nil {
+		return ProposeInput{}, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+			"a work effect accepts only target, arguments, effect type, and quote")
+	}
 	var err error
 	in, err = bindEpisode(caller.Episode, in)
 	if err != nil {
@@ -57,13 +61,7 @@ func prepareWorkEffect(caller Caller, in ProposeInput) (ProposeInput, error) {
 }
 
 func workEffectDigest(caller Caller, in ProposeInput) []byte {
-	target := in.Target
-	switch in.EffectType {
-	case effectargs.GitHubRepositoryGet, effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubPullRequestCreateDraft:
-		// GitHub owner/repository names are case-insensitive. Do not change
-		// the stored target or the target against which mandates are evaluated.
-		target = strings.ToLower(target)
-	}
+	target := workEffectTarget(in.EffectType, in.Target)
 	intent := sha256.Sum256(in.Arguments)
 	var m bytes.Buffer
 	for _, part := range []string{"helm.gateway.v1.work-effect.v1", caller.TenantID, caller.WorkspaceID,
@@ -73,4 +71,14 @@ func workEffectDigest(caller Caller, in ProposeInput) []byte {
 	field(&m, intent[:])
 	sum := sha256.Sum256(m.Bytes())
 	return sum[:]
+}
+
+func workEffectTarget(effectType, target string) string {
+	switch effectType {
+	case effectargs.GitHubRepositoryGet, effectargs.GitHubBranchCreateFromChanges, effectargs.GitHubGitPush, effectargs.GitHubPullRequestCreateDraft, effectargs.GitHubPullRequestCreate, effectargs.GitHubPullRequestMerge:
+		// GitHub owner/repository names are case-insensitive. Do not change
+		// the stored target or the target against which mandates are evaluated.
+		target = strings.ToLower(target)
+	}
+	return target
 }

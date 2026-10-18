@@ -57,10 +57,16 @@ surface for the `helm-ai-kernel` project.
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
   It requires the `claude-managed-agents-live` environment with
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
-- `dev-image.yml` is the dispatch-only, dev-grade QA lane. For one exact
-  commit with a green in-repo `ci.yml` run, it publishes and signs
-  `ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>`. Its signing identity is
-  `dev-image.yml@refs/heads/main`, so release verification rejects it.
+- `dev-image.yml` is the dev-grade QA lane with two entry points. Dispatch:
+  for one exact commit with a green in-repo `ci.yml` run, it publishes and
+  signs `ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>`. Main lane
+  (HELM-968): when `ci.yml` succeeds on a `main` commit of this repository, it
+  publishes `:dev-sha-<sha>` and `:main-<YYYYMMDDHHMMSS>-<sha7>`, built natively
+  on GitHub's hosted arm64 runner, plus a prerelease chart `<VERSION>-main.<ts>`
+  in `ghcr.io/mindburn-labs/charts-dev`, so the QA stand can follow `main` with
+  chart and binary from one commit. Its signing identity is
+  `dev-image.yml@refs/heads/main`, so release verification rejects everything
+  it produces.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
   manually dispatched with the scoped CI key. Main runs retain artifact evidence

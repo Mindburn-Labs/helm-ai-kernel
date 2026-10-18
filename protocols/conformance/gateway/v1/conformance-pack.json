@@ -44,7 +44,7 @@
     {
       "id": "GW-007",
       "file": "scenarios/GW-007-step-up-high-not-medium.json",
-      "sha256": "07ec0b6076419a1d158349aa03f3809491a9fd701f41e4ccc8329e7503c364dc"
+      "sha256": "85c19bba864980b824a9d2997d7e12fe18b1ac39d237b6c3dc610b0b95d9d59b"
     },
     {
       "id": "GW-008",
@@ -129,7 +129,7 @@
     {
       "id": "GW-024",
       "file": "scenarios/GW-024-step-up-proof-admits-and-is-single-use.json",
-      "sha256": "67c4b3c3cdd497e4306060f7d81a76bc6582c7827796c0f21616f075a6ecf800"
+      "sha256": "a406eb34f347f86f7cc4938b3dd04d5323d8a7666875e94de2ed5062d3d9457e"
     }
   ]
 }

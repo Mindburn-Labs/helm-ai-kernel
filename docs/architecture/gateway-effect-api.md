@@ -262,17 +262,19 @@ typed result. Fields 10–15 stay held for later result types
 (`TestHeldFieldNumbersStayFree`). Clients read these fields, never the
 provider's raw bytes.
 
-The HELM-789 walking skeleton needs three GitHub effects. Their argument schemas
-are closed JSON Schemas with known-good and known-bad fixtures, checked by the
-`json-schemas` gate:
+The governed GitHub adapter exposes six effects. Their argument schemas
+are closed JSON Schemas checked by the `json-schemas` gate:
 
 | Effect type | Arguments | Risk | Result |
 |---|---|---|---|
 | `github.repository.get` | `protocols/json-schemas/effects/github/repository_get.v1.json` | low (admitted) | `github_repository` (field 9) |
 | `github.branch.create_from_changes` | `protocols/json-schemas/effects/github/branch_create_from_changes.v1.json` | medium (admitted under a mandate) | `github_branch` (field 8) |
+| `github.git.push` | `protocols/json-schemas/effects/github/git_push.v1.json` | medium (admitted under a mandate) | `github_branch` (field 8) |
 | `github.pull_request.create_draft` | `protocols/json-schemas/effects/github/pull_request_create_draft.v1.json` | medium (escalated by mandate policy) | `github_pull_request` (field 7) |
+| `github.pull_request.create` | `protocols/json-schemas/effects/github/pull_request_create.v1.json` | medium (admitted or escalated by mandate policy) | `github_pull_request` (field 7) |
+| `github.pull_request.merge` | `protocols/json-schemas/effects/github/pull_request_merge.v1.json` | high (distinct approval and step-up) | `github_pull_request` (field 7) |
 
-Rules for both:
+Rules for all six:
 
 - **Target.** The target is `github.com/{owner}/{repo}`, with owner matching
   `^[A-Za-z0-9-]{1,39}$` and repo matching `^[A-Za-z0-9._-]{1,100}$`. It has
@@ -319,6 +321,17 @@ Anything else is FAILED with `READBACK_MISMATCH`. If the ref already exists,
 the same commit reconciles to SUCCEEDED and a different one is
 `READBACK_MISMATCH`. Nothing is ever overwritten.
 
+**Push.** `github.git.push` advances an existing non-default branch. Its
+`base_sha` must equal that branch's current head at Prepare and Dispatch. The
+adapter creates a commit with `base_sha` as its sole parent, then uses the
+atomic GitHub `updateRefs` mutation with `beforeOid=base_sha` and `force=false`.
+The expected OID check refuses concurrent head changes, including rewinds.
+The `base` branch is a
+distinct existing branch in the same repository. Readback uses the same parent,
+proposed-path and blob checks as branch creation. After a lost reply, replay
+first checks whether that exact change is already present and sends no second
+ref update.
+
 `files_digest` is SHA-256 over the files sorted by path, each encoded as
 `path 0x00 mode 0x00 blob-sha1-hex 0x0A`. Vector, checked by
 `TestGitHubBranchFilesDigestVector`:
@@ -330,13 +343,13 @@ the same commit reconciles to SUCCEEDED and a different one is
 
 `files_digest` = `c361fc7cce27fa9aa3f9e7ef1b275961a2418fff20e16fa1846e5bc50b43ec54`
 
-**Draft pull request.** `branch_attempt_id` names the branch attempt. At
+**Pull request creation.** `branch_attempt_id` names the branch-create or push attempt. At
 Propose the gateway requires that attempt to meet all of these, or it refuses
 with `PRECONDITION_FAILED` and creates no attempt:
 
 - it is in the same tenant and has the same target;
-- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED) or
-  RECONCILED(SUCCEEDED). Reconciliation runs the same ref, parent, compare
+- it is `github.branch.create_from_changes` or `github.git.push` in
+  OBSERVED(SUCCEEDED) or RECONCILED(SUCCEEDED). Reconciliation runs the same ref, parent, compare
   and blob checks as Observe, so both prove the same commit;
 - its `head` and `base` equal these;
 - its `commit_sha` equals `head_sha`.
@@ -351,8 +364,9 @@ response, Observe finds the pull request by head and base. If the provider's
 answer was not definitive, the attempt stays UNKNOWN and is never
 re-dispatched blindly.
 
-The read-back is SUCCEEDED only if `draft` is true, `head_sha` equals the
-proposed value, `base_ref` equals `base`, and the title matches. Otherwise it
+The read-back is SUCCEEDED only if `draft` matches the effect type (`true`
+for `create_draft`, `false` for `create`), `head_sha` equals the proposed value,
+`base_ref` equals `base`, and the title matches. Otherwise it
 is FAILED with `READBACK_MISMATCH`, and the result still records the URL.
 
 **Dispatch-time refusal is a state, not an error.** When the Dispatch-time
@@ -371,7 +385,7 @@ a certain FAILED and the reservation is released. The Propose-time
 `PRECONDITION_FAILED`.
 
 The adapter is `core/pkg/gateway/adapters/github` (HELM-753). Since HELM-751
-s3, `helm-gateway`'s `Dispatch` and `Observe` call it. It performs all three effects above. It registers and emits `READBACK_MISMATCH` and `PRECONDITION_FAILED`, plus
+s3, `helm-gateway`'s `Dispatch` and `Observe` call it. It performs the effects above. It registers and emits `READBACK_MISMATCH` and `PRECONDITION_FAILED`, plus
 `PERMIT_ARGUMENT_MISMATCH` (the permit's argument digest is not SHA-256 of the
 bytes it is about to send, audit 09-01), `PROVIDER_CREDENTIAL_REJECTED`,
 `PROVIDER_RESPONSE_TOO_LARGE` (audit 09-04) and `PROVIDER_ERROR`. Its dispatch
@@ -916,7 +930,10 @@ least `permissions` the effect type needs:
 |---|---|
 | `github.repository.get` | `contents: read`, `metadata: read` |
 | `github.branch.create_from_changes` | `contents: write`, `metadata: read` |
+| `github.git.push` | `contents: write`, `metadata: read` |
 | `github.pull_request.create_draft` | `pull_requests: write`, `contents: read`, `metadata: read` |
+| `github.pull_request.create` | `pull_requests: write`, `contents: read`, `metadata: read` |
+| `github.pull_request.merge` | `contents: write`, `metadata: read` |
 
 A token therefore reaches one repository with one operation's permissions.
 Tokens are cached per (installation, repository, effect type) until 5 minutes

@@ -182,6 +182,9 @@ before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-g
 | `gateway.github.appIdKey` / `privateKeyKey` | `app-id` / `private-key.pem` | Keys in `gateway.github.existingSecret`. |
 | `gateway.github.installationsFile` | empty | JSON, rendered into a ConfigMap and mounted at `/etc/helm-gateway/github/installations.json`. Shape below; any other field fails the render. |
 | `gateway.github.apiURL` | empty | `HELM_GATEWAY_GITHUB_API_URL`, a GitHub Enterprise Server API root (https); empty uses `https://api.github.com`. Needs the two values above. |
+| `gateway.activity.sourcesFile` | empty | JSON with `sources` entries containing `tenant_id`, `workspace_id`, canonical `repository`, and explicit `enabled`. Mounted into the gateway for provider polling. |
+| `gateway.activity.pollInterval` | `1m` | Poll interval, from `15s` to `1h`. |
+| `gateway.activity.webhookSecretKey` | empty | Optional key in the GitHub App Secret used to verify signed push deliveries at `/internal/github/activity`. |
 
 The installations file lists, per tenant and GitHub owner, the App
 installation and the repositories (`owner/name`) that tenant may act on. It

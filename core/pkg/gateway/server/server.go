@@ -212,6 +212,27 @@ func (s *Server) Stop(ctx context.Context, req *connect.Request[gatewayv1.StopRe
 	return connect.NewResponse(&gatewayv1.StopResponse{Stop: stopProto(stop), Existing: existing}), nil
 }
 
+// GetStopOutcome reads one workspace's current principal Stop outcome
+// (token scope helm.gateway.read). No Stop is created or lifted by this read.
+func (s *Server) GetStopOutcome(ctx context.Context, req *connect.Request[gatewayv1.GetStopOutcomeRequest]) (*connect.Response[gatewayv1.GetStopOutcomeResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeRead)
+	if err != nil {
+		return nil, err
+	}
+	outcome, err := s.Admission.StopOutcome(ctx, id.Caller, req.Msg.GetStopId())
+	if err != nil {
+		return nil, toRPCError(ctx, "GetStopOutcome", err)
+	}
+	return connect.NewResponse(&gatewayv1.GetStopOutcomeResponse{
+		Stop: stopProto(outcome.Stop), Active: outcome.Active,
+		BlockedAdmissionAttemptIds: outcome.BlockedAdmissionAttemptIDs,
+		AwaitingClaimAttemptIds:    outcome.AwaitingClaimAttemptIDs,
+		VoidedAtClaimAttemptIds:    outcome.VoidedAtClaimAttemptIDs,
+		CheckingAttemptIds:         outcome.CheckingAttemptIDs,
+		HumanReviewAttemptIds:      outcome.HumanReviewAttemptIDs,
+	}), nil
+}
+
 // Lift proposes lifting a stop: a helm.authority.lift attempt, normally
 // ESCALATED (token scope helm.gateway.stop, single-use, bound to the stop by
 // its helm_stop_lift authorization_details entry).
@@ -246,6 +267,9 @@ func (s *Server) GetAttempt(ctx context.Context, req *connect.Request[gatewayv1.
 		return nil, err
 	}
 	attempt, err := s.Admission.Get(ctx, id.Caller, req.Msg.GetAttemptId())
+	if canTryContinuationRead(err, id.Caller) {
+		attempt, err = s.Admission.GetContinuation(ctx, id.Caller, req.Msg.GetAttemptId())
+	}
 	if err != nil {
 		return nil, toRPCError(ctx, "GetAttempt", err)
 	}
@@ -260,10 +284,21 @@ func (s *Server) GetAttemptContent(ctx context.Context, req *connect.Request[gat
 		return nil, err
 	}
 	content, err := s.Admission.GetContent(ctx, id.Caller, req.Msg.GetAttemptId())
+	if canTryContinuationRead(err, id.Caller) {
+		content, err = s.Admission.GetContentContinuation(ctx, id.Caller, req.Msg.GetAttemptId())
+	}
 	if err != nil {
 		return nil, toRPCError(ctx, "GetAttemptContent", err)
 	}
 	return connect.NewResponse(&gatewayv1.GetAttemptContentResponse{AttemptId: req.Msg.GetAttemptId(), Arguments: content}), nil
+}
+
+func canTryContinuationRead(err error, caller admission.Caller) bool {
+	if caller.Continuation == nil {
+		return false
+	}
+	var refusal *admission.Error
+	return errors.As(err, &refusal) && refusal.Code == admission.CodeNotFound
 }
 
 // ListAttempts lists the attempts of the token's tenant and workspace that

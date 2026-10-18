@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/github/pull_request_merge.v1.json",
+  "title": "github.pull_request.merge v1 arguments",
+  "description": "Merge one approved pull request at exactly head_sha into base. The repository is only the effect target. Always high risk, with a distinct authorized owner and WebAuthn step-up. Re-read before dispatch; send the SHA precondition with GitHub merge_action=default and bypass_rules=false. Repository merge queues and rules remain authoritative. A queued or pending response is not success: Observe requires merged=true, an exact head/base/repository match, and a merge commit SHA. merge_method applies only to direct merges; a queue uses its configured method. UTF-8, no duplicate keys and a 65536-byte document limit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "pull_number",
+    "head_sha",
+    "base",
+    "merge_method"
+  ],
+  "properties": {
+    "schema": {
+      "const": "helm.github.pull_request.merge.v1"
+    },
+    "pull_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "base": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9._/-]+$",
+      "not": {
+        "pattern": "^refs/"
+      }
+    },
+    "merge_method": {
+      "type": "string",
+      "enum": [
+        "merge",
+        "squash",
+        "rebase"
+      ]
+    }
+  },
+  "x-helm": {
+    "effect_type": "github.pull_request.merge",
+    "target": "github.com/{owner}/{repo}",
+    "risk_class": "high",
+    "idempotent": "conditional: exact PR number and head SHA, authoritative readback before retry",
+    "observable": "yes: merged flag, head SHA, base, repository and merge commit readback",
+    "reversible": "no",
+    "mediation": "enforced",
+    "result": "helm.gateway.v1.Observation.github_pull_request (GitHubPullRequestResult)",
+    "approval": "always requires an authorized owner and WebAuthn step-up; no documentation-only exception"
+  }
+}

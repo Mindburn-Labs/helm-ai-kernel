@@ -78,10 +78,14 @@ func newStepUpWire(t *testing.T) *stepUpWire {
 // escalate proposes an effect as human-a and returns the ESCALATED attempt.
 func (w *stepUpWire) escalate(key, effectType string) *gatewayv1.EffectAttempt {
 	w.t.Helper()
+	args := []byte(`{"n":"` + key + `"}`)
+	if effectType == stepUpMerge {
+		args = []byte(`{"schema":"helm.github.pull_request.merge.v1","pull_number":17,"head_sha":"1111111111111111111111111111111111111111","base":"main","merge_method":"squash"}`)
+	}
 	resp, err := w.client.Propose(context.Background(), withToken(&gatewayv1.ProposeRequest{
 		IdempotencyKey: key,
 		WorkRef:        &gatewayv1.ProposeRequest_CommitmentId{CommitmentId: "commitment-1"},
-		Effect:         &gatewayv1.EffectDescriptor{EffectType: effectType, Target: testRepo, Arguments: []byte(`{"n":"` + key + `"}`)},
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: effectType, Target: testRepo, Arguments: args},
 	}, w.iss.token(w.t, testAudience, "tenant-a", "human-a", ScopePropose)))
 	must(w.t, err)
 	a := resp.Msg.GetAttempt()

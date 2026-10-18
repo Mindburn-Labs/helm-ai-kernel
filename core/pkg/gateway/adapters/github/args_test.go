@@ -36,7 +36,13 @@ func TestSchemaExamples(t *testing.T) {
 		parse := func() error { _, err := parseBranchArgs(raw); return err }
 		switch {
 		case strings.HasPrefix(name, "pull_request_create_draft"):
-			parse = func() error { _, err := parsePullRequestArgs(raw); return err }
+			parse = func() error { _, err := parsePullRequestArgsFor(EffectPullRequestCreateDraft, raw); return err }
+		case strings.HasPrefix(name, "pull_request_create"):
+			parse = func() error { _, err := parsePullRequestArgsFor(EffectPullRequestCreate, raw); return err }
+		case strings.HasPrefix(name, "pull_request_merge"):
+			parse = func() error { _, err := parseMergeArgs("github.com/o/r", raw); return err }
+		case strings.HasPrefix(name, "git_push"):
+			parse = func() error { _, err := parseBranchArgsFor(EffectGitPush, raw); return err }
 		case strings.HasPrefix(name, "repository_get"):
 			parse = func() error { _, err := parseRepositoryArgs(raw); return err }
 		}
@@ -62,7 +68,7 @@ func TestArgumentRulesBeyondTheSchema(t *testing.T) {
 	if _, err := parseBranchArgs([]byte(validBranch)); err != nil {
 		t.Fatalf("the valid branch: %v", err)
 	}
-	if _, err := parsePullRequestArgs([]byte(validPullRequest)); err != nil {
+	if _, err := parsePullRequestArgsFor(EffectPullRequestCreateDraft, []byte(validPullRequest)); err != nil {
 		t.Fatalf("the valid pull request: %v", err)
 	}
 	branch := func(old, new string) string { return strings.Replace(validBranch, old, new, 1) }
@@ -103,7 +109,7 @@ func TestArgumentRulesBeyondTheSchema(t *testing.T) {
 	} {
 		var err error
 		if strings.Contains(raw, "pull_request") {
-			_, err = parsePullRequestArgs([]byte(raw))
+			_, err = parsePullRequestArgsFor(EffectPullRequestCreateDraft, []byte(raw))
 		} else {
 			_, err = parseBranchArgs([]byte(raw))
 		}
@@ -172,6 +178,16 @@ func TestCheckBranchAttempt(t *testing.T) {
 	if err := CheckBranchAttempt(view, proposal); err != nil {
 		t.Fatalf("the matching attempt: %v", err)
 	}
+	push := view
+	push.EffectType = EffectGitPush
+	push.Arguments = []byte(strings.Replace(validBranch, "helm.github.branch.create_from_changes.v1", "helm.github.git.push.v1", 1))
+	if err := CheckBranchAttempt(push, proposal); err != nil {
+		t.Fatalf("the matching observed push: %v", err)
+	}
+	push.CommitSHA = strings.Repeat("f", 40)
+	if err := CheckBranchAttempt(push, proposal); !refusedWith(err, contracts.ReasonPreconditionFailed) {
+		t.Fatalf("a PR named a push with another observed commit: %v", err)
+	}
 	for _, state := range []string{"RECONCILED", "SETTLED"} {
 		v := view
 		v.State = state
@@ -213,8 +229,11 @@ func TestCheckBranchAttempt(t *testing.T) {
 func TestDeclarationsMatchTheSchemas(t *testing.T) {
 	for file, effectType := range map[string]string{
 		"branch_create_from_changes.v1.json": EffectBranchCreateFromChanges,
+		"git_push.v1.json":                   EffectGitPush,
 		"pull_request_create_draft.v1.json":  EffectPullRequestCreateDraft,
 		"repository_get.v1.json":             EffectRepositoryGet,
+		"pull_request_create.v1.json":        EffectPullRequestCreate,
+		"pull_request_merge.v1.json":         EffectPullRequestMerge,
 	} {
 		raw, err := os.ReadFile(filepath.Join(schemasDir(t), file))
 		if err != nil {
@@ -244,8 +263,8 @@ func TestDeclarationsMatchTheSchemas(t *testing.T) {
 				effectType, d.TargetForm, len(d.ArgumentSchema), d.Grantable, d.Description, x["target"])
 		}
 	}
-	if len(New().Declarations()) != 3 {
-		t.Error("the adapter declares other than its three effects")
+	if len(New().Declarations()) != 6 {
+		t.Error("the adapter declares other than its six effects")
 	}
 }
 

@@ -1,6 +1,6 @@
 // Command helm-gateway is the effect gateway (Zone C, HELM-751): the server
-// of the gateway effect API, helm.gateway.v1.EffectGatewayService, and of its
-// authority administration API, helm.gateway.v1.AuthorityAdminService, on the
+// of the gateway effect API, helm.gateway.v1.EffectGatewayService, its
+// authority administration API, and the read-only ActivityTrailService on the
 // same listener.
 //
 //	helm-gateway migrate   apply the gateway schema and River's to HELM_GATEWAY_DATABASE_URL
@@ -21,6 +21,10 @@
 // HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE, all or none, and optionally
 // HELM_GATEWAY_GITHUB_API_URL. Without them every GitHub dispatch is NOT_SENT
 // (PROVIDER_CREDENTIAL_REJECTED).
+// HELM_GATEWAY_ACTIVITY_SOURCES_FILE optionally supplies operator-bound
+// tenant/workspace/repository scopes for provider polling. An optional
+// HELM_GATEWAY_ACTIVITY_WEBHOOK_SECRET_FILE mounts signed push ingress on the
+// main listener; neither path accepts tenant identity from provider content.
 //
 // With HELM_GATEWAY_MODEL_ROUTES_FILE the gateway also serves the model
 // gateway (package modelgw) under /v1/ on its main listener, for the Control
@@ -58,6 +62,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/activitytrail"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
@@ -102,6 +107,9 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		defer func() { _ = db.Close() }()
 		if err := admission.Migrate(ctx, db); err != nil {
 			return err
+		}
+		if err := activitytrail.Migrate(ctx, db); err != nil {
+			return fmt.Errorf("activity trail migration: %w", err)
 		}
 		if err := jobs.Migrate(ctx, db); err != nil {
 			return fmt.Errorf("river migration: %w", err)
@@ -221,6 +229,10 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 			}
 		}
 	}
+	activity, err := newActivityRuntime(db, getenv, admissionConfig.Credentials)
+	if err != nil {
+		return err
+	}
 	models.install(&admissionConfig)
 	// River works the expiry and reconciliation jobs in this process, from
 	// the same database: one deployable, and a leader-elected client, so
@@ -255,6 +267,11 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(admin.Handler())
+	mux.Handle((&server.ActivityServer{Trail: activity.trail, Auth: api.Auth}).Handler())
+	if activity.webhook != nil {
+		mux.Handle("POST /internal/github/activity", activity.webhook)
+	}
+	mux.Handle(admin.TeamCounterHandler())
 	plain := cfg.devInsecureListen != ""
 
 	// The model gateway: on the main listener for the Control Plane's calls,
@@ -318,6 +335,11 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		}
 		defer l.Close()
 		*extra.listener = l
+	}
+	if len(activity.sources) > 0 {
+		pollContext, stopPolling := context.WithCancel(ctx)
+		defer stopPolling()
+		go activity.poll(pollContext)
 	}
 	defer apiServer.Close()
 	defer healthServer.Close()
@@ -511,6 +533,8 @@ func healthHandler(db *sql.DB) http.Handler {
 			http.Error(w, fmt.Sprintf("gateway schema at version %d, want %d: run helm-gateway migrate", version, admission.HeadVersion()), http.StatusServiceUnavailable)
 		case jobs.Ready(ctx, db) != nil:
 			http.Error(w, "the job tables are not current: run helm-gateway migrate", http.StatusServiceUnavailable)
+		case activitytrail.Ready(ctx, db) != nil:
+			http.Error(w, "the activity trail tables are not current: run helm-gateway migrate", http.StatusServiceUnavailable)
 		default:
 			_, _ = io.WriteString(w, "ready\n")
 		}

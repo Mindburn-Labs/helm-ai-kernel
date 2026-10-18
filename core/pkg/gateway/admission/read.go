@@ -168,15 +168,19 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 	return loadAttemptScoped(ctx, tx, caller, attemptID, "", nil)
 }
 
-// The work scope is private to ProposeWorkEffect: both its work id and digest
-// are derived from the authenticated claim and validated intent. No read API
-// accepts this alternative scope.
+// The work scope is private to work-effect replay and the explicit
+// continuation read methods. Those callers check a signed predecessor grant
+// and original row binding before returning anything; Get/GetContent do not.
 func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, workID string, workDigest []byte) (Attempt, error) {
 	scope := `AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5))`
 	args := []any{caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID}
 	if workID != "" {
-		scope = `AND episode_id IS NOT NULL AND case_id = $4 AND request_digest = $5`
-		args[3], args[4] = workID, workDigest
+		scope = `AND episode_id IS NOT NULL AND case_id = $4`
+		args = []any{caller.TenantID, attemptID, caller.WorkspaceID, workID}
+		if workDigest != nil {
+			scope += ` AND request_digest = $5`
+			args = append(args, workDigest)
+		}
 	}
 	var a Attempt
 	var mandate, commitment, caseID, risk, outcome, basis, episodeID, organizationVersionID sql.NullString
@@ -276,8 +280,9 @@ func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID
 	var kind string
 	var result []byte
 	err = tx.QueryRowContext(ctx, `SELECT source, trust_class, outcome, evidence_digest, observed_at, result_ref, result_kind, result
-		FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2 ORDER BY observation_id DESC LIMIT 1`,
-		caller.TenantID, attemptID).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef,
+		FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2
+		AND ($3 = '' OR outcome = $3) ORDER BY observation_id DESC LIMIT 1`,
+		caller.TenantID, attemptID, a.Outcome).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef,
 		&kind, &result)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

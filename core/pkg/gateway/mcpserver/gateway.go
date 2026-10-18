@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -114,7 +115,7 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 		return Result{}, ErrForbidden
 	}
 	propose := admission.ProposeInput{
-		EffectType: t.effectType, Target: in.Target, Arguments: []byte(in.Arguments), Quote: quoteFor(grants),
+		EffectType: t.effectType, Target: in.Target, Arguments: []byte(in.Arguments), Quote: quoteFor(grants, t.quote),
 	}
 	attempt, _, err := g.ledger.ProposeWorkEffect(ctx, c.Caller, propose)
 	var refusal *admission.Error
@@ -124,7 +125,7 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 		if grants, err = g.ledger.ModelGrants(ctx, c.Caller, t.effectType); err != nil {
 			return Result{}, refusedOr(err)
 		}
-		propose.Quote = quoteFor(grants)
+		propose.Quote = quoteFor(grants, t.quote)
 		attempt, _, err = g.ledger.ProposeWorkEffect(ctx, c.Caller, propose)
 	}
 	if err != nil {
@@ -215,12 +216,24 @@ func refusedOr(err error) error {
 	return err
 }
 
-// quoteFor is a zero amount for every unit the caller's chains sum: a sum limit
-// needs an amount for its unit, and an effect tool costs none of it.
-func quoteFor(g admission.Grants) []admission.Amount {
-	quote := make([]admission.Amount, 0, len(g.SumUnits))
+// quoteFor includes every summed unit, using the adapter's fixed cost where
+// declared. A replay produces the same quote without reading provider state.
+func quoteFor(g admission.Grants, fixed []adapters.Amount) []admission.Amount {
+	amounts := make(map[string]int64, len(g.SumUnits)+len(fixed))
 	for _, unit := range g.SumUnits {
-		quote = append(quote, admission.Amount{Unit: unit})
+		amounts[unit] = 0
+	}
+	for _, amount := range fixed {
+		amounts[amount.Unit] = amount.Amount
+	}
+	units := make([]string, 0, len(amounts))
+	for unit := range amounts {
+		units = append(units, unit)
+	}
+	sort.Strings(units)
+	quote := make([]admission.Amount, 0, len(units))
+	for _, unit := range units {
+		quote = append(quote, admission.Amount{Unit: unit, Amount: amounts[unit]})
 	}
 	return quote
 }

@@ -1,0 +1,13 @@
+{
+  "schema": "helm.github.git.push.v1",
+  "base": "main",
+  "head": "helm/run-0192f0c4",
+  "message": "docs: add the skeleton note",
+  "files": [
+    {
+      "path": "docs/skeleton.md",
+      "mode": "100644",
+      "content_utf8": "# Skeleton\n"
+    }
+  ]
+}

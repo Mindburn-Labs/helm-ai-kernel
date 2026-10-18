@@ -292,6 +292,16 @@ service EffectGatewayService {
   // with scope_kind in the lower-case form of StopScopeKind.
   rpc Stop(StopRequest) returns (StopResponse);
 
+  // GetStopOutcome reads a principal Stop and the current attempt states in
+  // the token's workspace. The attempt sets are scope-matching snapshots,
+  // not causal attribution to this Stop when Stops overlap. A non-principal
+  // Stop returns failed_precondition. Episode tokens cannot read this view.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetStopOutcome(GetStopOutcomeRequest) returns (GetStopOutcomeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // Lift proposes lifting a stop. Lifting widens authority, so it is an
   // effect attempt of type helm.authority.lift that needs approval by
   // another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
@@ -554,6 +564,31 @@ message StopResponse {
   Stop stop = 1;
   // True when the idempotency key already named this request.
   bool existing = 2;
+}
+
+// GetStopOutcomeRequest names a Stop in the token's tenant.
+message GetStopOutcomeRequest {
+  string stop_id = 1;
+}
+
+// GetStopOutcomeResponse is one workspace's current principal Stop snapshot.
+// IDs in each set are sorted and the sets are disjoint. They describe
+// attempts proposed by, or carried by, the stopped principal. When Stops
+// overlap, these sets do not attribute any attempt to one Stop alone.
+message GetStopOutcomeResponse {
+  Stop stop = 1;
+  // Whether this Stop is neither lifted nor expired in the read snapshot.
+  bool active = 2;
+  // Attempts denied by an emergency Stop while matching this principal.
+  repeated string blocked_admission_attempt_ids = 3;
+  // ADMITTED attempts not yet claimed; an active Stop fences their claim.
+  repeated string awaiting_claim_attempt_ids = 4;
+  // Attempts CANCELLED by a stopped claim, with permit voided and hold released.
+  repeated string voided_at_claim_attempt_ids = 5;
+  // DISPATCHING, DISPATCHED or UNKNOWN attempts that may have reached the provider.
+  repeated string checking_attempt_ids = 6;
+  // Attempts handed to a human after inconclusive read-back.
+  repeated string human_review_attempt_ids = 7;
 }
 
 // LiftRequest proposes lifting one stop.
@@ -1042,6 +1077,10 @@ message GitHubPullRequestResult {
   bool draft = 7;
   // "open" or "closed".
   string state = 8;
+  // A closed pull request is not necessarily merged.
+  bool merged = 9;
+  // Authoritative merged commit; meaningful only when merged is true.
+  string merge_commit_sha = 10;
 }
 
 // GitHubBranchResult is a branch as the adapter read it back (HELM-753).

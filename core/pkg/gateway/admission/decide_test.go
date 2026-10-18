@@ -234,7 +234,9 @@ func TestStepUpCoversHighIrreversibleAndAuthorityChanges(t *testing.T) {
 		want             bool
 	}{
 		{"high", "github.pull_request.merge", true},
+		{"high", "payment.send", true},
 		{"irreversible", "payment.send", true},
+		{"low", "github.pull_request.merge", true},
 		{"low", "helm.authority.lift", true},
 		{"medium", "github.pull_request.create_draft", false},
 		{"low", "github.repository.get", false},

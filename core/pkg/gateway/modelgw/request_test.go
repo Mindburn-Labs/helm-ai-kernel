@@ -3,6 +3,7 @@ package modelgw
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,6 +23,49 @@ func forwarded(t *testing.T, c *call) map[string]json.RawMessage {
 		t.Fatalf("the forwarded body is not JSON: %v\n%s", err, c.Body)
 	}
 	return m
+}
+
+func TestOnlyDefaultOutputCapsShrinkToAnAffordableQuoteAcrossAPIs(t *testing.T) {
+	for _, tc := range []struct {
+		api, body, capField string
+	}{
+		{effectargs.APIOpenAIResponses, `{"model":"gpt-6-sol","input":"budget"}`, "max_output_tokens"},
+		{effectargs.APIOpenAIChat, `{"model":"gpt-6-sol","messages":[{"role":"user","content":"budget"}]}`, "max_completion_tokens"},
+		{effectargs.APIAnthropicMessages, `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"budget"}]}`, "max_tokens"},
+	} {
+		t.Run(tc.api, func(t *testing.T) {
+			c, refusal := inspectFor(t, tc.api, tc.body)
+			if refusal != nil || !c.DefaultedOutput {
+				t.Fatalf("default inspection: call=%+v refusal=%v", c, refusal)
+			}
+			original := c.MaxOutputTokens
+			// Leave enough for input and some output, but not the route default.
+			affordable, err := c.Route.Quote(int64(len(c.Body)), original/2, c.MayWriteCache)
+			must(t, err)
+			c.fitDefaultOutput(affordable)
+			if c.MaxOutputTokens < 1 || c.MaxOutputTokens >= original {
+				t.Fatalf("default output did not shrink: %d -> %d", original, c.MaxOutputTokens)
+			}
+			quote, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+			must(t, err)
+			if quote > affordable {
+				t.Fatalf("forwarded quote %d exceeds %d", quote, affordable)
+			}
+			var sent int64
+			if err := json.Unmarshal(forwarded(t, c)[tc.capField], &sent); err != nil || sent != c.MaxOutputTokens {
+				t.Fatalf("forwarded %s=%d, cap=%d, err=%v", tc.capField, sent, c.MaxOutputTokens, err)
+			}
+			explicit := strings.TrimSuffix(tc.body, "}") + `,"` + tc.capField + `":` + fmt.Sprint(original) + `}`
+			e, refusal := inspectFor(t, tc.api, explicit)
+			if refusal != nil || e.DefaultedOutput {
+				t.Fatalf("explicit inspection: call=%+v refusal=%v", e, refusal)
+			}
+			e.fitDefaultOutput(affordable)
+			if e.MaxOutputTokens != original || !bytes.Equal(e.Body, []byte(explicit)) {
+				t.Fatalf("explicit cap changed: %s", e.Body)
+			}
+		})
+	}
 }
 
 func TestEscapedPromptCacheKeysReserveTheCacheWriteTariff(t *testing.T) {

@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+// Observed-only GitHub default-branch activity. These reads do not create or
+// imply a governed effect attempt, approval, permit, or receipt.
+package helm.gateway.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
+
+// ActivityTrailService reads the Kernel-owned activity source. Every RPC
+// requires helm.gateway.read. Tenant and workspace come only from the bearer
+// token, never from a request field. There is no public write RPC.
+service ActivityTrailService {
+  rpc GetCoverage(GetCoverageRequest) returns (GetCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListObservations(ListObservationsRequest) returns (ListObservationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListOwnerExceptions(ListOwnerExceptionsRequest) returns (ListOwnerExceptionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetCoverageRequest {
+  // Canonical identity github.com/{owner}/{repo}.
+  string repository = 1;
+}
+
+message GetCoverageResponse {
+  ActivityCoverage coverage = 1;
+}
+
+message ActivityCoverage {
+  string repository = 1;
+  // "observed-only" when enabled, "unmanaged" otherwise.
+  string class = 2;
+  bool enabled = 3;
+  string default_branch = 4;
+  string head_sha = 5;
+  google.protobuf.Timestamp last_poll_at = 6;
+  string last_poll_error = 7;
+  google.protobuf.Timestamp last_event_poll_at = 8;
+  google.protobuf.Timestamp next_event_poll_at = 9;
+  bool event_window_capped = 10;
+  bool attribution_complete = 11;
+  int64 unattributed_count = 12;
+}
+
+message ListObservationsRequest {
+  string repository = 1;
+  // Defaults to 50; maximum 100.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListObservationsResponse {
+  repeated ActivityObservation observations = 1;
+  string next_page_token = 2;
+}
+
+message ActivityObservation {
+  string repository = 1;
+  string ref = 2;
+  string before_sha = 3;
+  string after_sha = 4;
+  // Hex SHA-256 of the normalized transition identity.
+  string fact_digest = 5;
+  // Empty until an authenticated provider event identifies the actor.
+  string actor_login = 6;
+  // Unset until an authenticated provider event supplies event created_at.
+  google.protobuf.Timestamp provider_time = 7;
+  google.protobuf.Timestamp observed_at = 8;
+  // Always "github activity".
+  string source = 9;
+  // Always "observed-only"; this does not prove mediation.
+  string coverage = 10;
+  // Always false in this source. A governed change needs its own attempt.
+  bool governed = 11;
+}
+
+message ListOwnerExceptionsRequest {
+  string repository = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListOwnerExceptionsResponse {
+  repeated OwnerException exceptions = 1;
+  string next_page_token = 2;
+}
+
+message OwnerException {
+  ActivityObservation observation = 1;
+  // Always "change made outside HELM" for this observed-only source.
+  string reason = 2;
+}

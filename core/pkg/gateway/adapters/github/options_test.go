@@ -2,8 +2,22 @@ package github
 
 import (
 	"net/http"
+	"testing"
 	"time"
 )
+
+func TestGraphQLEndpointUsesEnterpriseAPIPath(t *testing.T) {
+	for _, tc := range []struct{ rest, want string }{
+		{"https://api.github.com", "https://api.github.com/graphql"},
+		{"https://ghe.example/api/v3", "https://ghe.example/api/graphql"},
+		{"http://127.0.0.1:8080", "http://127.0.0.1:8080/graphql"},
+	} {
+		c := &client{a: New(WithBaseURL(tc.rest))}
+		if got := c.graphqlURL(); got != tc.want {
+			t.Errorf("GraphQL endpoint for %s = %s, want %s", tc.rest, got, tc.want)
+		}
+	}
+}
 
 // Options only the qualification suite uses; helm-gateway builds the adapter
 // with its defaults (WithBaseURL aside), so these are not shipped.

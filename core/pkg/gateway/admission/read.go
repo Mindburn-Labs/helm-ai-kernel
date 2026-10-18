@@ -276,8 +276,9 @@ func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID
 	var kind string
 	var result []byte
 	err = tx.QueryRowContext(ctx, `SELECT source, trust_class, outcome, evidence_digest, observed_at, result_ref, result_kind, result
-		FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2 ORDER BY observation_id DESC LIMIT 1`,
-		caller.TenantID, attemptID).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef,
+		FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2
+		AND ($3 = '' OR outcome = $3) ORDER BY observation_id DESC LIMIT 1`,
+		caller.TenantID, attemptID, a.Outcome).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef,
 		&kind, &result)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

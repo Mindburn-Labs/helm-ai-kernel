@@ -100,14 +100,53 @@ def json_stream(text: str) -> Iterable[dict[str, Any]]:
 def govulncheck_called(text: str) -> list[str]:
     """OSV ids whose trace reaches a function: the code calls the vulnerable symbol."""
     saw_config = False
+    saw_sbom = False
     called = set()
     for message in json_stream(text):
-        saw_config = saw_config or "config" in message
-        finding = message.get("finding")
-        if finding and finding.get("trace") and finding["trace"][0].get("function"):
-            called.add(finding["osv"])
+        if not isinstance(message, dict):
+            raise ReportError("govulncheck JSON stream contains a non-object message")
+        # v1.3.0 writes one populated Message field per JSON object.
+        if len(message) != 1 or next(iter(message)) not in {"config", "progress", "SBOM", "osv", "finding"}:
+            raise ReportError("govulncheck JSON stream contains an invalid message")
+        kind, payload = next(iter(message.items()))
+        if not isinstance(payload, dict):
+            raise ReportError(f"govulncheck {kind} message is not an object")
+        if not saw_config:
+            if kind != "config" or (
+                payload.get("protocol_version") != "v1.0.0"
+                or payload.get("scan_mode") != "source"
+                or payload.get("scan_level") != "symbol"
+            ):
+                raise ReportError("govulncheck JSON stream has no source/symbol config as its first message")
+            saw_config = True
+        elif kind == "config":
+            raise ReportError("govulncheck JSON stream contains a duplicate config message")
+        if kind == "SBOM":
+            roots = payload.get("roots")
+            if not isinstance(roots, list) or not roots or not all(isinstance(root, str) and root for root in roots):
+                raise ReportError("govulncheck source SBOM has no package roots")
+            saw_sbom = True
+        if kind == "finding":
+            osv = payload.get("osv")
+            trace = payload.get("trace")
+            if not isinstance(osv, str) or not osv:
+                raise ReportError("govulncheck finding has no OSV id")
+            if not isinstance(trace, list) or not trace or not all(isinstance(frame, dict) for frame in trace):
+                raise ReportError("govulncheck finding has no valid trace")
+            for frame in trace:
+                if not isinstance(frame.get("module"), str) or not frame["module"]:
+                    raise ReportError("govulncheck trace frame has no module")
+                for field in ("package", "function"):
+                    if field in frame and (not isinstance(frame[field], str) or not frame[field]):
+                        raise ReportError(f"govulncheck trace frame has an invalid {field}")
+            if trace[0].get("function"):
+                called.add(osv)
     if not saw_config:
         raise ReportError("govulncheck JSON stream has no config message; the scan did not run")
+    # v1.3.0 emits this only after package loading succeeds. There is no final
+    # JSON completion marker; the caller must also require scanner exit 0.
+    if not saw_sbom:
+        raise ReportError("govulncheck JSON stream has no source SBOM; the scan did not load packages")
     return sorted(called)
 
 

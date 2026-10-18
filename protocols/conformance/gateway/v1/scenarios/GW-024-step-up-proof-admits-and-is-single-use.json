@@ -439,6 +439,10 @@
           "effect_type": "github.pull_request.merge",
           "target": "github.com/Mindburn-Labs/example",
           "arguments_json": {
+            "schema": "helm.github.pull_request.merge.v1",
+            "pull_number": 1,
+            "head_sha": "0123456789abcdef0123456789abcdef01234567",
+            "base": "main",
             "merge_method": "squash"
           }
         }
@@ -464,6 +468,10 @@
           "effect_type": "github.pull_request.merge",
           "target": "github.com/Mindburn-Labs/example",
           "arguments_json": {
+            "schema": "helm.github.pull_request.merge.v1",
+            "pull_number": 2,
+            "head_sha": "0123456789abcdef0123456789abcdef01234567",
+            "base": "main",
             "merge_method": "rebase"
           }
         }

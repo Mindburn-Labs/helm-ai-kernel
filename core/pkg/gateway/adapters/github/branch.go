@@ -52,43 +52,11 @@ func (c *client) dispatchBranch(ctx context.Context, args branchArgs) adapters.D
 	case !isNotFound(err):
 		return notSent(err)
 	}
-	base, err := c.getCommit(ctx, args.BaseSHA)
+	commit, err := c.commitFiles(ctx, args.BaseSHA, args.Message, args.Files)
 	if err != nil {
-		if isNotFound(err) {
-			return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "base_sha %s is not a commit of the repository", args.BaseSHA))
-		}
 		return notSent(err)
 	}
 
-	type treeEntry struct {
-		Path string `json:"path"`
-		Mode string `json:"mode"`
-		Type string `json:"type"`
-		SHA  string `json:"sha"`
-	}
-	entries := make([]treeEntry, 0, len(args.Files))
-	for _, f := range args.Files {
-		blob, err := c.post(ctx, "/git/blobs", map[string]string{"content": f.Content, "encoding": "utf-8"})
-		if err != nil {
-			return notSent(err)
-		}
-		if want := blobSHA1(f.Content); blob.SHA != want {
-			return notSent(adapters.Refuse(contracts.ReasonReadbackMismatch, "GitHub stored %s as blob %s, want %s", f.Path, blob.SHA, want))
-		}
-		entries = append(entries, treeEntry{Path: f.Path, Mode: f.Mode, Type: "blob", SHA: blob.SHA})
-	}
-	tree, err := c.post(ctx, "/git/trees", map[string]any{"base_tree": base.Tree.SHA, "tree": entries})
-	if err != nil {
-		return notSent(err)
-	}
-	commit, err := c.post(ctx, "/git/commits", map[string]any{
-		"message": args.Message,
-		"tree":    tree.SHA,
-		"parents": []string{args.BaseSHA},
-	})
-	if err != nil {
-		return notSent(err)
-	}
 	var created gitRef
 	err = c.call(ctx, http.MethodPost, c.repoPath("/git/refs"), nil,
 		map[string]string{"ref": "refs/heads/" + args.Head, "sha": commit.SHA}, &created, c.a.maxResponseBytes)

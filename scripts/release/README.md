@@ -22,7 +22,12 @@ specific GitHub release attached a matching asset.
 | `check_version_drift.py` | Checks local source versions and published release channels with bounded per-surface requests. | `make version-drift`, `make version-drift-published`, scheduled monitor. |
 | `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
 | `rehearse.py` | Computes the version the next tag would carry and checks the pre-publish preconditions of `release.yml`; prints PASS / FAIL / ACTION-NEEDED / UNKNOWN rows. | `make release-rehearsal`, `release-rehearsal.yml`. |
-| `rehearse_test.py` | Hermetic self-test for the rehearsal: version computation through the real contract gate, catalog and pin outcomes, a planted chart defect. | `make test-release-rehearsal`, `release-rehearsal-self-test` gate. |
+| `rehearse_test.py` | Hermetic self-test for the rehearsal: version computation through the real contract gate, catalog and pin outcomes, planted chart defects and unprotected release environments. | `make test-release-rehearsal`, `release-rehearsal-self-test` gate. |
+
+The rehearsal reads live deployment policies for every environment declared by
+`release.yml`. Each must allow exactly `tag:v*` and have no required reviewers.
+A missing or broader rule fails the rehearsal; an unreadable policy is
+`UNKNOWN`. Environment secret values remain unverified by this read-only check.
 
 ## Drift, unknown, and exit codes
 

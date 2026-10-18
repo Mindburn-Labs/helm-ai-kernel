@@ -157,9 +157,9 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 	return resultFor(attempt), nil
 }
 
-// attemptGet reads back an attempt of the caller's own episode. Another
-// episode's attempt, another tenant's, and one that does not exist are the
-// same answer.
+// attemptGet reads an attempt of the caller's own episode, or an exact
+// predecessor listed in its signed continuation grant. An unlisted attempt,
+// another tenant's attempt, and one that does not exist are the same answer.
 func (g *Gateway) attemptGet(ctx context.Context, c Caller, call Call) (Result, error) {
 	var in struct {
 		AttemptID string `json:"attempt_id"`
@@ -175,6 +175,16 @@ func (g *Gateway) attemptGet(ctx context.Context, c Caller, call Call) (Result, 
 		return Result{}, ErrForbidden
 	}
 	attempt, err := g.ledger.Get(ctx, c.Caller, in.AttemptID)
+	if err != nil && c.Caller.Continuation != nil {
+		var refusal *admission.Error
+		if errors.As(err, &refusal) && refusal.Code == admission.CodeNotFound {
+			if reader, ok := g.ledger.(interface {
+				GetContinuation(context.Context, admission.Caller, string) (admission.Attempt, error)
+			}); ok {
+				attempt, err = reader.GetContinuation(ctx, c.Caller, in.AttemptID)
+			}
+		}
+	}
 	if err != nil {
 		return g.refusal(err, "")
 	}

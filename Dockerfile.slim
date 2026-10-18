@@ -18,8 +18,8 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
 # Stage 2: Minimal runtime
-FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
-RUN apk add --no-cache ca-certificates tzdata && \
+FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata && \
     adduser -D -h /home/helm-ai-kernel helm-kernel
 COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
 COPY --from=builder --chown=helm-kernel:helm-kernel /runtime-data/ /var/lib/helm-ai-kernel/

@@ -24,7 +24,7 @@
     "@grpc/grpc-js": "^1.14.3",
     "@vitest/coverage-v8": "^4.1.11",
     "ts-proto": "^2.11.5",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "overrides": {

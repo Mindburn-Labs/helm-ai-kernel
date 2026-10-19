@@ -33,6 +33,9 @@ var Tables = []string{
 	"authority_model_calls",
 	"authority_model_replays",
 	"authority_provision_limits",
+	"authority_reassignment_work",
+	"authority_reassignment_grants",
+	"authority_reassignment_members",
 }
 
 // migration is one version of the gateway schema.
@@ -75,6 +78,9 @@ var migrations = []migration{
 	}},
 	{11, "fence legacy model gateway writers", func() (string, error) {
 		return withRowSecurity("", "schema/011_model_writer_fence.sql", nil)
+	}},
+	{12, "governed retained work reassignment grants", func() (string, error) {
+		return withRowSecurity("", "schema/012_reassignment_grants.sql", Tables[13:16])
 	}},
 }
 

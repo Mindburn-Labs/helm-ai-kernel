@@ -14,6 +14,7 @@
 //     and approved (its approver is a registered human principal) at all;
 //   - GetProvisioning reads what a provision effect applied;
 //   - GetProvisionBudget reads the applied node's native lifetime USD usage;
+//   - GetCurrentWorkReassignment reads one work item's native grant generation;
 //   - ListEffectTypes reads the catalog of effect types the gateway performs,
 //     with their argument schemas.
 //
@@ -23,8 +24,9 @@
 //     message carries a tenant or a workspace.
 //   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
 //     Control Plane's issuer mints for its service principal only, and which no
-//     other RPC takes. GetProvisioning, GetProvisionBudget and ListEffectTypes take
-//     helm.gateway.read. ADR-0005 allows one scope per token.
+//     other RPC takes. GetProvisioning, GetProvisionBudget,
+//     GetCurrentWorkReassignment and ListEffectTypes take helm.gateway.read.
+//     ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque strings and
@@ -69,6 +71,9 @@ const (
 	// AuthorityAdminServiceGetProvisionBudgetProcedure is the fully-qualified name of the
 	// AuthorityAdminService's GetProvisionBudget RPC.
 	AuthorityAdminServiceGetProvisionBudgetProcedure = "/helm.gateway.v1.AuthorityAdminService/GetProvisionBudget"
+	// AuthorityAdminServiceGetCurrentWorkReassignmentProcedure is the fully-qualified name of the
+	// AuthorityAdminService's GetCurrentWorkReassignment RPC.
+	AuthorityAdminServiceGetCurrentWorkReassignmentProcedure = "/helm.gateway.v1.AuthorityAdminService/GetCurrentWorkReassignment"
 	// AuthorityAdminServiceListEffectTypesProcedure is the fully-qualified name of the
 	// AuthorityAdminService's ListEffectTypes RPC.
 	AuthorityAdminServiceListEffectTypesProcedure = "/helm.gateway.v1.AuthorityAdminService/ListEffectTypes"
@@ -121,6 +126,15 @@ type AuthorityAdminServiceClient interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error)
+	// GetCurrentWorkReassignment reads the Kernel's current high-water grant
+	// generation for one work item. It includes a revoked or expired grant, so
+	// the next installation can use the native expected_generation CAS. No
+	// attempt members, raw content or successor history are returned. Tenant and
+	// workspace are token-derived; an active service principal is required.
+	// No grant returns present=false and generation=0 for a provisioned org.
+	//
+	// Token scope: helm.gateway.read.
+	GetCurrentWorkReassignment(context.Context, *connect.Request[GetCurrentWorkReassignmentRequest]) (*connect.Response[GetCurrentWorkReassignmentResponse], error)
 	// ListEffectTypes returns the catalog of effect types this gateway performs:
 	// for each, its risk class, its declaration (idempotency, observability,
 	// reversibility and mediation), and the JSON Schema of its arguments. It is
@@ -162,6 +176,13 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getCurrentWorkReassignment: connect.NewClient[GetCurrentWorkReassignmentRequest, GetCurrentWorkReassignmentResponse](
+			httpClient,
+			baseURL+AuthorityAdminServiceGetCurrentWorkReassignmentProcedure,
+			connect.WithSchema(authorityAdminServiceMethods.ByName("GetCurrentWorkReassignment")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		listEffectTypes: connect.NewClient[ListEffectTypesRequest, ListEffectTypesResponse](
 			httpClient,
 			baseURL+AuthorityAdminServiceListEffectTypesProcedure,
@@ -174,10 +195,11 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 
 // authorityAdminServiceClient implements AuthorityAdminServiceClient.
 type authorityAdminServiceClient struct {
-	ensurePrincipals   *connect.Client[EnsurePrincipalsRequest, EnsurePrincipalsResponse]
-	getProvisioning    *connect.Client[GetProvisioningRequest, GetProvisioningResponse]
-	getProvisionBudget *connect.Client[GetProvisionBudgetRequest, GetProvisionBudgetResponse]
-	listEffectTypes    *connect.Client[ListEffectTypesRequest, ListEffectTypesResponse]
+	ensurePrincipals           *connect.Client[EnsurePrincipalsRequest, EnsurePrincipalsResponse]
+	getProvisioning            *connect.Client[GetProvisioningRequest, GetProvisioningResponse]
+	getProvisionBudget         *connect.Client[GetProvisionBudgetRequest, GetProvisionBudgetResponse]
+	getCurrentWorkReassignment *connect.Client[GetCurrentWorkReassignmentRequest, GetCurrentWorkReassignmentResponse]
+	listEffectTypes            *connect.Client[ListEffectTypesRequest, ListEffectTypesResponse]
 }
 
 // EnsurePrincipals calls helm.gateway.v1.AuthorityAdminService.EnsurePrincipals.
@@ -193,6 +215,12 @@ func (c *authorityAdminServiceClient) GetProvisioning(ctx context.Context, req *
 // GetProvisionBudget calls helm.gateway.v1.AuthorityAdminService.GetProvisionBudget.
 func (c *authorityAdminServiceClient) GetProvisionBudget(ctx context.Context, req *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error) {
 	return c.getProvisionBudget.CallUnary(ctx, req)
+}
+
+// GetCurrentWorkReassignment calls
+// helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment.
+func (c *authorityAdminServiceClient) GetCurrentWorkReassignment(ctx context.Context, req *connect.Request[GetCurrentWorkReassignmentRequest]) (*connect.Response[GetCurrentWorkReassignmentResponse], error) {
+	return c.getCurrentWorkReassignment.CallUnary(ctx, req)
 }
 
 // ListEffectTypes calls helm.gateway.v1.AuthorityAdminService.ListEffectTypes.
@@ -248,6 +276,15 @@ type AuthorityAdminServiceHandler interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error)
+	// GetCurrentWorkReassignment reads the Kernel's current high-water grant
+	// generation for one work item. It includes a revoked or expired grant, so
+	// the next installation can use the native expected_generation CAS. No
+	// attempt members, raw content or successor history are returned. Tenant and
+	// workspace are token-derived; an active service principal is required.
+	// No grant returns present=false and generation=0 for a provisioned org.
+	//
+	// Token scope: helm.gateway.read.
+	GetCurrentWorkReassignment(context.Context, *connect.Request[GetCurrentWorkReassignmentRequest]) (*connect.Response[GetCurrentWorkReassignmentResponse], error)
 	// ListEffectTypes returns the catalog of effect types this gateway performs:
 	// for each, its risk class, its declaration (idempotency, observability,
 	// reversibility and mediation), and the JSON Schema of its arguments. It is
@@ -285,6 +322,13 @@ func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...c
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	authorityAdminServiceGetCurrentWorkReassignmentHandler := connect.NewUnaryHandler(
+		AuthorityAdminServiceGetCurrentWorkReassignmentProcedure,
+		svc.GetCurrentWorkReassignment,
+		connect.WithSchema(authorityAdminServiceMethods.ByName("GetCurrentWorkReassignment")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	authorityAdminServiceListEffectTypesHandler := connect.NewUnaryHandler(
 		AuthorityAdminServiceListEffectTypesProcedure,
 		svc.ListEffectTypes,
@@ -300,6 +344,8 @@ func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...c
 			authorityAdminServiceGetProvisioningHandler.ServeHTTP(w, r)
 		case AuthorityAdminServiceGetProvisionBudgetProcedure:
 			authorityAdminServiceGetProvisionBudgetHandler.ServeHTTP(w, r)
+		case AuthorityAdminServiceGetCurrentWorkReassignmentProcedure:
+			authorityAdminServiceGetCurrentWorkReassignmentHandler.ServeHTTP(w, r)
 		case AuthorityAdminServiceListEffectTypesProcedure:
 			authorityAdminServiceListEffectTypesHandler.ServeHTTP(w, r)
 		default:
@@ -321,6 +367,10 @@ func (UnimplementedAuthorityAdminServiceHandler) GetProvisioning(context.Context
 
 func (UnimplementedAuthorityAdminServiceHandler) GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.GetProvisionBudget is not implemented"))
+}
+
+func (UnimplementedAuthorityAdminServiceHandler) GetCurrentWorkReassignment(context.Context, *connect.Request[GetCurrentWorkReassignmentRequest]) (*connect.Response[GetCurrentWorkReassignmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment is not implemented"))
 }
 
 func (UnimplementedAuthorityAdminServiceHandler) ListEffectTypes(context.Context, *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error) {

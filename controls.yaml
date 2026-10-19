@@ -722,8 +722,8 @@ removal_proofs:
       - "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
   - control: CTL-057
     file: core/pkg/gateway/server/auth.go
-    find: "\tif e := claims.Episode; e != nil {\n\t\tid.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID}\n\t}\n"
-    replace: ""
+    find: "\t\tid.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID, Profile: profile}\n"
+    replace: "\t\tid.Caller.Episode = &admission.Episode{EpisodeID: \"mutated\", WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID, Profile: profile}\n"
     tests:
       - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
   - control: CTL-057
@@ -787,6 +787,12 @@ removal_proofs:
     replace: "if false && v.config.RejectExecutor && claims.HelmExecutor != nil {"
     tests:
       - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+  - control: CTL-058
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif c.Caller.Reassignment != nil {\n"
+    replace: "\tif false && c.Caller.Reassignment != nil {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
 
 controls:
 
@@ -3673,3 +3679,48 @@ controls:
         - "core/pkg/gateway/mcpserver.TestPostgresAReplayedCallIsTheSameAttempt"
         - "core/pkg/gateway/mcpserver.TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown"
         - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
+
+  - id: CTL-058
+    title: "Kernel bounded retained work reassignment"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A distinct-human-approved and stepped-up Kernel authority effect installs
+      one current work reassignment generation after a locked, complete native
+      attempt scan. A signed worker or executor successor claim resolves its
+      exact grant and member in the tenant ledger on every retained status or
+      replay read. The replay returns only the original result and cannot
+      dispatch, observe, approve, copy a permit or move an exposure. The old
+      episode is fenced for both new proposals and idempotent replay. A revoked,
+      expired, stopped or superseded grant fails closed. An empty native drain
+      has no retained members. This is the Kernel boundary; Control Plane
+      preparation, assignment and issuance remain separate obligations.
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/runtime.serve"
+      - "core/pkg/gateway/server.Authenticator.Authenticate"
+      - "core/pkg/gateway/mcpserver.Gateway.Call"
+      - "core/pkg/gateway/admission.Service.FindRetainedWorkEffect"
+      - "core/pkg/gateway/admission.Service.GetReassignment"
+      - "core/pkg/gateway/adapters/reassignment.Adapter.Dispatch"
+    config:
+      - "HELM_GATEWAY_DATABASE_URL and gateway schema migration 12 for tenant-isolated current generation and member rows."
+      - "Worker and executor listener JWKS issuer, audience, actor and profile configuration; the signed helm_reassignment claim carries a reference, never member authority."
+    protected_operations:
+      - "The exact retained status/result of listed work attempts at MCP tools/call, helm_attempt_get and GetAttempt; original effect dispatch and authority stay on the original attempt."
+    bypass_assumptions:
+      - "The Control Plane issuer is trusted for recipient assignment and the application digest; Kernel checks its own grant and native attempt ledger, not the Control Plane database."
+      - "A valid grant is not evidence of the Control Plane's durable application, hosted issuance closure or live managed-client acceptance."
+      - "GetAttemptContent and ListAttempts retain ordinary episode isolation; the grant does not authorize raw historical content."
+    tests:
+      allowed:
+        - "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"
+        - "core/pkg/gateway/mcpserver.TestPostgresEmptyDrainGrantsNoRetainedHistory"
+        - "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
+      forbidden:
+        - "core/pkg/auth/jwks.TestReassignmentClaimRequiresTheExactEpisodeAndListener"
+        - "core/pkg/gateway/effectargs.TestWorkReassignmentGrantClosedAndBound"
+        - "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"
+      removal:
+        - "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
+      bypass:
+        - "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"

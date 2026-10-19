@@ -19,7 +19,7 @@ func TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim(t *testing.T) {
 	a := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor}
 	id, err := a.Authenticate(context.Background(), bearer(), ScopePropose)
 	must(t, err)
-	want := admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "ver-1"}
+	want := admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-1", Profile: "worker", OrganizationVersionID: "ver-1"}
 	if id.Caller.Episode == nil || *id.Caller.Episode != want {
 		t.Fatalf("caller episode = %+v, want %+v", id.Caller.Episode, want)
 	}

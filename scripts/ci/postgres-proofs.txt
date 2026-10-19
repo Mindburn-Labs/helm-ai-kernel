@@ -4,6 +4,9 @@
 # count against a real Postgres. A skip is a failure, not a pass.
 #
 # <package dir under core> <test> <count> <race|plain>
+pkg/gateway/server TestPostgresApprovalBindsRepositoryAndBranchBase 3 race
+pkg/gateway/server TestPostgresDraftApprovalBindsReviewedDestination 3 race
+pkg/gateway/server TestPostgresDraftPrerequisiteRejectsActualParentAndContentMismatch 3 race
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
 pkg/gateway/admission TestPostgresModelCallLateUsageConcurrentDelivery 1 race
 pkg/gateway/admission TestPostgresModelCallLateUsageConfirmsEstimateOnce 1 race
@@ -99,6 +102,7 @@ pkg/gateway/admission TestPostgresPrincipalStopCoversTheWorkloadAndTheDispatcher
 pkg/gateway/admission TestPostgresProposeAdmitsDeniesAndEscalates 1 race
 pkg/gateway/admission TestPostgresProposeIsIdempotent 3 race
 pkg/gateway/admission TestPostgresProvisionPlanIsEscalatedForADistinctHuman 1 race
+pkg/gateway/admission TestPostgresProvisionAmountChangeNeedsNewStepUpAndMovedBaseFails 1 race
 pkg/gateway/admission TestPostgresReadsAreTenantAndWorkspaceScoped 1 race
 pkg/gateway/admission TestPostgresReconcileAndManualObserveRaceSettlesOnce 1 race
 pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
@@ -129,6 +133,7 @@ pkg/gateway/mcpserver TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameC
 pkg/gateway/mcpserver TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval 1 race
 pkg/gateway/mcpserver TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown 1 race
 pkg/gateway/mcpserver TestPostgresDefaultBranchAndAuthorityToolsFailClosed 1 race
+pkg/gateway/mcpserver TestPostgresApprovedPullWritesFailClosedOnHeadAndArgumentDrift 1 race
 pkg/gateway/mcpserver TestPostgresAnotherEpisodesAttemptIsNotFound 1 race
 pkg/gateway/mcpserver TestPostgresTheEndpointServesOnlyAgentsOfAnEpisode 1 race
 pkg/gateway/mcpserver TestPostgresTheEpisodeComesFromTheClaimNotTheBody 1 race
@@ -137,9 +142,14 @@ pkg/gateway/mcpserver TestPostgresEscalationReplayNeedsSignedHandoffAcrossEpisod
 pkg/gateway/mcpserver TestPostgresSignedContinuationReplaysOnlyCommittedAttempts 1 race
 pkg/gateway/mcpserver TestPostgresSignedContinuationKeepsTheOriginalEscalation 1 race
 pkg/gateway/mcpserver TestPostgresSignedDraftContinuationAfterLostReply 1 race
+pkg/gateway/mcpserver TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers 1 race
+pkg/gateway/mcpserver TestPostgresEmptyDrainGrantsNoRetainedHistory 1 race
+pkg/gateway/mcpserver TestPostgresRecoveryNamesTheExactRevokedGrantNotAnAttempt 1 race
 pkg/gateway/mcpserver TestPostgresGitHubApplyThenDropReplayAllDeclaredWrites 1 race
 pkg/gateway/mcpserver TestPostgresGitHubFixedQuoteCannotBeUnderstatedByAPI 1 race
 pkg/gateway/mcpserver TestPostgresGitHubLateReconcileJobFourOutcomes 1 race
+pkg/gateway/mcpserver TestPostgresGitHubLateReconcileJobPullRequestCreateFourOutcomes 1 race
+pkg/gateway/mcpserver TestPostgresGitHubLateReconcileJobMergeFourOutcomes 1 race
 pkg/gateway/mcpserver TestPostgresGitHubMergeStepUpAndQueuedReadback 1 race
 pkg/gateway/mcpserver TestPostgresGitHubPushAttemptCanBackReadyPullRequest 1 race
 pkg/gateway/mcpserver TestPostgresToolsListReflectsTheCallersMandates 1 race

@@ -160,7 +160,11 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 	// The episode reaches admission through the caller, and only from the
 	// verified claim: it is what an attempt records and what a read is held to.
 	if e := claims.Episode; e != nil {
-		id.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID}
+		profile := "worker"
+		if claims.Executor != nil {
+			profile = "executor"
+		}
+		id.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID, Profile: profile}
 	}
 	if grant := claims.Continuation; grant != nil {
 		bound := &admission.Continuation{
@@ -177,6 +181,15 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 		}
 		id.Caller.Continuation = bound
 	}
+	if grant := claims.Reassignment; grant != nil {
+		id.Caller.Reassignment = &admission.Reassignment{
+			GrantID: grant.GrantID, Generation: grant.Generation,
+			ManifestDigest: grant.ManifestDigest, ApplicationDigest: grant.ApplicationDigest,
+			WorkItemID: grant.WorkItemID, RecipientEpisodeID: grant.Recipient.EpisodeID,
+			RecipientPrincipalID: grant.Recipient.PrincipalID, RecipientActorID: grant.Recipient.ActorID,
+			RecipientProfile: grant.Recipient.Profile, RecipientClient: grant.Recipient.Client,
+		}
+	}
 	if id.TenantID == "" || id.WorkspaceID == "" || id.PrincipalID == "" {
 		return Identity{}, unauthenticated("the token lacks its principal, tenant or workspace")
 	}
@@ -189,6 +202,9 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 	}
 	if id.ActorID != "" && id.ActorID != a.Actor {
 		return Identity{}, permissionDenied("the token's actor is not the configured workload actor")
+	}
+	if id.Caller.Reassignment != nil && !a.RequireEpisode {
+		return Identity{}, permissionDenied("the reassignment grant requires an episode listener")
 	}
 	if a.RequireEpisode {
 		if id.Episode == nil {

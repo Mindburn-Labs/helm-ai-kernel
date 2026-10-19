@@ -2,9 +2,10 @@ package server
 
 // AuthorityAdminService on the wire (docs/architecture/gateway-provisioning-
 // api.md): EnsurePrincipals registers a tenant's first principals,
-// GetProvisioning reads what an authority plan applied, and ListEffectTypes
-// serves the catalog of effect types the gateway performs. Authority itself is
-// provisioned as effects through the effect API; this service does what an
+// GetProvisioning reads what an authority plan applied.
+// GetCurrentWorkReassignment reads one work item's native grant fence.
+// ListEffectTypes serves the catalog of effect types the gateway performs.
+// Authority itself is provisioned as effects through the effect API; this service does what an
 // effect cannot do for itself.
 //
 // quantum_posture: the digests it returns are SHA-256 values read from rows;
@@ -26,6 +27,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 	gatewayv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/gateway/v1"
@@ -46,6 +48,8 @@ type AdminServer struct {
 	// provisioning its plans applied.
 	Rows *authorityrows.Store
 	Auth *Authenticator
+	// Admission owns the native work reassignment high-water fence.
+	Admission *admission.Service
 	// Catalog is what ListEffectTypes returns, from BuildCatalog.
 	Catalog []*gatewayv1.EffectTypeDeclaration
 }

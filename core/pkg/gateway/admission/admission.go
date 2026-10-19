@@ -97,6 +97,9 @@ type Caller struct {
 	// Continuation is a signed successor-only grant for exact predecessor
 	// attempts. It never changes the episode used for a new proposal.
 	Continuation *Continuation
+	// Reassignment is a reference to a live Kernel-owned retained-result grant.
+	// The signed claim alone does not authorize a predecessor read or replay.
+	Reassignment *Reassignment
 }
 
 // Episode is a worker token's helm_episode claim (jwks.EpisodeClaim), and what
@@ -104,6 +107,9 @@ type Caller struct {
 type Episode struct {
 	EpisodeID  string
 	WorkItemID string
+	// Profile is worker or executor, derived from the verified listener token.
+	// Empty is treated as worker for existing internal callers.
+	Profile string
 	// OrganizationVersionID is empty when the token names none.
 	OrganizationVersionID string
 }
@@ -352,6 +358,11 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if !provisioned {
 		return "", false, refuse(CodePermissionDenied, contracts.ReasonTenantIsolation, "the token's tenant has no authority rows in this gateway")
 	}
+	if in.workEffect {
+		if err := fenceWorkEffect(ctx, tx, caller); err != nil {
+			return "", false, err
+		}
+	}
 	id, err := uuid.NewV7()
 	if err != nil {
 		return "", false, err
@@ -368,9 +379,13 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	}
 	// The episode is the verified claim's and nothing else's: the attempt row
 	// records it with itself, and nothing ever changes it.
-	var episodeID, organizationVersionID string
+	var episodeID, organizationVersionID, episodeProfile string
 	if e := caller.Episode; e != nil {
 		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
+		episodeProfile = e.Profile
+		if episodeProfile == "" {
+			episodeProfile = "worker"
+		}
 	}
 	// Migration 11 fences older model gateways at INSERT. Their binaries omit
 	// this column and retain its default of 1; this binary writes protocol 2.
@@ -382,14 +397,14 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, episode_id, organization_version_id, model_writer_protocol, state)
+			 distinct_values, episode_id, organization_version_id, model_writer_protocol, episode_profile, state)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
-			NULLIF($16, ''), NULLIF($17, ''), $18, 'PROPOSED')
+			NULLIF($16, ''), NULLIF($17, ''), $18, NULLIF($19, ''), 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
 		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
-		episodeID, organizationVersionID, modelWriterProtocol).Scan(&attemptID)
+		episodeID, organizationVersionID, modelWriterProtocol, episodeProfile).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -457,9 +472,12 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	// target. The read is unlocked; the chain is locked below in the global
 	// order. A plan effect has none.
 	plan := effectargs.IsAuthorityPlan(in.EffectType)
+	grant := in.EffectType == effectargs.AuthorityWorkReassignmentGrant
+	revoke := in.EffectType == effectargs.AuthorityWorkReassignmentRevoke
+	mandateFree := plan || grant || revoke
 	var leaf uuid.UUID
 	var chain []mandates.Mandate
-	if !plan {
+	if !mandateFree {
 		var err error
 		if leaf, err = resolveMandate(ctx, tx, caller, in); err != nil {
 			return err
@@ -484,11 +502,24 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
 			"a human principal proposes through the configured workload actor, not directly")
 	}
-	if plan {
+	if mandateFree {
 		// The plan's class is its adapter's declaration, not a tenant row.
-		declared, _ := provision.DeclaredRisk(in.EffectType)
-		auth.riskClass = mandates.RiskClass(declared)
-		if refusal, err := precheckPlan(ctx, tx, caller, in); err != nil {
+		if plan {
+			declared, _ := provision.DeclaredRisk(in.EffectType)
+			auth.riskClass = mandates.RiskClass(declared)
+		} else if grant {
+			auth.riskClass = mandates.RiskIrreversible
+		} else {
+			auth.riskClass = mandates.RiskMedium
+		}
+		var refusal *adapters.Refusal
+		var err error
+		if plan {
+			refusal, err = precheckPlan(ctx, tx, caller, in)
+		} else if grant {
+			refusal, err = precheckReassignmentGrant(ctx, tx, caller, in)
+		}
+		if err != nil {
 			return err
 		} else if refusal != nil {
 			// A plan the applied plan does not admit: refused at Propose, which
@@ -539,7 +570,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		EffectType: in.EffectType, EffectTypeFound: auth.effectTypeFound, RiskClass: auth.riskClass,
 		Target: in.Target, Args: args, Quote: in.Quote, ActiveStops: stops, Counters: counters.states,
 		Approval: approval, LiftsStop: liftedStop(in.EffectType, in.Target),
-		MandateFree: plan, PrincipalKind: auth.principalKind,
+		MandateFree: mandateFree, PrincipalKind: auth.principalKind,
 	}
 	for _, m := range auth.chain {
 		link := Link{Mandate: m}
@@ -556,7 +587,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		mandate = leaf
 	}
 	var risk any
-	if auth.effectTypeFound || plan {
+	if auth.effectTypeFound || mandateFree {
 		risk = string(auth.riskClass)
 	}
 	switch decision.Verdict {
@@ -793,7 +824,7 @@ func principalStops(ctx context.Context, tx *sql.Tx, tenantID string, ids ...str
 // requester, on the workload that dispatches it or on the effect type does.
 func activeStops(ctx context.Context, tx *sql.Tx, tenantID, effectType string, a lockedAuthority) ([]string, error) {
 	keys := []string{"effect_type:" + effectType}
-	if effectType != effectargs.AuthorityNarrow {
+	if effectType != effectargs.AuthorityNarrow && effectType != effectargs.AuthorityWorkReassignmentRevoke {
 		keys = append(keys, "tenant:"+tenantID)
 	}
 	for _, v := range a.versions {
@@ -1081,6 +1112,9 @@ func checkCaller(c Caller) error {
 	}
 	if !validContinuationCaller(c) {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the continuation is not bound to this successor")
+	}
+	if !validReassignmentCaller(c) {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the reassignment is not bound to this successor")
 	}
 	return nil
 }

@@ -2,7 +2,7 @@
 
 # HELM-owned Kilo Code build recipe.
 # Build context: pinned upstream Kilo-Org/kilocode checkout.
-FROM oven/bun:1.3.13-debian@sha256:e95356cb8e1de62ad69ab3bd3584ba947013d27650a226804d2fc0af4e17dac2 AS build
+FROM oven/bun:1.4.3-debian@sha256:923bedb355f7746666659f71e724998159a5c8c54bd1cb1030e1975a0698415b AS build
 
 WORKDIR /src/kilocode
 RUN apt-get update \

@@ -1,3 +1,3 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/tools/doccheck
 
-go 1.26.9
+go 1.26.10

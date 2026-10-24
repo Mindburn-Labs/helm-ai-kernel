@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/sdk/go
 
-go 1.26.9
+go 1.26.10
 
 require (
 	connectrpc.com/connect v1.21.1

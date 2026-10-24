@@ -83,7 +83,7 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 	if !utf8.Valid(raw) {
 		return nil, invalid("arguments are not UTF-8")
 	}
-	if err := checkNoDuplicateKeys(raw); err != nil {
+	if err := CheckNoDuplicateKeys(raw); err != nil {
 		return nil, err
 	}
 	var parsed map[string]any
@@ -543,9 +543,11 @@ func strictDecode(raw []byte, v any) error {
 	return nil
 }
 
-// checkNoDuplicateKeys walks the token stream and refuses any object with a
-// repeated key, which encoding/json would otherwise resolve silently.
-func checkNoDuplicateKeys(raw []byte) error {
+// CheckNoDuplicateKeys walks one complete JSON value and refuses any object
+// with a repeated key, which encoding/json would otherwise resolve silently.
+// Schema compilation uses the same check so duplicate declaration fields
+// cannot silently change the registered input contract.
+func CheckNoDuplicateKeys(raw []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	if err := walk(dec); err != nil {

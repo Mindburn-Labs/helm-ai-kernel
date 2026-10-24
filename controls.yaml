@@ -758,6 +758,12 @@ removal_proofs:
       - "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
 
   - control: CTL-057
+    file: core/pkg/gateway/admission/admission.go
+    find: "\tif err := s.validateArgumentSchema(in); err != nil {\n"
+    replace: "\tif err := s.validateArgumentSchema(in); false && err != nil {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDeclaredArgumentsAreRefusedBeforeAnyDatabaseUse"
+  - control: CTL-057
     file: core/pkg/gateway/adapters/artifact_result.go
     find: "if err := s.schema.Validate(value); err != nil {"
     replace: "if err := s.schema.Validate(value); false && err != nil {"
@@ -3585,6 +3591,10 @@ controls:
       executors use a separate listener and audience, a signed canonical client
       marker, complete episode linkage and a strict 900-second maximum lease.
       Internal worker tokens, including short ones, cannot authenticate there.
+      Registered custom argument schemas are compiled as closed objects at
+      startup and enforced against the complete input before any admission
+      transaction. Exact published builtin schemas retain their native
+      semantic validators; a changed declaration cannot inherit that exemption.
     status: enforced
     entry_points:
       - "core/pkg/gateway/runtime.serve"
@@ -3597,6 +3607,8 @@ controls:
       - "core/pkg/gateway/admission.Service.List"
       - "core/pkg/gateway/admission.Service.PrincipalEffects"
       - "core/pkg/gateway/admission.Service.ModelCallReplay"
+      - "core/pkg/gateway/adapters.CompileArgumentSchema"
+      - "core/pkg/gateway/adapters.ArgumentSchema.Validate"
     config:
       - "--executor-listen, HELM_GATEWAY_EXECUTOR_AUDIENCE=helm-gateway-executor:<env> and HELM_GATEWAY_EXECUTOR_MAX_TTL<=15m: public executor profile, with required CP actor, signed helm_executor client, complete helm_episode, no cnf and strict expiry."
       - "--worker-listen, HELM_GATEWAY_WORKER_AUDIENCE and HELM_GATEWAY_WORKER_MAX_TTL: the worker listener, which serves /mcp and the model endpoints to episode tokens only. It needs HELM_GATEWAY_MODEL_ROUTES_FILE."
@@ -3612,6 +3624,8 @@ controls:
       - "tools/call runs the dispatch in the request: a client that hangs up does not stop it, and a call that outlives CallTimeout is answered as a failure to repeat, with the attempt left for a read-back or the reconciliation job."
     tests:
       allowed:
+        - "core/pkg/gateway/admission.TestPostgresDeclaredArgumentsRejectBeforeReservationAndPermit"
+        - "core/pkg/gateway/admission.TestCurrentBuiltinAdaptersRegisterWithoutChangingTheirContracts"
         - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
         - "core/pkg/gateway/admission.TestPostgresDeclaredResultSurvivesReplayAndRestart"
         - "core/pkg/gateway/mcpserver.TestArtifactResultReachesTheWorkerAsItsDeclaredPayload"
@@ -3625,6 +3639,12 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresEpisodeAttemptsRecordTheClaimAndNothingElse"
         - "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
       forbidden:
+        - "core/pkg/gateway/admission.TestDeclaredArgumentsAreRefusedBeforeAnyDatabaseUse"
+        - "core/pkg/gateway/admission.TestInvalidArgumentContractPreventsServiceRegistration"
+        - "core/pkg/gateway/adapters.TestArgumentSchemaRejectsMalformedOrUnsupportedDeclarations"
+        - "core/pkg/gateway/adapters.TestArgumentSchemaEnforcesTheDeclaredClosedObject"
+        - "core/pkg/gateway/adapters.TestArgumentSchemaChecksNumbersWithoutFloatRounding"
+        - "core/pkg/gateway/adapters.TestBuiltinNameCannotBypassCustomSchemaCompilation"
         - "core/pkg/gateway/server.TestEpisodeScopeMustAuthorizeTheRequestedRoute"
         - "core/pkg/auth/jwks.TestExecutorValidatorRefusesUnsafeConfiguration"
         - "core/pkg/gateway/admission.TestPostgresDeclaredResultCannotSettleWithAnUnexpectedShape"
@@ -3652,6 +3672,7 @@ controls:
         - "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
         - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
       removal:
+        - "core/pkg/gateway/admission.TestDeclaredArgumentsAreRefusedBeforeAnyDatabaseUse"
         - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
         - "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact"
         - "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema"
@@ -3673,6 +3694,7 @@ controls:
         - "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
         - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
       bypass:
+        - "core/pkg/gateway/admission.TestDeclaredBuiltinSchemaPreservesSemanticRefusals"
         - "core/pkg/gateway/runtime.TestExecutorListenerConfigurationAndExecutorOnlyMode"
         - "core/pkg/gateway/runtime.TestServeSeparatesPublicExecutorsFromInternalWorkers"
         - "core/pkg/gateway/runtime.TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly"

@@ -173,11 +173,12 @@ type Config struct {
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db            *sql.DB
-	cfg           Config
-	adapters      map[string]adapters.Adapter
-	fixedQuotes   map[string][]adapters.Amount
-	resultSchemas map[string]*adapters.ResultSchema
+	db              *sql.DB
+	cfg             Config
+	adapters        map[string]adapters.Adapter
+	fixedQuotes     map[string][]adapters.Amount
+	argumentSchemas map[string]*adapters.ArgumentSchema
+	resultSchemas   map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
 }
@@ -204,6 +205,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	}
 	byType := map[string]adapters.Adapter{}
 	fixedQuotes := map[string][]adapters.Amount{}
+	argumentSchemas := map[string]*adapters.ArgumentSchema{}
 	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
@@ -211,6 +213,11 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			argumentSchema, err := adapters.CompileArgumentSchema(d)
+			if err != nil {
+				return nil, fmt.Errorf("%s argument contract: %w", d.EffectType, err)
+			}
+			argumentSchemas[d.EffectType] = argumentSchema
 			seenUnits := map[string]bool{}
 			for _, q := range d.Quote {
 				if !unitPattern.MatchString(q.Unit) || q.Amount <= 0 || seenUnits[q.Unit] {
@@ -229,7 +236,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType, fixedQuotes: fixedQuotes, resultSchemas: resultSchemas}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, fixedQuotes: fixedQuotes, argumentSchemas: argumentSchemas, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
@@ -277,6 +284,9 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	}
 	args, err := validateProposal(in)
 	if err != nil {
+		return Attempt{}, false, err
+	}
+	if err := s.validateArgumentSchema(in); err != nil {
 		return Attempt{}, false, err
 	}
 	if err := s.requireFixedQuote(in); err != nil {

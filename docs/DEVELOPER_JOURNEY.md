@@ -33,7 +33,7 @@ helm-ai-kernel --version
 
 Source build:
 
-The source build uses Go 1.26.9, pinned by `go.work` and `mise.toml`. The
+The source build uses Go 1.26.10, pinned by `go.work` and `mise.toml`. The
 recipe explicitly trusts the checked-out mise configuration and installs the
 pinned toolchain before building. If mise is unavailable, use a compatible
 native Go toolchain instead.

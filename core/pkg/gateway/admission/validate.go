@@ -25,6 +25,17 @@ const (
 	maxWorkRefBytes = 255
 )
 
+// validateArgumentSchema runs before any admission transaction. It validates
+// original bytes, not the potentially reduced built-in condition input.
+func (s *Service) validateArgumentSchema(in ProposeInput) error {
+	if schema := s.argumentSchemas[in.EffectType]; schema != nil {
+		if err := schema.Validate(in.Arguments); err != nil {
+			return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "effect.arguments: %v", err)
+		}
+	}
+	return nil
+}
+
 // validateProposal refuses a malformed request before anything is written,
 // and returns the parsed arguments.
 func validateProposal(in ProposeInput) (map[string]any, error) {

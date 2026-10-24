@@ -172,7 +172,7 @@ func ParsePlan(effectType string, raw []byte) (*Plan, error) {
 	if !utf8.Valid(raw) {
 		return nil, invalid("the plan is not UTF-8")
 	}
-	if err := checkNoDuplicateKeys(raw); err != nil {
+	if err := CheckNoDuplicateKeys(raw); err != nil {
 		return nil, err
 	}
 	top, err := asObject(raw, "the plan")

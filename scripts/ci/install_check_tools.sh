@@ -35,11 +35,8 @@ fetch() {
 sudo apt-get update -qq
 sudo apt-get install --yes --no-install-recommends ripgrep
 
-# PostgreSQL 16 server binaries: the postgres-proofs gate starts a disposable
-# cluster from /usr/lib/postgresql/16/bin. The runner image usually has them.
-if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
-    sudo apt-get install --yes --no-install-recommends postgresql-16
-fi
+# PostgreSQL 16: preserve the proof profile across Ubuntu runner updates.
+bash "${ROOT}/scripts/ci/install_postgres16.sh"
 
 # protoc: fixture descriptors and codegen.
 bash "${ROOT}/scripts/ci/install_protoc.sh"

@@ -39,7 +39,7 @@ func ParseWorkReassignmentRevoke(raw []byte) (*WorkReassignmentRevoke, error) {
 	if len(raw) > MaxBytes {
 		return nil, invalid("reassignment revocation exceeds %d bytes", MaxBytes)
 	}
-	if err := checkNoDuplicateKeys(raw); err != nil {
+	if err := CheckNoDuplicateKeys(raw); err != nil {
 		return nil, err
 	}
 	if _, err := reassignmentObject(raw, "schema", "org_ref", "grant_id", "generation", "reason"); err != nil {
@@ -115,7 +115,7 @@ func ParseWorkReassignmentGrant(raw []byte) (*WorkReassignmentGrant, error) {
 	if len(raw) > MaxBytes {
 		return nil, invalid("reassignment grant exceeds %d bytes", MaxBytes)
 	}
-	if err := checkNoDuplicateKeys(raw); err != nil {
+	if err := CheckNoDuplicateKeys(raw); err != nil {
 		return nil, err
 	}
 	root, err := reassignmentObjectWithOptional(raw, "predecessor_reassignment_id", "schema", "reassignment_id", "manifest_digest", "drain_digest", "org_ref", "work_item_id", "organization_version_id", "commitment_id", "terms_digest", "plan_digest", "authority_revision", "expected_generation", "generation", "expires_at", "recipient", "sources")

@@ -9,7 +9,8 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("install_postgres16.sh")
-KEY_SHA256 = "0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76"
+# Public PGDG download checksum, not a credential.
+PGDG_SHA256 = "0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76"
 MOCK = r'''#!/usr/bin/env python3
 from pathlib import Path
 import os, sys
@@ -27,7 +28,7 @@ elif op == "curl":
     Path(sys.argv[sys.argv.index("-o") + 1]).write_text("mock-key")
 elif op == "sha256sum":
     check = sys.stdin.read()
-    assert check.split()[0] == os.environ["PG_KEY_SHA256"]
+    assert check.split()[0] == os.environ["PGDG_EXPECTED_SHA256"]
     sys.exit(1 if os.environ.get("PG_BAD_KEY") else 0)
 elif op == "apt-get":
     if os.environ.get("PG_APT_FAILURE"):
@@ -57,7 +58,7 @@ class PostgreSQL16InstallerTest(unittest.TestCase):
             path.chmod(0o755)
         self.env = {**os.environ, "PATH": f"{mockbin}:{os.environ['PATH']}",
                     "PG_FIXTURE": str(self.root), "RUNNER_TEMP": str(self.root),
-                    "PG_KEY_SHA256": KEY_SHA256}
+                    "PGDG_EXPECTED_SHA256": PGDG_SHA256}
 
     def run_installer(self, **settings):
         return subprocess.run(["bash", "-c", 'source "$1"; install_postgres16 "$2"',

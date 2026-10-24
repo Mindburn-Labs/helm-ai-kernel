@@ -2,7 +2,7 @@
 
 # HELM-owned OpenCode build recipe.
 # Build context: pinned upstream sst/opencode checkout.
-FROM oven/bun:1.3.14-debian@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f AS build
+FROM oven/bun:1.4.3-debian@sha256:923bedb355f7746666659f71e724998159a5c8c54bd1cb1030e1975a0698415b AS build
 
 WORKDIR /src/opencode
 RUN apt-get update \

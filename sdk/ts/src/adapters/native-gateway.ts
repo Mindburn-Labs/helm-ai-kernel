@@ -213,7 +213,7 @@ export class NativeGatewayClient {
         const out = toolResult(result);
         const value = out.structuredContent;
         if (
-          value.attempt_id &&
+          value.state !== undefined &&
           (value.target !== target ||
             value.effect_type?.replaceAll(".", "_") !== name)
         ) {
@@ -378,20 +378,28 @@ function toolResult(result: Record<string, unknown>): NativeGatewayToolResult {
   }
   const hasAttempt = value.attempt_id !== undefined;
   if (
-    (nonErrors.has(String(value.status)) && !hasAttempt) ||
-    (hasAttempt &&
-      (typeof value.attempt_id !== "string" ||
-        !attemptPattern.test(value.attempt_id) ||
-        typeof value.state !== "string" ||
-        !value.state ||
-        typeof value.effect_type !== "string" ||
-        !value.effect_type ||
-        typeof value.target !== "string" ||
-        !value.target))
+    hasAttempt &&
+    (typeof value.attempt_id !== "string" ||
+      !attemptPattern.test(value.attempt_id))
   ) {
-    throw new TypeError("incomplete native attempt");
+    throw new TypeError("invalid native attempt identity");
   }
-  if (hasAttempt) {
+  const snapshot =
+    value.state !== undefined ||
+    value.effect_type !== undefined ||
+    value.target !== undefined;
+  if (snapshot) {
+    if (
+      !hasAttempt ||
+      typeof value.state !== "string" ||
+      !value.state ||
+      typeof value.effect_type !== "string" ||
+      !value.effect_type ||
+      typeof value.target !== "string" ||
+      !value.target
+    ) {
+      throw new TypeError("incomplete native attempt snapshot");
+    }
     const terminal = [
       "OBSERVED",
       "RECONCILED",
@@ -412,6 +420,15 @@ function toolResult(result: Record<string, unknown>): NativeGatewayToolResult {
       : (direct[String(value.state)] ?? "reconciling");
     if (value.status !== expected)
       throw new TypeError("status does not match the native attempt");
+  } else if (
+    !["invalid", "denied", "not_found", "conflict", "refused"].includes(
+      String(value.status),
+    )
+  ) {
+    // gateway.go refusal(err, attemptID) deliberately emits no snapshot. Keep
+    // its known ID for read-back after Dispatch/Observe failure, without ever
+    // interpreting this minimal error shape as an in-flight/success result.
+    throw new TypeError("native outcome requires an attempt snapshot");
   }
   return {
     isError: result.isError,

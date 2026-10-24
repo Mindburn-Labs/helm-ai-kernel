@@ -318,6 +318,41 @@ describe("native gateway framework client", () => {
     });
   });
 
+  it.each([
+    ["dispatch", "refused", "PERMIT_EXPIRED"],
+    ["observation", "denied", "INSUFFICIENT_PRIVILEGE"],
+  ])("retains a minimal %s refusal's attempt ID for read-back without another write", async (_phase, status, reason) => {
+    // Exact gateway.go refusal(err, id) shape from the Dispatch/Observe paths:
+    // no state/effect_type/target, but a known attempt that must not be lost.
+    const refusal = {
+      status,
+      reason_code: reason,
+      message: "fixture refusal",
+      attempt_id: attemptId,
+    };
+    handler = (_req, body, res) => toolResponse(res, body.id, refusal, true);
+    const native = client();
+    const result = await native.callEffect(effect);
+    expect(result).toEqual({ isError: true, structuredContent: refusal });
+    handler = (_req, body, res) =>
+      toolResponse(res, body.id, outcome("UNKNOWN", "reconciling"));
+    expect(
+      await native.getAttempt(result.structuredContent.attempt_id as string),
+    ).toMatchObject({
+      structuredContent: {
+        attempt_id: attemptId,
+        state: "UNKNOWN",
+        status: "reconciling",
+      },
+    });
+    expect(requests[1].body.params.arguments).toEqual({
+      attempt_id: attemptId,
+    });
+    expect(
+      requests.filter((request) => request.body.params.name === toolName),
+    ).toHaveLength(1);
+  });
+
   it("never repeats an effect when its response is lost after dispatch", async () => {
     let dispatches = 0;
     handler = (_req, _body, res) => {

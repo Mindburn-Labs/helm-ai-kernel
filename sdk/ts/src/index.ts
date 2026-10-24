@@ -85,3 +85,18 @@ export type {
 
 export { ReasonCodes, isRegisteredReasonCode } from "./reason_codes.gen.js";
 export type { RegisteredReasonCode } from "./reason_codes.gen.js";
+
+export {
+  NATIVE_GATEWAY_PROTOCOL_VERSION,
+  NativeGatewayClient,
+  NativeGatewayError,
+} from "./adapters/native-gateway.js";
+export type {
+  NativeGatewayConfig,
+  NativeGatewayEffect,
+  NativeGatewayOutcome,
+  NativeGatewayRequestOptions,
+  NativeGatewayStatus,
+  NativeGatewayTool,
+  NativeGatewayToolResult,
+} from "./adapters/native-gateway.js";

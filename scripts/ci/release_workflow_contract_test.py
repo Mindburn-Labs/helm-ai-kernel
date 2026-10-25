@@ -446,6 +446,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             packaged = subprocess.run(["bash", "-c", commands], cwd=fixture, env=env,
                                       text=True, capture_output=True)
             self.assertEqual(packaged.returncode, 0, packaged.stdout + packaged.stderr)
+            fixture_source = fixture / "deploy/helm-chart"
+            self.assertEqual(before, {p.relative_to(fixture_source): p.read_bytes()
+                                      for p in fixture_source.rglob("*") if p.is_file()})
             archive = fixture / "dist/chart/helm-ai-kernel-0.11.1-main.20000101000000.tgz"
             with tarfile.open(archive) as chart:
                 metadata = yaml.safe_load(chart.extractfile("helm-ai-kernel/Chart.yaml"))

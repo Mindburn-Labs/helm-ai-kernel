@@ -8,9 +8,17 @@ post-quantum assurance.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import tarfile
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -416,6 +424,67 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("dev.mindburn.build-grade=dev", dev)
         self.assertIn("cosign sign --yes", dev)
         self.assertNotIn("release-production", dev)
+
+    def test_main_chart_catalog_matches_the_packaged_development_image(self) -> None:
+        image = "ghcr.io/mindburn-labs/helm-ai-kernel:main-20000101000000-abcdef0"
+        source = ROOT / "deploy/helm-chart"
+        before = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+        dev = DEV_IMAGE_WORKFLOW.read_text(encoding="utf-8")
+        step = dev.split("      - name: Package, push and sign the prerelease chart\n", 1)[1]
+        commands = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        # Execute the real workflow's local packaging prefix. No registry or
+        # signing command is needed to inspect the resulting chart archive.
+        commands = commands.split("helm registry login", 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = Path(tmp)
+            shutil.copytree(source, fixture / "deploy/helm-chart")
+            (fixture / "scripts/release").mkdir(parents=True)
+            shutil.copy2(ROOT / "scripts/release/prepare_dev_chart.py", fixture / "scripts/release")
+            (fixture / "VERSION").write_text("0.11.1\n", encoding="utf-8")
+            env = dict(os.environ, REGISTRY="ghcr.io", IMAGE_NAME="mindburn-labs/helm-ai-kernel",
+                       MAIN_TAG=image.rsplit(":", 1)[1], TS="20000101000000")
+            packaged = subprocess.run(["bash", "-c", commands], cwd=fixture, env=env,
+                                      text=True, capture_output=True)
+            self.assertEqual(packaged.returncode, 0, packaged.stdout + packaged.stderr)
+            archive = fixture / "dist/chart/helm-ai-kernel-0.11.1-main.20000101000000.tgz"
+            with tarfile.open(archive) as chart:
+                metadata = yaml.safe_load(chart.extractfile("helm-ai-kernel/Chart.yaml"))
+            self.assertEqual(metadata["version"], "0.11.1-main.20000101000000")
+            self.assertEqual(metadata["appVersion"], image.rsplit(":", 1)[1])
+            annotations = metadata["annotations"]
+            self.assertEqual(annotations["artifacthub.io/prerelease"], "true")
+            self.assertEqual(yaml.safe_load(annotations["artifacthub.io/images"]), [
+                {"name": "helm-ai-kernel", "image": image, "platforms": ["linux/arm64"]},
+            ])
+            self.assertIn(image, annotations["artifacthub.io/changes"])
+            rendered = subprocess.run(["helm", "template", "dev", str(archive)],
+                                      text=True, capture_output=True)
+            self.assertEqual(rendered.returncode, 0, rendered.stdout + rendered.stderr)
+            deployments = [d for d in yaml.safe_load_all(rendered.stdout) if d and d.get("kind") == "Deployment"]
+            self.assertTrue(any(c["image"] == image for d in deployments
+                                for c in d["spec"]["template"]["spec"]["containers"]))
+        self.assertEqual(before, {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()})
+
+    def test_dev_chart_staging_refuses_release_images_and_missing_catalog_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "chart"
+            shutil.copytree(ROOT / "deploy/helm-chart", source)
+            destination = Path(tmp) / "staged"
+            command = ["python3", str(ROOT / "scripts/release/prepare_dev_chart.py"),
+                       "--source", str(source), "--destination", str(destination),
+                       "--platform", "linux/arm64", "--image"]
+            release = subprocess.run(command + ["ghcr.io/mindburn-labs/helm-ai-kernel:v0.11.1"],
+                                     text=True, capture_output=True)
+            self.assertNotEqual(release.returncode, 0)
+            self.assertIn("expected the main development image tag", release.stderr)
+            self.assertFalse(destination.exists())
+            chart = source / "Chart.yaml"
+            chart.write_text(chart.read_text().replace('  artifacthub.io/prerelease: "false"\n', ""))
+            missing = subprocess.run(command + ["ghcr.io/mindburn-labs/helm-ai-kernel:main-20000101000000-abcdef0"],
+                                     text=True, capture_output=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("expected exactly one artifacthub.io/prerelease:", missing.stderr)
+            self.assertFalse(destination.exists())
 
     def test_no_workflow_re_attests_already_published_release_assets(self) -> None:
         # The former slsa-provenance.yml repair lane minted SLSA L3 provenance

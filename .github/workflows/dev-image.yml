@@ -198,7 +198,8 @@ jobs:
             exit 1
           fi
       # Main lane only: the chart that carries this image, as a prerelease
-      # version packaged from the same commit. Chart.yaml is not modified;
+      # version packaged from the same commit. Catalog annotations are staged
+      # with the actual image/platform; release Chart.yaml is not modified.
       # --version and --app-version are applied at package time, so the
       # release/version-surfaces.yaml lockstep check (which reads the file)
       # is unaffected. The destination is charts-dev, never charts/.
@@ -214,7 +215,10 @@ jobs:
           version="$(tr -d '[:space:]' < VERSION)"
           chart_version="${version}-main.${TS}"
           mkdir -p dist/chart
-          helm package deploy/helm-chart -d dist/chart \
+          python3 scripts/release/prepare_dev_chart.py \
+            --source deploy/helm-chart --destination dist/chart/source \
+            --image "${REGISTRY}/${IMAGE_NAME}:${MAIN_TAG}" --platform linux/arm64
+          helm package dist/chart/source -d dist/chart \
             --version "${chart_version}" --app-version "${MAIN_TAG}"
           helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" --password-stdin <<< "${GHCR_TOKEN}"
           helm push "dist/chart/helm-ai-kernel-${chart_version}.tgz" "oci://${CHART_DEV_REPOSITORY}" 2>&1 | tee push.log

@@ -304,7 +304,9 @@
       "paths": [
         ".github/workflows/**",
         "scripts/ci/quality-gates.json",
-        "scripts/ci/release_workflow_contract_test.py"
+        "scripts/ci/release_workflow_contract_test.py",
+        "scripts/release/prepare_dev_chart.py",
+        "deploy/helm-chart/**"
       ]
     },
     {

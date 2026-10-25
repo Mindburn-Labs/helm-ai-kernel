@@ -21,11 +21,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.1",
-    "@grpc/grpc-js": "^1.14.3",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@grpc/grpc-js": "^1.14.6",
+    "@vitest/coverage-v8": "^4.1.12",
     "ts-proto": "^2.11.5",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "rollup": "^4.59.0"

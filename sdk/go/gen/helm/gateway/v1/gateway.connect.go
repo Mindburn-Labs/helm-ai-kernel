@@ -364,16 +364,20 @@ type EffectGatewayServiceClient interface {
 	// permits. Requires single-use helm.gateway.stop bound to the exact request
 	// as helm_recovery_fence. No installer or episode credential controls it.
 	// This capability does not enable provider backup, restore or resume.
+	// Token scope: helm.gateway.stop.
 	FenceRecovery(context.Context, *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error)
 	// Read the current exact fence with helm.gateway.read as an active human.
+	// Token scope: helm.gateway.read.
 	GetRecoveryFence(context.Context, *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error)
 	// Bind a CP content digest to a current native inventory watermark. Refuses
 	// in-flight/unknown effects. Requires a single-use helm.gateway.stop token
 	// bound as helm_recovery_checkpoint. This is correlation, not qualification
 	// of snapshot consistency, restore eligibility or a signed recovery receipt.
+	// Token scope: helm.gateway.stop.
 	BindRecoveryCheckpoint(context.Context, *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error)
 	// Page the immutable original-attempt membership, 100 IDs per page. Existing
 	// Get/Observe authorization remains mandatory for each attempt.
+	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
 }
 
@@ -818,16 +822,20 @@ type EffectGatewayServiceHandler interface {
 	// permits. Requires single-use helm.gateway.stop bound to the exact request
 	// as helm_recovery_fence. No installer or episode credential controls it.
 	// This capability does not enable provider backup, restore or resume.
+	// Token scope: helm.gateway.stop.
 	FenceRecovery(context.Context, *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error)
 	// Read the current exact fence with helm.gateway.read as an active human.
+	// Token scope: helm.gateway.read.
 	GetRecoveryFence(context.Context, *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error)
 	// Bind a CP content digest to a current native inventory watermark. Refuses
 	// in-flight/unknown effects. Requires a single-use helm.gateway.stop token
 	// bound as helm_recovery_checkpoint. This is correlation, not qualification
 	// of snapshot consistency, restore eligibility or a signed recovery receipt.
+	// Token scope: helm.gateway.stop.
 	BindRecoveryCheckpoint(context.Context, *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error)
 	// Page the immutable original-attempt membership, 100 IDs per page. Existing
 	// Get/Observe authorization remains mandatory for each attempt.
+	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
 }
 

@@ -320,9 +320,11 @@ service EffectGatewayService {
   // permits. Requires single-use helm.gateway.stop bound to the exact request
   // as helm_recovery_fence. No installer or episode credential controls it.
   // This capability does not enable provider backup, restore or resume.
+  // Token scope: helm.gateway.stop.
   rpc FenceRecovery(FenceRecoveryRequest) returns (FenceRecoveryResponse);
 
   // Read the current exact fence with helm.gateway.read as an active human.
+  // Token scope: helm.gateway.read.
   rpc GetRecoveryFence(GetRecoveryFenceRequest) returns (GetRecoveryFenceResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -331,10 +333,12 @@ service EffectGatewayService {
   // in-flight/unknown effects. Requires a single-use helm.gateway.stop token
   // bound as helm_recovery_checkpoint. This is correlation, not qualification
   // of snapshot consistency, restore eligibility or a signed recovery receipt.
+  // Token scope: helm.gateway.stop.
   rpc BindRecoveryCheckpoint(BindRecoveryCheckpointRequest) returns (BindRecoveryCheckpointResponse);
 
   // Page the immutable original-attempt membership, 100 IDs per page. Existing
   // Get/Observe authorization remains mandatory for each attempt.
+  // Token scope: helm.gateway.read.
   rpc ListRecoveryAttempts(ListRecoveryAttemptsRequest) returns (ListRecoveryAttemptsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -345,7 +349,8 @@ message RecoveryBinding {
   string operation_id = 1;
   string installation_id = 2;
   string org_ref = 3;
-  string organization_version_id = 4;
+  // Selects the current provisioned version; never sets an attempt's episode.
+  string version_ref = 4;
   // FenceRecovery uses the expected prior generation (zero initially). Every
   // other operation uses the current acknowledged generation.
   int64 generation = 5;

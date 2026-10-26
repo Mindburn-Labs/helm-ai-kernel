@@ -689,11 +689,12 @@ func (StopScopeKind) EnumDescriptor() ([]byte, []int) {
 
 // Exact selectors; tenant/workspace always come from the verified token.
 type RecoveryBinding struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	OperationId           string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	InstallationId        string                 `protobuf:"bytes,2,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
-	OrgRef                string                 `protobuf:"bytes,3,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
-	OrganizationVersionId string                 `protobuf:"bytes,4,opt,name=organization_version_id,json=organizationVersionId,proto3" json:"organization_version_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	OperationId    string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	InstallationId string                 `protobuf:"bytes,2,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	OrgRef         string                 `protobuf:"bytes,3,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
+	// Selects the current provisioned version; never sets an attempt's episode.
+	VersionRef string `protobuf:"bytes,4,opt,name=version_ref,json=versionRef,proto3" json:"version_ref,omitempty"`
 	// FenceRecovery uses the expected prior generation (zero initially). Every
 	// other operation uses the current acknowledged generation.
 	Generation    int64 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
@@ -752,9 +753,9 @@ func (x *RecoveryBinding) GetOrgRef() string {
 	return ""
 }
 
-func (x *RecoveryBinding) GetOrganizationVersionId() string {
+func (x *RecoveryBinding) GetVersionRef() string {
 	if x != nil {
-		return x.OrganizationVersionId
+		return x.VersionRef
 	}
 	return ""
 }
@@ -4646,12 +4647,13 @@ var File_helm_gateway_v1_gateway_proto protoreflect.FileDescriptor
 
 const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\n" +
-	"\x1dhelm/gateway/v1/gateway.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xce\x01\n" +
+	"\x1dhelm/gateway/v1/gateway.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x01\n" +
 	"\x0fRecoveryBinding\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12'\n" +
 	"\x0finstallation_id\x18\x02 \x01(\tR\x0einstallationId\x12\x17\n" +
-	"\aorg_ref\x18\x03 \x01(\tR\x06orgRef\x126\n" +
-	"\x17organization_version_id\x18\x04 \x01(\tR\x15organizationVersionId\x12\x1e\n" +
+	"\aorg_ref\x18\x03 \x01(\tR\x06orgRef\x12\x1f\n" +
+	"\vversion_ref\x18\x04 \x01(\tR\n" +
+	"versionRef\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x05 \x01(\x03R\n" +
 	"generation\"\xab\x03\n" +

@@ -63,7 +63,8 @@ BEGIN
             WHEN t.relname = 'gateway_schema_migrations' THEN 'SELECT'
             WHEN t.relname = 'gateway_activity_schema_migrations' THEN 'SELECT'
             WHEN t.relname IN ('gateway_activity_sources', 'gateway_activity_observations', 'gateway_activity_evidence') THEN 'SELECT, INSERT, UPDATE'
-            WHEN t.relname IN ('authority_postings', 'authority_distinct_values', 'authority_provision_limits') THEN 'SELECT, INSERT'
+            WHEN t.relname IN ('authority_postings', 'authority_distinct_values', 'authority_provision_limits',
+                'authority_recovery_fences','authority_recovery_members','authority_recovery_checkpoints') THEN 'SELECT, INSERT'
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
             WHEN t.relname IN ('river_job', 'river_leader', 'river_queue', 'river_notification')

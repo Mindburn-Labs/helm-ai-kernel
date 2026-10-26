@@ -126,6 +126,18 @@ const (
 	// EffectGatewayServiceLiftProcedure is the fully-qualified name of the EffectGatewayService's Lift
 	// RPC.
 	EffectGatewayServiceLiftProcedure = "/helm.gateway.v1.EffectGatewayService/Lift"
+	// EffectGatewayServiceFenceRecoveryProcedure is the fully-qualified name of the
+	// EffectGatewayService's FenceRecovery RPC.
+	EffectGatewayServiceFenceRecoveryProcedure = "/helm.gateway.v1.EffectGatewayService/FenceRecovery"
+	// EffectGatewayServiceGetRecoveryFenceProcedure is the fully-qualified name of the
+	// EffectGatewayService's GetRecoveryFence RPC.
+	EffectGatewayServiceGetRecoveryFenceProcedure = "/helm.gateway.v1.EffectGatewayService/GetRecoveryFence"
+	// EffectGatewayServiceBindRecoveryCheckpointProcedure is the fully-qualified name of the
+	// EffectGatewayService's BindRecoveryCheckpoint RPC.
+	EffectGatewayServiceBindRecoveryCheckpointProcedure = "/helm.gateway.v1.EffectGatewayService/BindRecoveryCheckpoint"
+	// EffectGatewayServiceListRecoveryAttemptsProcedure is the fully-qualified name of the
+	// EffectGatewayService's ListRecoveryAttempts RPC.
+	EffectGatewayServiceListRecoveryAttemptsProcedure = "/helm.gateway.v1.EffectGatewayService/ListRecoveryAttempts"
 )
 
 // EffectGatewayServiceClient is a client for the helm.gateway.v1.EffectGatewayService service.
@@ -348,6 +360,25 @@ type EffectGatewayServiceClient interface {
 	// Approving the resulting attempt takes a decide token bound to that
 	// attempt, as for any other.
 	Lift(context.Context, *connect.Request[LiftRequest]) (*connect.Response[LiftResponse], error)
+	// Fence one native organization version, preserving original attempts and
+	// permits. Requires single-use helm.gateway.stop bound to the exact request
+	// as helm_recovery_fence. No installer or episode credential controls it.
+	// This capability does not enable provider backup, restore or resume.
+	// Token scope: helm.gateway.stop.
+	FenceRecovery(context.Context, *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error)
+	// Read the current exact fence with helm.gateway.read as an active human.
+	// Token scope: helm.gateway.read.
+	GetRecoveryFence(context.Context, *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error)
+	// Bind a CP content digest to a current native inventory watermark. Refuses
+	// in-flight/unknown effects. Requires a single-use helm.gateway.stop token
+	// bound as helm_recovery_checkpoint. This is correlation, not qualification
+	// of snapshot consistency, restore eligibility or a signed recovery receipt.
+	// Token scope: helm.gateway.stop.
+	BindRecoveryCheckpoint(context.Context, *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error)
+	// Page the immutable original-attempt membership, 100 IDs per page. Existing
+	// Get/Observe authorization remains mandatory for each attempt.
+	// Token scope: helm.gateway.read.
+	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
 }
 
 // NewEffectGatewayServiceClient constructs a client for the helm.gateway.v1.EffectGatewayService
@@ -437,23 +468,53 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(effectGatewayServiceMethods.ByName("Lift")),
 			connect.WithClientOptions(opts...),
 		),
+		fenceRecovery: connect.NewClient[FenceRecoveryRequest, FenceRecoveryResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceFenceRecoveryProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("FenceRecovery")),
+			connect.WithClientOptions(opts...),
+		),
+		getRecoveryFence: connect.NewClient[GetRecoveryFenceRequest, GetRecoveryFenceResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceGetRecoveryFenceProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("GetRecoveryFence")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		bindRecoveryCheckpoint: connect.NewClient[BindRecoveryCheckpointRequest, BindRecoveryCheckpointResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceBindRecoveryCheckpointProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("BindRecoveryCheckpoint")),
+			connect.WithClientOptions(opts...),
+		),
+		listRecoveryAttempts: connect.NewClient[ListRecoveryAttemptsRequest, ListRecoveryAttemptsResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceListRecoveryAttemptsProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("ListRecoveryAttempts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // effectGatewayServiceClient implements EffectGatewayServiceClient.
 type effectGatewayServiceClient struct {
-	propose           *connect.Client[ProposeRequest, ProposeResponse]
-	approve           *connect.Client[ApproveRequest, ApproveResponse]
-	reject            *connect.Client[RejectRequest, RejectResponse]
-	cancel            *connect.Client[CancelRequest, CancelResponse]
-	dispatch          *connect.Client[DispatchRequest, DispatchResponse]
-	observe           *connect.Client[ObserveRequest, ObserveResponse]
-	getAttempt        *connect.Client[GetAttemptRequest, GetAttemptResponse]
-	getAttemptContent *connect.Client[GetAttemptContentRequest, GetAttemptContentResponse]
-	listAttempts      *connect.Client[ListAttemptsRequest, ListAttemptsResponse]
-	stop              *connect.Client[StopRequest, StopResponse]
-	getStopOutcome    *connect.Client[GetStopOutcomeRequest, GetStopOutcomeResponse]
-	lift              *connect.Client[LiftRequest, LiftResponse]
+	propose                *connect.Client[ProposeRequest, ProposeResponse]
+	approve                *connect.Client[ApproveRequest, ApproveResponse]
+	reject                 *connect.Client[RejectRequest, RejectResponse]
+	cancel                 *connect.Client[CancelRequest, CancelResponse]
+	dispatch               *connect.Client[DispatchRequest, DispatchResponse]
+	observe                *connect.Client[ObserveRequest, ObserveResponse]
+	getAttempt             *connect.Client[GetAttemptRequest, GetAttemptResponse]
+	getAttemptContent      *connect.Client[GetAttemptContentRequest, GetAttemptContentResponse]
+	listAttempts           *connect.Client[ListAttemptsRequest, ListAttemptsResponse]
+	stop                   *connect.Client[StopRequest, StopResponse]
+	getStopOutcome         *connect.Client[GetStopOutcomeRequest, GetStopOutcomeResponse]
+	lift                   *connect.Client[LiftRequest, LiftResponse]
+	fenceRecovery          *connect.Client[FenceRecoveryRequest, FenceRecoveryResponse]
+	getRecoveryFence       *connect.Client[GetRecoveryFenceRequest, GetRecoveryFenceResponse]
+	bindRecoveryCheckpoint *connect.Client[BindRecoveryCheckpointRequest, BindRecoveryCheckpointResponse]
+	listRecoveryAttempts   *connect.Client[ListRecoveryAttemptsRequest, ListRecoveryAttemptsResponse]
 }
 
 // Propose calls helm.gateway.v1.EffectGatewayService.Propose.
@@ -514,6 +575,26 @@ func (c *effectGatewayServiceClient) GetStopOutcome(ctx context.Context, req *co
 // Lift calls helm.gateway.v1.EffectGatewayService.Lift.
 func (c *effectGatewayServiceClient) Lift(ctx context.Context, req *connect.Request[LiftRequest]) (*connect.Response[LiftResponse], error) {
 	return c.lift.CallUnary(ctx, req)
+}
+
+// FenceRecovery calls helm.gateway.v1.EffectGatewayService.FenceRecovery.
+func (c *effectGatewayServiceClient) FenceRecovery(ctx context.Context, req *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error) {
+	return c.fenceRecovery.CallUnary(ctx, req)
+}
+
+// GetRecoveryFence calls helm.gateway.v1.EffectGatewayService.GetRecoveryFence.
+func (c *effectGatewayServiceClient) GetRecoveryFence(ctx context.Context, req *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error) {
+	return c.getRecoveryFence.CallUnary(ctx, req)
+}
+
+// BindRecoveryCheckpoint calls helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint.
+func (c *effectGatewayServiceClient) BindRecoveryCheckpoint(ctx context.Context, req *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error) {
+	return c.bindRecoveryCheckpoint.CallUnary(ctx, req)
+}
+
+// ListRecoveryAttempts calls helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts.
+func (c *effectGatewayServiceClient) ListRecoveryAttempts(ctx context.Context, req *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error) {
+	return c.listRecoveryAttempts.CallUnary(ctx, req)
 }
 
 // EffectGatewayServiceHandler is an implementation of the helm.gateway.v1.EffectGatewayService
@@ -737,6 +818,25 @@ type EffectGatewayServiceHandler interface {
 	// Approving the resulting attempt takes a decide token bound to that
 	// attempt, as for any other.
 	Lift(context.Context, *connect.Request[LiftRequest]) (*connect.Response[LiftResponse], error)
+	// Fence one native organization version, preserving original attempts and
+	// permits. Requires single-use helm.gateway.stop bound to the exact request
+	// as helm_recovery_fence. No installer or episode credential controls it.
+	// This capability does not enable provider backup, restore or resume.
+	// Token scope: helm.gateway.stop.
+	FenceRecovery(context.Context, *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error)
+	// Read the current exact fence with helm.gateway.read as an active human.
+	// Token scope: helm.gateway.read.
+	GetRecoveryFence(context.Context, *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error)
+	// Bind a CP content digest to a current native inventory watermark. Refuses
+	// in-flight/unknown effects. Requires a single-use helm.gateway.stop token
+	// bound as helm_recovery_checkpoint. This is correlation, not qualification
+	// of snapshot consistency, restore eligibility or a signed recovery receipt.
+	// Token scope: helm.gateway.stop.
+	BindRecoveryCheckpoint(context.Context, *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error)
+	// Page the immutable original-attempt membership, 100 IDs per page. Existing
+	// Get/Observe authorization remains mandatory for each attempt.
+	// Token scope: helm.gateway.read.
+	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
 }
 
 // NewEffectGatewayServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -822,6 +922,32 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		connect.WithSchema(effectGatewayServiceMethods.ByName("Lift")),
 		connect.WithHandlerOptions(opts...),
 	)
+	effectGatewayServiceFenceRecoveryHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceFenceRecoveryProcedure,
+		svc.FenceRecovery,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("FenceRecovery")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effectGatewayServiceGetRecoveryFenceHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceGetRecoveryFenceProcedure,
+		svc.GetRecoveryFence,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("GetRecoveryFence")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	effectGatewayServiceBindRecoveryCheckpointHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceBindRecoveryCheckpointProcedure,
+		svc.BindRecoveryCheckpoint,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("BindRecoveryCheckpoint")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effectGatewayServiceListRecoveryAttemptsHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceListRecoveryAttemptsProcedure,
+		svc.ListRecoveryAttempts,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("ListRecoveryAttempts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/helm.gateway.v1.EffectGatewayService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EffectGatewayServiceProposeProcedure:
@@ -848,6 +974,14 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 			effectGatewayServiceGetStopOutcomeHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceLiftProcedure:
 			effectGatewayServiceLiftHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceFenceRecoveryProcedure:
+			effectGatewayServiceFenceRecoveryHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceGetRecoveryFenceProcedure:
+			effectGatewayServiceGetRecoveryFenceHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceBindRecoveryCheckpointProcedure:
+			effectGatewayServiceBindRecoveryCheckpointHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceListRecoveryAttemptsProcedure:
+			effectGatewayServiceListRecoveryAttemptsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -903,4 +1037,20 @@ func (UnimplementedEffectGatewayServiceHandler) GetStopOutcome(context.Context, 
 
 func (UnimplementedEffectGatewayServiceHandler) Lift(context.Context, *connect.Request[LiftRequest]) (*connect.Response[LiftResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.Lift is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) FenceRecovery(context.Context, *connect.Request[FenceRecoveryRequest]) (*connect.Response[FenceRecoveryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.FenceRecovery is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) GetRecoveryFence(context.Context, *connect.Request[GetRecoveryFenceRequest]) (*connect.Response[GetRecoveryFenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetRecoveryFence is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) BindRecoveryCheckpoint(context.Context, *connect.Request[BindRecoveryCheckpointRequest]) (*connect.Response[BindRecoveryCheckpointResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts is not implemented"))
 }

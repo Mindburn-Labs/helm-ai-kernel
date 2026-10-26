@@ -298,6 +298,9 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 	want["authority_postings"] = "INSERT,SELECT"
 	want["authority_provision_limits"] = "INSERT,SELECT"
 	want["authority_distinct_values"] = "INSERT,SELECT"
+	for _, table := range []string{"authority_recovery_fences", "authority_recovery_members", "authority_recovery_checkpoints"} {
+		want[table] = "INSERT,SELECT"
+	}
 	if _, ok := want["authority_token_replay"]; ok {
 		want["authority_token_replay"] = "DELETE,INSERT,SELECT"
 	}

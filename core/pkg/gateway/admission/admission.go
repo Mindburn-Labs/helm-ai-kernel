@@ -504,6 +504,11 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	if err != nil {
 		return err
 	}
+	if caller.Episode != nil {
+		if err := allowRecoveryVersion(ctx, tx, caller.TenantID, caller.WorkspaceID, caller.Episode.OrganizationVersionID); err != nil {
+			return err
+		}
+	}
 	// Merge remains high risk even if a tenant catalog row is lowered.
 	if in.EffectType == effectargs.GitHubPullRequestMerge && auth.riskClass != mandates.RiskIrreversible {
 		auth.riskClass = mandates.RiskHigh

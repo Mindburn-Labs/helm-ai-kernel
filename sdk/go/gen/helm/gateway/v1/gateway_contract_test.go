@@ -47,7 +47,7 @@ func service(t *testing.T) protoreflect.ServiceDescriptor {
 // The six operations of rev 3.4 §4.2 as eight unary RPCs, plus Cancel and
 // GetAttemptContent from WS-B's review.
 func TestServiceHasTheSixOperations(t *testing.T) {
-	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "GetStopOutcome", "Lift"}
+	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "GetStopOutcome", "Lift", "FenceRecovery", "GetRecoveryFence", "BindRecoveryCheckpoint", "ListRecoveryAttempts"}
 	methods := service(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -65,7 +65,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		}
 		level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel()
 		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
-		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" || name == "GetStopOutcome" {
+		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" || name == "GetStopOutcome" || name == "GetRecoveryFence" || name == "ListRecoveryAttempts" {
 			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
 		}
 		if level != wantLevel {
@@ -78,18 +78,22 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 
 	// The Connect routes WS-B's adapter calls.
 	procedures := map[string]string{
-		EffectGatewayServiceProposeProcedure:           "Propose",
-		EffectGatewayServiceApproveProcedure:           "Approve",
-		EffectGatewayServiceRejectProcedure:            "Reject",
-		EffectGatewayServiceCancelProcedure:            "Cancel",
-		EffectGatewayServiceDispatchProcedure:          "Dispatch",
-		EffectGatewayServiceObserveProcedure:           "Observe",
-		EffectGatewayServiceGetAttemptProcedure:        "GetAttempt",
-		EffectGatewayServiceGetAttemptContentProcedure: "GetAttemptContent",
-		EffectGatewayServiceListAttemptsProcedure:      "ListAttempts",
-		EffectGatewayServiceStopProcedure:              "Stop",
-		EffectGatewayServiceGetStopOutcomeProcedure:    "GetStopOutcome",
-		EffectGatewayServiceLiftProcedure:              "Lift",
+		EffectGatewayServiceProposeProcedure:                "Propose",
+		EffectGatewayServiceApproveProcedure:                "Approve",
+		EffectGatewayServiceRejectProcedure:                 "Reject",
+		EffectGatewayServiceCancelProcedure:                 "Cancel",
+		EffectGatewayServiceDispatchProcedure:               "Dispatch",
+		EffectGatewayServiceObserveProcedure:                "Observe",
+		EffectGatewayServiceGetAttemptProcedure:             "GetAttempt",
+		EffectGatewayServiceGetAttemptContentProcedure:      "GetAttemptContent",
+		EffectGatewayServiceListAttemptsProcedure:           "ListAttempts",
+		EffectGatewayServiceStopProcedure:                   "Stop",
+		EffectGatewayServiceGetStopOutcomeProcedure:         "GetStopOutcome",
+		EffectGatewayServiceLiftProcedure:                   "Lift",
+		EffectGatewayServiceFenceRecoveryProcedure:          "FenceRecovery",
+		EffectGatewayServiceGetRecoveryFenceProcedure:       "GetRecoveryFence",
+		EffectGatewayServiceBindRecoveryCheckpointProcedure: "BindRecoveryCheckpoint",
+		EffectGatewayServiceListRecoveryAttemptsProcedure:   "ListRecoveryAttempts",
 	}
 	if len(procedures) != len(want) {
 		t.Errorf("%d procedure constants checked, want %d", len(procedures), len(want))
@@ -439,18 +443,22 @@ func rpcScopes(src string) (map[string][]string, error) {
 // resolved (docs/architecture/gateway-effect-api.md, "Resolved").
 func TestRPCTokenScopes(t *testing.T) {
 	want := map[string][]string{
-		"Propose":           {"helm.gateway.propose"},
-		"Approve":           {"helm.gateway.decide"},
-		"Reject":            {"helm.gateway.decide"},
-		"Cancel":            {"helm.gateway.propose", "helm.gateway.stop"},
-		"Dispatch":          {"helm.gateway.execute"},
-		"Observe":           {"helm.gateway.execute"},
-		"GetAttempt":        {"helm.gateway.read"},
-		"GetAttemptContent": {"helm.gateway.read"},
-		"ListAttempts":      {"helm.gateway.read"},
-		"Stop":              {"helm.gateway.stop"},
-		"GetStopOutcome":    {"helm.gateway.read"},
-		"Lift":              {"helm.gateway.stop"},
+		"Propose":                {"helm.gateway.propose"},
+		"Approve":                {"helm.gateway.decide"},
+		"Reject":                 {"helm.gateway.decide"},
+		"Cancel":                 {"helm.gateway.propose", "helm.gateway.stop"},
+		"Dispatch":               {"helm.gateway.execute"},
+		"Observe":                {"helm.gateway.execute"},
+		"GetAttempt":             {"helm.gateway.read"},
+		"GetAttemptContent":      {"helm.gateway.read"},
+		"ListAttempts":           {"helm.gateway.read"},
+		"Stop":                   {"helm.gateway.stop"},
+		"GetStopOutcome":         {"helm.gateway.read"},
+		"Lift":                   {"helm.gateway.stop"},
+		"FenceRecovery":          {"helm.gateway.stop"},
+		"GetRecoveryFence":       {"helm.gateway.read"},
+		"BindRecoveryCheckpoint": {"helm.gateway.stop"},
+		"ListRecoveryAttempts":   {"helm.gateway.read"},
 	}
 
 	planted := "  // Token scope: helm.gateway.read.\n  // Token scope: helm.gateway.stop.\n  rpc Planted(PlantedRequest) returns (PlantedResponse);\n" +

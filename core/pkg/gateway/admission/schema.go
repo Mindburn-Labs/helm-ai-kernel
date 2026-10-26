@@ -36,6 +36,10 @@ var Tables = []string{
 	"authority_reassignment_work",
 	"authority_reassignment_grants",
 	"authority_reassignment_members",
+	"authority_recovery_fences",
+	"authority_recovery_scopes",
+	"authority_recovery_members",
+	"authority_recovery_checkpoints",
 }
 
 // migration is one version of the gateway schema.
@@ -81,6 +85,19 @@ var migrations = []migration{
 	}},
 	{12, "governed retained work reassignment grants", func() (string, error) {
 		return withRowSecurity("", "schema/012_reassignment_grants.sql", Tables[13:16])
+	}},
+	{13, "scoped provider recovery dispatch holds", func() (string, error) {
+		// Name the new tables explicitly. Positional slices drift when older
+		// migrations insert tables into the shared registry. Also retain the
+		// original-attempt membership protection missing from migration 12's
+		// older positional slice, including on an upgrade from schema 12.
+		return withRowSecurity("", "schema/013_provider_recovery.sql", []string{
+			"authority_reassignment_members",
+			"authority_recovery_fences",
+			"authority_recovery_scopes",
+			"authority_recovery_members",
+			"authority_recovery_checkpoints",
+		})
 	}},
 }
 

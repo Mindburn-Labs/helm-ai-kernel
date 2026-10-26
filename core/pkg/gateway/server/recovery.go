@@ -10,15 +10,21 @@ import (
 )
 
 func recoveryInput(b *gatewayv1.RecoveryBinding) admission.RecoveryBinding {
-	return admission.RecoveryBinding{OperationID: b.GetOperationId(), InstallationID: b.GetInstallationId(), OrgRef: b.GetOrgRef(), OrganizationVersionID: b.GetVersionRef(), Generation: b.GetGeneration()}
+	return admission.RecoveryBinding{OperationID: b.GetOperationId(), InstallationID: b.GetInstallationId(), OrgRef: b.GetOrgRef(), OrganizationVersionID: b.GetVersionRef(), Generation: b.GetGeneration(), AuthorityVersionID: b.GetAuthorityVersionRef(), CoveredVersionIDs: append([]string(nil), b.GetCoveredVersionRefs()...), ExpectedPlanDigest: b.GetExpectedPlanDigest()}
 }
 
 func recoveryFields(b *gatewayv1.RecoveryBinding) map[string]string {
-	return map[string]string{"operation_id": b.GetOperationId(), "installation_id": b.GetInstallationId(), "org_ref": b.GetOrgRef(), "organization_version_id": b.GetVersionRef(), "generation": strconv.FormatInt(b.GetGeneration(), 10)}
+	fields := map[string]string{"operation_id": b.GetOperationId(), "installation_id": b.GetInstallationId(), "org_ref": b.GetOrgRef(), "organization_version_id": b.GetVersionRef(), "generation": strconv.FormatInt(b.GetGeneration(), 10)}
+	if b.GetAuthorityVersionRef() != "" || len(b.GetCoveredVersionRefs()) != 0 || b.GetExpectedPlanDigest() != "" {
+		fields["authority_version_id"] = b.GetAuthorityVersionRef()
+		fields["version_set_digest"] = admission.RecoveryVersionSetDigest(b.GetCoveredVersionRefs())
+		fields["expected_plan_digest"] = b.GetExpectedPlanDigest()
+	}
+	return fields
 }
 
 func recoveryProto(f admission.RecoveryFence) *gatewayv1.RecoveryFence {
-	return &gatewayv1.RecoveryFence{Binding: &gatewayv1.RecoveryBinding{OperationId: f.OperationID, InstallationId: f.InstallationID, OrgRef: f.OrgRef, VersionRef: f.OrganizationVersionID, Generation: f.Generation}, PlanDigest: f.PlanDigest, AuthorityRevision: f.AuthorityRevision, InventoryWatermark: f.InventoryWatermark, InventoryCount: f.InventoryCount, UnresolvedCount: f.UnresolvedCount, CheckpointDigest: f.CheckpointDigest, CheckpointWatermark: f.CheckpointWatermark, CutoffWatermark: f.CutoffWatermark}
+	return &gatewayv1.RecoveryFence{Binding: &gatewayv1.RecoveryBinding{OperationId: f.OperationID, InstallationId: f.InstallationID, OrgRef: f.OrgRef, VersionRef: f.OrganizationVersionID, Generation: f.Generation, AuthorityVersionRef: f.AuthorityVersionID, CoveredVersionRefs: append([]string(nil), f.CoveredVersionIDs...), ExpectedPlanDigest: f.ExpectedPlanDigest}, PlanDigest: f.PlanDigest, AuthorityRevision: f.AuthorityRevision, InventoryWatermark: f.InventoryWatermark, InventoryCount: f.InventoryCount, UnresolvedCount: f.UnresolvedCount, CheckpointDigest: f.CheckpointDigest, CheckpointWatermark: f.CheckpointWatermark, CutoffWatermark: f.CutoffWatermark}
 }
 
 func (s *Server) FenceRecovery(ctx context.Context, req *connect.Request[gatewayv1.FenceRecoveryRequest]) (*connect.Response[gatewayv1.FenceRecoveryResponse], error) {

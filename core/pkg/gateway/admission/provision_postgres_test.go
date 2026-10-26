@@ -47,8 +47,11 @@ type planFixture struct {
 // newPlanFixture is the admission fixture with the provision adapter
 // configured, a provisioner and another service principal in both tenants.
 func newPlanFixture(t *testing.T) *planFixture {
+	return newPlanFixtureWithFixture(t, newFixture(t))
+}
+
+func newPlanFixtureWithFixture(t *testing.T, f *fixture) *planFixture {
 	t.Helper()
-	f := newFixture(t)
 	ctx := context.Background()
 	for _, tenant := range []string{tenantA, tenantB} {
 		must(t, f.rows.CreatePrincipal(ctx, tenant, provisioner, authorityrows.PrincipalService))

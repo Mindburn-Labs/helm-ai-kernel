@@ -99,6 +99,9 @@ var migrations = []migration{
 			"authority_recovery_checkpoints",
 		})
 	}},
+	{14, "exact recovery CP version lineage", func() (string, error) {
+		return withRowSecurity("", "schema/014_recovery_version_lineage.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

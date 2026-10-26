@@ -8,19 +8,23 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"math"
+	"slices"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
-// RecoveryBinding selects one provisioned version, never a tenant-wide hold.
+// RecoveryBinding selects an exact CP-issued version set, never a tenant-wide hold.
 // Tenant and workspace come from the verified caller. InstallationID is an
 // exact caller-authorized correlation binding, not an installation credential.
 type RecoveryBinding struct {
 	OperationID, InstallationID, OrgRef, OrganizationVersionID string
 	Generation                                                 int64
+	AuthorityVersionID, ExpectedPlanDigest                     string
+	CoveredVersionIDs                                          []string
 }
 
 // RecoveryFence acknowledges a durable claim cutoff. A claim committed before
@@ -43,7 +47,53 @@ func validateRecovery(in RecoveryBinding) error {
 		!effectargs.ValidOrgRef(in.OrgRef) || !claimIDPattern.MatchString(in.OrganizationVersionID) || in.Generation < 0 || in.Generation == math.MaxInt64 {
 		return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "invalid recovery operation, installation, organization, version or generation")
 	}
+	if recoveryExtended(in) {
+		if !claimIDPattern.MatchString(in.AuthorityVersionID) || len(in.CoveredVersionIDs) == 0 || len(in.CoveredVersionIDs) > 4096 || !validRecoveryDigest(in.ExpectedPlanDigest) {
+			return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "recovery requires an authority version, exact plan digest and bounded version set")
+		}
+		for i, version := range in.CoveredVersionIDs {
+			if !claimIDPattern.MatchString(version) || i > 0 && in.CoveredVersionIDs[i-1] >= version {
+				return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "covered recovery versions must be sorted and unique")
+			}
+		}
+		if !slices.Contains(in.CoveredVersionIDs, in.OrganizationVersionID) || !slices.Contains(in.CoveredVersionIDs, in.AuthorityVersionID) {
+			return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, "recovery version set must contain lifecycle and authority versions")
+		}
+	}
 	return nil
+}
+
+func recoveryExtended(in RecoveryBinding) bool {
+	return in.AuthorityVersionID != "" || len(in.CoveredVersionIDs) != 0 || in.ExpectedPlanDigest != ""
+}
+
+func validRecoveryDigest(value string) bool {
+	b, err := hex.DecodeString(value)
+	return err == nil && len(b) == sha256.Size && hex.EncodeToString(b) == value
+}
+
+func recoveryAuthorityVersion(in RecoveryBinding) string {
+	if recoveryExtended(in) {
+		return in.AuthorityVersionID
+	}
+	return in.OrganizationVersionID
+}
+
+func recoveryVersionJSON(in RecoveryBinding) string {
+	versions := in.CoveredVersionIDs
+	if !recoveryExtended(in) {
+		versions = []string{in.OrganizationVersionID}
+	}
+	raw, _ := json.Marshal(versions)
+	return string(raw)
+}
+
+// RecoveryVersionSetDigest binds the exact ordered JSON array in narrowed stop
+// claims. The caller must separately validate its sorted, unique membership.
+func RecoveryVersionSetDigest(versions []string) string {
+	raw, _ := json.Marshal(versions)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 func recoveryOperator(ctx context.Context, tx *sql.Tx, caller Caller) error {
@@ -83,8 +133,8 @@ func (s *Service) FenceRecovery(ctx context.Context, caller Caller, token Token,
 		var current int64
 		var operation string
 		err := tx.QueryRowContext(ctx, `SELECT generation, operation_id::text FROM authority_recovery_scopes
-			WHERE tenant_id=$1 AND workspace_id=$2 AND org_ref=$3 AND organization_version_id=$4`,
-			caller.TenantID, caller.WorkspaceID, in.OrgRef, in.OrganizationVersionID).Scan(&current, &operation)
+			WHERE tenant_id=$1 AND workspace_id=$2 AND org_ref=$3`,
+			caller.TenantID, caller.WorkspaceID, in.OrgRef).Scan(&current, &operation)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -102,25 +152,45 @@ func (s *Service) FenceRecovery(ctx context.Context, caller Caller, token Token,
 		if current != in.Generation {
 			return recoveryStale()
 		}
+		if operation != "" {
+			var preservesHold bool
+			if err := tx.QueryRowContext(ctx, `SELECT covered_version_refs <@ $3::jsonb FROM authority_recovery_fences WHERE tenant_id=$1 AND operation_id=$2`, caller.TenantID, operation, recoveryVersionJSON(in)).Scan(&preservesHold); err != nil {
+				return err
+			}
+			if !preservesHold {
+				return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "recovery cannot release previously held versions")
+			}
+		}
 		var digest, version string
 		var revision int64
 		err = tx.QueryRowContext(ctx, `SELECT p.plan_digest, p.version_ref, p.revision FROM authority_provisions p
 			JOIN authority_effect_attempts a ON a.tenant_id=p.tenant_id AND a.attempt_id=p.attempt_id
 			WHERE p.tenant_id=$1 AND p.org_ref=$2 AND a.workspace_id=$3 FOR SHARE OF p`, caller.TenantID, in.OrgRef, caller.WorkspaceID).Scan(&digest, &version, &revision)
-		if errors.Is(err, sql.ErrNoRows) || err == nil && version != in.OrganizationVersionID {
+		if errors.Is(err, sql.ErrNoRows) || err == nil && version != recoveryAuthorityVersion(in) {
 			return errNotFound
 		}
 		if err != nil {
 			return err
 		}
-		// Attempts carry a verified version, not org_ref. Refuse an ambiguous
-		// version rather than holding another organization's work by accident.
+		if in.ExpectedPlanDigest != "" && in.ExpectedPlanDigest != digest {
+			return recoveryStale()
+		}
+		// CP membership is the trusted issuer's assertion, not an inference from
+		// attempt content. Refuse any known foreign provision in that exact set.
+		versions := recoveryVersionJSON(in)
 		var owners int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM authority_provisions WHERE tenant_id=$1 AND version_ref=$2`, caller.TenantID, version).Scan(&owners); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM authority_provisions WHERE tenant_id=$1 AND org_ref<>$2 AND version_ref IN (SELECT jsonb_array_elements_text($3::jsonb))`, caller.TenantID, in.OrgRef, versions).Scan(&owners); err != nil {
 			return err
 		}
-		if owners != 1 {
+		if owners != 0 {
 			return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "organization version is not unambiguous")
+		}
+		var foreignHold bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_recovery_scopes s JOIN authority_recovery_fences f ON f.tenant_id=s.tenant_id AND f.operation_id=s.operation_id WHERE s.tenant_id=$1 AND s.org_ref<>$2 AND f.covered_version_refs ?| ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`, caller.TenantID, in.OrgRef, versions).Scan(&foreignHold); err != nil {
+			return err
+		}
+		if foreignHold {
+			return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "recovery versions intersect another organization's hold")
 		}
 		if err := consumeToken(ctx, tx, caller.TenantID, token); err != nil {
 			return err
@@ -128,27 +198,27 @@ func (s *Service) FenceRecovery(ctx context.Context, caller Caller, token Token,
 		in.Generation++
 		var membership string
 		if err := tx.QueryRowContext(ctx, `SELECT coalesce(jsonb_agg(attempt_id::text ORDER BY attempt_id)::text,'[]') FROM authority_effect_attempts
-			WHERE tenant_id=$1 AND workspace_id=$2 AND organization_version_id=$3`, caller.TenantID, caller.WorkspaceID, version).Scan(&membership); err != nil {
+			WHERE tenant_id=$1 AND workspace_id=$2 AND organization_version_id IN (SELECT jsonb_array_elements_text($3::jsonb))`, caller.TenantID, caller.WorkspaceID, versions).Scan(&membership); err != nil {
 			return err
 		}
 		cutoff := sha256.Sum256([]byte(membership))
 		_, err = tx.ExecContext(ctx, `INSERT INTO authority_recovery_fences
-			(tenant_id,workspace_id,org_ref,organization_version_id,operation_id,installation_id,generation,plan_digest,authority_revision,requested_by,cutoff_watermark)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, caller.TenantID, caller.WorkspaceID, in.OrgRef, version,
-			in.OperationID, in.InstallationID, in.Generation, digest, revision, caller.PrincipalID, hex.EncodeToString(cutoff[:]))
+			(tenant_id,workspace_id,org_ref,organization_version_id,operation_id,installation_id,generation,plan_digest,authority_revision,requested_by,cutoff_watermark,authority_version_ref,covered_version_refs,expected_plan_digest)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)`, caller.TenantID, caller.WorkspaceID, in.OrgRef, in.OrganizationVersionID,
+			in.OperationID, in.InstallationID, in.Generation, digest, revision, caller.PrincipalID, hex.EncodeToString(cutoff[:]), version, versions, in.ExpectedPlanDigest)
 		if err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO authority_recovery_scopes (tenant_id,workspace_id,org_ref,organization_version_id,operation_id,generation)
-			VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,workspace_id,org_ref,organization_version_id)
-			DO UPDATE SET operation_id=EXCLUDED.operation_id,generation=EXCLUDED.generation`,
-			caller.TenantID, caller.WorkspaceID, in.OrgRef, version, in.OperationID, in.Generation)
+			VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,workspace_id,org_ref)
+			DO UPDATE SET organization_version_id=EXCLUDED.organization_version_id,operation_id=EXCLUDED.operation_id,generation=EXCLUDED.generation`,
+			caller.TenantID, caller.WorkspaceID, in.OrgRef, in.OrganizationVersionID, in.OperationID, in.Generation)
 		if err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO authority_recovery_members (tenant_id,operation_id,attempt_id)
-			SELECT tenant_id,$1,attempt_id FROM authority_effect_attempts WHERE tenant_id=$2 AND workspace_id=$3 AND organization_version_id=$4`,
-			in.OperationID, caller.TenantID, caller.WorkspaceID, version)
+			SELECT tenant_id,$1,attempt_id FROM authority_effect_attempts WHERE tenant_id=$2 AND workspace_id=$3 AND organization_version_id IN (SELECT jsonb_array_elements_text($4::jsonb))`,
+			in.OperationID, caller.TenantID, caller.WorkspaceID, versions)
 		if err != nil {
 			return err
 		}
@@ -170,7 +240,7 @@ func allowRecoveryVersion(ctx context.Context, tx *sql.Tx, tenant, workspace, ve
 		return nil
 	}
 	var held bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_recovery_scopes WHERE tenant_id=$1 AND workspace_id=$2 AND organization_version_id=$3)`, tenant, workspace, version).Scan(&held); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_recovery_scopes s JOIN authority_recovery_fences f ON f.tenant_id=s.tenant_id AND f.operation_id=s.operation_id WHERE s.tenant_id=$1 AND s.workspace_id=$2 AND f.covered_version_refs ? $3)`, tenant, workspace, version).Scan(&held); err != nil {
 		return err
 	}
 	if held {
@@ -186,8 +256,9 @@ func readRecovery(ctx context.Context, tx *sql.Tx, caller Caller, in RecoveryBin
 		 ON s.tenant_id=f.tenant_id AND s.operation_id=f.operation_id AND s.generation=f.generation
 		LEFT JOIN authority_recovery_checkpoints c ON c.tenant_id=f.tenant_id AND c.operation_id=f.operation_id
 		WHERE f.tenant_id=$1 AND f.workspace_id=$2 AND f.org_ref=$3 AND f.organization_version_id=$4
-		 AND f.operation_id=$5 AND f.installation_id=$6 AND f.generation=$7`,
-		caller.TenantID, caller.WorkspaceID, in.OrgRef, in.OrganizationVersionID, in.OperationID, in.InstallationID, in.Generation).
+		 AND f.operation_id=$5 AND f.installation_id=$6 AND f.generation=$7
+		 AND f.authority_version_ref=$8 AND f.covered_version_refs=$9::jsonb AND f.expected_plan_digest=$10`,
+		caller.TenantID, caller.WorkspaceID, in.OrgRef, in.OrganizationVersionID, in.OperationID, in.InstallationID, in.Generation, recoveryAuthorityVersion(in), recoveryVersionJSON(in), in.ExpectedPlanDigest).
 		Scan(&out.PlanDigest, &out.AuthorityRevision, &out.CheckpointDigest, &out.CheckpointWatermark, &out.CutoffWatermark)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, errNotFound

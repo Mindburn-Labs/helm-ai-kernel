@@ -1,7 +1,7 @@
 # Scoped provider recovery fence
 
 HELM-1039 implements an initial gateway capability: a durable hold on native
-attempts for one provisioned organization version in one token workspace.
+attempts for an exact CP-issued version set in one token workspace.
 Provider-enabled backup, restore, resume and signed recovery receipts remain
 unsupported.
 
@@ -9,16 +9,26 @@ unsupported.
 
 `FenceRecovery` requires existing `helm.gateway.stop` authority from a currently
 active human. Its single-use token carries one `helm_recovery_fence` detail
-binding operation, installation correlation, organization, provisioned version
-and expected prior generation. Tenant and workspace come from the token.
+binding operation, installation correlation, organization, CP lifecycle version
+and expected prior generation. Extended bindings also carry the native applied
+authority-plan version, exact expected plan digest, and the digest of a sorted,
+unique covered-version array (at most 4096 entries). Both lifecycle and native
+authority versions must be members. Tenant and workspace come from the token.
 Installation correlation is not an installer credential. Episode, continuation
 and reassignment credentials cannot control or read recovery operations.
 
-The gateway verifies `authority_provisions`, retains its plan digest/revision
-and refuses versions shared by multiple organizations. Coverage is native
+The trusted CP issuer asserts the exact lineage from its own scoped applied
+activation records. The native ledger stores CP versions on attempts and cannot
+independently infer historical organization membership from those attempts.
+The gateway verifies the native version and digest against current
+`authority_provisions`, retains its plan digest/revision, and refuses covered
+versions belonging to another current native provision or recovery scope.
+Coverage is native
 attempts carrying a verified episode version. Legacy unversioned attempts lack
 a source-owned organization binding and remain outside this capability. It
-does not cover an adapter's independent dispatch store.
+does not cover an adapter's independent dispatch store. With every extension
+field absent, a legacy request still selects only the exact current provisioned
+version. The gateway never infers aliases for such a caller.
 
 `GetRecoveryFence` and `ListRecoveryAttempts` require `helm.gateway.read` from
 an active human in the exact operation scope and do not contact providers.
@@ -29,16 +39,27 @@ never uses Stop's cancellation, permit-voiding or exposure-release transitions.
 ## Durable cutoff
 
 Migration 13 adds gateway-owned fences, current scopes, original membership
-and checkpoint correlations under forced tenant row security. Generation
-advances by compare-and-set on the exact workspace/organization/version scope.
+and checkpoint correlations under forced tenant row security. Migration 14
+adds the immutable dual-version binding and exact covered set, backfilling old
+records as singletons. It refuses ambiguous databases with multiple current
+legacy operations for one workspace/organization rather than releasing a hold.
+The supported schema-13 producer already refuses replacement of a held native
+version: its provision trigger rolls back that transaction before a second
+version could become provisioned. The upgrade regression exercises that real
+propose/approve/dispatch refusal, then preserves the singleton read/replay/hold
+through migration. Manually altered or trigger-bypassing multi-scope databases
+require separate reconciliation and are not automatically rewritten.
+Generation advances by compare-and-set on the exact workspace/organization scope.
+The version set itself remains exact: it is not an organization-wide hold.
 Only an exact replay of the current operation is idempotent; stale callers
-cannot replace or acknowledge newer generations.
+cannot replace or acknowledge newer generations. A newer operation must retain
+every previously held version; no generation transition can release an alias.
 
 Fence creation takes the existing tenant control row `FOR UPDATE`. Admission
 and claims hold it `FOR SHARE` through commit. The fence then captures original
 membership and its immutable cutoff digest. It does not bump the tenant version
-or invalidate unrelated permits. Other workspace and organization versions
-remain live. A pre-cutoff claim may begin provider I/O after acknowledgement;
+or invalidate unrelated permits. Other workspaces and versions outside the
+exact set remain live. A pre-cutoff claim may begin provider I/O after acknowledgement;
 its original attempt remains inventoried.
 
 Native authority provisioning takes that same shared tenant control lock before

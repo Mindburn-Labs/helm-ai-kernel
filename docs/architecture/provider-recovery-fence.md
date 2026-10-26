@@ -14,6 +14,8 @@ and expected prior generation. Extended bindings also carry the native applied
 authority-plan version, exact expected plan digest, and the digest of a sorted,
 unique covered-version array (at most 4096 entries). Both lifecycle and native
 authority versions must be members. Tenant and workspace come from the token.
+Recovery details have one closed field set: an extended signed binding cannot
+be presented as a legacy singleton by omitting request extension fields.
 Installation correlation is not an installer credential. Episode, continuation
 and reassignment credentials cannot control or read recovery operations.
 

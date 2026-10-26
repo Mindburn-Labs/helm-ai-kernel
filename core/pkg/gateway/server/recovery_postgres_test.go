@@ -135,3 +135,32 @@ func TestPostgresRecoveryWireBindsExactCPLifecycleLineage(t *testing.T) {
 	_, err = w.effects.BindRecoveryCheckpoint(ctx, withToken(checkpoint, checkpointToken))
 	must(t, err)
 }
+
+func TestPostgresRecoveryWireRefusesExtendedTokenDowngrade(t *testing.T) {
+	w, b := recoveryWireFixture(t)
+	ctx := context.Background()
+	read := w.token("tenant-a", adminOwner, ScopeRead)
+	applied, err := w.client.GetProvisioning(ctx, withToken(&gatewayv1.GetProvisioningRequest{OrgRef: adminOrg}, read))
+	must(t, err)
+	// Lifecycle and authority versions intentionally match: dropping extension
+	// fields must still refuse before an otherwise-valid singleton can commit.
+	b.AuthorityVersionRef = b.VersionRef
+	b.CoveredVersionRefs = []string{"recovery-v0", "recovery-v1"}
+	b.ExpectedPlanDigest = applied.Msg.GetProvisioning().GetPlanDigest()
+	token := w.iss.token(t, testAudience, "tenant-a", adminOwner, ScopeStop, bound("helm_recovery_fence", recoveryFields(b)))
+	legacy := proto.Clone(b).(*gatewayv1.RecoveryBinding)
+	legacy.AuthorityVersionRef, legacy.ExpectedPlanDigest, legacy.CoveredVersionRefs = "", "", nil
+	_, err = w.effects.FenceRecovery(ctx, withToken(&gatewayv1.FenceRecoveryRequest{Binding: legacy}, token))
+	wantRPCError(t, "signed exact set cannot downgrade to singleton", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	legacy.Generation = 1
+	_, err = w.effects.GetRecoveryFence(ctx, withToken(&gatewayv1.GetRecoveryFenceRequest{Binding: legacy}, read))
+	wantRPCError(t, "refused downgrade commits no singleton", err, connect.CodeNotFound, "")
+	// The original full request and single-use authority remain usable.
+	response, err := w.effects.FenceRecovery(ctx, withToken(&gatewayv1.FenceRecoveryRequest{Binding: b}, token))
+	must(t, err)
+	want := proto.Clone(b).(*gatewayv1.RecoveryBinding)
+	want.Generation = 1
+	if !proto.Equal(response.Msg.GetFence().GetBinding(), want) {
+		t.Fatal("full exact-set retry changed signed binding")
+	}
+}

@@ -349,11 +349,20 @@ message RecoveryBinding {
   string operation_id = 1;
   string installation_id = 2;
   string org_ref = 3;
-  // Selects the current provisioned version; never sets an attempt's episode.
+  // Current CP lifecycle version; never sets an attempt's episode. Legacy
+  // callers without fields 6-8 select only this exact provisioned version.
   string version_ref = 4;
   // FenceRecovery uses the expected prior generation (zero initially). Every
   // other operation uses the current acknowledged generation.
   int64 generation = 5;
+  // Retained native applied authority-plan version, which may precede version_ref.
+  string authority_version_ref = 6;
+  // Exact sorted unique CP-applied lineage asserted by the trusted CP issuer.
+  // Native attempts retain CP versions, so this explicit set drives the hold.
+  // It must include both version_ref and authority_version_ref; at most 4096.
+  repeated string covered_version_refs = 7;
+  // Exact current native plan digest. Fields 6-8 must be supplied together.
+  string expected_plan_digest = 8;
 }
 
 // A durable cutoff on native version-bound claims. A pre-cutoff claim may still

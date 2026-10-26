@@ -693,13 +693,22 @@ type RecoveryBinding struct {
 	OperationId    string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
 	InstallationId string                 `protobuf:"bytes,2,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
 	OrgRef         string                 `protobuf:"bytes,3,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
-	// Selects the current provisioned version; never sets an attempt's episode.
+	// Current CP lifecycle version; never sets an attempt's episode. Legacy
+	// callers without fields 6-8 select only this exact provisioned version.
 	VersionRef string `protobuf:"bytes,4,opt,name=version_ref,json=versionRef,proto3" json:"version_ref,omitempty"`
 	// FenceRecovery uses the expected prior generation (zero initially). Every
 	// other operation uses the current acknowledged generation.
-	Generation    int64 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Generation int64 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	// Retained native applied authority-plan version, which may precede version_ref.
+	AuthorityVersionRef string `protobuf:"bytes,6,opt,name=authority_version_ref,json=authorityVersionRef,proto3" json:"authority_version_ref,omitempty"`
+	// Exact sorted unique CP-applied lineage asserted by the trusted CP issuer.
+	// Native attempts retain CP versions, so this explicit set drives the hold.
+	// It must include both version_ref and authority_version_ref; at most 4096.
+	CoveredVersionRefs []string `protobuf:"bytes,7,rep,name=covered_version_refs,json=coveredVersionRefs,proto3" json:"covered_version_refs,omitempty"`
+	// Exact current native plan digest. Fields 6-8 must be supplied together.
+	ExpectedPlanDigest string `protobuf:"bytes,8,opt,name=expected_plan_digest,json=expectedPlanDigest,proto3" json:"expected_plan_digest,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *RecoveryBinding) Reset() {
@@ -765,6 +774,27 @@ func (x *RecoveryBinding) GetGeneration() int64 {
 		return x.Generation
 	}
 	return 0
+}
+
+func (x *RecoveryBinding) GetAuthorityVersionRef() string {
+	if x != nil {
+		return x.AuthorityVersionRef
+	}
+	return ""
+}
+
+func (x *RecoveryBinding) GetCoveredVersionRefs() []string {
+	if x != nil {
+		return x.CoveredVersionRefs
+	}
+	return nil
+}
+
+func (x *RecoveryBinding) GetExpectedPlanDigest() string {
+	if x != nil {
+		return x.ExpectedPlanDigest
+	}
+	return ""
 }
 
 // A durable cutoff on native version-bound claims. A pre-cutoff claim may still
@@ -4647,7 +4677,7 @@ var File_helm_gateway_v1_gateway_proto protoreflect.FileDescriptor
 
 const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\n" +
-	"\x1dhelm/gateway/v1/gateway.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x01\n" +
+	"\x1dhelm/gateway/v1/gateway.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcf\x02\n" +
 	"\x0fRecoveryBinding\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12'\n" +
 	"\x0finstallation_id\x18\x02 \x01(\tR\x0einstallationId\x12\x17\n" +
@@ -4656,7 +4686,10 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"versionRef\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x05 \x01(\x03R\n" +
-	"generation\"\xab\x03\n" +
+	"generation\x122\n" +
+	"\x15authority_version_ref\x18\x06 \x01(\tR\x13authorityVersionRef\x120\n" +
+	"\x14covered_version_refs\x18\a \x03(\tR\x12coveredVersionRefs\x120\n" +
+	"\x14expected_plan_digest\x18\b \x01(\tR\x12expectedPlanDigest\"\xab\x03\n" +
 	"\rRecoveryFence\x12:\n" +
 	"\abinding\x18\x01 \x01(\v2 .helm.gateway.v1.RecoveryBindingR\abinding\x12\x1f\n" +
 	"\vplan_digest\x18\x02 \x01(\tR\n" +

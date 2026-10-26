@@ -65,8 +65,10 @@ type nodeState struct {
 // one (toRefusal), is a definite refusal: nothing was applied. Any other error
 // is a failure of the database.
 //
-// Locks follow ADR-0001 §1 where the algorithm allows it: principals, then
-// mandates from the root down, then effect-type rows that change, then limits.
+// Locks begin with the tenant control row, before the organization advisory
+// lock and applied-plan row. Authority locks then follow ADR-0001 §1 where
+// the algorithm allows it: principals, mandates from the root down, changing
+// effect-type rows and limits.
 // Two plans for one organization are serialized by an advisory lock, and a plan
 // that meets a concurrent admission's locks waits for it, or one of them is
 // chosen as a deadlock victim and fails as a database error, which is retried.
@@ -75,6 +77,15 @@ func (a *Adapter) apply(ctx context.Context, tx *authorityrows.Tx, in applyInput
 	plan := c.Plan
 	narrow := plan.Schema == effectargs.AuthorityNarrow
 	sqlTx := tx.SQL()
+	// Admission/dispatch and recovery use this same control row. Taking it
+	// before the org locks prevents an applied-plan writer from holding the
+	// provision row while waiting for a recovery fence's tenant lock.
+	if err := sqlTx.QueryRowContext(ctx, `SELECT 1 FROM authority_tenants WHERE tenant_id=$1 FOR SHARE`, tx.TenantID()).Scan(new(int)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: tenant %q", authorityrows.ErrNotFound, tx.TenantID())
+		}
+		return err
+	}
 
 	if _, err := sqlTx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		"authority_provisions:"+tx.TenantID()+":"+plan.OrgRef); err != nil {

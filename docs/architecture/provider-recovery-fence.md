@@ -41,6 +41,11 @@ or invalidate unrelated permits. Other workspace and organization versions
 remain live. A pre-cutoff claim may begin provider I/O after acknowledgement;
 its original attempt remains inventoried.
 
+Native authority provisioning takes that same shared tenant control lock before
+its organization advisory lock and applied-plan row. This preserves one order
+with recovery's exclusive tenant lock and later provision read, without changing
+authority versions or the organization plan's atomic application.
+
 Triggers fence older attempt writers and model claims, rolling back late permit
 consumption. Read-only idempotency lookup can still find original attempts.
 Provisioning cannot replace the held version or assign it to a neighbor org.

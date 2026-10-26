@@ -268,3 +268,31 @@ func TestPostgresRecoveryHumanHandoffRemainsUnresolved(t *testing.T) {
 	_, err = svc.BindRecoveryCheckpoint(ctx, operator, stopToken(), fence.RecoveryBinding, strings.Repeat("a", 64), fence.InventoryWatermark)
 	wantRefusal(t, "unresolved human handoff checkpoint", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
 }
+
+func TestPostgresRecoveryCheckpointStorageEnforcesTenantRLS(t *testing.T) {
+	f, svc, _, in := recoveryFixture(t)
+	ctx := context.Background()
+	fence, _, err := svc.FenceRecovery(ctx, operator, stopToken(), in)
+	must(t, err)
+	_, err = svc.BindRecoveryCheckpoint(ctx, operator, stopToken(), fence.RecoveryBinding, strings.Repeat("a", 64), fence.InventoryWatermark)
+	must(t, err)
+	var visible int
+	must(t, f.runtime.QueryRow(`SELECT count(*) FROM authority_recovery_checkpoints`).Scan(&visible))
+	if visible != 0 {
+		t.Fatalf("unscoped restricted runtime disclosed %d recovery checkpoints", visible)
+	}
+	err = svc.inTenant(ctx, tenantB, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT count(*) FROM authority_recovery_checkpoints WHERE operation_id=$1`, in.OperationID).Scan(&visible)
+	})
+	must(t, err)
+	if visible != 0 {
+		t.Fatal("other tenant read an original recovery checkpoint")
+	}
+	err = svc.inTenant(ctx, tenantB, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO authority_recovery_checkpoints(tenant_id,operation_id,checkpoint_digest,inventory_watermark) VALUES ($1,$2,$3,$4)`, tenantA, in.OperationID, strings.Repeat("b", 64), fence.InventoryWatermark)
+		return err
+	})
+	if err == nil {
+		t.Fatal("other tenant wrote into an existing recovery operation")
+	}
+}

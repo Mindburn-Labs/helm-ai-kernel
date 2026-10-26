@@ -235,3 +235,36 @@ func TestPostgresRecoveryConcurrentClaimsHaveOneCutoff(t *testing.T) {
 		t.Fatalf("claimed=%d calls=%d", claimed, fake.dispatched.Load())
 	}
 }
+
+func TestPostgresRecoveryHumanHandoffRemainsUnresolved(t *testing.T) {
+	f, svc, fake, in := recoveryFixture(t)
+	ctx := context.Background()
+	worker := episodeWorker("handoff", "recovery-v1")
+	fake.set(func(adapters.Effect) adapters.DispatchResult {
+		return adapters.DispatchResult{Status: adapters.DispatchIndefinite}
+	}, func(adapters.Effect) adapters.ObserveResult {
+		return adapters.ObserveResult{Outcome: adapters.OutcomeUnknown}
+	})
+	a := f.propose(worker, workerNote("human-handoff"))
+	a, _, err := svc.Dispatch(ctx, worker, a.ID)
+	must(t, err)
+	fence, _, err := svc.FenceRecovery(ctx, operator, stopToken(), in)
+	must(t, err)
+	resolved, _, err := svc.Reconcile(ctx, tenantA, workspace, a.ID, true)
+	must(t, err)
+	if !resolved {
+		t.Fatal("native final reconciliation did not hand off")
+	}
+	current, err := svc.Get(ctx, worker, a.ID)
+	must(t, err)
+	if current.State != "ESCALATED_TO_HUMAN" || current.Permit.ConsumedAt == nil || fake.dispatched.Load() != 1 {
+		t.Fatalf("human handoff changed original claim: %+v", current)
+	}
+	fence, err = svc.GetRecoveryFence(ctx, operator, fence.RecoveryBinding)
+	must(t, err)
+	if fence.UnresolvedCount != 1 {
+		t.Fatal("human handoff was mislabeled as a resolved effect")
+	}
+	_, err = svc.BindRecoveryCheckpoint(ctx, operator, stopToken(), fence.RecoveryBinding, strings.Repeat("a", 64), fence.InventoryWatermark)
+	wantRefusal(t, "unresolved human handoff checkpoint", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+}

@@ -199,7 +199,8 @@ func readRecovery(ctx context.Context, tx *sql.Tx, caller Caller, in RecoveryBin
 	// original authority/effect identities enter the watermark; no arguments,
 	// provider tokens, secret values or provider response bodies enter it.
 	var material string
-	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER (WHERE a.state IN ('DISPATCHING','DISPATCHED','UNKNOWN')
+	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER (WHERE a.state IN ('DISPATCHING','DISPATCHED','UNKNOWN','ESCALATED_TO_HUMAN')
+		 OR (p.consumed_at IS NOT NULL AND a.outcome IS NULL)
 		 OR m.state IN ('HELD','ESTIMATED','UNRESOLVED_FINAL')),
 		coalesce(jsonb_agg(jsonb_build_array(a.attempt_id,a.version,a.state,a.outcome,a.effect_type,a.target,
 		 encode(a.argument_digest,'hex'),encode(a.approval_digest,'hex'),a.mandate_id,a.episode_id,a.case_id,

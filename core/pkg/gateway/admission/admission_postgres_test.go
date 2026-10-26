@@ -86,6 +86,7 @@ func newFixture(t *testing.T) *fixture {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(tables, ", ") + ` TO ` + role,
 		`REVOKE UPDATE ON authority_postings, authority_provision_limits FROM ` + role,
+		`REVOKE UPDATE ON authority_recovery_fences,authority_recovery_members,authority_recovery_checkpoints FROM ` + role,
 		// Admission writes distinct values with INSERT ... ON CONFLICT DO
 		// NOTHING and reads them with EXISTS, and never updates a token replay
 		// row: the grants ADR-0004 (as amended 2026-09-26) and the chart's

@@ -167,6 +167,13 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	if err != nil {
 		return nil, err
 	}
+	var organizationVersion sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT organization_version_id FROM authority_effect_attempts WHERE tenant_id=$1 AND attempt_id=$2`, a.tenantID, a.id).Scan(&organizationVersion); err != nil {
+		return nil, err
+	}
+	if err := allowRecoveryVersion(ctx, tx, a.tenantID, a.workspaceID, organizationVersion.String); err != nil {
+		return nil, err
+	}
 	stops, err := activeStops(ctx, tx, a.tenantID, a.effectType, auth)
 	if err != nil {
 		return nil, err

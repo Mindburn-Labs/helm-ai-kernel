@@ -4,6 +4,11 @@
 # count against a real Postgres. A skip is a failure, not a pass.
 #
 # <package dir under core> <test> <count> <race|plain>
+pkg/gateway/admission TestPostgresRecoveryScopeHoldsOriginalAuthorityAndKeepsNeighborsLive 1 race
+pkg/gateway/admission TestPostgresRecoveryTracksLateSendUnknownAndCheckpointGeneration 1 race
+pkg/gateway/admission TestPostgresRecoveryConcurrentClaimsHaveOneCutoff 3 race
+pkg/gateway/admission TestPostgresRecoveryProcessCrashReconcilesOriginalWithoutDuplicate 1 race
+pkg/gateway/server TestPostgresRecoveryWireRequiresExactCurrentOperatorAuthority 1 race
 pkg/gateway/admission TestPostgresDeclaredArgumentsRejectBeforeReservationAndPermit 1 race
 pkg/gateway/server TestPostgresApprovalBindsRepositoryAndBranchBase 3 race
 pkg/gateway/server TestPostgresDraftApprovalBindsReviewedDestination 3 race

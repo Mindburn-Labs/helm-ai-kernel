@@ -38,6 +38,8 @@ github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAw
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2-0.20261018155926-15f60c38d39a h1:CGUMvMoy4wkMjvjFBH+68MoWbAgbtLyWc7x7fX0Aj98=
 github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2-0.20261018155926-15f60c38d39a/go.mod h1:PPXUTWs2uvy7ihpII8bOOjgIJ5fV7xx4T540zVPzCqY=
+github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2-0.20261026144458-38fa711d08a6 h1:jXxy5gtjLn2RFrkry4Ub655TbCJuNkUjbO8DZUmYl2I=
+github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2-0.20261026144458-38fa711d08a6/go.mod h1:5J0KKLHC1jvaRULIgRj6HO3SZgnqkTt6v7vmlM/7ZZ8=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=

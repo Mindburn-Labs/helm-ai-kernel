@@ -1,5 +1,9 @@
 # Gateway effect API (contract 1)
 
+The initial [provider recovery fence](provider-recovery-fence.md) holds exact
+native organization versions at the durable dispatch claim. It does not enable
+provider backup, restore or resume.
+
 <!-- quantum_posture: this note describes a wire contract that carries SHA-256
 digests as opaque values and no signatures or keys. It adds no cryptographic
 control and makes no post-quantum claim; token verification is ADR-0005's. -->

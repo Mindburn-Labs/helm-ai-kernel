@@ -315,6 +315,82 @@ service EffectGatewayService {
   // Approving the resulting attempt takes a decide token bound to that
   // attempt, as for any other.
   rpc Lift(LiftRequest) returns (LiftResponse);
+
+  // Fence one native organization version, preserving original attempts and
+  // permits. Requires single-use helm.gateway.stop bound to the exact request
+  // as helm_recovery_fence. No installer or episode credential controls it.
+  // This capability does not enable provider backup, restore or resume.
+  // Token scope: helm.gateway.stop.
+  rpc FenceRecovery(FenceRecoveryRequest) returns (FenceRecoveryResponse);
+
+  // Read the current exact fence with helm.gateway.read as an active human.
+  // Token scope: helm.gateway.read.
+  rpc GetRecoveryFence(GetRecoveryFenceRequest) returns (GetRecoveryFenceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Bind a CP content digest to a current native inventory watermark. Refuses
+  // in-flight/unknown effects. Requires a single-use helm.gateway.stop token
+  // bound as helm_recovery_checkpoint. This is correlation, not qualification
+  // of snapshot consistency, restore eligibility or a signed recovery receipt.
+  // Token scope: helm.gateway.stop.
+  rpc BindRecoveryCheckpoint(BindRecoveryCheckpointRequest) returns (BindRecoveryCheckpointResponse);
+
+  // Page the immutable original-attempt membership, 100 IDs per page. Existing
+  // Get/Observe authorization remains mandatory for each attempt.
+  // Token scope: helm.gateway.read.
+  rpc ListRecoveryAttempts(ListRecoveryAttemptsRequest) returns (ListRecoveryAttemptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// Exact selectors; tenant/workspace always come from the verified token.
+message RecoveryBinding {
+  string operation_id = 1;
+  string installation_id = 2;
+  string org_ref = 3;
+  // Selects the current provisioned version; never sets an attempt's episode.
+  string version_ref = 4;
+  // FenceRecovery uses the expected prior generation (zero initially). Every
+  // other operation uses the current acknowledged generation.
+  int64 generation = 5;
+}
+
+// A durable cutoff on native version-bound claims. A pre-cutoff claim may still
+// send after acknowledgement and remains in original-attempt membership.
+message RecoveryFence {
+  RecoveryBinding binding = 1;
+  string plan_digest = 2;
+  int64 authority_revision = 3;
+  string inventory_watermark = 4;
+  int64 inventory_count = 5;
+  int64 unresolved_count = 6;
+  string checkpoint_digest = 7;
+  string checkpoint_watermark = 8;
+  // Immutable digest of original-attempt membership at the dispatch cutoff.
+  string cutoff_watermark = 9;
+}
+message FenceRecoveryRequest { RecoveryBinding binding = 1; }
+message FenceRecoveryResponse {
+  RecoveryFence fence = 1;
+  bool existing = 2;
+}
+message GetRecoveryFenceRequest { RecoveryBinding binding = 1; }
+message GetRecoveryFenceResponse { RecoveryFence fence = 1; }
+message BindRecoveryCheckpointRequest {
+  RecoveryBinding binding = 1;
+  string checkpoint_digest = 2;
+  string inventory_watermark = 3;
+}
+message BindRecoveryCheckpointResponse { RecoveryFence fence = 1; }
+message ListRecoveryAttemptsRequest {
+  RecoveryBinding binding = 1;
+  string after_attempt_id = 2;
+}
+message ListRecoveryAttemptsResponse {
+  repeated string attempt_ids = 1;
+  // Empty means the final page. Nonempty pages can be replayed unchanged.
+  string next_after_attempt_id = 2;
 }
 
 // ProposeRequest proposes one effect under one of the principal's mandates.

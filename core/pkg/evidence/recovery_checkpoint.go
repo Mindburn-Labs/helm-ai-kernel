@@ -1,3 +1,4 @@
+// quantum_posture: this contract verifies classical Ed25519 DSSE signatures only.
 package evidence
 
 import (

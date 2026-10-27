@@ -20,7 +20,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
-	"github.com/google/uuid"
 )
 
 const (
@@ -181,8 +180,27 @@ func checkpointInvalid(message string) error {
 	return fmt.Errorf("%w: %s", ErrRecoveryCheckpointInvalid, message)
 }
 func checkpointUUID(value string) bool {
-	id, err := uuid.Parse(value)
-	return err == nil && id != uuid.Nil && id.String() == value
+	// The schema requires only nonzero, lowercase, hyphenated 128-bit IDs.
+	// Do not add UUID version/variant restrictions or pull hardware/network
+	// discovery into the shared contracts dependency graph to parse bytes.
+	if len(value) != 36 {
+		return false
+	}
+	nonzero := false
+	for i := range len(value) {
+		b := value[i]
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if b != '-' {
+				return false
+			}
+			continue
+		}
+		if !(b >= '0' && b <= '9' || b >= 'a' && b <= 'f') {
+			return false
+		}
+		nonzero = nonzero || b != '0'
+	}
+	return nonzero
 }
 func checkpointInteger(value uint64) bool  { return value <= RecoveryCheckpointMaxInteger }
 func checkpointPositive(value uint64) bool { return value > 0 && checkpointInteger(value) }

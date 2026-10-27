@@ -72,6 +72,40 @@ func TestRecoveryCheckpointGoldenConstructionAndPrivateContent(t *testing.T) {
 	}
 }
 
+func TestRecoveryCheckpointUUIDWireForm(t *testing.T) {
+	// Nonzero lowercase canonical bytes are the whole contract; UUID version
+	// and variant bits are deliberately unconstrained, as in the schema.
+	for _, value := range []string{
+		"00000000-0000-0000-0000-000000000001",
+		"ffffffff-ffff-ffff-ffff-ffffffffffff",
+		"12345678-9abc-4def-8123-456789abcdef",
+	} {
+		if !checkpointUUID(value) {
+			t.Fatalf("valid canonical ID refused: %q", value)
+		}
+	}
+	canonical := "12345678-9abc-4def-8123-456789abcdef"
+	invalid := []string{
+		"", "00000000-0000-0000-0000-000000000000", canonical[:35], canonical + "0",
+		strings.ReplaceAll(canonical, "-", ""), "{" + canonical + "}", "urn:uuid:" + canonical,
+		strings.ToUpper(canonical), " " + canonical, canonical + "\n",
+	}
+	for i := range len(canonical) {
+		value := []byte(canonical)
+		if value[i] == '-' {
+			value[i] = '0'
+		} else {
+			value[i] = 'g'
+		}
+		invalid = append(invalid, string(value))
+	}
+	for _, value := range invalid {
+		if checkpointUUID(value) {
+			t.Fatalf("noncanonical ID accepted: %q", value)
+		}
+	}
+}
+
 func TestRecoveryCheckpointStrictWireRefusals(t *testing.T) {
 	raw := checkpointContractPayload(t)
 	cases := map[string][]byte{

@@ -1,5 +1,7 @@
 # Provider recovery checkpoint evidence v1
 
+<!-- quantum_posture: this contract uses classical Ed25519 DSSE signatures only. -->
+
 This contract is a typed evidence primitive. It does not capture or retain a
 checkpoint, observe Kubernetes or storage, call a signer, or authorize backup,
 restore, dispatch or resume. Those producers remain separate integrations.
@@ -14,6 +16,8 @@ stay within the interoperable `2^53-1` range. Go validation additionally
 enforces byte/array bounds, ordered identity sets and cross-field bindings.
 Integer wire values use unsigned decimal JSON integer literals; fractional
 and exponent forms refuse even when they denote a mathematical integer.
+UUID fields accept exactly nonzero lowercase hexadecimal IDs in the hyphenated
+8-4-4-4-12 form. They impose no UUID version or variant restriction.
 
 `contracts.EncodeRecoveryCheckpoint` validates and deterministically encodes a
 descriptor. `contracts.DecodeRecoveryCheckpoint` strictly decodes bytes while
@@ -57,6 +61,45 @@ interpret or make a custody claim about those bytes. Public descriptors contain
 hashes and opaque identities; they contain no raw content, credential/token
 values, lease tokens, private keys or storage locators. Source metadata and
 hash claims still require their owning producers and scoped private custody.
+
+The shipped offline CLI exposes these operations through
+`helm-ai-kernel evidence checkpoint`. `prepare --descriptor descriptor.json`
+prints a public JSON bundle containing canonical payload and DSSE PAE as
+base64. Use `--emit payload` or `--emit pae` for exact bytes on stdout.
+`assemble --payload payload.json --key-id KEY_ID --signature-hex SIGNATURE`
+packages the explicitly supplied external signature without verifying it or
+claiming signing authority. It preserves the exact validated payload bytes.
+The released signer still needs its separate purpose-specific integration;
+preparing material does not establish that an existing signer accepts it.
+
+`verify` requires every independent trust input explicitly:
+
+```sh
+helm-ai-kernel evidence checkpoint verify \
+  --envelope envelope.json --expected trusted-descriptor.json \
+  --public-key-hex "$TRUSTED_PUBLIC_KEY_HEX" --key-id "$TRUSTED_KEY_ID" \
+  --purpose provider-recovery-checkpoint \
+  --payload-type application/vnd.helm.provider-recovery-checkpoint.v1+json \
+  --valid-from-unix "$TRUSTED_VALID_FROM" --valid-until-unix "$TRUSTED_VALID_UNTIL" \
+  --verify-at-unix "$HISTORICAL_VERIFICATION_INSTANT" --revoked=false
+```
+
+The caller must obtain the key, revocation/validity decision and complete
+expected descriptor through authenticated independent owners. The CLI neither
+authenticates those files' provenance nor discovers trust from the envelope.
+It reads no clock and performs no network, signer, key-generation or storage
+operation. Missing policy inputs refuse. Inputs are bounded regular local
+files; descriptor and envelope JSON use the same closed codecs as the library.
+Duplicate/unknown flags and positional inputs refuse. Errors omit input paths,
+values and file contents. The commands write only stdout/stderr.
+
+Successful verification reports `signed_descriptor_only` and hashes by default.
+Adding `--content snapshot.bin` verifies the supplied private bytes' exact hash
+and length and reports `signed_descriptor_and_supplied_content`. Results never
+contain those bytes or local paths. Neither scope proves capture consistency,
+retention, private-store custody, runtime installation, backup or restore/resume
+authority. Use `--frozen-envelope-digest sha256:...` when independently retained
+state already pins exact envelope bytes. The CLI does not consume replay state.
 
 The reference vector in
 `core/pkg/evidence/testdata/recovery-checkpoint.v1.json` was constructed using

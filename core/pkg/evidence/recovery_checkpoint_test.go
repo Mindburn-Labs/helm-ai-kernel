@@ -1,3 +1,4 @@
+// quantum_posture: these tests exercise classical Ed25519 DSSE verification only.
 package evidence
 
 import (

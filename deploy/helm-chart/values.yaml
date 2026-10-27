@@ -367,13 +367,24 @@ helm:
     runtimeActions: []
 
 # Effect gateway (helm-gateway serve, Zone C; HELM-751, HELM-789). Off by
-# default. Enabled, it adds a Deployment from the same image and tag as the
-# kernel, a Service on 8443, its own ServiceAccount, a NetworkPolicy, and a
-# pre-install/pre-upgrade hook Job that runs `helm-gateway migrate`. See
+# default. Enabled, it adds a Deployment using the kernel image unless
+# serving is explicitly selected, a Service on 8443, its own ServiceAccount,
+# a NetworkPolicy, and a pre-install/pre-upgrade hook Job that runs
+# `helm-gateway migrate`. See
 # docs/KUBERNETES_DEPLOYMENT.md, "Effect gateway (helm-gateway)".
 gateway:
   enabled: false
   replicaCount: 1
+  # Optional serving-only composition. Set repository, exactly one of tag or
+  # digest, and an absolute executable together. Empty keeps the shared image
+  # and /usr/local/bin/helm-gateway. The executable must accept the existing
+  # Kernel `serve` arguments. Migration always uses the shared Kernel image.
+  serving:
+    image:
+      repository: ""
+      tag: ""
+      digest: "" # Required for an override when helm.production=true.
+    executable: ""
   podAnnotations: {}
   resources:
     limits:

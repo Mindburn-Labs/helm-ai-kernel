@@ -40,9 +40,9 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: helm-gateway
-          image: {{ include "helm-ai-kernel.image" . | quote }}
+          image: {{ include "helm-ai-kernel.gatewayServingImage" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/usr/local/bin/helm-gateway"]
+          command: [{{ default "/usr/local/bin/helm-gateway" $g.serving.executable | quote }}]
           args:
             - serve
             {{- if $g.tls.devInsecureLoopback }}

@@ -58,6 +58,12 @@ type fixture struct {
 var human = Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "human-a", ActorID: actor}
 
 func newFixture(t *testing.T) *fixture {
+	return newFixtureAtVersion(t, HeadVersion())
+}
+
+// newFixtureAtVersion models an installed older gateway schema using the same
+// source-owned migrations and restricted runtime role as the normal fixture.
+func newFixtureAtVersion(t *testing.T, version int) *fixture {
 	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
@@ -78,7 +84,21 @@ func newFixture(t *testing.T) *fixture {
 	must(t, err)
 	t.Cleanup(func() { _ = owner.Close() })
 	ctx := context.Background()
-	must(t, Migrate(ctx, owner))
+	if version == HeadVersion() {
+		must(t, Migrate(ctx, owner))
+	} else {
+		if version < 1 || version > HeadVersion() {
+			t.Fatal("invalid fixture migration version")
+		}
+		_, err = owner.ExecContext(ctx, journalDDL)
+		must(t, err)
+		for _, migration := range migrations {
+			if migration.version > version {
+				break
+			}
+			must(t, apply(ctx, owner, migration))
+		}
+	}
 
 	tables := append(append([]string{}, authorityrows.Tables...), Tables...)
 	for _, statement := range []string{

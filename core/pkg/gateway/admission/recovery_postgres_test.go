@@ -2,13 +2,16 @@ package admission
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/google/uuid"
 )
@@ -36,6 +39,178 @@ func recoveryFixture(t *testing.T) (*fixture, *Service, *scripted, RecoveryBindi
 	f.rootMandate(tenantA, "agent-a", skeletonTerms(f.now))
 	fake := &scripted{}
 	return f.fixture, f.withAdapter(fake), fake, RecoveryBinding{OperationID: uuid.NewString(), InstallationID: "fixture-installation", OrgRef: planOrg, OrganizationVersionID: "recovery-v1"}
+}
+
+func TestPostgresRecoveryCoversExactCPLifecycleLineage(t *testing.T) {
+	f, svc, fake, in := recoveryFixture(t)
+	ctx := context.Background()
+	applied, err := provision.GetProvisioning(ctx, f.rows, tenantA, in.OrgRef)
+	must(t, err)
+	in.AuthorityVersionID, in.ExpectedPlanDigest = "recovery-v1", applied.Digest
+	in.OrganizationVersionID = "recovery-v2"
+	in.CoveredVersionIDs = []string{"recovery-v0", "recovery-v1", "recovery-v2"}
+	var held []struct {
+		caller  Caller
+		attempt Attempt
+	}
+	for _, version := range in.CoveredVersionIDs {
+		worker := episodeWorker("episode-"+version, version)
+		held = append(held, struct {
+			caller  Caller
+			attempt Attempt
+		}{worker, f.propose(worker, workerNote("work-"+version))})
+	}
+	// An exact version set leaves a nonmember version live even in this org's
+	// workspace. It is not an inferred organization-wide or tenant-wide stop.
+	unlisted := episodeWorker("unlisted", "recovery-v3")
+	other := f.propose(unlisted, workerNote("unlisted"))
+	foreignWorkspace := episodeWorker("foreign-workspace", "recovery-v2")
+	foreignWorkspace.WorkspaceID = "ws-other"
+	foreign := f.propose(foreignWorkspace, workerNote("foreign-workspace"))
+	bad := in
+	bad.ExpectedPlanDigest = strings.Repeat("b", 64)
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), bad)
+	wantRefusal(t, "different native plan", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	bad = in
+	bad.CoveredVersionIDs = []string{"neighbor-v1", "recovery-v1", "recovery-v2"}
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), bad)
+	wantRefusal(t, "foreign native version in CP set", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	legacy := in
+	legacy.AuthorityVersionID, legacy.ExpectedPlanDigest, legacy.CoveredVersionIDs = "", "", nil
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), legacy)
+	wantRefusal(t, "legacy cannot infer aliases", err, CodeNotFound, "")
+	fence, _, err := svc.FenceRecovery(ctx, operator, stopToken(), in)
+	must(t, err)
+	if fence.InventoryCount != int64(len(held)) || fence.AuthorityVersionID != "recovery-v1" || fence.OrganizationVersionID != "recovery-v2" {
+		t.Fatalf("lineage fence=%+v", fence)
+	}
+	neighborPlan, err := provision.GetProvisioning(ctx, f.rows, tenantA, "org:neighbor")
+	must(t, err)
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), RecoveryBinding{
+		OperationID: uuid.NewString(), InstallationID: in.InstallationID, OrgRef: "org:neighbor", OrganizationVersionID: "neighbor-v2",
+		AuthorityVersionID: "neighbor-v1", ExpectedPlanDigest: neighborPlan.Digest,
+		CoveredVersionIDs: []string{"neighbor-v1", "neighbor-v2", "recovery-v0"},
+	})
+	wantRefusal(t, "foreign held alias cannot be reassigned", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	for _, item := range held {
+		_, _, err := svc.Dispatch(ctx, item.caller, item.attempt.ID)
+		wantRefusal(t, "held lineage claim", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+		if _, _, err := svc.Propose(ctx, item.caller, workerNote("late-"+item.caller.Episode.OrganizationVersionID)); err == nil {
+			t.Fatal("new lineage attempt crossed hold")
+		}
+	}
+	for _, item := range []struct {
+		caller  Caller
+		attempt Attempt
+	}{{unlisted, other}, {foreignWorkspace, foreign}} {
+		_, _, err := svc.Dispatch(ctx, item.caller, item.attempt.ID)
+		must(t, err)
+	}
+	if fake.dispatched.Load() != 2 {
+		t.Fatalf("nonmember transport calls=%d", fake.dispatched.Load())
+	}
+	ids, err := svc.ListRecoveryAttempts(ctx, operator, fence.RecoveryBinding, "")
+	must(t, err)
+	if len(ids) != len(held) {
+		t.Fatalf("original lineage membership=%v", ids)
+	}
+	changed := fence.RecoveryBinding
+	changed.CoveredVersionIDs = []string{"recovery-v1", "recovery-v2"}
+	_, err = svc.GetRecoveryFence(ctx, operator, changed)
+	wantRefusal(t, "read requires immutable membership", err, CodeNotFound, "")
+	changed.OperationID, changed.Generation = uuid.NewString(), fence.Generation
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), changed)
+	wantRefusal(t, "new generation cannot release old alias", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	// Generation belongs to the org, even if a new CP lifecycle selector is
+	// presented. The exact prior covered set cannot be superseded at generation 0.
+	changed = in
+	changed.OperationID, changed.OrganizationVersionID = uuid.NewString(), "recovery-v0"
+	_, _, err = svc.FenceRecovery(ctx, operator, stopToken(), changed)
+	wantRefusal(t, "generation cannot reset under older CP version", err, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	retry, existing, err := svc.FenceRecovery(ctx, operator, stopToken(), in)
+	must(t, err)
+	if !existing || retry.CutoffWatermark != fence.CutoffWatermark {
+		t.Fatal("exact typed replay changed cutoff")
+	}
+	_, err = svc.BindRecoveryCheckpoint(ctx, operator, stopToken(), fence.RecoveryBinding, strings.Repeat("a", 64), fence.InventoryWatermark)
+	must(t, err)
+}
+
+func TestPostgresRecoveryVersionLineageUpgradesLegacySingleton(t *testing.T) {
+	f := newPlanFixtureWithFixture(t, newFixtureAtVersion(t, 13))
+	ctx := context.Background()
+	raw := f.plan(effectargs.AuthorityProvision, "", "legacy-v1", nil)
+	a, _, err := f.svc.Propose(ctx, organization, planProposal("legacy-provision", effectargs.AuthorityProvision, raw))
+	must(t, err)
+	a, _, err = f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), withProof(approval(a, "legacy native provision"), stepUpProof()))
+	must(t, err)
+	_, _, err = f.svc.Dispatch(ctx, workload, a.ID)
+	must(t, err)
+	applied := f.provisioning(tenantA)
+	emptyMembership := sha256.Sum256([]byte("[]"))
+	legacy := RecoveryBinding{OperationID: uuid.NewString(), InstallationID: "legacy-installation", OrgRef: planOrg, OrganizationVersionID: "legacy-v1", Generation: 1}
+	// Model the rows an already-installed schema-13 binary committed. The
+	// current binary cannot create its new contract against that old schema.
+	err = f.svc.inTenant(ctx, tenantA, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO authority_recovery_fences
+			(tenant_id,workspace_id,org_ref,organization_version_id,operation_id,installation_id,generation,plan_digest,authority_revision,requested_by,cutoff_watermark)
+			VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,$9,$10)`, tenantA, workspace, planOrg, "legacy-v1", legacy.OperationID, legacy.InstallationID, applied.Digest, applied.Revision, operator.PrincipalID, fmt.Sprintf("%x", emptyMembership))
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO authority_recovery_scopes(tenant_id,workspace_id,org_ref,organization_version_id,operation_id,generation) VALUES($1,$2,$3,$4,$5,1)`, tenantA, workspace, planOrg, "legacy-v1", legacy.OperationID)
+		return err
+	})
+	must(t, err)
+	// A schema-13 hold already forbids the native transition that could create
+	// another current scope at a different version of this same organization.
+	// Use the real propose/approve/dispatch path while schema 13 is still active.
+	nextPlan := f.plan(effectargs.AuthorityProvision, applied.Digest, "legacy-v2", nil)
+	next, _, err := f.svc.Propose(ctx, organization, planProposal("legacy-held-provision-v2", effectargs.AuthorityProvision, nextPlan))
+	must(t, err)
+	next, _, err = f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), withProof(approval(next, "native held version cannot change"), stepUpProof()))
+	must(t, err)
+	blocked, _, err := f.svc.Dispatch(ctx, workload, next.ID)
+	must(t, err)
+	stillApplied := f.provisioning(tenantA)
+	if blocked.State != "UNKNOWN" || stillApplied.VersionRef != "legacy-v1" || stillApplied.Digest != applied.Digest || stillApplied.Revision != applied.Revision {
+		t.Fatalf("schema-13 hold allowed native plan replacement: attempt=%+v provision=%+v", blocked, stillApplied)
+	}
+	must(t, Migrate(ctx, f.owner))
+	version, err := SchemaVersion(ctx, f.runtime)
+	must(t, err)
+	if version != 14 {
+		t.Fatalf("upgraded schema=%d", version)
+	}
+	read, err := f.svc.GetRecoveryFence(ctx, operator, legacy)
+	must(t, err)
+	if recoveryVersionJSON(read.RecoveryBinding) != `["legacy-v1"]` || read.ExpectedPlanDigest != "" {
+		t.Fatalf("legacy scope broadened: %+v", read)
+	}
+	retry := legacy
+	retry.Generation = 0
+	_, existing, err := f.svc.FenceRecovery(ctx, operator, stopToken(), retry)
+	must(t, err)
+	if !existing {
+		t.Fatal("legacy exact replay lost after migration")
+	}
+	f.rootMandate(tenantA, "agent-a", skeletonTerms(f.now))
+	svc := f.withAdapter(&scripted{})
+	_, _, err = svc.Propose(ctx, episodeWorker("legacy-held", "legacy-v1"), workerNote("legacy-held"))
+	if err == nil {
+		t.Fatal("migrated singleton did not hold original version")
+	}
+	typed := legacy
+	typed.OperationID, typed.OrganizationVersionID = uuid.NewString(), "legacy-v2"
+	typed.AuthorityVersionID, typed.ExpectedPlanDigest = "legacy-v1", applied.Digest
+	typed.CoveredVersionIDs = []string{"legacy-v1", "legacy-v2"}
+	upgraded, _, err := svc.FenceRecovery(ctx, operator, stopToken(), typed)
+	must(t, err)
+	if upgraded.Generation != 2 {
+		t.Fatalf("upgraded org generation=%d", upgraded.Generation)
+	}
+	_, err = svc.GetRecoveryFence(ctx, operator, legacy)
+	wantRefusal(t, "legacy operation superseded by typed generation", err, CodeNotFound, "")
 }
 
 func TestPostgresRecoveryScopeHoldsOriginalAuthorityAndKeepsNeighborsLive(t *testing.T) {

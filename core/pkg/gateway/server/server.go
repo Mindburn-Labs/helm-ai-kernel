@@ -37,17 +37,27 @@ type Server struct {
 // A request message is capped at MaxMessageBytes after decompression, and the
 // request body at MaxBodyBytes on the wire, both before the message reaches a
 // handler, so an unauthenticated caller cannot make the gateway buffer or
-// inflate more than that. Propose alone has the larger caps of
+// inflate more than that. Propose has the larger caps of
 // MaxProposeMessageBytes and MaxProposeBodyBytes, because it alone carries an
-// authority plan.
+// authority plan. Recovery RPCs have separate bounded caps for 4096 version IDs.
 func (s *Server) Handler() (string, http.Handler) {
 	path, handler := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxMessageBytes))
 	_, propose := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxProposeMessageBytes))
+	_, recovery := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxRecoveryMessageBytes))
 	handler = http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
 	propose = http.MaxBytesHandler(withTLSState(propose), MaxProposeBodyBytes)
+	recovery = http.MaxBytesHandler(withTLSState(recovery), MaxRecoveryBodyBytes)
 	return path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == gatewayv1.EffectGatewayServiceProposeProcedure {
 			propose.ServeHTTP(w, r)
+			return
+		}
+		switch r.URL.Path {
+		case gatewayv1.EffectGatewayServiceFenceRecoveryProcedure,
+			gatewayv1.EffectGatewayServiceGetRecoveryFenceProcedure,
+			gatewayv1.EffectGatewayServiceListRecoveryAttemptsProcedure,
+			gatewayv1.EffectGatewayServiceBindRecoveryCheckpointProcedure:
+			recovery.ServeHTTP(w, r)
 			return
 		}
 		handler.ServeHTTP(w, r)
@@ -70,6 +80,12 @@ const MaxProposeMessageBytes = (effectargs.MaxPlanBytes+2)/3*4 + 64<<10
 
 // MaxProposeBodyBytes caps a Propose body as sent.
 const MaxProposeBodyBytes = MaxProposeMessageBytes + 4<<10
+
+// Recovery IDs have a restricted ASCII alphabet and at most 128 bytes. JSON
+// quotes/separators plus 4 KiB for the other exact binding fields bound a full
+// 4096-member set without raising any unrelated RPC's body limit.
+const MaxRecoveryMessageBytes = 4096*(128+3) + 4<<10
+const MaxRecoveryBodyBytes = MaxRecoveryMessageBytes + 4<<10
 
 // Propose admits one effect (token scope helm.gateway.propose).
 func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.ProposeRequest]) (*connect.Response[gatewayv1.ProposeResponse], error) {

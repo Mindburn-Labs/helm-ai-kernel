@@ -198,6 +198,8 @@ func runEvidenceCheckpointVerify(args []string, stdout, stderr io.Writer) int {
 // values, paths or file contents. JSON inputs use the closed contract codecs.
 func checkpointCLIParse(cmd *flag.FlagSet, args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(io.Discard)
+	// The existing dispatcher translates global --format=json to --json.
+	jsonOutput := cmd.Bool("json", false, "JSON output (the default for bundle and verification results)")
 	seen := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		name, hasValue := strings.CutPrefix(args[i], "-")
@@ -224,6 +226,9 @@ func checkpointCLIParse(cmd *flag.FlagSet, args []string, stdout, stderr io.Writ
 	}
 	if err := cmd.Parse(args); err != nil || cmd.NArg() != 0 {
 		return checkpointCLIError(stderr, 2, "invalid checkpoint flags")
+	}
+	if emit := cmd.Lookup("emit"); *jsonOutput && emit != nil && emit.Value.String() != "bundle" {
+		return checkpointCLIError(stderr, 2, "JSON output selection conflicts with exact byte output")
 	}
 	return -1
 }

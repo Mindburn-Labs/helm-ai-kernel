@@ -273,3 +273,22 @@ func TestEvidenceCheckpointPreservesExistingHelp(t *testing.T) {
 		}
 	}
 }
+
+func TestEvidenceCheckpointGlobalJSONSelection(t *testing.T) {
+	v := checkpointCLISetup(t)
+	for _, args := range [][]string{
+		append(v.verifyArgs(), "--format=json"),
+		{"prepare", "--descriptor=" + filepath.Join(v.dir, "descriptor"), "--format=json"},
+		{"assemble", "--payload=" + filepath.Join(v.dir, "payload"), "--key-id=" + v.KeyID,
+			"--signature-hex=" + hex.EncodeToString(checkpointCLIBytes(t, v.Signature)), "--format=json"},
+	} {
+		code, out, stderr := checkpointCLICall(args)
+		if code != 0 || stderr != "" || !json.Valid([]byte(out)) {
+			t.Fatalf("global JSON selection failed: code=%d stderr=%s", code, stderr)
+		}
+	}
+	code, out, _ := checkpointCLICall([]string{"prepare", "--descriptor=" + filepath.Join(v.dir, "descriptor"), "--emit=pae", "--format=json"})
+	if code != 2 || out != "" {
+		t.Fatal("conflicting JSON and exact signing-byte output accepted")
+	}
+}

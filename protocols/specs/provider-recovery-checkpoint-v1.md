@@ -66,6 +66,8 @@ The shipped offline CLI exposes these operations through
 `helm-ai-kernel evidence checkpoint`. `prepare --descriptor descriptor.json`
 prints a public JSON bundle containing canonical payload and DSSE PAE as
 base64. Use `--emit payload` or `--emit pae` for exact bytes on stdout.
+The global `--format=json` selection works for JSON results and refuses when
+combined with an exact-byte `--emit` mode.
 `assemble --payload payload.json --key-id KEY_ID --signature-hex SIGNATURE`
 packages the explicitly supplied external signature without verifying it or
 claiming signing authority. It preserves the exact validated payload bytes.

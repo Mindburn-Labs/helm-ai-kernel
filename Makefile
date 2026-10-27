@@ -134,6 +134,11 @@ verify-launch-mission-vectors:
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
 
+.PHONY: test-core-module-closure
+test-core-module-closure:
+	python3 -m unittest discover -s scripts/ci -p 'check_core_module_closure_test.py'
+	python3 scripts/ci/check_core_module_closure.py
+
 test-sdk-ts:
 	cd sdk/ts && npm ci && npm test -- --run && npm run build
 

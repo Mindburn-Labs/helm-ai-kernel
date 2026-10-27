@@ -8,7 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2-0.20261026233929-b300c8d68aee
+	github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.2
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9

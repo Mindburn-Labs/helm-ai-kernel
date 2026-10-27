@@ -44,17 +44,21 @@ class ColdModuleClosureTests(unittest.TestCase):
                 return json.dumps({"Path": closure.SDK_MODULE, "Version": selected_version or version})
 
             def run(command, *, cwd, env, check):
-                self.assertEqual(command, ["go", "mod", "download"])
                 self.assertEqual(env["GOWORK"], "off")
                 self.assertEqual(env["GONOPROXY"], closure.PRIVATE_PATTERN)
                 calls.append(command)
-                if mutate:
-                    (cwd / "go.sum").write_text("unexpected repair\n")
+                if command == ["go", "mod", "tidy", "-diff"]:
+                    self.assertEqual(cwd, core)
+                else:
+                    self.assertEqual(command, ["go", "mod", "download"])
+                    if mutate:
+                        (cwd / "go.sum").write_text("unexpected repair\n")
 
             with patch.dict(os.environ, {"GOWORK": "/inherited/go.work", "GOMODCACHE": "/inherited/warm/cache", "GOFLAGS": "-mod=mod", "GOPROXY": "https://public-proxy.invalid", "GONOPROXY": "none", "GONOSUMDB": "checksum-policy-preserved"}), patch.object(closure.subprocess, "check_output", side_effect=output), patch.object(closure.subprocess, "run", side_effect=run):
                 closure.check_closure(core)
             self.assertIn(["go", "mod", "download", "-json", closure.SDK_MODULE + "@" + version], calls)
             self.assertIn(["go", "mod", "download"], calls)
+            self.assertIn(["go", "mod", "tidy", "-diff"], calls)
 
     def test_overrides_workspace_and_warm_cache_then_downloads_full_closure(self):
         self.run_guard()

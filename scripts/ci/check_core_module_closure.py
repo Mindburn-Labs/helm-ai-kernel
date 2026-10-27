@@ -91,10 +91,13 @@ def check_closure(core: Path) -> None:
         selected = go_json(["list", "-m", "-json", SDK_MODULE], module, env)
         if selected.get("Replace") or selected.get("Version") != requirements[SDK_MODULE]:
             raise RuntimeError("standalone module graph substituted the declared SDK")
+        # Tidy must inspect actual Core imports, not the download-only snapshot.
+        # -diff checks parity without repairing the source or its checksums.
+        subprocess.run(["go", "mod", "tidy", "-diff"], cwd=core, env=env, check=True)
         for name, content in original.items():
             if (module / name).read_bytes() != content or (core / name).read_bytes() != content:
                 raise RuntimeError(f"cold module closure changed {name}")
-        print("Core cold standalone module closure passed.", flush=True)
+        print("Core cold standalone module closure and tidy parity passed.", flush=True)
 
 
 if __name__ == "__main__":

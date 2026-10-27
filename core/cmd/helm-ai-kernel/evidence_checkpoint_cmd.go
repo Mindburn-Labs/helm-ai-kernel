@@ -234,15 +234,28 @@ func checkpointCLIParse(cmd *flag.FlagSet, args []string, stdout, stderr io.Writ
 }
 
 func checkpointCLIRead(path string, limit int) ([]byte, error) {
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > int64(limit) {
+	info, err := checkpointCLIPathInfo(path)
+	if err != nil {
 		return nil, errors.New("bounded local file required")
 	}
-	f, err := os.Open(path)
+	return checkpointCLIReadChecked(path, info, limit)
+}
+
+func checkpointCLIReadChecked(path string, info os.FileInfo, limit int) ([]byte, error) {
+	if info == nil || !info.Mode().IsRegular() || info.Size() > int64(limit) {
+		return nil, errors.New("bounded local file required")
+	}
+	// Opening must itself refuse symlinks and avoid waiting for a special-file
+	// peer. Fstat alone would run too late after a blocking FIFO open.
+	f, err := checkpointCLIOpen(path)
 	if err != nil {
 		return nil, errors.New("local file unavailable")
 	}
 	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !opened.Mode().IsRegular() || opened.Size() > int64(limit) || !os.SameFile(info, opened) {
+		return nil, errors.New("local file changed or is not a bounded regular file")
+	}
 	raw, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
 	if err != nil || len(raw) > limit {
 		return nil, errors.New("local input exceeds bound or cannot be read")

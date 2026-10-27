@@ -292,3 +292,24 @@ func TestEvidenceCheckpointGlobalJSONSelection(t *testing.T) {
 		t.Fatal("conflicting JSON and exact signing-byte output accepted")
 	}
 }
+
+func TestEvidenceCheckpointOpenedFileBounds(t *testing.T) {
+	dir := t.TempDir()
+	path := checkpointCLIWrite(t, dir, "public-local", []byte("original"))
+	info, err := checkpointCLIPathInfo(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := checkpointCLIReadChecked(path, info, 8)
+	if err != nil || string(raw) != "original" {
+		t.Fatal("unchanged bounded regular file refused")
+	}
+	// Keep the inode but grow after inspection. The actual opened FD size must
+	// be checked, rather than trusting only the earlier path metadata.
+	if err := os.WriteFile(path, []byte("oversized"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := checkpointCLIReadChecked(path, info, 8); err == nil || raw != nil {
+		t.Fatal("opened FD exceeded its bound")
+	}
+}

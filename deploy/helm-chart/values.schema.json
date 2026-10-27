@@ -1043,6 +1043,7 @@
     "gateway": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["serving"],
       "description": "Effect gateway (helm-gateway serve, Zone C). Off by default.",
       "properties": {
         "enabled": {
@@ -1055,6 +1056,41 @@
           "minimum": 1,
           "default": 1,
           "description": "Gateway replicas. Admission state is in Postgres, so replicas share nothing in process."
+        },
+        "serving": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "executable"],
+          "description": "Optional serving-only composition; empty selectors retain the shared Kernel image and stock executable. An override requires its own repository, exactly one selector, and an absolute executable together.",
+          "properties": {
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["repository", "tag", "digest"],
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Serving image repository without a tag or digest; no shared image selector is inherited."
+                },
+                "tag": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Explicit serving image tag; mutually exclusive with digest."
+                },
+                "digest": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Explicit serving image sha256 digest; required for an override in production."
+                }
+              }
+            },
+            "executable": {
+              "type": "string",
+              "default": "",
+              "description": "One absolute executable path accepting the unchanged Kernel serve arguments; requires a complete serving image selection."
+            }
+          }
         },
         "podAnnotations": {
           "type": "object",

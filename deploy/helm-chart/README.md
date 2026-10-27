@@ -145,16 +145,31 @@ flowchart TD
 ### Effect gateway (`gateway.*`)
 
 `gateway.enabled=true` adds `helm-gateway serve` (the Zone C effect gateway)
-from the same image and tag as the kernel: a Deployment with its own
+using the shared Kernel image by default: a Deployment with its own
 ServiceAccount (no API token), a Service on 8443, a NetworkPolicy, and a
 pre-install/pre-upgrade hook Job that runs `helm-gateway migrate`. With the
 default `gateway.enabled=false` the chart renders exactly what it rendered
 before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-gateway-helm-gateway).
 
+For a source-owned composition that installs extension adapters into the same
+Kernel runtime, set `gateway.serving.image.repository`, exactly one of its
+`tag` or `digest`, and `gateway.serving.executable` together. The executable is
+one absolute path, for example `/app/helm-model-gateway`, and must accept the
+existing `serve` arguments and retain the Kernel admission boundary. Production
+requires the serving image's own immutable digest. No shared tag or digest is
+inherited. This changes only the serving container's image and executable;
+the shared pull policy, arguments, identity, TLS, security, listeners and
+database role stay intact. The Kernel workload and migration hook always use
+the shared Kernel image and their existing commands. Selecting a composition
+does not configure its adapters or activate a native profile.
+
 | Value | Default | Contract |
 | --- | --- | --- |
 | `gateway.enabled` | `false` | Render the gateway objects. |
 | `gateway.replicaCount` | `1` | Gateway replicas; admission state lives in Postgres. |
+| `gateway.serving.image.repository` | empty | Serving-only image repository, without tag or digest; set with an explicit selector and executable. |
+| `gateway.serving.image.tag` / `digest` | empty / empty | Exactly one own selector when overriding; production requires immutable `sha256` digest. |
+| `gateway.serving.executable` | empty | Serving-only absolute executable path accepting the unchanged `serve` arguments; empty defaults to `/usr/local/bin/helm-gateway` with the shared image. |
 | `gateway.service.port` | `8443` | Service port of the Connect/gRPC API. |
 | `gateway.approvalWindow` | empty | `HELM_GATEWAY_APPROVAL_WINDOW` (Go duration); empty keeps 24h. |
 | `gateway.permitTTL` | empty | `HELM_GATEWAY_PERMIT_TTL` (Go duration); empty keeps 10m. |

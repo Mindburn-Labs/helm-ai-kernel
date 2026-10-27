@@ -183,11 +183,53 @@ app.kubernetes.io/part-of: helm-ai-kernel
 {{- end }}
 
 {{/*
+Return the serving image without inheriting a digest or tag from the shared
+Kernel image. gatewayValidate checks that any override is complete.
+*/}}
+{{- define "helm-ai-kernel.gatewayServingImage" -}}
+{{- $image := .Values.gateway.serving.image -}}
+{{- if $image.repository -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $image.repository $image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $image.repository $image.tag -}}
+{{- end -}}
+{{- else -}}
+{{- include "helm-ai-kernel.image" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Render-time checks for the gateway block. Every gateway template includes
 this, so a missing value fails `helm template` whichever object renders first.
 */}}
 {{- define "helm-ai-kernel.gatewayValidate" -}}
 {{- $g := .Values.gateway -}}
+{{- $serving := $g.serving -}}
+{{- $image := $serving.image -}}
+{{- if or $serving.executable $image.repository $image.tag $image.digest -}}
+{{- if or (not $image.repository) (not $serving.executable) -}}
+{{- fail "gateway.serving requires image.repository, exactly one of image.tag or image.digest, and executable together" -}}
+{{- end -}}
+{{- if eq (empty $image.tag) (empty $image.digest) -}}
+{{- fail "gateway.serving requires exactly one of image.tag or image.digest; shared image selectors are never inherited" -}}
+{{- end -}}
+{{- if not (regexMatch "^([a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*)*$" $image.repository) -}}
+{{- fail "gateway.serving.image.repository must be a lowercase image repository without a tag, digest or scheme; a registry port is allowed before the path" -}}
+{{- end -}}
+{{- if and $image.tag (not (regexMatch "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$" $image.tag)) -}}
+{{- fail "gateway.serving.image.tag must be a valid image tag with at most 128 characters" -}}
+{{- end -}}
+{{- if and $image.digest (not (regexMatch "^sha256:[0-9a-f]{64}$" $image.digest)) -}}
+{{- fail "gateway.serving.image.digest must be a sha256 digest with 64 lowercase hex characters" -}}
+{{- end -}}
+{{- if and .Values.helm.production (not $image.digest) -}}
+{{- fail "helm.production=true requires gateway.serving.image.digest pinned by immutable sha256 digest for a serving override" -}}
+{{- end -}}
+{{- if not (regexMatch "^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$" $serving.executable) -}}
+{{- fail "gateway.serving.executable must be an absolute executable path without whitespace, arguments or traversal" -}}
+{{- end -}}
+{{- end -}}
 {{- if $g.tls.devInsecureLoopback -}}
 {{- if .Values.helm.production -}}
 {{- fail "gateway.tls.devInsecureLoopback is refused when helm.production=true; set gateway.tls.existingSecret" -}}

@@ -4,6 +4,7 @@
     "pr": {
       "description": "Fast pull request profile with core gates and impacted package checks.",
       "gates": [
+        "core-module-closure",
         "docs-truth",
         "version-drift",
         "console-sidecar-pin",
@@ -44,6 +45,7 @@
     "merge": {
       "description": "Full merge gate: `make check` runs it with every gate blocking, and `ci / gate` runs `make check`.",
       "gates": [
+        "core-module-closure",
         "quality-self-test",
         "gate-self-tests",
         "concept-change-markers",
@@ -108,6 +110,7 @@
     "release": {
       "description": "Release assurance profile for release tags and local release readiness.",
       "gates": [
+        "core-module-closure",
         "quality-self-test",
         "docs-truth",
         "version-drift",
@@ -240,6 +243,21 @@
     }
   },
   "gates": [
+    {
+      "id": "core-module-closure",
+      "title": "Cold standalone Core module dependency closure",
+      "command": "make test-core-module-closure",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/go.mod",
+        "core/go.sum",
+        "go.work",
+        "go.work.sum",
+        "scripts/ci/check_core_module_closure*",
+        "scripts/ci/quality*",
+        "Makefile"
+      ]
+    },
     {
       "id": "quality-self-test",
       "title": "Quality registry self-test",

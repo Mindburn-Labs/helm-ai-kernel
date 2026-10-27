@@ -17,6 +17,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY = ROOT / "scripts" / "ci" / "quality-gates.json"
 EXPECTED_GATE_IDS = {
+    "core-module-closure",
     "docs-truth",
     "deadcode",
     "secrets",

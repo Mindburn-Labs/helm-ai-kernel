@@ -502,7 +502,7 @@ jobs:
     runs-on: ubuntu-latest
     # Public registry publication starts only after the EvidencePack-backed
     # release assets and the exact Console source closure both succeed.
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
     permissions:
       contents: read
       id-token: write
@@ -819,7 +819,7 @@ jobs:
 
   go-sdk-tag:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
     permissions:
       contents: write
     steps:
@@ -866,7 +866,7 @@ jobs:
 
   npm-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
     environment: npm-production
     permissions:
       contents: read
@@ -932,7 +932,6 @@ jobs:
       - name: Version checks
         run: make version-drift
       - name: Check existing package version
-        id: package
         working-directory: sdk/python
         run: |
           PACKAGE_VERSION=$(python - <<'PY'
@@ -942,8 +941,7 @@ jobs:
           print(data["project"]["version"])
           PY
           )
-          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          status=$(python - "$PACKAGE_VERSION" <<'PY'
+          python - "$PACKAGE_VERSION" <<'PY'
           import json
           import sys
           import urllib.error
@@ -964,35 +962,23 @@ jobs:
           if actual != expected:
               print(f"mismatch:{actual}")
               raise SystemExit(1)
-          print("published")
+          raise SystemExit(f"Refusing to publish existing helm-sdk version {expected}; choose a fresh version")
           PY
-          )
-          if [ "$status" = "published" ]; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Build and validate
-        if: steps.package.outputs.published != 'true'
         working-directory: sdk/python
         run: |
           python -m pip install --require-hashes -r ../../.github/python-build-requirements.txt
           python -m build
           twine check dist/*
       - name: Publish
-        if: steps.package.outputs.published != 'true'
         # PyPI trusted publishing: the action exchanges the job's OIDC token.
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: sdk/python/dist/
-          skip-existing: true
-      - name: Skip already published package
-        if: steps.package.outputs.published == 'true'
-        run: echo "helm-sdk@${{ steps.package.outputs.version }} is already published"
 
   crates-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
     environment: crates-production
     permissions:
       contents: read
@@ -1062,7 +1048,7 @@ jobs:
 
   maven-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
     # Maven Central has no OIDC trusted publishing, so these MAVEN_* secrets
     # are the only long-lived registry credentials left in the release.
     environment: maven-central

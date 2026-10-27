@@ -7,6 +7,7 @@ post-quantum assurance.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -16,7 +17,10 @@ import tarfile
 import tempfile
 import textwrap
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -391,6 +395,99 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         for duplicate in ("npm-publish.yml", "python-publish.yml", "crates-publish.yml", "maven-publish.yml"):
             with self.subTest(duplicate=duplicate):
                 self.assertFalse((WORKFLOWS / duplicate).exists())
+
+    def assert_python_gates_canonical_publishers(self) -> None:
+        # Building and signing internal evidence may remain parallel. Public
+        # SDK/image/chart/tag publishers must wait for a real Python publish.
+        internal_evidence = {
+            "binaries", "console-local-sidecar", "console-release-assets",
+            "cosign-binaries", "slsa-provenance",
+        }
+        publishers = TAG_RELEASE_MUTATION_JOBS - internal_evidence - {"python-sdk"}
+        self.assertTrue({"binaries", "console-local-sidecar", "verify-slsa"}.issubset(
+            self.job_needs("python-sdk")))
+        self.assertFalse(RELEASE_VALIDATION_JOBS - self.transitive_needs("python-sdk"))
+        for name in self.job_blocks:
+            self.assertNotIn(name, self.transitive_needs(name), f"dependency cycle at {name}")
+        for name in sorted(publishers):
+            self.assertIn("python-sdk", self.transitive_needs(name), name)
+            if name == "post-release-version-drift":
+                condition = self.job_if(name)
+                self.assertIn("needs.github-release.result == 'success'", condition)
+                self.assertNotIn("||", condition)
+                self.assertNotIn("!", condition)
+            else:
+                self.assertNotRegex(self.job(name), r"(?m)^    if:",
+                                    f"{name} must retain default failed/skipped dependency handling")
+        python = self.job("python-sdk")
+        self.assertNotIn("skip-existing", python)
+        self.assertNotRegex(self.step(python, "Publish"), r"(?m)^        if:")
+        self.assertIn(
+            "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086",
+            python,
+        )
+
+    def test_python_publish_gates_canonical_publishers(self) -> None:
+        self.assert_python_gates_canonical_publishers()
+
+    def test_python_publish_guard_rejects_dependency_bypasses(self) -> None:
+        original = self.job_blocks
+        mutations = {
+            "missing Python prerequisite": (
+                "container", original["container"].replace(
+                    ", python-sdk]", "]", 1)),
+            "failed dependency override": (
+                "container", "    if: always()\n" + original["container"]),
+            "skipped dependency override": (
+                "npm-sdk", "    if: ${{ !cancelled() }}\n" + original["npm-sdk"]),
+            "missing SLSA validation": (
+                "python-sdk", original["python-sdk"].replace(
+                    ", verify-slsa]", "]", 1)),
+            "dependency cycle": (
+                "python-sdk", original["python-sdk"].replace(
+                    ", verify-slsa]", ", verify-slsa, container]", 1)),
+            "skipped Python publish": (
+                "python-sdk", original["python-sdk"].replace(
+                    "      - name: Publish\n", "      - name: Publish\n        if: false\n", 1)),
+            "skip existing Python upload": (
+                "python-sdk", original["python-sdk"].replace(
+                    "          packages-dir: sdk/python/dist/\n",
+                    "          packages-dir: sdk/python/dist/\n          skip-existing: true\n", 1)),
+        }
+        try:
+            for label, (name, body) in mutations.items():
+                with self.subTest(mutation=label):
+                    self.job_blocks = {**original, name: body}
+                    with self.assertRaises(AssertionError):
+                        self.assert_python_gates_canonical_publishers()
+        finally:
+            self.job_blocks = original
+
+    def test_python_version_collision_cannot_skip_the_real_publisher(self) -> None:
+        check = self.step(self.job("python-sdk"), "Check existing package version")
+        match = re.search(
+            r'python - "\$PACKAGE_VERSION" <<\'PY\'\n(?P<script>.*?)^          PY$',
+            check, re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        assert match is not None
+        script = textwrap.dedent(match.group("script"))
+        version = "0.11.3"
+        with patch("sys.argv", ["version-check", version]):
+            with patch("urllib.request.urlopen", return_value=io.BytesIO(
+                    json.dumps({"info": {"version": version}}).encode())):
+                with self.assertRaises(SystemExit) as collision:
+                    exec(compile(script, "pypi-version-check", "exec"), {})
+                self.assertNotEqual(collision.exception.code, 0)
+            missing = urllib.error.HTTPError("https://pypi.org/", 404, "missing", None, None)
+            with patch("urllib.request.urlopen", side_effect=missing):
+                with self.assertRaises(SystemExit) as available:
+                    exec(compile(script, "pypi-version-check", "exec"), {})
+                self.assertEqual(available.exception.code, 0)
+            unavailable = urllib.error.HTTPError("https://pypi.org/", 503, "unavailable", None, None)
+            with patch("urllib.request.urlopen", side_effect=unavailable):
+                with self.assertRaises(urllib.error.HTTPError):
+                    exec(compile(script, "pypi-version-check", "exec"), {})
 
     def test_release_workflow_runs_only_on_version_tag_pushes(self) -> None:
         # Every keyless signature and SLSA attestation minted by release.yml

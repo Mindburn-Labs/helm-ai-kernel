@@ -86,8 +86,8 @@ helm-ai-kernel evidence checkpoint verify \
   --verify-at-unix "$HISTORICAL_VERIFICATION_INSTANT" --revoked=false
 ```
 
-The caller must obtain the key, revocation/validity decision and complete
-expected descriptor through authenticated independent owners. The CLI neither
+The caller must obtain every trust input and the complete expected descriptor
+through authenticated independent owners. The CLI neither
 authenticates those files' provenance nor discovers trust from the envelope.
 It reads no clock and performs no network, signer, key-generation or storage
 operation. Missing policy inputs refuse. Inputs are bounded regular local

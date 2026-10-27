@@ -17,5 +17,5 @@ func checkpointCLIOpen(path string) (*os.File, error) {
 	// refuses a substituted leaf symlink. The caller validates the opened FD's
 	// type, size and captured identity before reading; that also refuses an
 	// ancestor redirect to a different file. Ancestor path trust stays local.
-	return os.OpenFile(path, os.O_RDONLY|unix.O_NONBLOCK|unix.O_NOFOLLOW, 0)
+	return os.OpenFile(path, os.O_RDONLY|unix.O_NONBLOCK|unix.O_NOFOLLOW, 0) // #nosec G304 -- explicit local CLI input; NOFOLLOW/NONBLOCK; caller enforces opened-FD regular/size/SameFile checks
 }

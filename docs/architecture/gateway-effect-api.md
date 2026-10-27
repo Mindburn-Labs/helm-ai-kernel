@@ -756,9 +756,11 @@ human operator's single-use `helm.gateway.stop` token.
 
 A request message is capped at 128 KiB after decompression, and a request
 body at 132 KiB as sent, before authentication or any handler runs. Propose
-alone has a larger cap, because it alone carries an authority plan (at most
+has a larger cap, because it carries an authority plan (at most
 524288 bytes, which a JSON client sends base64-encoded): 764588 bytes of message
-and 768684 bytes of body.
+and 768684 bytes of body. Recovery RPCs have separate caps of 540672 bytes of
+message and 544768 bytes of body, accommodating at most 4096 covered version
+IDs, each at most 128 ASCII bytes. Other RPC limits remain unchanged.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's

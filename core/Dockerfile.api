@@ -3,7 +3,7 @@
 
 # Stage 1: Builder
 # SC-004: Base images pinned by digest for supply chain integrity
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS builder
 ARG TARGETOS
 ARG TARGETARCH
 # Build metadata for /version. See /Dockerfile for the full explanation.
@@ -34,7 +34,7 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -trimpath -o /app/bin/helm-ai-kernel ./cmd/helm-ai-kernel
 
 # Stage 2: Runtime
-FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 WORKDIR /app
 

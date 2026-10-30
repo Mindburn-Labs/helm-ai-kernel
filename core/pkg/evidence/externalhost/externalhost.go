@@ -1,4 +1,7 @@
 // Package externalhost parses and verifies vendor-neutral host evidence chains.
+//
+// quantum_posture: receipt verification uses classical Ed25519 or ECDSA-P256
+// signatures and SHA-256 hashes; it provides no post-quantum assurance.
 package externalhost
 
 import (

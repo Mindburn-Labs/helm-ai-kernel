@@ -187,22 +187,6 @@ trust:
 	return created, nil
 }
 
-func applyDoctorFixes(dir string) ([]string, error) {
-	created, err := initializeProjectLayout(dir, initProfiles["default"])
-	if err != nil {
-		return nil, err
-	}
-	relative := make([]string, 0, len(created))
-	for _, path := range created {
-		if rel, relErr := filepath.Rel(dir, path); relErr == nil {
-			relative = append(relative, rel)
-			continue
-		}
-		relative = append(relative, path)
-	}
-	return relative, nil
-}
-
 func init() {
 	Register(Subcommand{Name: "init", Aliases: []string{}, Usage: "Initialize a new HELM project", RunFn: runInitCmd})
 }

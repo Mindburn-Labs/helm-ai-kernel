@@ -424,14 +424,6 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 	return filepath.Join(wd, cleaned), nil
 }
 
-func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
-	return serveLocalMCPStdioWithDataDir(stdin, stdout, "data")
-}
-
-func serveLocalMCPStdioWithDataDir(stdin io.Reader, stdout io.Writer, dataDir string) error {
-	return serveLocalMCPStdioWithDataDirAndPolicy(stdin, stdout, dataDir, nil)
-}
-
 func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, dataDir string, policyGraph *prg.Graph) error {
 	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
 	if err != nil {
@@ -663,10 +655,6 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 		}
 		return response, nil
 	}
-}
-
-func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
-	return newLocalMCPHTTPServerWithDataDir(port, authMode, "data")
 }
 
 func newLocalMCPHTTPServerWithDataDir(port int, authMode, dataDir string) (*http.Server, error) {

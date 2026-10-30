@@ -38,13 +38,6 @@ function converterBodyFor(modelName: string): string {
   return match?.[0] ?? "";
 }
 
-function normalizeJson(value: any): any {
-  if (value == null) return value;
-  if (Array.isArray(value)) return value.map(normalizeJson);
-  if (typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeJson(item)]));
-}
-
 function sourceValueFor(modelName: string, field: string, expression: string, stack: string[]): any {
   const arrayMatch = expression.match(/json\['[^']+'\] as Array<any>\)\.map\(([^)]+)FromJSON\)/);
   if (arrayMatch) {

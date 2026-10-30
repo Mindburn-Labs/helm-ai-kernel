@@ -768,10 +768,6 @@ func writeApprovalConsumptionError(w http.ResponseWriter, err error) {
 	}
 }
 
-func writeApprovalConsumerUnauthorized(w http.ResponseWriter, detail string) {
-	writeApprovalWorkloadUnauthorized(w, "helm-approval-consumer", detail)
-}
-
 func writeApprovalWorkloadUnauthorized(w http.ResponseWriter, realm, detail string) {
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, realm))
 	httperr.WriteUnauthorized(w, detail)

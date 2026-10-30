@@ -1607,18 +1607,6 @@ func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref st
 	return nil, fmt.Errorf("receipt not found")
 }
 
-func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byte, error) {
-	return buildEvidenceBundleWithSurfaceArtifacts(sessionID, receipts, nil)
-}
-
-func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
-	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
-	if err != nil {
-		return nil, err
-	}
-	return tarEvidenceBundleFiles(files)
-}
-
 func buildTrustedEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry, svc *Services) ([]byte, error) {
 	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
 	if err != nil {

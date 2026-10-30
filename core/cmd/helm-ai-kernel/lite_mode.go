@@ -22,10 +22,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func setupLiteMode(ctx context.Context) (*sql.DB, ledger.Ledger, store.ReceiptStore, error) {
-	return setupLiteModeWithDataDir(ctx, "data")
-}
-
 func setupLiteModeWithDataDir(ctx context.Context, dataDir string) (*sql.DB, ledger.Ledger, store.ReceiptStore, error) {
 	if dataDir == "" {
 		dataDir = "data"
@@ -61,10 +57,6 @@ func setupLiteModeWithDBPath(ctx context.Context, dbPath string) (*sql.DB, ledge
 	}
 
 	return db, lgr, receiptStore, nil
-}
-
-func loadOrGenerateSigner() (crypto.Signer, error) {
-	return loadOrGenerateSignerWithDataDir("data")
 }
 
 // loadOrGenerateSignerWithDataDir builds the kernel root receipt signer.

@@ -1,4 +1,7 @@
 // Package externalhost parses and verifies vendor-neutral host evidence chains.
+//
+// quantum_posture: receipt verification uses classical Ed25519 or ECDSA-P256
+// signatures and SHA-256 hashes; it provides no post-quantum assurance.
 package externalhost
 
 import (
@@ -458,12 +461,6 @@ func selectChainPublicKey(chain *contracts.ExternalReceiptChain, alg string) str
 		}
 	}
 	return ""
-}
-
-// firstChainPublicKey is a thin wrapper for backward compatibility with
-// existing callers that only need an Ed25519 key.
-func firstChainPublicKey(chain *contracts.ExternalReceiptChain) string {
-	return selectChainPublicKey(chain, "Ed25519")
 }
 
 // verifyECDSAP256 verifies an ASN.1 DER ECDSA-P256 signature over sha256(data).

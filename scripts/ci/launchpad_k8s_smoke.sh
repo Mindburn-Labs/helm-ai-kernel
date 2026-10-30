@@ -438,13 +438,6 @@ assert_job_succeeded() {
     kubectl -n "$NAMESPACE" wait --for=condition=Complete "job/${jobname}" --timeout="$timeout"
 }
 
-assert_job_failed() {
-    local app="$1" timeout="$2"
-    local jobname
-    jobname="$(kubectl -n "$NAMESPACE" get jobs -l "helm.ai/launchpad-app=${app}" -o jsonpath='{.items[0].metadata.name}')"
-    echo "waiting up to ${timeout} for Job ${jobname} to fail"
-    kubectl -n "$NAMESPACE" wait --for=condition=Failed "job/${jobname}" --timeout="$timeout"
-}
 
 assert_negative_hermes() {
     # Hermes' Python CLI may exit 0 even when OpenRouter rejects the key

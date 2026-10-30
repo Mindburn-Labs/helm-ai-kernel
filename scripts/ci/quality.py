@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from fnmatch import fnmatchcase

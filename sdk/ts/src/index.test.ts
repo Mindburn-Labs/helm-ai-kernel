@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HelmClient, HelmApiError } from './client.js';
-import type { HelmClientConfig } from './client.js';
 
 // ── Helpers ─────────────────────────────────────────────
 

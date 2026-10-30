@@ -1585,17 +1585,6 @@ func runConformVectors(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func buildEnvelopeManifest(manifestID, envelope, nativeHash, subject string, experimental bool) (contracts.EvidenceEnvelopeManifest, error) {
-	return evidencepkg.BuildEnvelopeManifest(evidencepkg.EnvelopeExportRequest{
-		ManifestID:         manifestID,
-		Envelope:           evidencepkg.EnvelopeExportType(envelope),
-		NativeEvidenceHash: nativeHash,
-		Subject:            subject,
-		CreatedAt:          time.Now().UTC(),
-		AllowExperimental:  experimental,
-	})
-}
-
 func splitCSV(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil

@@ -7,13 +7,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"text/template"
 )
 
@@ -336,15 +334,6 @@ func writeTemplate(path, tmpl string, data interface{}) error {
 
 	return t.Execute(f, data)
 }
-
-// printConfigJSON is a helper to dump JSON configs for debugging.
-func printConfigJSON(w io.Writer, v interface{}) {
-	data, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Fprintln(w, string(data))
-}
-
-// Ensure we don't have naming conflicts with other cmd files.
-var _ = strings.TrimSpace
 
 func init() {
 	Register(Subcommand{

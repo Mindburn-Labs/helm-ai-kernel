@@ -308,26 +308,6 @@ func min3(a, b, c int) int {
 	return c
 }
 
-func summarizeByTool(findings []mcppkg.DocScanFinding) map[string]int {
-	m := make(map[string]int)
-	for _, f := range findings {
-		m[f.ToolName]++
-	}
-	return m
-}
-
-func maxDocSeverity(findings []mcppkg.DocScanFinding) mcppkg.DocScanSeverity {
-	top := mcppkg.DocScanSeverity("")
-	topRank := 0
-	for _, f := range findings {
-		if r := severityRank(f.Severity); r > topRank {
-			topRank = r
-			top = f.Severity
-		}
-	}
-	return top
-}
-
 func writeSupplyScanReport(w io.Writer, r mcpScanV1Report) {
 	fmt.Fprintf(w, "MCP scan (inspect only; does not authorize)\n")
 	fmt.Fprintf(w, "  servers: %d\n", r.ServersScanned)
@@ -341,48 +321,4 @@ func writeSupplyScanReport(w io.Writer, r mcpScanV1Report) {
 	for _, f := range r.Findings {
 		fmt.Fprintf(w, "  [%s] %s %s %s\n", f.Severity, f.Kind, f.ServerID, f.Description)
 	}
-}
-
-func writeHumanReport(w io.Writer, r mcpScanReport) {
-	fmt.Fprintf(w, "\n%sMCP Scan Report%s\n", ColorBold+ColorBlue, ColorReset)
-	fmt.Fprintf(w, "  Server:        %s\n", r.ServerID)
-	fmt.Fprintf(w, "  Tools scanned: %d\n", r.ToolsScanned)
-	fmt.Fprintf(w, "  Max severity:  %s\n", r.MaxSeverity)
-	fmt.Fprintf(w, "  Exit:          %d\n\n", r.ExitCode)
-
-	if len(r.DocFindings) == 0 && len(r.TypoFindings) == 0 {
-		fmt.Fprintf(w, "%sNo findings.%s\n\n", ColorGreen, ColorReset)
-		return
-	}
-
-	if len(r.DocFindings) > 0 {
-		fmt.Fprintf(w, "%sDocumentation Findings (%d)%s\n", ColorBold, len(r.DocFindings), ColorReset)
-		for _, f := range r.DocFindings {
-			fmt.Fprintf(w, "  [%s] %s :: %s\n", f.Severity, f.ToolName, f.Pattern)
-			fmt.Fprintf(w, "         %s\n", f.Description)
-			if f.MatchedText != "" {
-				fmt.Fprintf(w, "         matched: %s\n", truncateScanOutput(f.MatchedText, 80))
-			}
-		}
-		fmt.Fprintln(w)
-	}
-
-	if len(r.TypoFindings) > 0 {
-		fmt.Fprintf(w, "%sTyposquat Findings (%d)%s\n", ColorBold, len(r.TypoFindings), ColorReset)
-		for _, f := range r.TypoFindings {
-			fmt.Fprintf(w, "  [%s] %s resembles %s — %s\n", f.Severity, f.ToolName, f.Resembles, f.Description)
-		}
-		fmt.Fprintln(w)
-	}
-
-	if r.ExitCode != 0 {
-		fmt.Fprintf(w, "%sFindings at or above fail-on-severity threshold — exit 1%s\n\n", ColorYellow, ColorReset)
-	}
-}
-
-func truncateScanOutput(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n-1] + "…"
 }

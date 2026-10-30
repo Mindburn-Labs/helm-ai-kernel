@@ -18,7 +18,6 @@ package router
 
 import (
 	"errors"
-	"sort"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
@@ -213,10 +212,4 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
-}
-
-func sortedRegions(regions []string) []string {
-	out := append([]string(nil), regions...)
-	sort.Strings(out)
-	return out
 }

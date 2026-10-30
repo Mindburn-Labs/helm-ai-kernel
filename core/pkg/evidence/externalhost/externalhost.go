@@ -460,12 +460,6 @@ func selectChainPublicKey(chain *contracts.ExternalReceiptChain, alg string) str
 	return ""
 }
 
-// firstChainPublicKey is a thin wrapper for backward compatibility with
-// existing callers that only need an Ed25519 key.
-func firstChainPublicKey(chain *contracts.ExternalReceiptChain) string {
-	return selectChainPublicKey(chain, "Ed25519")
-}
-
 // verifyECDSAP256 verifies an ASN.1 DER ECDSA-P256 signature over sha256(data).
 // keyHex may be an uncompressed (04...) or compressed (02.../03...) P-256 point
 // encoded as hex (with optional "ecdsa-p256:" or "0x" prefix), or a

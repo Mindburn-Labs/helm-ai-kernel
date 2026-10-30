@@ -19,19 +19,25 @@ func TestServeSeparatesPublicExecutorsFromInternalWorkers(t *testing.T) {
 	values := with(identity, map[string]string{
 		"HELM_GATEWAY_DATABASE_URL":      "postgres://127.0.0.1:1/none?sslmode=disable",
 		"HELM_GATEWAY_MODEL_ROUTES_FILE": routesFile(t),
-		"HELM_GATEWAY_WORKER_AUDIENCE":   "helm-gateway-worker:test",
-		"HELM_GATEWAY_EXECUTOR_AUDIENCE": "helm-gateway-executor:test",
+		"HELM_GATEWAY_WORKER_AUDIENCE":   "helm-gateway-worker:qa",
+		"HELM_GATEWAY_WORKER_MAX_TTL":    "3600s",
+		"HELM_GATEWAY_EXECUTOR_AUDIENCE": "helm-gateway-executor:qa",
+		"HELM_GATEWAY_EXECUTOR_MAX_TTL":  "900s",
 	})
 	startServe(t, []string{"--dev-insecure-listen", main, "--worker-listen", worker, "--executor-listen", executor}, values)
 	ep := map[string]string{"episode_id": "ep-1", "work_item_id": "work-1", "organization_version_id": "v-1"}
 	marker := jwt.MapClaims{"helm_executor": map[string]string{"client": "codex"}, "scope": "helm.gateway.propose helm.gateway.read"}
-	executorToken := sign("helm-gateway-executor:test", 15*time.Minute, ep, marker)
+	executorToken := sign("helm-gateway-executor:qa", 15*time.Minute, ep, marker)
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex","version":"1"}}}`
 	request := func(base, path, token string) (int, string) {
 		t.Helper()
 		method, body := http.MethodGet, ""
-		if path != "/v1/models" {
+		if path == "/mcp" {
 			method, body = http.MethodPost, initialize
+		} else if path != "/v1/models" {
+			// Body validation follows authentication on each inference route.
+			// A malformed body proves that wiring without a provider call.
+			method, body = http.MethodPost, "{"
 		}
 		req, err := http.NewRequest(method, "http://"+base+path, strings.NewReader(body))
 		if err != nil {
@@ -49,28 +55,31 @@ func TestServeSeparatesPublicExecutorsFromInternalWorkers(t *testing.T) {
 		return res.StatusCode, string(raw)
 	}
 	tokens := map[string]string{
-		"worker900":     sign("helm-gateway-worker:test", 15*time.Minute, ep),
-		"worker3600":    sign("helm-gateway-worker:test", time.Hour, ep),
+		"worker900":     sign("helm-gateway-worker:qa", 15*time.Minute, ep),
+		"worker3600":    sign("helm-gateway-worker:qa", time.Hour, ep),
 		"main":          sign("helm-gateway:test", time.Minute, nil),
-		"no client":     sign("helm-gateway-executor:test", 15*time.Minute, ep),
-		"over900":       sign("helm-gateway-executor:test", 901*time.Second, ep, marker),
-		"no episode":    sign("helm-gateway-executor:test", time.Minute, nil, marker),
-		"no version":    sign("helm-gateway-executor:test", time.Minute, map[string]string{"episode_id": "ep", "work_item_id": "w"}, marker),
+		"no client":     sign("helm-gateway-executor:qa", 15*time.Minute, ep),
+		"over900":       sign("helm-gateway-executor:qa", 901*time.Second, ep, marker),
+		"no episode":    sign("helm-gateway-executor:qa", time.Minute, nil, marker),
+		"no version":    sign("helm-gateway-executor:qa", time.Minute, map[string]string{"episode_id": "ep", "work_item_id": "w"}, marker),
 		"foreign env":   sign("helm-gateway-executor:prod", time.Minute, ep, marker),
-		"mixed":         sign("helm-gateway-executor:test", time.Minute, ep, marker, jwt.MapClaims{"aud": []string{"helm-gateway-executor:test", "helm-gateway-worker:test"}}),
-		"foreign scope": sign("helm-gateway-executor:test", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.propose other.read"}),
-		"read alone":    sign("helm-gateway-executor:test", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.read"}),
-		"execute":       sign("helm-gateway-executor:test", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.propose helm.gateway.execute"}),
+		"mixed":         sign("helm-gateway-executor:qa", time.Minute, ep, marker, jwt.MapClaims{"aud": []string{"helm-gateway-executor:qa", "helm-gateway-worker:qa"}}),
+		"foreign scope": sign("helm-gateway-executor:qa", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.propose other.read"}),
+		"read alone":    sign("helm-gateway-executor:qa", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.read"}),
+		"execute":       sign("helm-gateway-executor:qa", time.Minute, ep, marker, jwt.MapClaims{"scope": "helm.gateway.propose helm.gateway.execute"}),
 	}
+	paths := []string{"/mcp", "/v1/models", "/v1/messages", "/v1/chat/completions", "/v1/responses"}
 	for name, token := range tokens {
-		for _, path := range []string{"/mcp", "/v1/models"} {
-			if code, body := request(executor, path, token); code != 401 && code != 403 {
-				t.Errorf("%s %s: %d %s", name, path, code, body)
-			}
+		for _, path := range paths {
+			t.Run(name+path, func(t *testing.T) {
+				if code, body := request(executor, path, token); code != 401 && code != 403 {
+					t.Fatalf("%d %s", code, body)
+				}
+			})
 		}
 	}
 	for _, ttl := range []time.Duration{15 * time.Minute, time.Hour} {
-		if code, body := request(worker, "/mcp", sign("helm-gateway-worker:test", ttl, ep)); code != 200 {
+		if code, body := request(worker, "/mcp", sign("helm-gateway-worker:qa", ttl, ep)); code != 200 {
 			t.Fatalf("internal worker %s: %d %s", ttl, code, body)
 		}
 	}
@@ -80,10 +89,20 @@ func TestServeSeparatesPublicExecutorsFromInternalWorkers(t *testing.T) {
 	if code, body := request(executor, "/v1/models", executorToken); code != 503 || !strings.Contains(body, "ledger_unavailable") {
 		t.Fatalf("executor model auth: %d %s", code, body)
 	}
+	for _, path := range paths[2:] {
+		t.Run("executor body validation"+path, func(t *testing.T) {
+			if code, body := request(executor, path, executorToken); code != 400 || !strings.Contains(body, "not valid JSON") {
+				t.Fatalf("%d %s", code, body)
+			}
+		})
+	}
 	for _, base := range []string{main, worker} {
 		if code, _ := request(base, "/v1/models", executorToken); code != 401 && code != 403 {
 			t.Fatalf("executor on other listener: %d", code)
 		}
+	}
+	if code, body := request(worker, "/mcp", executorToken); code != 401 {
+		t.Fatalf("executor on worker MCP: %d %s", code, body)
 	}
 	for _, path := range []string{"/helm.gateway.v1.EffectGatewayService/Dispatch", "/helm.gateway.v1.AuthorityAdminService/EnsurePrincipals"} {
 		if code, _ := request(executor, path, executorToken); code != 404 {

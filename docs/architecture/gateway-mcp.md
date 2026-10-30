@@ -10,20 +10,28 @@ identity of the worker's token.
 
 ## Where it is served
 
-- **Listener.** The worker listener (`--worker-listen`), at `/mcp`, beside
-  `/v1/*`. The main listener serves no MCP, and the worker listener serves no
-  effect API. There is one worker listener and one worker token profile: the
-  endpoint mounts on them and adds neither.
-- **Token.** The worker listener's own: audience `HELM_GATEWAY_WORKER_AUDIENCE`,
+- **Listeners.** The internal worker listener (`--worker-listen`, port 8444)
+  and the separate executor listener (`--executor-listen`, port 8445) serve
+  `/mcp` beside `/v1/*`. Neither serves the privileged effect API; the main
+  listener serves no MCP. Each listener accepts only its own token profile.
+- **Worker token.** Audience `HELM_GATEWAY_WORKER_AUDIENCE`,
   no client certificate, a `helm_episode` claim, and one scope. Tools are
   called with `helm.gateway.propose`. A token with `helm.gateway.read` lists
   tools and reads its episode's attempts, and is denied every effect. A token
   never carries `helm.gateway.execute`: the effect API's `Dispatch` and
   `Observe` still ask for it.
+- **Executor token.** Audience `HELM_GATEWAY_EXECUTOR_AUDIENCE` must be
+  `helm-gateway-executor:<env>`. `HELM_GATEWAY_EXECUTOR_MAX_TTL` is at most
+  `900s`, independently of the worker's 3600-second ceiling. The signed
+  `helm_executor.client` and complete `helm_episode` claims are required;
+  scopes are exactly `helm.gateway.propose`, optionally with
+  `helm.gateway.read`. Worker tokens, mixed audiences, read-only or execute
+  scopes, and longer-lived tokens are rejected. Executor tokens are likewise
+  rejected by the worker and main listeners.
 - **Who.** Agent principals only. A human or service principal with an episode
   token is refused with 403 whatever mandates it holds. The kind is the
   gateway's own row for the principal, not a claim.
-- **Configuration.** None of its own. The worker listener needs the model
+- **Configuration.** None of its own. Both episode listeners need the model
   routes file like the model endpoints do (`HELM_GATEWAY_MODEL_ROUTES_FILE`),
   and `serve` refuses to start when an effect type that would be a tool cannot
   be given a tool name.
@@ -222,3 +230,9 @@ current organization state. Episode and tenant isolation apply to these reads.
   `TestPostgresAnotherEpisodesAttemptIsNotFound` and, in `admission`,
   `TestPostgresAnEpisodeReadsOnlyItsOwnAttempts`.
 - The mount: `core/pkg/gateway/runtime` `TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly`.
+- Executor separation: `TestServeSeparatesPublicExecutorsFromInternalWorkers`
+  runs real signed tokens against the served listeners with the QA audiences
+  and explicit 900/3600-second TTLs. Both worker lifetimes are refused on
+  every executor route; executor MCP initializes, model discovery reaches
+  the ledger, and inference routes reach body validation. These local checks
+  do not claim a successful provider effect or deployed QA edge acceptance.

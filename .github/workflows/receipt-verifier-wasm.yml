@@ -1,0 +1,78 @@
+name: Receipt verifier WASM
+
+# quantum_posture: distributes the classical-only verifier with no trust roots.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: receipt-verifier-wasm-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind the exact green main source
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          git merge-base --is-ancestor "${SOURCE_SHA}" origin/main
+          test -z "$(git status --porcelain)"
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22.23.3'
+      - name: Build and verify the exact published bundle
+        run: bash scripts/test_receipt_verifier_wasm.sh "${GITHUB_WORKSPACE}/bin/receipt-verifier-wasm"
+      - name: Require a clean commit-bound conformance result
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('bin/receipt-verifier-wasm')
+          build=json.loads((p/'build.json').read_text())
+          proof=json.loads((p/'conformance.json').read_text())
+          assert build['source_revision']==proof['source_revision']==os.environ['SOURCE_SHA']
+          assert build['source_dirty'] is False and proof['source_dirty'] is False
+          assert proof['result']=='PASS' and proof['native_wasm_parity_cases']>=30
+          assert proof['cases']>=48 and proof['wasm_memory_ceiling_mib']==128
+          assert len(proof['named_results'])==proof['cases']
+          assert len({r['case'] for r in proof['named_results']})==proof['cases']
+          assert all(r['result']=='PASS' for r in proof['named_results'])
+          assert proof['wasm_sha256']==build['sha256']['receipt_verify.wasm']
+          PY
+      - name: Publish the tested CI artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: receipt-verifier-wasm-${{ github.event.workflow_run.head_sha }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            bin/receipt-verifier-wasm/receipt_verify.wasm
+            bin/receipt-verifier-wasm/wasm_exec.js
+            bin/receipt-verifier-wasm/receipt-verifier.mjs
+            bin/receipt-verifier-wasm/GO-LICENSE
+            bin/receipt-verifier-wasm/build.json
+            bin/receipt-verifier-wasm/conformance.json

@@ -1,0 +1,4 @@
+# Shipped JavaScript/WebAssembly binaries, measured with GOOS=js GOARCH=wasm.
+# Keep this separate from the native enforcement/control-registry roots.
+# receipt-verifier-wasm.yml publishes this entrypoint after exact-source CI.
+core/cmd/receipt_verify_wasm

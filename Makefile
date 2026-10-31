@@ -485,6 +485,16 @@ receipt-verify-binaries:
 verify-receipt-verify-offline:
 	cd core && GOWORK=off go test ./pkg/receiptverify/ -run 'TestNoTransportPackageIsReachable|TestVerificationReadsNoClock|TestFrozenReceiptStillVerifies' -v
 
+.PHONY: receipt-verify-wasm verify-receipt-verifier-wasm
+WASM_OUT ?= $(CURDIR)/bin/receipt-verifier-wasm
+
+# The browser bridge uses the same strict parser and leaf verifier as the CLI.
+receipt-verify-wasm:
+	bash scripts/build_receipt_verifier_wasm.sh "$(WASM_OUT)"
+
+verify-receipt-verifier-wasm:
+	bash scripts/test_receipt_verifier_wasm.sh
+
 release-assets: release-binaries-reproducible mcp-pack sbom vex
 	bash scripts/release/stage_release_assets.sh
 

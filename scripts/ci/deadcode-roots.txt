@@ -11,5 +11,6 @@
 # pack_verify, bootstrap, semantic-model-gen,
 # skill_lint, skill_pack. Code only they reach counts as dead to the gate. Add a
 # line here when one of them starts shipping.
+# The js/wasm verifier is declared separately in deadcode-wasm-roots.txt.
 core/cmd/helm-ai-kernel
 core/cmd/helm-gateway

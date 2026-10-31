@@ -830,39 +830,24 @@ jobs:
         with:
           go-version: "1.26.10"
           cache-dependency-path: "**/go.sum"
-      - name: Publish immutable Go SDK subdirectory tag
+      - name: Publish immutable Go module subdirectory tags
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          tag="sdk/go/v${version}"
-          commit_suffix='^{commit}'
-          target="$(git rev-parse "HEAD${commit_suffix}")"
-          git fetch origin "refs/tags/${tag}:refs/tags/${tag}" || true
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            existing="$(git rev-parse "${tag}${commit_suffix}")"
-            if [ "$existing" != "$target" ]; then
-              echo "::error::Go SDK tag ${tag} points at ${existing}, expected ${target}; refusing to move an existing release tag."
-              exit 1
-            fi
-            echo "Go SDK tag ${tag} already points at ${target}."
-          else
-            git config user.name "mindburn-release-bot"
-            git config user.email "release@mindburn.org"
-            git tag -a "$tag" -m "Release Go SDK v${version}"
-            git push origin "refs/tags/${tag}"
-          fi
+          bash scripts/release/publish_go_module_tags.sh "$GITHUB_REF_NAME"
       - name: Warm Go module proxy
         run: |
           set -euo pipefail
-          module="github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v${GITHUB_REF_NAME#v}"
-          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"; then
-              exit 0
-            fi
-            echo "Go proxy has not indexed ${module} yet; retry ${attempt}/12."
-            sleep 10
+          for path in core sdk/go; do
+            module="github.com/Mindburn-Labs/helm-ai-kernel/${path}@${GITHUB_REF_NAME}"
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              if GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"; then
+                break
+              fi
+              echo "Go proxy has not indexed ${module} yet; retry ${attempt}/12."
+              sleep 10
+            done
+            GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"
           done
-          GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"
 
   npm-sdk:
     runs-on: ubuntu-latest

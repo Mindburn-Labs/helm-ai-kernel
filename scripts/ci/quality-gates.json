@@ -317,12 +317,14 @@
     {
       "id": "release-workflow-contract",
       "title": "Release workflow provenance contract",
-      "command": "python3 scripts/ci/release_workflow_contract_test.py",
+      "command": "python3 scripts/ci/release_workflow_contract_test.py && python3 scripts/release/publish_go_module_tags_test.py",
       "timeout_seconds": 60,
       "paths": [
         ".github/workflows/**",
         "scripts/ci/quality-gates.json",
         "scripts/ci/release_workflow_contract_test.py",
+        "scripts/release/publish_go_module_tags.sh",
+        "scripts/release/publish_go_module_tags_test.py",
         "scripts/release/prepare_dev_chart.py",
         "deploy/helm-chart/**"
       ]

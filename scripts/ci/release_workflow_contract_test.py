@@ -63,6 +63,7 @@ NON_RELEASE_MUTATION_JOB_EXEMPTIONS: frozenset[str] = frozenset()
 # validation dependency is deliberately reviewed (or it is documented as a
 # non-release exemption above).
 EXTERNAL_MUTATION_MARKERS = (
+    "bash scripts/release/publish_go_module_tags.sh",
     "actions/attest-build-provenance@",
     "cosign sign",
     "gh release upload ",

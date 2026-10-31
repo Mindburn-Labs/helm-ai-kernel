@@ -58,6 +58,10 @@ jobs:
           assert build['source_revision']==proof['source_revision']==os.environ['SOURCE_SHA']
           assert build['source_dirty'] is False and proof['source_dirty'] is False
           assert proof['result']=='PASS' and proof['native_wasm_parity_cases']>=30
+          assert proof['cases']>=48 and proof['wasm_memory_ceiling_mib']==128
+          assert len(proof['named_results'])==proof['cases']
+          assert len({r['case'] for r in proof['named_results']})==proof['cases']
+          assert all(r['result']=='PASS' for r in proof['named_results'])
           assert proof['wasm_sha256']==build['sha256']['receipt_verify.wasm']
           PY
       - name: Publish the tested CI artifact

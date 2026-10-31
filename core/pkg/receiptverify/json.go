@@ -55,6 +55,9 @@ func VerifyJSON(document, trustRootJSON []byte) DocumentResult {
 	if !utf8.Valid(document) {
 		return fail(errors.New("receipt document must be UTF-8"))
 	}
+	if err := validateJSONWork(document); err != nil {
+		return fail(fmt.Errorf("receipt document: %w", err))
+	}
 	bundle, err := ParseBundle(document)
 	if err != nil {
 		return fail(err)
@@ -85,6 +88,9 @@ func parseJSONTrustRoot(raw []byte) (map[string]string, error) {
 	}
 	if !utf8.Valid(raw) || raw[0] != '{' {
 		return nil, errors.New("trust root must be a UTF-8 JSON object")
+	}
+	if err := validateJSONWork(raw); err != nil {
+		return nil, fmt.Errorf("trust root: %w", err)
 	}
 	if err := ValidateJSONStructure(raw); err != nil {
 		return nil, fmt.Errorf("trust root: %w", err)

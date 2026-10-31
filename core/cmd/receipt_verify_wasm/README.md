@@ -23,9 +23,12 @@ const verifier = await loadReceiptVerifier(bytes, globalThis.Go);
 const report = verifier.verifyJSON(receiptJSON, trustRootJSON);
 ```
 
-Asset loading is a host action. Verification does not fetch keys, read browser
+The host needs `TextEncoder.encodeInto` for bounded UTF-8 conversion before data
+is copied into WASM memory. Asset loading is a host action. Verification does not fetch keys, read browser
 storage, inspect the environment or consult a clock. One verifier instance is
-installed per realm; use a separate Worker for another instance.
+installed per realm; concurrent or repeated initialization is refused. A failed
+instantiation can be retried. If a runtime starts without the required exports,
+discard the realm. Use a separate Worker for another instance.
 
 `receiptJSON` is JSON text containing one receipt, an array in causal order,
 or a bundle with `receipts` and optional `permits`, `key_id` and
@@ -51,14 +54,19 @@ The result has schema `helm.receipt-verification.v1`, a `verdict` and the full
   supplied. No successful identity check is invented.
 
 Inputs are limited to 8 MiB of receipt JSON, 64 KiB of trust-root JSON and 128
-trusted keys. The native `receiptverify.VerifyJSON` API has the same contract.
+trusted keys. Iterative preflight also limits input to 64 nested containers,
+100000 JSON tokens, 256 bytes per object member name and 64 KiB per decoded
+string or number token before recursive parsing. The native
+`receiptverify.VerifyJSON` API has the same contract.
 The existing native CLI retains its flags and explicit inspection behavior.
 
 The shared corpus reuses frozen public receipt/permit fixtures without private
 keys. It tests native/WASM result parity, artifact-only trust refusal, wrong
 roots, signed-field and permit tampering, strict wire parsing and argument/size
-refusals. The JavaScript harness runs the actual WASM module in Node and records
-its exact binary hash in `conformance.json`.
+refusals. It also covers initialization races and parsing-work refusals followed
+by successful reuse. The JavaScript harness runs the actual WASM module in Node
+with WASM linear memory capped at 128 MiB and records its exact binary hash and named
+results in `conformance.json`.
 
 After a successful main `CI` run, `Receipt verifier WASM` rebuilds and tests the
 exact source revision and uploads the bundle as a commit-bound Actions artifact.

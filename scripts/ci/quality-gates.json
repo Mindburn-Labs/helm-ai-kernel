@@ -16,6 +16,7 @@
         "build",
         "go-test",
         "command-tests",
+        "receipt-verifier-wasm",
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
@@ -66,6 +67,7 @@
         "postgres-proofs",
         "tcb-coverage",
         "command-tests",
+        "receipt-verifier-wasm",
         "go-module-tests",
         "launchpad-promotion",
         "verify-fixtures",
@@ -122,6 +124,7 @@
         "build",
         "go-test",
         "command-tests",
+        "receipt-verifier-wasm",
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
@@ -1164,6 +1167,26 @@
       "description": "Binding rule R1 (HELM-746). Resolves the invariant hints, self-tests on planted registry entries, then fails on an invalid controls.yaml entry, an enforced entry point unreachable from scripts/ci/deadcode-roots.txt, a named test that go test -list does not report, a removal mutation the tests survive, or a HELM_INVARIANTS.md or coverage-map.json that differs from the registry.",
       "command": "make controls-check",
       "timeout_seconds": 900
+    },
+    {
+      "id": "receipt-verifier-wasm",
+      "title": "Receipt verifier JavaScript/WebAssembly conformance",
+      "description": "Builds the actual browser WASM bridge with its matching Go runtime; runs frozen native/WASM parity, caller-trust and wire/tamper controls without a service in the verification path.",
+      "command": "make verify-receipt-verifier-wasm",
+      "timeout_seconds": 600,
+      "paths": [
+        "core/pkg/receiptverify/**",
+        "core/pkg/canonicalize/**",
+        "core/pkg/contracts/**",
+        "core/cmd/receipt_verify/**",
+        "core/cmd/receipt_verify_wasm/**",
+        "core/go.mod",
+        "core/go.sum",
+        "scripts/build_receipt_verifier_wasm.sh",
+        "scripts/test_receipt_verifier_wasm*",
+        ".github/workflows/receipt-verifier-wasm.yml",
+        "Makefile"
+      ]
     }
   ]
 }

@@ -1,0 +1,45 @@
+# Labels pull requests that touch security, infrastructure, migration or release
+# paths `tier-2`: the queue a person reviews after the merge. The label never
+# holds a merge. This workflow is not a required check and fails nothing on
+# policy. It runs only for pull requests that touch one of the paths below; keep
+# them in step with .github/labeler.yml.
+name: Tier labels
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/workflows/**'
+      - '.github/dependabot.yml'
+      - 'CODEOWNERS'
+      - '.github/CODEOWNERS'
+      - '**/migrations/**'
+      - '**/*.sql'
+      - 'deploy/**'
+      - 'release/**'
+      - 'scripts/release/**'
+      - '.goreleaser.yml'
+      - '**/auth/**'
+      - '**/crypto/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tier-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # pull_request_target reads .github/labeler.yml from the base branch and
+      # lists the changed files through the API; it never checks out the pull
+      # request's code.
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          configuration-path: .github/labeler.yml

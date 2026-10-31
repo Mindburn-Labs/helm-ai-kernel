@@ -1,0 +1,18 @@
+# Pull requests that touch these paths get the `tier-2` label: the post-merge
+# human review queue. Labels never block a merge. Keep the paths in step with
+# the `paths` filter in .github/workflows/labeler.yml.
+tier-2:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/dependabot.yml'
+          - 'CODEOWNERS'
+          - '.github/CODEOWNERS'
+          - '**/migrations/**'
+          - '**/*.sql'
+          - 'deploy/**'
+          - 'release/**'
+          - 'scripts/release/**'
+          - '.goreleaser.yml'
+          - '**/auth/**'
+          - '**/crypto/**'

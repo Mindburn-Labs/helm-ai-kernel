@@ -1,6 +1,6 @@
 ---
 name: repo-auditor
-description: Use when asked to audit what a HELM repository actually implements before planning or changing it.
+description: Audits what a HELM repository actually implements from its current source and classifies each finding. Use when asked for a source-grounded reality check before planning or changing HELM code.
 ---
 
 # HELM Repo Auditor

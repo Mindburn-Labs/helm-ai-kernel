@@ -10,7 +10,8 @@ import (
 
 // TestFirstPartyRegistryPacksAreDiscoverableAndAllowed keeps every shipped
 // first-party pack loadable, scan-clean, and discoverable by agents that read
-// SKILL.md frontmatter (name matching the directory, a one-line description).
+// SKILL.md frontmatter (name matching the directory, and a one-line description
+// that says what the skill does and when to use it).
 func TestFirstPartyRegistryPacksAreDiscoverableAndAllowed(t *testing.T) {
 	root := firstPartyRepoRoot(t)
 	var dirs []string
@@ -40,8 +41,8 @@ func TestFirstPartyRegistryPacksAreDiscoverableAndAllowed(t *testing.T) {
 			if front["name"] != filepath.Base(dir) {
 				t.Fatalf("frontmatter name = %q, want %q", front["name"], filepath.Base(dir))
 			}
-			if desc := front["description"]; desc == "" || len(desc) > 200 {
-				t.Fatalf("frontmatter description must be one short sentence, got %q", desc)
+			if desc := front["description"]; desc == "" || len(desc) > 300 || !strings.Contains(desc, "Use when") {
+				t.Fatalf("frontmatter description must say what the skill does, then \"Use when ...\", in at most 300 characters, got %q", desc)
 			}
 			result, err := Scan(pack)
 			if err != nil {

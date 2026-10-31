@@ -1,5 +1,7 @@
 # Receipt verifier for JavaScript and WebAssembly
 
+<!-- quantum_posture: This bridge exposes the existing classical Ed25519 verifier; it adds no cryptography or trust roots. -->
+
 Build the classical Ed25519 receipt verifier and its matching Go runtime:
 
 ```sh
@@ -67,6 +69,10 @@ refusals. It also covers initialization races and parsing-work refusals followed
 by successful reuse. The JavaScript harness runs the actual WASM module in Node
 with WASM linear memory capped at 128 MiB and records its exact binary hash and named
 results in `conformance.json`.
+
+The shipped `js/wasm` entrypoint is declared in `scripts/ci/deadcode-roots.txt`.
+The reachability gate measures both targets and combines findings only where
+they compile the same source declaration. Its frozen allowlist remains unchanged.
 
 After a successful main `CI` run, `Receipt verifier WASM` rebuilds and tests the
 exact source revision and uploads the bundle as a commit-bound Actions artifact.

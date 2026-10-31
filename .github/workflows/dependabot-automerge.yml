@@ -1,0 +1,24 @@
+# Arms GitHub auto-merge for patch and minor Dependabot updates. The merge still
+# waits for the required `ci / gate` check, and majors are left for review. The
+# shared workflow arms nothing on a branch with no required status check.
+#
+# Not a required check: it only turns auto-merge on, and it never fails a pull
+# request on policy.
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependabot:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: Mindburn-Labs/platform-actions/.github/workflows/dependabot-auto-merge.yml@v2.0.4
+    secrets:
+      MINDBURN_FLUX_APP_ID: ${{ secrets.MINDBURN_FLUX_APP_ID }}
+      MINDBURN_FLUX_PRIVATE_KEY: ${{ secrets.MINDBURN_FLUX_PRIVATE_KEY }}

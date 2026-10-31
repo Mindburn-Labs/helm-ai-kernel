@@ -6,6 +6,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: ci
       include: scope
@@ -17,6 +18,7 @@ updates:
     directories: ['**/*']
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       include: scope
@@ -28,6 +30,7 @@ updates:
     directories: ['**/*']
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       prefix-development: chore
@@ -40,6 +43,7 @@ updates:
     directories: ['**/*']
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       prefix-development: chore
@@ -52,6 +56,7 @@ updates:
     directories: ['**/*']
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       include: scope
@@ -63,6 +68,7 @@ updates:
     directories: ['**/*']
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       include: scope
@@ -74,6 +80,7 @@ updates:
     directory: /sdk/java
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     commit-message:
       prefix: fix
       include: scope

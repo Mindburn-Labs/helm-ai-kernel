@@ -126,6 +126,8 @@ type OAuthTokenClaims struct {
 
 type ExecutorClaim struct {
 	Client string `json:"client"`
+	// Host is optional ADR-0011 provenance; it is never a principal or grant.
+	Host string `json:"host,omitempty"`
 }
 
 // UnmarshalJSON keeps this authority-bearing marker identical to the issuer's
@@ -135,18 +137,42 @@ func (e *ExecutorClaim) UnmarshalJSON(data []byte) error {
 	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
 		return errors.New("helm_executor must be an object")
 	}
-	if key, err := d.Token(); err != nil || key != "client" {
-		return errors.New("helm_executor requires client")
+	var parsed ExecutorClaim
+	seen := map[string]bool{}
+	for d.More() {
+		key, err := d.Token()
+		name, ok := key.(string)
+		if err != nil || !ok || seen[name] {
+			return errors.New("helm_executor contains an invalid or duplicate member")
+		}
+		seen[name] = true
+		value, err := d.Token()
+		text, ok := value.(string)
+		if err != nil || !ok {
+			return errors.New("helm_executor members must be strings")
+		}
+		switch name {
+		case "client":
+			if !executorClient(text) {
+				return errors.New("helm_executor client is invalid")
+			}
+			parsed.Client = text
+		case "host":
+			if text != "console-runner" {
+				return errors.New("helm_executor host is invalid")
+			}
+			parsed.Host = text
+		default:
+			return errors.New("helm_executor contains an unknown member")
+		}
 	}
-	value, err := d.Token()
-	client, ok := value.(string)
-	if err != nil || !ok || !executorClient(client) || d.More() {
-		return errors.New("helm_executor must name exactly one canonical client")
+	if tok, err := d.Token(); err != nil || tok != json.Delim('}') || !seen["client"] {
+		return errors.New("helm_executor requires a canonical client")
 	}
-	if tok, err := d.Token(); err != nil || tok != json.Delim('}') {
-		return errors.New("helm_executor must end after client")
+	if _, err := d.Token(); err != io.EOF {
+		return errors.New("helm_executor has trailing input")
 	}
-	e.Client = client
+	*e = parsed
 	return nil
 }
 

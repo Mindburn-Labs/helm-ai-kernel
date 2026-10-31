@@ -26,7 +26,7 @@
 | Data Plane signer | `ecf30df4bdabbcf06cf2e9fe5c2f3c7c4468d103` | merged on canonical main |
 | Integration proof candidate | `aee83f9d1cf2dc16726ab54836ddc3c0fd06bf29` | reconciled with canonical main; runner 48/372 and stack 15/105 pass |
 | Bounded runtime evidence | stack `helm638-local-2ff74c7-c` | seven exact-source services healthy before/after restart, public JWKS 200, private Kernel mTLS denied without/allowed with client cert, ten mode-0600 evidence files, zero secret matches, no provider/GitHub calls, clean teardown |
-| Remote/public boundary | active GitHub identity `ironwrap`; stored `mindburnlabs` permission readback | private-repository admin/push permission exists under stored identity, but no switch/write occurred; v0.8.5 tags/release absent; Xcode license check exits 69 |
+| Remote/public boundary | active GitHub identity was a personal account, not `mindburnlabs`; stored `mindburnlabs` permission readback | private-repository admin/push permission exists under stored identity, but no switch/write occurred; v0.8.5 tags/release absent; Xcode license check exits 69 |
 
 The traceability compilation commit necessarily supersedes the pre-traceability Kernel HEAD. AK-001 must bind and revalidate the final clean candidate after this documentation change; the earlier executable evidence remains source-addressable and is not presented as remote/public proof.
 

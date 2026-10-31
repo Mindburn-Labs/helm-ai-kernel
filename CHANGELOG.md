@@ -96,6 +96,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Changed
 
+- First-party skill packs: `helm/repo-auditor` 0.2.0 adds the `name` and
+  `description` frontmatter agents need to discover it and tightens its body;
+  `helm/codex-multi-agent-director` is removed because agents decompose work
+  natively.
 - Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder
   images; `golang.org/x/net` v0.60.0 and `golang.org/x/crypto` v0.57.0 clear
   the 2026-10-08 govulncheck advisories (GO-2026-6599 through GO-2026-6617).

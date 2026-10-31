@@ -72,7 +72,6 @@ this skill-pack survey, not a product completeness or GA claim.
 - `core/pkg/skillpacks/*`
 - `schemas/skills/*.schema.json`
 - `registry/skills/helm/repo-auditor/*`
-- `registry/skills/helm/codex-multi-agent-director/*`
 - `policies/skills/first-party.safe.toml`
 - `core/pkg/skillpacks/skillpacks_test.go`
 - `core/cmd/helm-ai-kernel/skills_cmd_test.go`

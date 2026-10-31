@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: Mindburn-Labs/platform-actions/.github/workflows/dependabot-auto-merge.yml@v2.0.4
+    uses: Mindburn-Labs/platform-actions/.github/workflows/dependabot-auto-merge.yml@v2.1.0
     secrets:
       MINDBURN_FLUX_APP_ID: ${{ secrets.MINDBURN_FLUX_APP_ID }}
       MINDBURN_FLUX_PRIVATE_KEY: ${{ secrets.MINDBURN_FLUX_PRIVATE_KEY }}

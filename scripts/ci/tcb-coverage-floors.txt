@@ -23,7 +23,7 @@ trust/registry
 runtime/sandbox 75.6
 receipts/policies 67.0
 verifier 83.6
-receiptverify 57.6
+receiptverify
 evidencepack 78.8
 pdp
 firewall

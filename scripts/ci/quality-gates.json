@@ -992,7 +992,7 @@
     {
       "id": "deadcode",
       "title": "Unreachable code in shipped binaries",
-      "description": "golang.org/x/tools deadcode from scripts/ci/deadcode-roots.txt. A planted-function positive control runs first; unreachable functions not in scripts/ci/deadcode-allowlist.txt, and allowlisted functions that are no longer unreachable, fail.",
+      "description": "golang.org/x/tools deadcode from native deadcode-roots.txt and js/wasm deadcode-wasm-roots.txt. Target-specific positive controls run first; findings combine only across targets that compile the same declaration. New or stale frozen allowlist entries fail.",
       "command": "bash scripts/ci/deadcode_gate.sh",
       "timeout_seconds": 1200
     },

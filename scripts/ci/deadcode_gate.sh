@@ -2,8 +2,8 @@
 # Unreachable-code gate (target architecture R10, §13.1-4).
 #
 # Runs golang.org/x/tools/cmd/deadcode from every root listed in
-# scripts/ci/deadcode-roots.txt (the shipped binaries), for linux/amd64 and any
-# declared js/wasm roots, with CGO_ENABLED=0. A function no root can reach is a finding,
+# scripts/ci/deadcode-roots.txt (native binaries) and deadcode-wasm-roots.txt
+# (js/wasm), with CGO_ENABLED=0. A function no root can reach is a finding,
 # keyed as "<package path> <function>".
 #
 # scripts/ci/deadcode-allowlist.txt freezes the unreachable functions that
@@ -79,17 +79,26 @@ while IFS= read -r line; do
     line="${line%%#*}"
     line="$(echo "$line" | tr -d '[:space:]')"
     [ -n "$line" ] || continue
-    target=linux/amd64
-    case "$line" in js/wasm:*) target=js/wasm; line="${line#js/wasm:}" ;; esac
     case "$line" in
-        core/*)
-            if [ "$target" = js/wasm ]; then wasm_roots+=("./${line#core/}")
-            else roots+=("./${line#core/}"); fi ;;
+        core/*) roots+=("./${line#core/}") ;;
         *) echo "::error::deadcode root $line is outside the core module"; exit 2 ;;
     esac
 done <"$ROOT/scripts/ci/deadcode-roots.txt"
+while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | tr -d '[:space:]')"
+    [ -n "$line" ] || continue
+    case "$line" in
+        core/*) wasm_roots+=("./${line#core/}") ;;
+        *) echo "::error::WASM deadcode root $line is outside the core module"; exit 2 ;;
+    esac
+done <"$ROOT/scripts/ci/deadcode-wasm-roots.txt"
 if [ "${#roots[@]}" -eq 0 ]; then
     echo "::error::scripts/ci/deadcode-roots.txt lists no roots"
+    exit 2
+fi
+if [ "${#wasm_roots[@]}" -eq 0 ]; then
+    echo "::error::scripts/ci/deadcode-wasm-roots.txt lists no roots"
     exit 2
 fi
 echo "==> deadcode from ${roots[*]}"
@@ -122,7 +131,7 @@ if [ "${#wasm_roots[@]}" -gt 0 ]; then
         --profile "$WORK/deadcode-wasm.json" "$WORK/wasm.sources" >"$WORK/deadcode.keys"
 fi
 if ! python3 "$FINDINGS" compare "$ALLOWLIST" "$WORK/deadcode.keys"; then
-    echo "A new line above is unreachable from every shipped binary: call it from a shipped path, delete it, or declare its binary in scripts/ci/deadcode-roots.txt."
+    echo "A new line above is unreachable from every shipped binary: call it from a shipped path, delete it, or declare its binary in the appropriate native/WASM roots file."
     echo "A stale line above means code was deleted or is now reached: remove that line from scripts/ci/deadcode-allowlist.txt in the same PR."
     exit 1
 fi

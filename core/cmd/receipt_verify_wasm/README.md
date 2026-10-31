@@ -70,9 +70,10 @@ by successful reuse. The JavaScript harness runs the actual WASM module in Node
 with WASM linear memory capped at 128 MiB and records its exact binary hash and named
 results in `conformance.json`.
 
-The shipped `js/wasm` entrypoint is declared in `scripts/ci/deadcode-roots.txt`.
+The shipped `js/wasm` entrypoint is declared in `scripts/ci/deadcode-wasm-roots.txt`.
 The reachability gate measures both targets and combines findings only where
 they compile the same source declaration. Its frozen allowlist remains unchanged.
+The native control registry continues to read its separate native roots list.
 
 After a successful main `CI` run, `Receipt verifier WASM` rebuilds and tests the
 exact source revision and uploads the bundle as a commit-bound Actions artifact.

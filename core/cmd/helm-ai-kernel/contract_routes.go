@@ -2050,58 +2050,95 @@ func readEvidenceBundle(data []byte) (*evidenceBundle, error) {
 }
 
 // checkEvidenceBundleSeal checks the EvidencePack seal against the runtime
-// key only. A seal signed by any other key, including one the pack carries
-// about itself, is UNVERIFIABLE when the contents match it and FAILED when
-// they do not.
+// key only. When that does not prove it, the seal is checked once more
+// against the key the seal carries, only to tell an intact pack signed by
+// another key (UNVERIFIABLE) from a missing, malformed or altered one
+// (FAILED); the carried key never makes the seal VERIFIED. The same applies
+// when the runtime has no Ed25519 trust anchor at all.
 func checkEvidenceBundleSeal(result *evidenceVerification, raw []byte, svc *Services) {
-	trustConfig, err := trustedEvidenceBundleSealTrustConfig(svc)
-	if err != nil {
-		result.add(evidenceCheckBundleSeal, receiptverify.VerdictUnverifiable,
-			"the runtime has no Ed25519 trust anchor for EvidencePack seals, so the seal was not checked", err.Error())
-		return
-	}
-	report, err := verifyEvidenceBundleSealReport(raw, trustConfig)
+	packDir, err := os.MkdirTemp("", "helm-evidence-verify-*")
 	if err != nil {
 		result.add(evidenceCheckBundleSeal, receiptverify.VerdictFailed,
 			"the bundle could not be unpacked to check its seal",
-			"trusted evidence bundle seal verification failed: "+err.Error())
+			"trusted evidence bundle seal verification failed: create evidence verify workspace")
 		return
 	}
-	trustedKeyID := trustConfig.Signer.KeyID
-	signedByRuntime := report.SignerKeyID == trustedKeyID
-	switch {
-	case report.State == "valid" && report.SignatureValid && len(report.Errors) == 0 && signedByRuntime:
-		result.add(evidenceCheckBundleSeal, receiptverify.VerdictVerified,
-			fmt.Sprintf("the seal signature verifies under the runtime key %q and the pack inventory matches the seal", trustedKeyID))
-	case report.State == evidencepkg.EvidencePackSealStateUnverifiable,
-		report.State == "valid" && report.SignatureValid && len(report.Errors) == 0:
-		result.add(evidenceCheckBundleSeal, receiptverify.VerdictUnverifiable,
-			fmt.Sprintf("the pack matches its seal, but the seal names signer %q, not the runtime key %q", report.SignerKeyID, trustedKeyID),
-			fmt.Sprintf("evidence bundle seal signer %q is not the runtime trust anchor %q", report.SignerKeyID, trustedKeyID))
-	default:
-		detail := fmt.Sprintf("state=%s signer=%s", report.State, report.SignerKeyID)
-		if len(report.Errors) > 0 {
-			detail = strings.Join(report.Errors, "; ")
-		}
+	defer os.RemoveAll(packDir)
+	// Seal errors name files inside the workspace; report them relative to
+	// the pack so the public route does not leak server paths.
+	relative := func(text string) string { return strings.ReplaceAll(text, packDir+string(os.PathSeparator), "") }
+	if err := extractEvidenceBundleToDir(raw, packDir); err != nil {
 		result.add(evidenceCheckBundleSeal, receiptverify.VerdictFailed,
-			"the seal is missing or malformed, or does not match the pack contents under the runtime key",
-			"trusted evidence bundle seal verification failed: "+detail)
+			"the bundle could not be unpacked to check its seal",
+			"trusted evidence bundle seal verification failed: "+relative(err.Error()))
+		return
 	}
+
+	trustConfig, trustErr := trustedEvidenceBundleSealTrustConfig(svc)
+	var runtimeReport evidencepkg.EvidencePackSealVerification
+	if trustErr == nil {
+		trustedKeyID := trustConfig.Signer.KeyID
+		runtimeReport = verifyEvidencePackSealWith(packDir, trustConfig)
+		if evidenceSealValid(runtimeReport) && runtimeReport.SignerKeyID == trustedKeyID {
+			result.add(evidenceCheckBundleSeal, receiptverify.VerdictVerified,
+				fmt.Sprintf("the seal signature verifies under the runtime key %q and the pack inventory matches the seal", trustedKeyID))
+			return
+		}
+	}
+
+	if carried, ok := carriedEvidenceSealTrust(packDir); ok && evidenceSealValid(verifyEvidencePackSealWith(packDir, carried)) {
+		if trustErr != nil {
+			result.add(evidenceCheckBundleSeal, receiptverify.VerdictUnverifiable,
+				"the pack matches its seal, but the runtime has no Ed25519 trust anchor to check the signer against",
+				"evidence bundle seal not checked against a trust anchor: "+trustErr.Error())
+			return
+		}
+		result.add(evidenceCheckBundleSeal, receiptverify.VerdictUnverifiable,
+			fmt.Sprintf("the pack matches its seal, but the seal is signed by key %q, not the runtime key %q", carried.Signer.KeyID, trustConfig.Signer.KeyID),
+			fmt.Sprintf("evidence bundle seal signer %q is not the runtime trust anchor %q", carried.Signer.KeyID, trustConfig.Signer.KeyID))
+		return
+	}
+
+	detail := fmt.Sprintf("state=%s signer=%s", runtimeReport.State, runtimeReport.SignerKeyID)
+	if len(runtimeReport.Errors) > 0 {
+		detail = relative(strings.Join(runtimeReport.Errors, "; "))
+	} else if trustErr != nil {
+		detail = "the seal does not verify under the key it carries"
+	}
+	result.add(evidenceCheckBundleSeal, receiptverify.VerdictFailed,
+		"the seal is missing or malformed, or does not match the pack contents",
+		"trusted evidence bundle seal verification failed: "+detail)
 }
 
-func verifyEvidenceBundleSealReport(bundle []byte, trustConfig *evidencepkg.EvidencePackTrustConfig) (evidencepkg.EvidencePackSealVerification, error) {
-	packDir, err := os.MkdirTemp("", "helm-evidence-verify-*")
-	if err != nil {
-		return evidencepkg.EvidencePackSealVerification{}, fmt.Errorf("create evidence verify workspace: %w", err)
-	}
-	defer os.RemoveAll(packDir)
-	if err := extractEvidenceBundleToDir(bundle, packDir); err != nil {
-		return evidencepkg.EvidencePackSealVerification{}, err
-	}
+func verifyEvidencePackSealWith(packDir string, trustConfig *evidencepkg.EvidencePackTrustConfig) evidencepkg.EvidencePackSealVerification {
 	return evidencepkg.VerifyEvidencePackSeal(packDir, evidencepkg.VerifyEvidencePackSealOptions{
 		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
 		TrustConfig: trustConfig,
-	}), nil
+	})
+}
+
+func evidenceSealValid(report evidencepkg.EvidencePackSealVerification) bool {
+	return report.State == "valid" && report.SignatureValid && len(report.Errors) == 0
+}
+
+// carriedEvidenceSealTrust builds a trust config from the signer the seal
+// names about itself. It exists only to classify a seal that failed under the
+// runtime key; it is never used to accept one.
+func carriedEvidenceSealTrust(packDir string) (*evidencepkg.EvidencePackTrustConfig, bool) {
+	data, err := os.ReadFile(filepath.Join(packDir, filepath.FromSlash(evidencepkg.EvidencePackSealPath)))
+	if err != nil {
+		return nil, false
+	}
+	var seal evidencepkg.EvidencePackSeal
+	if err := json.Unmarshal(data, &seal); err != nil {
+		return nil, false
+	}
+	keyID := strings.TrimSpace(seal.Signer.KeyID)
+	publicKey := strings.TrimSpace(seal.Signer.PublicKey)
+	if keyID == "" || publicKey == "" {
+		return nil, false
+	}
+	return trustedEvidenceBundleSealConfig(keyID, publicKey, seal.Signer.Type), true
 }
 
 func extractEvidenceBundleToDir(data []byte, dstDir string) error {
@@ -2212,11 +2249,12 @@ func checkEvidenceRequiredArtifacts(result *evidenceVerification, bundle *eviden
 }
 
 func receiptRequiresEvidenceArtifact(receipt *contracts.Receipt) bool {
-	return receiptRequiresVerificationScope(receipt) ||
-		receiptRequiresHarnessTrace(receipt) ||
-		receiptRequiresPlanTransaction(receipt) ||
-		receiptRequiresHarnessChange(receipt) ||
-		receiptRequiresGroundedAction(receipt)
+	for _, requirement := range evidenceArtifactRequirements {
+		if requirement.requires(receipt) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkEvidenceReceiptSignatures verifies every receipt against the runtime
@@ -2420,23 +2458,27 @@ func verifyEvidenceReceiptProfile(ed25519PublicKey, mldsa65PublicKey string, rec
 	return nil
 }
 
+// evidenceArtifactRequirements is the one list of artifacts a receipt can
+// require in its bundle; the check and the decision to run it both read it.
+var evidenceArtifactRequirements = []struct {
+	prefix   string
+	label    string
+	requires func(*contracts.Receipt) bool
+}{
+	{"verification_scopes/", "verification scope", receiptRequiresVerificationScope},
+	{"harness_traces/", "harness trace", receiptRequiresHarnessTrace},
+	{"plan_transactions/", "plan transaction", receiptRequiresPlanTransaction},
+	{"harness_change_contracts/", "harness change contract", receiptRequiresHarnessChange},
+	{"grounded_action_refs/", "grounded action ref", receiptRequiresGroundedAction},
+}
+
 func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
 	var errs []string
 	for _, receipt := range receipts {
-		if receiptRequiresVerificationScope(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "verification_scopes/", receipt) {
-			errs = append(errs, fmt.Sprintf("%s missing verification scope", receipt.ReceiptID))
-		}
-		if receiptRequiresHarnessTrace(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_traces/", receipt) {
-			errs = append(errs, fmt.Sprintf("%s missing harness trace", receipt.ReceiptID))
-		}
-		if receiptRequiresPlanTransaction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "plan_transactions/", receipt) {
-			errs = append(errs, fmt.Sprintf("%s missing plan transaction", receipt.ReceiptID))
-		}
-		if receiptRequiresHarnessChange(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_change_contracts/", receipt) {
-			errs = append(errs, fmt.Sprintf("%s missing harness change contract", receipt.ReceiptID))
-		}
-		if receiptRequiresGroundedAction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "grounded_action_refs/", receipt) {
-			errs = append(errs, fmt.Sprintf("%s missing grounded action ref", receipt.ReceiptID))
+		for _, requirement := range evidenceArtifactRequirements {
+			if requirement.requires(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, requirement.prefix, receipt) {
+				errs = append(errs, fmt.Sprintf("%s missing %s", receipt.ReceiptID, requirement.label))
+			}
 		}
 	}
 	return errs

@@ -113,7 +113,7 @@ def main() -> None:
                 "mcp_unknown_server": mcp_verdict,
                 "receipt_verified": True,
                 "sandbox_preflight": preflight["verdict"],
-                "evidence_verification": evidence_result.verdict,
+                "evidence_verification": evidence_result.outcome,
             },
             indent=2,
             sort_keys=True,

@@ -2929,7 +2929,7 @@ paths:
     post:
       operationId: replayVerify
       tags: [evidence]
-      summary: Replay and verify execution from tapes
+      summary: Verify an evidence bundle (no replay runs)
       requestBody:
         required: true
         content:

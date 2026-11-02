@@ -2410,3 +2410,113 @@ func TestEvidenceVerificationConclude(t *testing.T) {
 		})
 	}
 }
+
+// Every default install signs with the same key id but its own key. A bundle
+// from another instance is intact but unproven here, not tampered.
+func TestEvidenceVerifySameKeyIDOtherKeyIsUnverifiable(t *testing.T) {
+	local, err := helmcrypto.NewEd25519Signer("root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := helmcrypto.NewEd25519Signer("root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: local})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", signedEvidenceVerifyTestBundle(t, other))
+	statuses := evidenceCheckStatuses(t, result)
+	if statuses["bundle_seal"] != "UNVERIFIABLE" || statuses["receipt_signatures"] != "UNVERIFIABLE" || result["outcome"] != "UNVERIFIABLE" {
+		t.Fatalf("bundle from another instance with the same key id = %+v, want seal, signatures and outcome UNVERIFIABLE", result)
+	}
+}
+
+// Without a trust anchor the seal still separates intact from altered: an
+// altered pack is FAILED, and no error leaks the server's workspace path.
+func TestEvidenceVerifyWithoutTrustAnchorStillFailsAlteredBundles(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("unanchored-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered, err := tamperEvidenceReceiptFields(signedEvidenceVerifyTestBundle(t, signer), func(receipt *contracts.Receipt) {
+		receipt.ArgsHash = "args-rewritten"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", tampered)
+	if statuses := evidenceCheckStatuses(t, result); statuses["bundle_seal"] != "FAILED" || result["outcome"] != "FAILED" {
+		t.Fatalf("altered bundle without a trust anchor = %+v, want seal and outcome FAILED", result)
+	}
+	if resultErrorsContain(result, "helm-evidence-verify-") {
+		t.Fatalf("errors leak the verify workspace path: %+v", result["errors"])
+	}
+}
+
+// One receipt signed by another key and one with a broken signature: the
+// broken one fails the check, and both are reported.
+func TestEvidenceVerifyMixedReceiptSignaturesFail(t *testing.T) {
+	trusted, err := helmcrypto.NewEd25519Signer("runtime-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := helmcrypto.NewEd25519Signer("other-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	carried := newEvidenceVerifyTestReceipt("mixed-carried", "mixed-a", 1, "")
+	if err := other.SignReceipt(carried); err != nil {
+		t.Fatal(err)
+	}
+	broken := newEvidenceVerifyTestReceipt("mixed-broken", "mixed-b", 1, "")
+	if err := trusted.SignReceipt(broken); err != nil {
+		t.Fatal(err)
+	}
+	broken.ArgsHash = "args-rewritten-after-signing"
+	bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("", []*contracts.Receipt{carried, broken}, nil, &Services{ReceiptSigner: trusted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: trusted})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", bundle)
+	if statuses := evidenceCheckStatuses(t, result); statuses["receipt_signatures"] != "FAILED" || result["outcome"] != "FAILED" {
+		t.Fatalf("mixed receipts = %+v, want receipt_signatures and outcome FAILED", result)
+	}
+	if !resultErrorsContain(result, "mixed-broken signature verification failed") || !resultErrorsContain(result, "mixed-carried is signed by a key it carries") {
+		t.Fatalf("both receipts must be reported: %+v", result["errors"])
+	}
+}
+
+// required_artifacts runs when a receipt declares a requirement and fails
+// when the bundle lacks the artifact.
+func TestEvidenceVerifyRequiredArtifactMissingFails(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("artifact-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := newEvidenceVerifyTestReceipt("needs-scope", "artifact-session", 1, "")
+	receipt.Metadata = map[string]any{"risk_class": "T2"}
+	if err := signer.SignReceipt(receipt); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("artifact-session", []*contracts.Receipt{receipt}, nil, &Services{ReceiptSigner: signer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", bundle)
+	if statuses := evidenceCheckStatuses(t, result); statuses["required_artifacts"] != "FAILED" || result["outcome"] != "FAILED" {
+		t.Fatalf("receipt requiring a scope without one = %+v, want required_artifacts and outcome FAILED", result)
+	}
+	if !resultErrorsContain(result, "needs-scope missing verification scope") {
+		t.Fatalf("missing artifact not named: %+v", result["errors"])
+	}
+}

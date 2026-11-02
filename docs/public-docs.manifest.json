@@ -177,8 +177,8 @@
   "api_contract": {
     "schema_version": 1,
     "source_path": "api/openapi/helm.openapi.yaml",
-    "content_sha256": "sha256:71018476f0a19961469b4462ff568567742eb101a9b931d9758fdf0f44703495",
-    "git_blob_sha1": "529e9e80f6c602a7beeb93c55bbed910b717a4cd",
+    "content_sha256": "sha256:3cedb857a0832c873a6ca344c268b141bbe0da8dc53573fd079aa2ad6a29681b",
+    "git_blob_sha1": "98eed3e794623c1d8605c27cbcf158dc351c3b59",
     "public_operations": [
       {
         "method": "GET",

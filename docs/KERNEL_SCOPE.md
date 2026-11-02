@@ -93,8 +93,6 @@ non-TCB supporting infrastructure:
 | `canonicalize/`        | RFC 8785 JCS implementation                | ✅ Active |
 | `manifest/`            | Tool args/output validation (PEP boundary) | ✅ Active |
 | `bridge/`              | KernelBridge choke point                   | ✅ Active |
-| `runtime/budget/`      | Compute budget enforcement; not linked into `core/cmd/helm-ai-kernel` | Library only |
-| `escalation/ceremony/` | RFC-005 Approval Ceremony; not linked into `core/cmd/helm-ai-kernel` | Library only |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
 | `replay/`              | Replay engine for verification; not linked into `core/cmd/helm-ai-kernel` | Library only |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |

@@ -18,8 +18,6 @@ generic-api-key core/pkg/identity/did/document.go 44c8054e2347
 generic-api-key core/pkg/kernel/secrets_test.go 6a376fc0ee06
 generic-api-key core/pkg/launchpad/session/runtime_starter.go 4026d1d3357a
 generic-api-key core/pkg/networkproof/types.go 40ca42358f37
-generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go ac6e7bfb8d7f
-generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go fb498cd1dd2f
 generic-api-key tools/launchpad/egressproxy/main_test.go 5223dd08d6cd
 gitlab-pat core/internal/cli/tui/pentest_test.go 3450b4fcb4ae
 jwt core/pkg/mcp/catalog_test.go 66980714638d

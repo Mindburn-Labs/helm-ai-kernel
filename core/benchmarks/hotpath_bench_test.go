@@ -576,13 +576,7 @@ func TestOverheadReport(t *testing.T) {
 		report["p99_gate_pass"] = (results[1].P99Us - results[0].P99Us) < threshold
 	}
 
-	// Competitive comparison: isolated component benchmarks vs Microsoft Agent Governance Toolkit
-	competitiveComparison := map[string]any{
-		"microsoft_agent_os": map[string]any{
-			"claimed_policy_eval_us":     12,
-			"claimed_throughput_ops_sec": 72000,
-		},
-	}
+	// Isolated component measurements from this run.
 	helmMetrics := map[string]any{
 		"measured_throughput_ops_sec": celThroughputOps,
 	}
@@ -599,8 +593,7 @@ func TestOverheadReport(t *testing.T) {
 			helmMetrics["measured_total_allow_p99_us"] = r.P99Us
 		}
 	}
-	competitiveComparison["helm"] = helmMetrics
-	report["competitive_comparison"] = competitiveComparison
+	report["component_metrics"] = helmMetrics
 
 	reportJSON, _ := json.MarshalIndent(report, "", "  ")
 

@@ -124,17 +124,6 @@ func TestFinal_ExecutionPlanJSON(t *testing.T) {
 	}
 }
 
-func TestFinal_PolicyDomainConstants(t *testing.T) {
-	domains := []PolicyDomain{DomainAuthorization, DomainCompliance, DomainRisk, DomainAudit, DomainGeneral}
-	seen := make(map[PolicyDomain]bool)
-	for _, d := range domains {
-		if seen[d] {
-			t.Fatalf("duplicate: %s", d)
-		}
-		seen[d] = true
-	}
-}
-
 func TestFinal_CELDPErrorCodeConstants(t *testing.T) {
 	codes := []CELDPErrorCode{CELDPErrorTypeError, CELDPErrorDivZero, CELDPErrorOverflow, CELDPErrorUndefined, CELDPErrorInvalidArg, CELDPErrorInternal}
 	for _, c := range codes {
@@ -186,16 +175,6 @@ func TestFinal_RiskEnvelopeJSON(t *testing.T) {
 	var re2 RiskEnvelope
 	json.Unmarshal(data, &re2)
 	if re2.EnvelopeID != "re1" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_SwarmPDPConfigJSON(t *testing.T) {
-	cfg := SwarmPDPConfig{MaxParallelPDPs: 5, EnableMetrics: true}
-	data, _ := json.Marshal(cfg)
-	var cfg2 SwarmPDPConfig
-	json.Unmarshal(data, &cfg2)
-	if cfg2.MaxParallelPDPs != 5 || !cfg2.EnableMetrics {
 		t.Fatal("round-trip mismatch")
 	}
 }

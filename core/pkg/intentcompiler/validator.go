@@ -72,7 +72,7 @@ func (v *GraphValidator) Validate(plan *contracts.PlanSpec) []error {
 
 	// Validate effect types are known (if catalog available).
 	for _, node := range dag.Nodes {
-		if contracts.IsLaunchMissionEffectPreview(node.EffectType) {
+		if contracts.IsReservedPreviewEffect(node.EffectType) {
 			errs = append(errs, fmt.Errorf("step %s uses preview effect %s, which is not executable", node.ID, node.EffectType))
 		}
 	}

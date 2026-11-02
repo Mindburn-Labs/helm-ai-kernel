@@ -136,6 +136,14 @@ func TestLaunchPreviewEffectsRemainOutsideExecutableCatalog(t *testing.T) {
 		if risk := EffectRiskClass(effect.effectID); risk != effect.risk {
 			t.Fatalf("preview launch effect %s risk class = %s, want %s", effect.effectID, risk, effect.risk)
 		}
+		if !IsReservedPreviewEffect(effect.effectID) {
+			t.Fatalf("preview launch effect %s is not reserved", effect.effectID)
+		}
+	}
+	for _, effect := range DefaultEffectCatalog().EffectTypes {
+		if IsReservedPreviewEffect(effect.TypeID) {
+			t.Fatalf("executable catalog type %s is reserved as a preview", effect.TypeID)
+		}
 	}
 }
 

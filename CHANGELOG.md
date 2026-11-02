@@ -106,6 +106,85 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `sdk/go` and every other module now declare `go 1.26.9`, so consumers need
   Go 1.26.9 or newer.
 
+## [0.11.3]
+
+### Fixed
+
+- `core` now requires the published `sdk/go` `v0.11.2` instead of a
+  pseudo-version, so a build from a cold module cache resolves it.
+  `make test-core-module-closure` downloads `core`'s first-party requirements
+  directly into a fresh module cache, without the workspace, and fails when one
+  cannot be fetched.
+
+### Release process
+
+- The container, Go SDK tag and npm publishers now wait for the PyPI SDK job to
+  succeed.
+- The PyPI job refuses to publish a `helm-sdk` version that already exists
+  instead of skipping the upload.
+
+## [0.11.2]
+
+### Added
+
+- Gateway GitHub effects `github.pull_request.create`,
+  `github.pull_request.merge` and `github.git.push`; the push is bound to the
+  exact ref object ID, and an ambiguous merge result preserves custody.
+- Shared model budgets with affordable default caps, enforced at the model
+  gateway; legacy model writers are fenced across gateway upgrades.
+- Gateway reads: the outcome of a principal Stop, an observed-only GitHub
+  activity trail with a read API, and authenticated team admission counter
+  snapshots readable by the team or its provisioner.
+- Signed continuation of retained work attempts, and governed cross-seat work
+  reassignment with native fence reads. The SDK declares the current work
+  reassignment read.
+- Scoped provider recovery fences that serialize with native dispatch claims,
+  and an exact recovery version lineage. Recovery rejects token scope
+  downgrades, and every checkpoint table is under tenant row-level security.
+- Chart: `gateway.serving` selects an independent serving image and executable
+  for the gateway Deployment. Migration always uses the shared Kernel image.
+- TypeScript SDK: an explicit native MCP effect client that keeps the attempt
+  identity of a native refusal.
+
+### Changed
+
+- Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder
+  images; `golang.org/x/net` v0.60.0 and `golang.org/x/crypto` v0.57.0 clear
+  the govulncheck advisories GO-2026-6599 through GO-2026-6617. `sdk/go` and
+  every other module now declare `go 1.26.9`, so consumers need Go 1.26.9 or
+  newer.
+- A Go dependency batch (41 updates in the root module) raises
+  `golang.org/x/net` to v0.61.0 and `golang.org/x/crypto` to v0.58.0, among
+  others.
+- The slim container image refreshes its Alpine runtime packages, clearing
+  current OpenSSL and zlib findings on both architectures.
+- TypeScript SDK tooling is refreshed to clear its audit findings (HELM-1030),
+  and the development chart catalog metadata is staged accurately (HELM-1031).
+
+### Fixed
+
+- The gateway enforces the custom argument schemas that adapters declare for
+  their inputs.
+- Dependabot coverage now parses singular and plural directories, including
+  globs, and checks every tracked Go module and SDK dependency manifest against
+  its package ecosystem (HELM-972).
+
+### Release process
+
+- The `dev-image` workflow also runs on every green `main` commit. It publishes
+  a development image and a cosign-signed prerelease chart to
+  `oci://ghcr.io/mindburn-labs/charts-dev`; the public chart repository never
+  receives a prerelease (HELM-968).
+- The govulncheck gate fails on an incomplete scan.
+- The release verifies tag-only environment policies (HELM-732) and pins the
+  verified Console sidecar for the release.
+
+### Release scope
+
+- Partial publication, fixed forward by 0.11.3. The `v0.11.2` tag, the container
+  images, the npm package and the `sdk/go/v0.11.2` tag exist. The PyPI SDK job
+  failed, so `helm-sdk` 0.11.2 is not on PyPI and no GitHub Release was created.
+
 ## [0.11.1]
 
 ### Fixed
@@ -115,6 +194,73 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   nonempty signing Secret while refusing a nonempty differing key or a symlink.
 - Cover the rendered init states and the published-0.7.2 Kind upgrade, including
   key matching and receipt persistence across restart.
+
+## [0.11.0]
+
+### Added
+
+- Gateway `ListAttempts` with bounded, stable paging and filters on state, work
+  reference, requester, effect type and episode. It returns `settled_before`,
+  the safe resume point for an incremental reader.
+- Authority provisioning as gateway effects: `helm.authority.provision.v1`
+  applies an organization's whole authority plan behind a distinct human's
+  approval, and `helm.authority.narrow.v1` applies a plan that only narrows.
+  `AuthorityAdminService` (`EnsurePrincipals`, `GetProvisioning`,
+  `ListEffectTypes`) and the effect-type catalog are served on the gateway
+  listener.
+- Approve accepts a single-use step-up proof bound to the attempt and its
+  approval digest.
+- A native model gateway with per-call settlement, served by
+  `helm-gateway serve` when `HELM_GATEWAY_MODEL_ROUTES_FILE` is set:
+  `POST /v1/responses`, `POST /v1/chat/completions` and `POST /v1/messages`.
+- A governed MCP mount for episode workers. Effect types are served as MCP
+  tools, attempts record their worker episode (`EffectAttempt.episode`), and a
+  token with an episode claim reads only its own episode's attempts. MCP effects
+  keep a stable work intent across revisions, and schema-bound artifact results
+  are retained.
+- Chart: optional isolated worker and executor gateway listeners
+  (`gateway.worker`, `gateway.executor`), each with its own Service and
+  audience, and `gateway.models` for model routes and provider credentials.
+  All three are off or empty by default.
+
+### Fixed
+
+- The model gateway reserves the configured cache-read surcharge.
+
+### Release process
+
+- The release waits, within a bounded budget, for PyPI to expose the new
+  version before creating the GitHub Release.
+- The GitHub Release is created as neither a draft nor a prerelease and is
+  marked latest.
+
+## [0.10.5]
+
+### Added
+
+- Exact provider tariffs: a versioned nano-cent price
+  (`provider_price_snapshot.v2` and `core/pkg/contracts/economic`) keeps the
+  provider's price without rounding.
+- Usage and settlement receipts v2 (`usage_receipt.v2`,
+  `settlement_receipt.v2`) and EvidencePack spend evidence that verifies exact
+  tariff accrual and balanced settlement.
+- Gateway provisioning and read contracts (HELM-751): the
+  `AuthorityAdminService` wire contract, the `helm.authority.provision.v1` and
+  `helm.authority.narrow.v1` schemas, `ListAttempts` and the Approve step-up
+  proof field. These are contracts, schemas and documentation only; the gateway
+  does not serve them until 0.11.0.
+
+### Fixed
+
+- The chart preserves the gateway bootstrap SQL through kubelet environment
+  expansion (HELM-789).
+
+### Release scope
+
+- The `v0.10.5` tag, container images, npm package, PyPI package and
+  `sdk/go/v0.10.5` tag exist, but no GitHub Release was created: the release
+  run failed at its version check while PyPI's cached index still listed the
+  previous version. 0.11.0 makes the release wait for PyPI propagation.
 
 ## [0.10.4] - 2026-09-29
 

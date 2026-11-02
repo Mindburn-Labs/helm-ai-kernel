@@ -29,7 +29,9 @@
 // set, because a key that travels with the thing it verifies is not a trust
 // root.
 //
-// Exit codes: 0 verified, 1 verification failed, 2 usage error.
+// Exit codes: 0 verified, 1 verification failed, 2 no verdict reported (bad or
+// missing flags, no key, an unreadable receipt or key file, a receipt file that
+// does not parse, or a JSON verdict that cannot be encoded).
 package main
 
 import (

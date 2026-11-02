@@ -94,10 +94,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `receipt_verify-linux-amd64`, `receipt_verify-linux-arm64`,
   `receipt_verify-darwin-amd64`, `receipt_verify-darwin-arm64` and
   `receipt_verify-windows-amd64.exe`, each with a keyless cosign bundle and a
-  line in `SHA256SUMS.txt`. Releases through `v0.11.3` do not carry them. The
+  line in `SHA256SUMS.txt`, from the first release after `v0.11.3`. The
   release staging, the `binaries` job and `make release-smoke` fail when an
-  asset is missing or when the host build does not verify the frozen fixture
-  chain and reject a wrong key and a tampered receipt.
+  asset is missing, too small, or built for a different operating system or CPU
+  architecture than its name states, or when the host build does not verify the
+  frozen fixture chain and reject a wrong key and a tampered receipt.
+- The release reproducibility check now compares binary hashes. It used to
+  compare file names only, so differing builds could not fail it.
 
 ### Fixed
 

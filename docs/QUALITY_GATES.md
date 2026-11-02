@@ -102,10 +102,10 @@ make deadcode
 ```
 
 Runs `golang.org/x/tools/cmd/deadcode` from the shipped binaries listed in
-`scripts/ci/deadcode-roots.txt` (today `core/cmd/helm-ai-kernel`) for
-linux/amd64, and blocks in the `pr`, `merge` and `release` profiles. A planted
-unreachable function in a throwaway program must be reported first, or the gate
-exits 2. The functions that were unreachable when the gate landed are frozen in
+`scripts/ci/deadcode-roots.txt` (today `core/cmd/helm-ai-kernel`,
+`core/cmd/helm-gateway` and `core/cmd/receipt_verify`) for linux/amd64, and
+blocks in the `pr`, `merge` and `release` profiles. A planted unreachable
+function in a throwaway program must be reported first, or the gate exits 2. The functions that were unreachable when the gate landed are frozen in
 `scripts/ci/deadcode-allowlist.txt`, keyed by package and function. New dead code
 fails the gate: wire it, delete it, or declare its binary as a root. A listed
 function that is no longer dead also fails the gate, and the message says to

@@ -70,16 +70,16 @@ no HELM service in the trust path and opens no sockets by construction rather
 than by policy: the binary's transitive import graph contains no transport
 package, and a test fails the build if one appears
 (`core/pkg/receiptverify/receiptverify_test.go:40-78`). **Status: Live in tagged
-source and attached to GitHub Releases as standalone assets.** The release
-workflow builds `receipt_verify` for five platforms and attaches each build to
-the GitHub Release, separate from the kernel binary, so a counterparty can check
-a receipt without downloading the software that issued it:
-`receipt_verify-linux-amd64`, `receipt_verify-linux-arm64`,
-`receipt_verify-darwin-amd64`, `receipt_verify-darwin-arm64` and
-`receipt_verify-windows-amd64.exe`. Each has a keyless `.cosign.bundle` and a
-line in the release `SHA256SUMS.txt`. Releases published through `v0.11.3` do not
-carry these assets; for those, build the same binary from the tagged source with
-`make receipt-verify-binaries`.
+source; attached to GitHub Releases as standalone assets from the first release
+after `v0.11.3`.** The release workflow builds `receipt_verify` for five
+platforms and attaches each build to the GitHub Release, separate from the
+kernel binary, so a counterparty can check a receipt without downloading the
+software that issued it: `receipt_verify-linux-amd64`,
+`receipt_verify-linux-arm64`, `receipt_verify-darwin-amd64`,
+`receipt_verify-darwin-arm64` and `receipt_verify-windows-amd64.exe`. Each has a
+keyless `.cosign.bundle` and a line in the release `SHA256SUMS.txt`. `v0.11.3`
+and earlier releases do not carry these assets; for those, build the same binary
+from the tagged source with `make receipt-verify-binaries`.
 
 Download the asset for your platform from the release, then run it with the
 signer's public key, obtained from the signer through a channel other than the
@@ -91,7 +91,9 @@ chmod +x receipt_verify-linux-amd64
 ```
 
 Exit code `0` means the chain verified under the supplied key, `1` means
-verification failed, and `2` is a usage error such as a missing key. `--json`
+verification failed, and `2` means no verdict was reported: a missing or unknown
+flag, no key supplied, a receipt file or `--key-file` that cannot be read, or a
+receipt file that does not parse as a receipt, receipt array or bundle. `--json`
 prints the verdict as JSON. Verify the download itself with `make verify-cosign`
 as described in [Verification](../VERIFICATION.md).
 

@@ -166,18 +166,22 @@ or finds a bundle without its artifact.
 `make release-smoke` rebuilds the release surface from source: reproducible
 binaries (the kernel and the standalone `receipt_verify` verifier), the SBOM and
 the OpenVEX document, plus cosign verification when bundles are present. It
-also checks that the build holds all five `receipt_verify-*` assets and that the
-one for the running host verifies the frozen fixture chain and rejects a wrong
-key and a tampered receipt; a staged `dist/release-assets/` gets the same check.
-It is the same smoke the release workflow runs.
+also checks that the build holds all five `receipt_verify-*` assets, each at
+least as large as a real build and carrying the executable header of the
+operating system and CPU architecture its name states, and that the one for the
+running host verifies the frozen fixture chain and rejects a wrong key and a
+tampered receipt. A staged `dist/release-assets/` is checked by the staging
+script and the release workflow's `binaries` job, not by the smoke. It is the
+same smoke the release workflow runs.
 
 ### Verify A Receipt Chain Offline
 
-Releases carry the offline receipt verifier as `receipt_verify-linux-amd64`,
-`receipt_verify-linux-arm64`, `receipt_verify-darwin-amd64`,
-`receipt_verify-darwin-arm64` and `receipt_verify-windows-amd64.exe`, each with a
-`.cosign.bundle`. Releases through `v0.11.3` do not carry them; build from the
-tagged source with `make receipt-verify-binaries` instead. After checking the
+From the first release after `v0.11.3`, releases carry the offline receipt
+verifier as `receipt_verify-linux-amd64`, `receipt_verify-linux-arm64`,
+`receipt_verify-darwin-amd64`, `receipt_verify-darwin-arm64` and
+`receipt_verify-windows-amd64.exe`, each with a `.cosign.bundle`. `v0.11.3` and
+earlier releases do not carry them; build from the tagged source with
+`make receipt-verify-binaries` instead. After checking the
 download with `make verify-cosign`, run it with the signer's public key:
 
 ```bash
@@ -186,6 +190,8 @@ chmod +x receipt_verify-linux-amd64
 ```
 
 It opens no sockets and reads no configuration. Exit code `0` means the chain
-verified under the supplied key, `1` means it did not, and `2` is a usage error.
-See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
+verified under the supplied key, `1` means it did not, and `2` means no verdict
+was reported: a missing or unknown flag, no key supplied, a receipt file or
+`--key-file` that cannot be read, or a receipt file that does not parse as a
+receipt, receipt array or bundle. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
 result does and does not establish.

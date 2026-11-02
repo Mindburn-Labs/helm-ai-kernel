@@ -55,9 +55,8 @@ func TestFirstPartyRegistryPacksAreDiscoverableAndAllowed(t *testing.T) {
 	}
 }
 
-// firstPartyRepoRoot walks up from the test directory to the repository root.
-// findRepoRoot is not used because it also matches the Go package directory
-// core/pkg/registry/skills.
+// firstPartyRepoRoot walks up from the test directory to the repository root
+// that holds the first-party packs under registry/skills/helm.
 func firstPartyRepoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()

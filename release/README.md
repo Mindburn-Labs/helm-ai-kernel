@@ -16,8 +16,9 @@ files. It is not a complete copy of any GitHub release.
 ## Current Release Target
 
 The current source release target is `v0.11.3`. Its expected visible release
-assets are platform binaries for Darwin, Linux, and Windows,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
+assets are platform binaries for Darwin, Linux, and Windows, the standalone
+`receipt_verify-*` offline verifier binaries for the same five platforms (not
+attached to releases through `v0.11.3`), `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
 `v0.11.3.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
@@ -33,6 +34,8 @@ baseline for the `v0.5.0` delta is `v0.4.0`.
 GitHub release before publication is claimed:
 
 - five CLI binaries
+- five `receipt_verify-*` offline verifier binaries (not attached to releases
+  through `v0.11.3`)
 - `SHA256SUMS.txt`
 - `sbom.json`
 - `v0.11.3.openvex.json`

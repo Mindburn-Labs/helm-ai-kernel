@@ -88,6 +88,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Added
+
+- The standalone offline receipt verifier is now a release asset:
+  `receipt_verify-linux-amd64`, `receipt_verify-linux-arm64`,
+  `receipt_verify-darwin-amd64`, `receipt_verify-darwin-arm64` and
+  `receipt_verify-windows-amd64.exe`, each with a keyless cosign bundle and a
+  line in `SHA256SUMS.txt`. Releases through `v0.11.3` do not carry them. The
+  release staging, the `binaries` job and `make release-smoke` fail when an
+  asset is missing or when the host build does not verify the frozen fixture
+  chain and reject a wrong key and a tampered receipt.
+
 ### Fixed
 
 - Dependabot coverage now parses singular and plural directories, including

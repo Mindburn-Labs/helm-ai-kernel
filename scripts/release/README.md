@@ -16,6 +16,8 @@ specific GitHub release attached a matching asset.
 | `homebrew_formula.rb` | Generates a Homebrew formula from version and checksum inputs. | release workflow. |
 | `pin_benchmarks.sh` | Pins a benchmark snapshot for a release tag. | `make bench-pin`, release workflow. |
 | `console_local_sidecar.py` | Resolves an exact Console source pin, verifies its signed aggregate manifest and each native closure, then stages the verified files. | Kernel tag release only. |
+| `check_receipt_verify_assets.py` | Fails when a directory lacks any of the five `receipt_verify-*` assets, or when the build for the running host does not verify the frozen receipt chain and reject a wrong key and a tampered receipt. | `stage_release_assets.sh`, `release.yml` `binaries` job, `scripts/ci/release_smoke.sh`. |
+| `check_receipt_verify_assets_test.py` | Self-test: a real host build passes; a missing, empty, wrong-header, unrunnable or constant-verdict asset fails. | `make release-smoke`. |
 | `stage_release_assets.sh` | Stages the complete release asset directory, including exact tag OpenVEX, verified EvidencePack, sample policy material, attestation, Homebrew formula, and checksums. | `make release-assets`, release workflow. |
 | `verify_cosign.sh` | Verifies local artifacts that have adjacent `*.cosign.bundle` files. | `make verify-cosign`, manual verification. |
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |

@@ -3,7 +3,7 @@
 //
 // A verifier can confirm that one manifest entry (e.g. a single receipt) belongs
 // to a pack identified by its entries_merkle_root WITHOUT possessing the other
-// entries. Combined with SD-JWT selective disclosure (core/pkg/crypto/sdjwt),
+// entries. Combined with SD-JWT selective disclosure,
 // this lets an auditor confirm "this DENY happened under policy_hash X at time T"
 // while the rest of the pack's payloads stay sealed.
 //

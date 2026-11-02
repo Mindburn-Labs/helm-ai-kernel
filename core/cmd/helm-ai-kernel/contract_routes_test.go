@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 
 	_ "modernc.org/sqlite"
@@ -156,7 +158,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["verdict"] != "PASS" {
+	if result["outcome"] != "VERIFIED" {
 		t.Fatalf("verification result = %+v", result)
 	}
 }
@@ -270,7 +272,7 @@ func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T
 	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if verifyRec.Code != http.StatusOK || result["verdict"] != "PASS" {
+	if verifyRec.Code != http.StatusOK || result["outcome"] != "VERIFIED" {
 		t.Fatalf("referenced evidence verification status=%d result=%+v", verifyRec.Code, result)
 	}
 }
@@ -979,7 +981,7 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["verdict"] != "FAIL" {
+	if result["outcome"] != "FAILED" {
 		t.Fatalf("expected tampered bundle to fail verification, got %+v", result)
 	}
 	if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
@@ -987,7 +989,9 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	}
 }
 
-func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
+// A bundle sealed and signed by a key it carries about itself is intact but
+// unproven: UNVERIFIABLE, never VERIFIED, and not FAILED either.
+func TestEvidenceAndReplayVerifyReportForgedSelfConsistentBundleUnverifiable(t *testing.T) {
 	t.Setenv("HELM_PRODUCTION", "")
 	trustedSigner, err := helmcrypto.NewHybridSigner("trusted")
 	if err != nil {
@@ -1035,17 +1039,21 @@ func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
 	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
 		t.Run(endpoint+" trusted", func(t *testing.T) {
 			result := postEvidenceVerification(t, mux, endpoint, validBundle)
-			if result["verdict"] != "PASS" {
+			if result["outcome"] != "VERIFIED" {
 				t.Fatalf("trusted bundle verification = %+v", result)
 			}
 		})
 		t.Run(endpoint+" forged", func(t *testing.T) {
 			result := postEvidenceVerification(t, mux, endpoint, forgedBundle)
-			if result["verdict"] != "FAIL" {
+			if result["outcome"] != "UNVERIFIABLE" {
 				t.Fatalf("forged bundle verification = %+v", result)
 			}
-			if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
-				t.Fatalf("forged bundle did not fail trusted seal verification: %+v", result)
+			statuses := evidenceCheckStatuses(t, result)
+			if statuses["bundle_seal"] != "UNVERIFIABLE" || statuses["receipt_signatures"] != "UNVERIFIABLE" {
+				t.Fatalf("self-supplied key must leave seal and signatures unverifiable: %+v", result)
+			}
+			if statuses["manifest_hashes"] != "VERIFIED" || statuses["receipt_chain"] != "VERIFIED" {
+				t.Fatalf("intact forged bundle should still pass its integrity checks: %+v", result)
 			}
 		})
 	}
@@ -1130,7 +1138,7 @@ func TestEvidenceAndReplayVerifyRejectTamperedUnsignedReceiptAttachments(t *test
 
 	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
 		result := postEvidenceVerification(t, mux, endpoint, tampered)
-		if result["verdict"] != "FAIL" {
+		if result["outcome"] != "FAILED" {
 			t.Fatalf("%s expected tampered unsigned fields to fail, got %+v", endpoint, result)
 		}
 		if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
@@ -1462,12 +1470,15 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["verdict"] != "FAIL" {
+	if result["outcome"] != "FAILED" {
 		t.Fatalf("expected chain break to fail verification, got %+v", result)
 	}
-	checks, _ := result["checks"].(map[string]any)
-	if checks["causal_chain"] != "FAIL" || checks["replay"] != "FAIL" {
-		t.Fatalf("expected replay causal failure, got %+v", result)
+	statuses := evidenceCheckStatuses(t, result)
+	if statuses["receipt_chain"] != "FAILED" || statuses["receipt_signatures"] != "VERIFIED" {
+		t.Fatalf("expected only the receipt chain to fail, got %+v", result)
+	}
+	if _, ok := statuses["replay"]; ok {
+		t.Fatalf("no replay runs, so no replay check may be reported: %+v", result)
 	}
 }
 
@@ -1539,12 +1550,11 @@ func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
 	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["verdict"] != "PASS" {
+	if result["outcome"] != "VERIFIED" {
 		t.Fatalf("expected independent session chains to verify, got %+v", result)
 	}
-	checks, _ := result["checks"].(map[string]any)
-	if checks["causal_chain"] != "PASS" {
-		t.Fatalf("expected causal chain verification to pass, got %+v", result)
+	if evidenceCheckStatuses(t, result)["receipt_chain"] != "VERIFIED" {
+		t.Fatalf("expected receipt chain verification to pass, got %+v", result)
 	}
 }
 
@@ -1567,8 +1577,11 @@ func TestEvidenceVerifyRejectsUnsafeArchivePaths(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["verdict"] != "FAIL" {
+	if result["outcome"] != "FAILED" {
 		t.Fatalf("expected unsafe archive to fail verification, got %+v", result)
+	}
+	if statuses := evidenceCheckStatuses(t, result); len(statuses) != 1 || statuses["bundle_format"] != "FAILED" {
+		t.Fatalf("an unreadable bundle runs no check past the format check: %+v", result)
 	}
 }
 
@@ -2105,6 +2118,37 @@ func readRawEvidenceBundleFiles(bundle []byte) (map[string][]byte, error) {
 	}
 }
 
+// evidenceCheckStatuses maps each check in checks_run to its status and fails
+// the test on a duplicate check or a status outside the evidence verifier
+// vocabulary.
+func evidenceCheckStatuses(t *testing.T, result map[string]any) map[string]string {
+	t.Helper()
+	checks, ok := result["checks_run"].([]any)
+	if !ok {
+		t.Fatalf("checks_run missing or not a list: %+v", result)
+	}
+	statuses := make(map[string]string, len(checks))
+	for _, raw := range checks {
+		check, _ := raw.(map[string]any)
+		name, _ := check["name"].(string)
+		status, _ := check["status"].(string)
+		detail, _ := check["detail"].(string)
+		if name == "" || detail == "" {
+			t.Fatalf("check without name or detail: %+v", check)
+		}
+		switch status {
+		case "VERIFIED", "FAILED", "UNVERIFIABLE":
+		default:
+			t.Fatalf("check %s has status %q outside VERIFIED/FAILED/UNVERIFIABLE", name, status)
+		}
+		if _, dup := statuses[name]; dup {
+			t.Fatalf("check %s reported twice: %+v", name, result)
+		}
+		statuses[name] = status
+	}
+	return statuses
+}
+
 func resultErrorsContain(result map[string]any, want string) bool {
 	values, _ := result["errors"].([]any)
 	for _, value := range values {
@@ -2152,4 +2196,217 @@ func unsafeEvidenceBundleWithName(name string) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func newEvidenceVerifyTestReceipt(id, sessionID string, lamport uint64, prevHash string) *contracts.Receipt {
+	return &contracts.Receipt{
+		ReceiptID:    id,
+		DecisionID:   "decision-" + id,
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, int(lamport), 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		SessionID:    sessionID,
+		PrevHash:     prevHash,
+		LamportClock: lamport,
+		ArgsHash:     "args-" + id,
+	}
+}
+
+func signedEvidenceVerifyTestBundle(t *testing.T, signer helmcrypto.Signer) []byte {
+	t.Helper()
+	first := newEvidenceVerifyTestReceipt("contract-1", "contract-session", 1, "")
+	if err := signer.SignReceipt(first); err != nil {
+		t.Fatal(err)
+	}
+	firstHash, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := newEvidenceVerifyTestReceipt("contract-2", "contract-session", 2, firstHash)
+	if err := signer.SignReceipt(second); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("contract-session", []*contracts.Receipt{first, second}, nil, &Services{ReceiptSigner: signer})
+	if err != nil {
+		t.Fatalf("build evidence bundle: %v", err)
+	}
+	return bundle
+}
+
+// The response names only checks that ran, in the evidence verifier
+// vocabulary, and carries none of the retired synthesized fields.
+func TestEvidenceVerifyReportsOnlyChecksThatRan(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("contract-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", signedEvidenceVerifyTestBundle(t, signer))
+	if result["outcome"] != "VERIFIED" {
+		t.Fatalf("outcome = %v, want VERIFIED: %+v", result["outcome"], result)
+	}
+	for _, retired := range []string{"verdict", "checks"} {
+		if _, ok := result[retired]; ok {
+			t.Fatalf("response still carries retired field %q: %+v", retired, result)
+		}
+	}
+	checks, _ := result["checks_run"].([]any)
+	var names []string
+	for _, raw := range checks {
+		check, _ := raw.(map[string]any)
+		name, _ := check["name"].(string)
+		names = append(names, name)
+		if check["status"] != "VERIFIED" {
+			t.Fatalf("check %s = %v, want VERIFIED", name, check["status"])
+		}
+	}
+	want := []string{"bundle_format", "bundle_seal", "manifest_hashes", "receipt_signatures", "receipt_chain"}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("checks_run = %v, want %v (required_artifacts must not appear when no receipt requires an artifact, policy_compliance never)", names, want)
+	}
+	if roots, _ := result["roots"].(map[string]any); roots["entry_count"] != float64(2) {
+		t.Fatalf("roots = %+v, want entry_count 2", result["roots"])
+	}
+	if errs, _ := result["errors"].([]any); len(errs) != 0 {
+		t.Fatalf("errors = %v, want none", errs)
+	}
+}
+
+// Without a runtime trust anchor nothing can be proven: the seal and the
+// signatures are UNVERIFIABLE while the integrity checks still run.
+func TestEvidenceVerifyWithoutTrustAnchorIsUnverifiable(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("unanchored-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", signedEvidenceVerifyTestBundle(t, signer))
+	if result["outcome"] != "UNVERIFIABLE" {
+		t.Fatalf("outcome = %v, want UNVERIFIABLE: %+v", result["outcome"], result)
+	}
+	statuses := evidenceCheckStatuses(t, result)
+	if statuses["bundle_seal"] != "UNVERIFIABLE" || statuses["receipt_signatures"] != "UNVERIFIABLE" {
+		t.Fatalf("seal and signatures must be unverifiable without a trust anchor: %+v", result)
+	}
+	if statuses["manifest_hashes"] != "VERIFIED" || statuses["receipt_chain"] != "VERIFIED" {
+		t.Fatalf("integrity checks should still run: %+v", result)
+	}
+}
+
+// A receipt that fails under the runtime key is UNVERIFIABLE when it verifies
+// under the key it carries, and FAILED when it verifies under nothing.
+func TestEvidenceVerifyClassifiesReceiptsSignedByAnotherKey(t *testing.T) {
+	trusted, err := helmcrypto.NewEd25519Signer("runtime-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := helmcrypto.NewEd25519Signer("other-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: trusted})
+
+	for _, tc := range []struct {
+		name           string
+		stripCarried   bool
+		wantSignatures string
+	}{
+		{name: "carried key", wantSignatures: "UNVERIFIABLE"},
+		{name: "no carried key", stripCarried: true, wantSignatures: "FAILED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipt := newEvidenceVerifyTestReceipt("other-1", "other-session", 1, "")
+			if err := other.SignReceipt(receipt); err != nil {
+				t.Fatal(err)
+			}
+			if tc.stripCarried {
+				receipt.PublicKeySet = nil
+			}
+			// Sealed by the runtime key, so only the receipt signature differs.
+			bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("other-session", []*contracts.Receipt{receipt}, nil, &Services{ReceiptSigner: trusted})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", bundle)
+			statuses := evidenceCheckStatuses(t, result)
+			if statuses["bundle_seal"] != "VERIFIED" {
+				t.Fatalf("runtime-sealed bundle seal = %s: %+v", statuses["bundle_seal"], result)
+			}
+			if statuses["receipt_signatures"] != tc.wantSignatures || result["outcome"] != tc.wantSignatures {
+				t.Fatalf("receipt_signatures = %s outcome = %v, want %s: %+v", statuses["receipt_signatures"], result["outcome"], tc.wantSignatures, result)
+			}
+		})
+	}
+}
+
+// An unreadable request runs the format check only, so no later check can be
+// reported as passing next to an early error.
+func TestEvidenceVerifyMalformedRequestRunsOnlyFormatCheck(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("format-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
+	for name, body := range map[string][]byte{
+		"empty":    nil,
+		"not gzip": []byte("not a bundle"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", body)
+			if result["outcome"] != "FAILED" {
+				t.Fatalf("outcome = %v, want FAILED", result["outcome"])
+			}
+			if statuses := evidenceCheckStatuses(t, result); len(statuses) != 1 || statuses["bundle_format"] != "FAILED" {
+				t.Fatalf("checks_run = %+v, want only bundle_format FAILED", result["checks_run"])
+			}
+		})
+	}
+}
+
+func TestEvidenceVerificationConclude(t *testing.T) {
+	verified := receiptverify.VerdictVerified
+	all := func(override map[string]receiptverify.Verdict, skip ...string) []evidenceCheck {
+		var checks []evidenceCheck
+		for _, name := range evidenceChecksRequiredForVerified {
+			if slices.Contains(skip, name) {
+				continue
+			}
+			status := verified
+			if s, ok := override[name]; ok {
+				status = s
+			}
+			checks = append(checks, evidenceCheck{Name: name, Status: status, Detail: "test"})
+		}
+		return checks
+	}
+	for _, tc := range []struct {
+		name   string
+		checks []evidenceCheck
+		want   receiptverify.Verdict
+	}{
+		{name: "no checks", want: receiptverify.VerdictFailed},
+		{name: "all required verified", checks: all(nil), want: receiptverify.VerdictVerified},
+		{name: "required check skipped", checks: all(nil, evidenceCheckReceiptChain), want: receiptverify.VerdictUnverifiable},
+		{name: "one unverifiable", checks: all(map[string]receiptverify.Verdict{evidenceCheckBundleSeal: receiptverify.VerdictUnverifiable}), want: receiptverify.VerdictUnverifiable},
+		{name: "failed beats unverifiable", checks: all(map[string]receiptverify.Verdict{
+			evidenceCheckBundleSeal:     receiptverify.VerdictUnverifiable,
+			evidenceCheckManifestHashes: receiptverify.VerdictFailed,
+		}), want: receiptverify.VerdictFailed},
+		{name: "unknown status fails", checks: all(map[string]receiptverify.Verdict{evidenceCheckReceiptChain: "PASS"}), want: receiptverify.VerdictFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := evidenceVerification{ChecksRun: tc.checks}
+			result.conclude()
+			if result.Outcome != tc.want {
+				t.Fatalf("outcome = %s, want %s", result.Outcome, tc.want)
+			}
+		})
+	}
 }

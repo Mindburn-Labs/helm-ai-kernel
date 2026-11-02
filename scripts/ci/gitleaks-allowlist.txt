@@ -11,8 +11,6 @@ generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
 generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
 generic-api-key core/pkg/conformance/owasp_llm_top10.go ec12bec21f55
 generic-api-key core/pkg/contracts/launch_effect_types_test.go c94237b3626e
-generic-api-key core/pkg/evidence/externalhost/adapters/adapters_test.go ac6e7bfb8d7f
-generic-api-key core/pkg/evidence/externalhost/adapters/adapters_test.go fb498cd1dd2f
 generic-api-key core/pkg/governance/agent_safety.go a35aada80bc9
 generic-api-key core/pkg/governance/governance_integration_coverage_test.go 2dfbec468270
 generic-api-key core/pkg/identity/did/did.go e83ccbb94ce4

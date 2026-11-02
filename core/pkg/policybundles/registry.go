@@ -84,8 +84,8 @@ type CompileResult struct {
 //
 // The CEL path is intentionally a thin pass-through: helm-ai-kernel already had
 // CEL support before the multi-language work and routes CEL bundles through
-// the existing builtin pipeline (see core/pkg/policybundles/builtin.go and
-// core/pkg/celcheck/). Callers that pass language=cel today receive a
+// the existing builtin pipeline (see core/pkg/policybundles/builtin.go).
+// Callers that pass language=cel today receive a
 // "not handled by registry" sentinel and should call the existing CEL
 // path directly until that path is migrated under this registry in a
 // follow-up PR.

@@ -77,9 +77,9 @@ run_uc "UC-001" "PEP Allow" \
 run_uc "UC-002" "PEP Fail-Closed" \
     "cd $CORE_DIR && go test ./pkg/manifest -run 'TestValidateAndCanonicalizeToolArgs_(UnknownField|MissingRequired|TypeMismatch)\$' -v"
 
-# UC-003: Approval Ceremony (timelock + hold)
-run_uc "UC-003" "Approval Ceremony" \
-    "cd $CORE_DIR && go test ./pkg/escalation/ceremony/... -v"
+# UC-003 (Approval Ceremony) is retired: pkg/escalation/ceremony had no
+# importer and was deleted (helm-tracker#266). Approvals are the gateway's
+# typed records under core/pkg/gateway/admission.
 
 # UC-004 (WASM Transform) and UC-005 (WASM Exhaustion) are retired (T-02).
 # Their tests never ran a WASM module: TestWASI_* is arithmetic over
@@ -108,9 +108,8 @@ run_uc "UC-008" "EvidencePack Replay" \
 run_uc "UC-009" "Output Drift" \
     "cd $CORE_DIR && go test ./pkg/manifest -run TestValidateToolOutput_DriftDetected -v"
 
-# UC-010: Trust Rotation Replay
-run_uc "UC-010" "Trust Rotation" \
-    "cd $CORE_DIR && go test ./pkg/trust/registry/... -v"
+# UC-010 (Trust Rotation Replay) is retired: pkg/trust/registry is reached
+# only from orphan packages and leaves with them (helm-tracker#266).
 
 # UC-011 (Island Mode) was a `go build` and is retired: the island-mode check
 # (config.RegionalProfile.IsAllowed) has no production caller, so no use case

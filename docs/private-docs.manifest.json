@@ -91,33 +91,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/sandbox/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/datadog_logs/readme",
-      "title": "Datadog Logs SIEM Exporter",
-      "section": "internal",
-      "source_path": "core/pkg/connectors/siem/datadog_logs/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/datadog_logs/readme"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/elastic_ecs/readme",
-      "title": "Elastic ECS SIEM Exporter",
-      "section": "internal",
-      "source_path": "core/pkg/connectors/siem/elastic_ecs/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/elastic_ecs/readme"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/splunk_hec/readme",
-      "title": "Splunk HEC SIEM Exporter",
-      "section": "internal",
-      "source_path": "core/pkg/connectors/siem/splunk_hec/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/splunk_hec/readme"
-    },
-    {
       "slug": "internal/helm-ai-kernel/core/pkg/contracts/readme",
       "title": "HELM AI Kernel Contracts Package Source Owner",
       "section": "internal",

@@ -56,11 +56,11 @@ or current worktree path:
 
 | Forbidden action | Why it fails review | Implementation guard |
 | --- | --- | --- |
-| `curl | bash`, `curl | sh`, `irm ... | iex` | Host pipe-to-shell installers bypass artifact and policy review. | `core/pkg/launchpad/install/artifact_installer.go` |
-| `git pull` in `current/` | Mutable source updates break digest parity and replayable evidence. | `core/pkg/launchpad/install/source_installer.go` |
-| `npm install` in `current/` | Package-manager mutation breaks reviewed dependency state. | `core/pkg/launchpad/install/source_installer.go` |
-| `pnpm install` or `yarn install` in `current/` | Same mutable dependency hazard as `npm install`. | `core/pkg/launchpad/install/source_installer.go` |
-| `git stash` or `git stash apply` | Hides unreviewed state transitions from evidence review. | `core/pkg/launchpad/install/source_installer.go` |
+| `curl | bash`, `curl | sh`, `irm ... | iex` | Host pipe-to-shell installers bypass artifact and policy review. | Review rule; no code guard (the unwired `launchpad/install` installers were removed). |
+| `git pull` in `current/` | Mutable source updates break digest parity and replayable evidence. | Review rule; no code guard (the unwired `launchpad/install` installers were removed). |
+| `npm install` in `current/` | Package-manager mutation breaks reviewed dependency state. | Review rule; no code guard (the unwired `launchpad/install` installers were removed). |
+| `pnpm install` or `yarn install` in `current/` | Same mutable dependency hazard as `npm install`. | Review rule; no code guard (the unwired `launchpad/install` installers were removed). |
+| `git stash` or `git stash apply` | Hides unreviewed state transitions from evidence review. | Review rule; no code guard (the unwired `launchpad/install` installers were removed). |
 
 Sandboxed upstream installers remain a separate artifact strategy. They must
 run inside the sandbox, not as host setup, and they do not replace signed OCI

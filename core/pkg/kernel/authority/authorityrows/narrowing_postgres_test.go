@@ -144,10 +144,14 @@ func TestPostgresNarrowedAuthorityCannotBeRegainedThroughAnyLink(t *testing.T) {
 			t.Fatalf("%s wrote a mandate", test.name)
 		}
 	}
-	leaf, err := s.Delegate(ctx, tenantA, middle.ID, "agent-b", "agent-c", narrow)
+	leafTerms := narrow
+	leafTerms.PerCallLimit = amount(30)
+	leaf, err := s.Delegate(ctx, tenantA, middle.ID, "agent-b", "agent-c", leafTerms)
 	must(t, err)
-	// And a level further down, the leaf bounds what is delegated from it.
-	_, err = s.Delegate(ctx, tenantA, leaf.ID, "agent-c", "agent-a", Terms{EffectTypes: []string{"email.send"}, PerCallLimit: amount(41), ValidFrom: wide.ValidFrom, ValidUntil: wide.ValidUntil})
+	// And a level further down, the leaf bounds what is delegated from it: 35
+	// is within the narrowed top's 40 and the middle's 100, so only the leaf's
+	// 30 refuses it.
+	_, err = s.Delegate(ctx, tenantA, leaf.ID, "agent-c", "agent-a", Terms{EffectTypes: []string{"email.send"}, PerCallLimit: amount(35), ValidFrom: wide.ValidFrom, ValidUntil: wide.ValidUntil})
 	wantWidens(t, "a limit above the leaf's", err, "per_call_limit")
 
 	// The narrowed mandate stays narrowed.
@@ -169,7 +173,7 @@ func TestPostgresNarrowedAuthorityCannotBeRegainedThroughAnyLink(t *testing.T) {
 	must(t, s.Revoke(ctx, tenantA, middle.ID))
 	_, err = s.Delegate(ctx, tenantA, middle.ID, "agent-b", "agent-c", narrow)
 	wantErr(t, "delegating a revoked mandate", err, ErrInactive)
-	_, err = s.Delegate(ctx, tenantA, leaf.ID, "agent-c", "agent-a", narrow)
+	_, err = s.Delegate(ctx, tenantA, leaf.ID, "agent-c", "agent-a", leafTerms)
 	wantErr(t, "delegating beneath a revoked mandate", err, ErrInactive)
 }
 

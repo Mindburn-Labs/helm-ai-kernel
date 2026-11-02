@@ -5,8 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -39,10 +42,23 @@ type principalBindingRequest struct {
 	PrincipalID string `json:"principal_id"`
 }
 
+type principalBindingReadResponse struct {
+	TenantID    string `json:"tenant_id"`
+	PrincipalID string `json:"principal_id"`
+	Bound       bool   `json:"bound"`
+}
+
 // RegisterPrincipalBindingRoutes exposes the admin-only endpoint used to
-// register (tenant_id, principal_id) bindings so the kernel can authorize
+// observe or register (tenant_id, principal_id) bindings so the kernel can authorize
 // many tenants instead of a single env-configured pair (see
 // pkg/store.PrincipalBindingStore).
+//
+// GET observes only the exact pair selected by tenant_id and principal_id;
+// it never enrolls a principal. Each selector is a single nonempty UTF-8 value
+// of at most 256 bytes without whitespace or control characters. Extra or
+// duplicate selectors and queries over 2048 bytes are refused. A missing pair
+// answers bound=false, while an unavailable store answers 503. GET responses
+// are never cacheable.
 //
 // A new binding answers 201 and an existing one 200. A principal already
 // bound in another tenant is refused with 409 TENANT_ISOLATION and counted in
@@ -50,7 +66,11 @@ type principalBindingRequest struct {
 // lists it; each cross-tenant bind of a listed principal is logged.
 func RegisterPrincipalBindingRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	crossTenant := crossTenantPrincipalsFromEnv()
-	mux.HandleFunc("/api/v1/admin/principal-bindings", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+	handler := protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			readPrincipalBinding(w, r, svc)
+			return
+		}
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -104,5 +124,56 @@ func RegisterPrincipalBindingRoutes(mux routeMux, svc *Services, opts serverOpti
 			TenantID:    tenantID,
 			PrincipalID: principalID,
 		})
-	}))
+	})
+	mux.HandleFunc("/api/v1/admin/principal-bindings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		handler(w, r)
+	})
+}
+
+func readPrincipalBinding(w http.ResponseWriter, r *http.Request, svc *Services) {
+	req, err := principalBindingReadSelectors(r.URL.RawQuery)
+	if err != nil {
+		api.WriteBadRequest(w, "Exactly one canonical tenant_id and principal_id are required")
+		return
+	}
+	if svc == nil || svc.PrincipalBindings == nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
+		return
+	}
+	bound, err := svc.PrincipalBindings.Exists(r.Context(), req.TenantID, req.PrincipalID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "principal binding lookup unavailable", "error", err)
+		api.WriteError(w, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(principalBindingReadResponse{
+		TenantID: req.TenantID, PrincipalID: req.PrincipalID, Bound: bound,
+	})
+}
+
+func principalBindingReadSelectors(rawQuery string) (principalBindingRequest, error) {
+	invalid := errors.New("invalid principal binding selectors")
+	if len(rawQuery) > 2048 {
+		return principalBindingRequest{}, invalid
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil || len(values) != 2 || len(values["tenant_id"]) != 1 || len(values["principal_id"]) != 1 {
+		return principalBindingRequest{}, invalid
+	}
+	req := principalBindingRequest{TenantID: values["tenant_id"][0], PrincipalID: values["principal_id"][0]}
+	for _, id := range []string{req.TenantID, req.PrincipalID} {
+		if len(id) == 0 || len(id) > 256 || !utf8.ValidString(id) {
+			return principalBindingRequest{}, invalid
+		}
+		for _, char := range id {
+			if unicode.IsSpace(char) || unicode.IsControl(char) {
+				return principalBindingRequest{}, invalid
+			}
+		}
+	}
+	return req, nil
 }

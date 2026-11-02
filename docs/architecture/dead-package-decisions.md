@@ -144,7 +144,7 @@ package directory.
 | `core/pkg/federation` | 533 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forensics` | 65 | 2026-04-23 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forge` | 681 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/gateway` | 74 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/gateway` | 74 | 2026-04-23 | no | 0 | KEEP for now (helm-tracker#266 keep-list covers `core/pkg/gateway/**`; only the root stub `types.go` is dead) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/genesis/ceremony` | 318 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/harness` | 2518 | 2026-09-01 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — named only by docs/architecture/agent-process-ownership.md ("not yet wired"); HELM-658/674/682 do not name the package; last commit 2026-09-01 (#921, Prime Agent harness adapter; introduced by HELM-319 in #772) - owner to confirm before deletion |
 | `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | conformance suite: tests/conformance/did |

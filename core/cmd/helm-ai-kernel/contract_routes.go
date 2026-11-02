@@ -2125,7 +2125,12 @@ func evidenceSealValid(report evidencepkg.EvidencePackSealVerification) bool {
 // names about itself. It exists only to classify a seal that failed under the
 // runtime key; it is never used to accept one.
 func carriedEvidenceSealTrust(packDir string) (*evidencepkg.EvidencePackTrustConfig, bool) {
-	data, err := os.ReadFile(filepath.Join(packDir, filepath.FromSlash(evidencepkg.EvidencePackSealPath)))
+	root, err := os.OpenRoot(packDir)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = root.Close() }()
+	data, err := root.ReadFile(filepath.FromSlash(evidencepkg.EvidencePackSealPath))
 	if err != nil {
 		return nil, false
 	}

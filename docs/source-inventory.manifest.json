@@ -183,23 +183,6 @@
       ]
     },
     {
-      "id": "runtime-cli-helper-binaries",
-      "label": "Auxiliary core/cmd helper binaries outside the primary helm command",
-      "classification": "source-owner-doc",
-      "source_patterns": [
-        "core/cmd/bootstrap/**",
-        "core/cmd/pack_verify/**",
-        "core/cmd/skill_lint/**",
-        "core/cmd/skill_pack/**"
-      ],
-      "owner_doc_path": "core/cmd/README.md",
-      "public_doc_slugs": [],
-      "rationale": "Helper binaries are source-owned under core/cmd and must not be presented as supported top-level helm subcommands unless wired through core/cmd/helm-ai-kernel.",
-      "validation_commands": [
-        "cd core && go test ./cmd/..."
-      ]
-    },
-    {
       "id": "runtime-http-api-routes",
       "label": "Runtime HTTP route registry, auth wrapper, contract routes, receipt routes, and external client APIs",
       "classification": "public-direct",

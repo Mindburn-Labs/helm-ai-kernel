@@ -26,7 +26,6 @@ generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go fb498c
 generic-api-key tests/conformance/a2a/a2a_conformance_test.go 4be3bbb809d2
 generic-api-key tests/conformance/a2a/a2a_conformance_test.go 79d8444cc417
 generic-api-key tools/launchpad/egressproxy/main_test.go 5223dd08d6cd
-github-pat core/pkg/modelcatalog/catalog_test.go b16856bcebcc
 gitlab-pat core/internal/cli/tui/pentest_test.go 3450b4fcb4ae
 jwt core/pkg/mcp/catalog_test.go 66980714638d
 jwt core/pkg/privacy/privacy_mcp_test.go e8ca12ef816f

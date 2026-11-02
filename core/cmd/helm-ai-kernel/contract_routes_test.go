@@ -2520,3 +2520,37 @@ func TestEvidenceVerifyRequiredArtifactMissingFails(t *testing.T) {
 		t.Fatalf("missing artifact not named: %+v", result["errors"])
 	}
 }
+
+// Seal errors name files inside the server's verify workspace; the public
+// route reports them relative to the pack.
+func TestEvidenceVerifySealErrorsDoNotLeakWorkspacePath(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("leak-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := readRawEvidenceBundleFiles(signedEvidenceVerifyTestBundle(t, signer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := files[evidenceBundleIndexPath]; !ok {
+		t.Fatalf("bundle has no %s to remove", evidenceBundleIndexPath)
+	}
+	delete(files, evidenceBundleIndexPath)
+	stripped, err := tarEvidenceBundleFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
+
+	result := postEvidenceVerification(t, mux, "/api/v1/evidence/verify", stripped)
+	if statuses := evidenceCheckStatuses(t, result); statuses["bundle_seal"] != "FAILED" {
+		t.Fatalf("bundle without its index = %+v, want bundle_seal FAILED", result)
+	}
+	if !resultErrorsContain(result, evidenceBundleIndexPath) {
+		t.Fatalf("seal errors should name the missing index: %+v", result["errors"])
+	}
+	if resultErrorsContain(result, "helm-evidence-verify-") || resultErrorsContain(result, os.TempDir()) {
+		t.Fatalf("errors leak the verify workspace path: %+v", result["errors"])
+	}
+}

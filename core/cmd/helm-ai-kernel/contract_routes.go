@@ -2066,7 +2066,9 @@ func checkEvidenceBundleSeal(result *evidenceVerification, raw []byte, svc *Serv
 	defer os.RemoveAll(packDir)
 	// Seal errors name files inside the workspace; report them relative to
 	// the pack so the public route does not leak server paths.
-	relative := func(text string) string { return strings.ReplaceAll(text, packDir+string(os.PathSeparator), "") }
+	relative := func(text string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(text, packDir+string(os.PathSeparator), ""), packDir, "evidence pack")
+	}
 	if err := extractEvidenceBundleToDir(raw, packDir); err != nil {
 		result.add(evidenceCheckBundleSeal, receiptverify.VerdictFailed,
 			"the bundle could not be unpacked to check its seal",
@@ -2103,7 +2105,7 @@ func checkEvidenceBundleSeal(result *evidenceVerification, raw []byte, svc *Serv
 	if len(runtimeReport.Errors) > 0 {
 		detail = relative(strings.Join(runtimeReport.Errors, "; "))
 	} else if trustErr != nil {
-		detail = "the seal does not verify under the key it carries"
+		detail = "the seal is missing, names no public key, or does not verify under the key it carries"
 	}
 	result.add(evidenceCheckBundleSeal, receiptverify.VerdictFailed,
 		"the seal is missing or malformed, or does not match the pack contents",

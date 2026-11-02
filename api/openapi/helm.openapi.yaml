@@ -2324,6 +2324,11 @@ paths:
                   type: string
                   format: binary
                   description: EvidencePack .tar.gz file
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: EvidencePack .tar.gz bytes as the raw request body
       responses:
         '200':
           description: Verification result
@@ -2942,7 +2947,7 @@ paths:
                   format: binary
       responses:
         '200':
-          description: Replay verification result
+          description: Evidence bundle verification result
           content:
             application/json:
               schema:

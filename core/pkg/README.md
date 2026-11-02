@@ -10,13 +10,13 @@ Use this file when you need to find the package that owns runtime, policy, recei
 
 ## Package Families
 
-- Boundary and policy: `boundary`, `policybundles`, `policyloader`, `celcheck`, `contracts`, `runtime`.
-- Receipts and evidence: `receipts`, `evidence`, `proofgraph`, `merkle`, `ledger`, `verifier`.
+- Boundary and policy: `boundary`, `policybundles`, `contracts`.
+- Receipts and evidence: `receipts`, `evidence`, `proofgraph`, `merkle`, `store/ledger`, `verifier`.
 - MCP and execution safety: `mcp`, `sandbox`, `runtime/sandbox`, `firewall`, `guardian`, `executor`.
-- Identity and crypto: `identity`, `crypto`, `kms`, `rbac`, `auth`, `vcredentials`.
+- Identity and crypto: `identity`, `crypto`, `kms`, `auth`, `vcredentials`.
 - Observability and operations: `metrics`, `otel`, `observability`, `tracing`, `audit`.
 - Connectors and integrations: `connectors`, `integrations`, `registry`, `packs`.
-- Compliance and governance: `compliance`, `governance`, `constitution`, `delegation`.
+- Governance: `governance`.
 
 ## Public Docs Owners
 

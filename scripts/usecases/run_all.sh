@@ -77,9 +77,9 @@ run_uc "UC-001" "PEP Allow" \
 run_uc "UC-002" "PEP Fail-Closed" \
     "cd $CORE_DIR && go test ./pkg/manifest -run 'TestValidateAndCanonicalizeToolArgs_(UnknownField|MissingRequired|TypeMismatch)\$' -v"
 
-# UC-003: Approval Ceremony (timelock + hold)
-run_uc "UC-003" "Approval Ceremony" \
-    "cd $CORE_DIR && go test ./pkg/escalation/ceremony/... -v"
+# UC-003 (Approval Ceremony) is retired: pkg/escalation/ceremony had no
+# importer and was deleted (helm-tracker#266). Approvals are the gateway's
+# typed records under core/pkg/gateway/admission.
 
 # UC-004 (WASM Transform) and UC-005 (WASM Exhaustion) are retired (T-02).
 # Their tests never ran a WASM module: TestWASI_* is arithmetic over

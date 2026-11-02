@@ -171,7 +171,6 @@ not by runtime checking.
 | Sandbox isolation (library; the shipped server runs no pack) | `core/pkg/runtime/sandbox/` |
 | Tool catalog / MCP gateway | `core/pkg/mcp/` |
 | Manifest validation | `core/pkg/manifest/` |
-| Budget ceiling (P0) (library; no shipped binary enforces it, CTL-011) | `core/pkg/runtime/budget/` |
 
 ---
 
@@ -239,7 +238,6 @@ signed `DENY` verdict with a deterministic reason code.
 | Policy contracts | `core/pkg/contracts/` |
 | Gated execution | `core/pkg/executor/` |
 | Canonicalization | `core/pkg/canonicalize/` |
-| Approval ceremonies (library; not linked into the shipped binary) | `core/pkg/escalation/ceremony/` |
 
 ---
 

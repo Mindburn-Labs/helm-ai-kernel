@@ -84,8 +84,8 @@ type CompileResult struct {
 //
 // The CEL path is intentionally a thin pass-through: helm-ai-kernel already had
 // CEL support before the multi-language work and routes CEL bundles through
-// the existing builtin pipeline (see core/pkg/policybundles/builtin.go and
-// core/pkg/celcheck/). Callers that pass language=cel today receive a
+// the kernel's CEL authority function (core/pkg/kernel/authority).
+// Callers that pass language=cel today receive a
 // "not handled by registry" sentinel and should call the existing CEL
 // path directly until that path is migrated under this registry in a
 // follow-up PR.
@@ -132,7 +132,7 @@ func Compile(ctx context.Context, language, source string, opts CompileOptions) 
 		}
 		result = &CompileResult{Language: language, Hash: b.Hash, Cedar: b}
 	case LanguageCEL:
-		// CEL routes through the existing builtin / celcheck pipeline.
+		// CEL is compiled by the kernel authority function, not here.
 		// The registry advertises CEL as supported but does not yet own
 		// its compile path; callers should keep using the existing entry
 		// point until a follow-up migration unifies them.

@@ -10,7 +10,6 @@
 #   core/pkg/crypto              (keyring_fuzz_test.go)
 #   core/pkg/a2a                 (envelope_fuzz_test.go)
 #   core/pkg/contracts           (receipt_fuzz_test.go)
-#   core/pkg/saga                (orchestrator_fuzz_test.go)
 #   core/pkg/threatscan          (scanner_fuzz_test.go)
 #   core/pkg/guardian            (decision_fuzz_test.go)
 #   core/pkg/kernel              (csnf_fuzz_test.go)

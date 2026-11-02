@@ -22,8 +22,6 @@ backend, and anyone changing `core/pkg/observability/genai_attrs.go`.
 - Attribute keys: `core/pkg/observability/genai_attrs.go` — the single source of
   truth. Stable keys there are a major-version contract.
 - Emitters: `core/pkg/otel/governance_tracer.go`.
-- Exporters: `core/pkg/connectors/siem/loki/exporter.go`,
-  `core/pkg/connectors/siem/datadog_logs/exporter.go`.
 
 ## Which spans carry GenAI attributes
 

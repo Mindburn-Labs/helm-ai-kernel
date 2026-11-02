@@ -25299,6 +25299,247 @@ public static class EvidenceEnvelopeVerification {
 
 
 /**
+ * EvidenceVerificationCheck
+ */
+@JsonPropertyOrder({
+  EvidenceVerificationCheck.JSON_PROPERTY_NAME,
+  EvidenceVerificationCheck.JSON_PROPERTY_STATUS,
+  EvidenceVerificationCheck.JSON_PROPERTY_DETAIL
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EvidenceVerificationCheck {
+  public static final String JSON_PROPERTY_NAME = "name";
+  private String name;
+
+  /**
+   * UNVERIFIABLE means the material is intact but signed by a key the runtime does not trust, or the runtime has no trust anchor for it.
+   */
+  public enum StatusEnum {
+    VERIFIED("VERIFIED"),
+
+    FAILED("FAILED"),
+
+    UNVERIFIABLE("UNVERIFIABLE");
+
+    private String value;
+
+    StatusEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StatusEnum fromValue(String value) {
+      for (StatusEnum b : StatusEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private StatusEnum status;
+
+  public static final String JSON_PROPERTY_DETAIL = "detail";
+  private String detail;
+
+  public EvidenceVerificationCheck() {
+  }
+
+  public EvidenceVerificationCheck name(String name) {
+    this.name = name;
+    return this;
+  }
+
+   /**
+   * Check identifier: &#x60;bundle_format&#x60;, &#x60;bundle_seal&#x60;, &#x60;manifest_hashes&#x60;, &#x60;required_artifacts&#x60; (only when a receipt requires a referenced artifact), &#x60;receipt_signatures&#x60; or &#x60;receipt_chain&#x60;.
+   * @return name
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getName() {
+    return name;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setName(String name) {
+    this.name = name;
+  }
+
+
+  public EvidenceVerificationCheck status(StatusEnum status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * UNVERIFIABLE means the material is intact but signed by a key the runtime does not trust, or the runtime has no trust anchor for it.
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public StatusEnum getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(StatusEnum status) {
+    this.status = status;
+  }
+
+
+  public EvidenceVerificationCheck detail(String detail) {
+    this.detail = detail;
+    return this;
+  }
+
+   /**
+   * What the check established.
+   * @return detail
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDetail() {
+    return detail;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDetail(String detail) {
+    this.detail = detail;
+  }
+
+
+  /**
+   * Return true if this EvidenceVerificationCheck object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EvidenceVerificationCheck evidenceVerificationCheck = (EvidenceVerificationCheck) o;
+    return Objects.equals(this.name, evidenceVerificationCheck.name) &&
+        Objects.equals(this.status, evidenceVerificationCheck.status) &&
+        Objects.equals(this.detail, evidenceVerificationCheck.detail);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(name, status, detail);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EvidenceVerificationCheck {\n");
+    sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    detail: ").append(toIndentedString(detail)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `name` to the URL query string
+    if (getName() != null) {
+      joiner.add(String.format("%sname%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getName()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `detail` to the URL query string
+    if (getDetail() != null) {
+      joiner.add(String.format("%sdetail%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDetail()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.11.3
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * ExecutionBoundaryRecord
  */
 @JsonPropertyOrder({
@@ -65598,27 +65839,29 @@ public static class TransitionApprovalCeremonyRequest {
 
 
 /**
- * VerificationResult
+ * Evidence bundle verification. Replaces the retired &#x60;verdict&#x60; and &#x60;checks&#x60; fields, which reported PASS for checks that did not run (including a &#x60;policy_compliance&#x60; check no code evaluated).
  */
 @JsonPropertyOrder({
-  VerificationResult.JSON_PROPERTY_VERDICT,
-  VerificationResult.JSON_PROPERTY_CHECKS,
+  VerificationResult.JSON_PROPERTY_OUTCOME,
+  VerificationResult.JSON_PROPERTY_CHECKS_RUN,
   VerificationResult.JSON_PROPERTY_ROOTS,
   VerificationResult.JSON_PROPERTY_ERRORS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class VerificationResult {
   /**
-   * Gets or Sets verdict
+   * FAILED if any check failed; UNVERIFIABLE if any check was unverifiable or a required check did not run; VERIFIED only when every required check verified.
    */
-  public enum VerdictEnum {
-    PASS("PASS"),
+  public enum OutcomeEnum {
+    VERIFIED("VERIFIED"),
 
-    FAIL("FAIL");
+    FAILED("FAILED"),
+
+    UNVERIFIABLE("UNVERIFIABLE");
 
     private String value;
 
-    VerdictEnum(String value) {
+    OutcomeEnum(String value) {
       this.value = value;
     }
 
@@ -65633,8 +65876,8 @@ public static class VerificationResult {
     }
 
     @JsonCreator
-    public static VerdictEnum fromValue(String value) {
-      for (VerdictEnum b : VerdictEnum.values()) {
+    public static OutcomeEnum fromValue(String value) {
+      for (OutcomeEnum b : OutcomeEnum.values()) {
         if (b.value.equals(value)) {
           return b;
         }
@@ -65643,68 +65886,76 @@ public static class VerificationResult {
     }
   }
 
-  public static final String JSON_PROPERTY_VERDICT = "verdict";
-  private VerdictEnum verdict;
+  public static final String JSON_PROPERTY_OUTCOME = "outcome";
+  private OutcomeEnum outcome;
 
-  public static final String JSON_PROPERTY_CHECKS = "checks";
-  private VerificationResultChecks checks;
+  public static final String JSON_PROPERTY_CHECKS_RUN = "checks_run";
+  private List<EvidenceVerificationCheck> checksRun = new ArrayList<>();
 
   public static final String JSON_PROPERTY_ROOTS = "roots";
   private VerificationResultRoots roots;
 
   public static final String JSON_PROPERTY_ERRORS = "errors";
-  private List<String> errors;
+  private List<String> errors = new ArrayList<>();
 
   public VerificationResult() {
   }
 
-  public VerificationResult verdict(VerdictEnum verdict) {
-    this.verdict = verdict;
+  public VerificationResult outcome(OutcomeEnum outcome) {
+    this.outcome = outcome;
     return this;
   }
 
    /**
-   * Get verdict
-   * @return verdict
+   * FAILED if any check failed; UNVERIFIABLE if any check was unverifiable or a required check did not run; VERIFIED only when every required check verified.
+   * @return outcome
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_VERDICT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_OUTCOME)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public VerdictEnum getVerdict() {
-    return verdict;
+  public OutcomeEnum getOutcome() {
+    return outcome;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_VERDICT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setVerdict(VerdictEnum verdict) {
-    this.verdict = verdict;
+  @JsonProperty(JSON_PROPERTY_OUTCOME)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setOutcome(OutcomeEnum outcome) {
+    this.outcome = outcome;
   }
 
 
-  public VerificationResult checks(VerificationResultChecks checks) {
-    this.checks = checks;
+  public VerificationResult checksRun(List<EvidenceVerificationCheck> checksRun) {
+    this.checksRun = checksRun;
+    return this;
+  }
+
+  public VerificationResult addChecksRunItem(EvidenceVerificationCheck checksRunItem) {
+    if (this.checksRun == null) {
+      this.checksRun = new ArrayList<>();
+    }
+    this.checksRun.add(checksRunItem);
     return this;
   }
 
    /**
-   * Get checks
-   * @return checks
+   * The checks that ran, in order. A check that did not run is absent, never reported as passing.
+   * @return checksRun
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_CHECKS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_CHECKS_RUN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public VerificationResultChecks getChecks() {
-    return checks;
+  public List<EvidenceVerificationCheck> getChecksRun() {
+    return checksRun;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_CHECKS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setChecks(VerificationResultChecks checks) {
-    this.checks = checks;
+  @JsonProperty(JSON_PROPERTY_CHECKS_RUN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setChecksRun(List<EvidenceVerificationCheck> checksRun) {
+    this.checksRun = checksRun;
   }
 
 
@@ -65717,9 +65968,9 @@ public static class VerificationResult {
    * Get roots
    * @return roots
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_ROOTS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public VerificationResultRoots getRoots() {
     return roots;
@@ -65727,7 +65978,7 @@ public static class VerificationResult {
 
 
   @JsonProperty(JSON_PROPERTY_ROOTS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setRoots(VerificationResultRoots roots) {
     this.roots = roots;
   }
@@ -65750,9 +66001,9 @@ public static class VerificationResult {
    * Get errors
    * @return errors
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_ERRORS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public List<String> getErrors() {
     return errors;
@@ -65760,7 +66011,7 @@ public static class VerificationResult {
 
 
   @JsonProperty(JSON_PROPERTY_ERRORS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setErrors(List<String> errors) {
     this.errors = errors;
   }
@@ -65778,23 +66029,23 @@ public static class VerificationResult {
       return false;
     }
     VerificationResult verificationResult = (VerificationResult) o;
-    return Objects.equals(this.verdict, verificationResult.verdict) &&
-        Objects.equals(this.checks, verificationResult.checks) &&
+    return Objects.equals(this.outcome, verificationResult.outcome) &&
+        Objects.equals(this.checksRun, verificationResult.checksRun) &&
         Objects.equals(this.roots, verificationResult.roots) &&
         Objects.equals(this.errors, verificationResult.errors);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(verdict, checks, roots, errors);
+    return Objects.hash(outcome, checksRun, roots, errors);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class VerificationResult {\n");
-    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
-    sb.append("    checks: ").append(toIndentedString(checks)).append("\n");
+    sb.append("    outcome: ").append(toIndentedString(outcome)).append("\n");
+    sb.append("    checksRun: ").append(toIndentedString(checksRun)).append("\n");
     sb.append("    roots: ").append(toIndentedString(roots)).append("\n");
     sb.append("    errors: ").append(toIndentedString(errors)).append("\n");
     sb.append("}");
@@ -65844,14 +66095,19 @@ public static class VerificationResult {
 
     StringJoiner joiner = new StringJoiner("&");
 
-    // add `verdict` to the URL query string
-    if (getVerdict() != null) {
-      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `outcome` to the URL query string
+    if (getOutcome() != null) {
+      joiner.add(String.format("%soutcome%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOutcome()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `checks` to the URL query string
-    if (getChecks() != null) {
-      joiner.add(getChecks().toUrlQueryString(prefix + "checks" + suffix));
+    // add `checks_run` to the URL query string
+    if (getChecksRun() != null) {
+      for (int i = 0; i < getChecksRun().size(); i++) {
+        if (getChecksRun().get(i) != null) {
+          joiner.add(getChecksRun().get(i).toUrlQueryString(String.format("%schecks_run%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
     }
 
     // add `roots` to the URL query string
@@ -65889,385 +66145,18 @@ public static class VerificationResult {
 
 
 /**
- * VerificationResultChecks
- */
-@JsonPropertyOrder({
-  VerificationResultChecks.JSON_PROPERTY_SIGNATURES,
-  VerificationResultChecks.JSON_PROPERTY_CAUSAL_CHAIN,
-  VerificationResultChecks.JSON_PROPERTY_POLICY_COMPLIANCE
-})
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class VerificationResultChecks {
-  /**
-   * Gets or Sets signatures
-   */
-  public enum SignaturesEnum {
-    PASS("PASS"),
-
-    FAIL("FAIL");
-
-    private String value;
-
-    SignaturesEnum(String value) {
-      this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-      return value;
-    }
-
-    @Override
-    public String toString() {
-      return String.valueOf(value);
-    }
-
-    @JsonCreator
-    public static SignaturesEnum fromValue(String value) {
-      for (SignaturesEnum b : SignaturesEnum.values()) {
-        if (b.value.equals(value)) {
-          return b;
-        }
-      }
-      throw new IllegalArgumentException("Unexpected value '" + value + "'");
-    }
-  }
-
-  public static final String JSON_PROPERTY_SIGNATURES = "signatures";
-  private SignaturesEnum signatures;
-
-  /**
-   * Gets or Sets causalChain
-   */
-  public enum CausalChainEnum {
-    PASS("PASS"),
-
-    FAIL("FAIL");
-
-    private String value;
-
-    CausalChainEnum(String value) {
-      this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-      return value;
-    }
-
-    @Override
-    public String toString() {
-      return String.valueOf(value);
-    }
-
-    @JsonCreator
-    public static CausalChainEnum fromValue(String value) {
-      for (CausalChainEnum b : CausalChainEnum.values()) {
-        if (b.value.equals(value)) {
-          return b;
-        }
-      }
-      throw new IllegalArgumentException("Unexpected value '" + value + "'");
-    }
-  }
-
-  public static final String JSON_PROPERTY_CAUSAL_CHAIN = "causal_chain";
-  private CausalChainEnum causalChain;
-
-  /**
-   * Gets or Sets policyCompliance
-   */
-  public enum PolicyComplianceEnum {
-    PASS("PASS"),
-
-    FAIL("FAIL");
-
-    private String value;
-
-    PolicyComplianceEnum(String value) {
-      this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-      return value;
-    }
-
-    @Override
-    public String toString() {
-      return String.valueOf(value);
-    }
-
-    @JsonCreator
-    public static PolicyComplianceEnum fromValue(String value) {
-      for (PolicyComplianceEnum b : PolicyComplianceEnum.values()) {
-        if (b.value.equals(value)) {
-          return b;
-        }
-      }
-      throw new IllegalArgumentException("Unexpected value '" + value + "'");
-    }
-  }
-
-  public static final String JSON_PROPERTY_POLICY_COMPLIANCE = "policy_compliance";
-  private PolicyComplianceEnum policyCompliance;
-
-  public VerificationResultChecks() {
-  }
-
-  public VerificationResultChecks signatures(SignaturesEnum signatures) {
-    this.signatures = signatures;
-    return this;
-  }
-
-   /**
-   * Get signatures
-   * @return signatures
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_SIGNATURES)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public SignaturesEnum getSignatures() {
-    return signatures;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_SIGNATURES)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setSignatures(SignaturesEnum signatures) {
-    this.signatures = signatures;
-  }
-
-
-  public VerificationResultChecks causalChain(CausalChainEnum causalChain) {
-    this.causalChain = causalChain;
-    return this;
-  }
-
-   /**
-   * Get causalChain
-   * @return causalChain
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_CAUSAL_CHAIN)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public CausalChainEnum getCausalChain() {
-    return causalChain;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_CAUSAL_CHAIN)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setCausalChain(CausalChainEnum causalChain) {
-    this.causalChain = causalChain;
-  }
-
-
-  public VerificationResultChecks policyCompliance(PolicyComplianceEnum policyCompliance) {
-    this.policyCompliance = policyCompliance;
-    return this;
-  }
-
-   /**
-   * Get policyCompliance
-   * @return policyCompliance
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_POLICY_COMPLIANCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public PolicyComplianceEnum getPolicyCompliance() {
-    return policyCompliance;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_POLICY_COMPLIANCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPolicyCompliance(PolicyComplianceEnum policyCompliance) {
-    this.policyCompliance = policyCompliance;
-  }
-
-
-  /**
-   * Return true if this VerificationResult_checks object is equal to o.
-   */
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-    VerificationResultChecks verificationResultChecks = (VerificationResultChecks) o;
-    return Objects.equals(this.signatures, verificationResultChecks.signatures) &&
-        Objects.equals(this.causalChain, verificationResultChecks.causalChain) &&
-        Objects.equals(this.policyCompliance, verificationResultChecks.policyCompliance);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(signatures, causalChain, policyCompliance);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("class VerificationResultChecks {\n");
-    sb.append("    signatures: ").append(toIndentedString(signatures)).append("\n");
-    sb.append("    causalChain: ").append(toIndentedString(causalChain)).append("\n");
-    sb.append("    policyCompliance: ").append(toIndentedString(policyCompliance)).append("\n");
-    sb.append("}");
-    return sb.toString();
-  }
-
-  /**
-   * Convert the given object to string with each line indented by 4 spaces
-   * (except the first line).
-   */
-  private String toIndentedString(Object o) {
-    if (o == null) {
-      return "null";
-    }
-    return o.toString().replace("\n", "\n    ");
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @return URL query string
-   */
-  public String toUrlQueryString() {
-    return toUrlQueryString(null);
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @param prefix prefix of the query string
-   * @return URL query string
-   */
-  public String toUrlQueryString(String prefix) {
-    String suffix = "";
-    if (prefix == null) {
-      // style=form, explode=true, e.g. /pet?name=cat&type=manx
-      prefix = "";
-    } else {
-      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
-      prefix = prefix + "[";
-      suffix = "]";
-    }
-
-    StringJoiner joiner = new StringJoiner("&");
-
-    // add `signatures` to the URL query string
-    if (getSignatures() != null) {
-      joiner.add(String.format("%ssignatures%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatures()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    // add `causal_chain` to the URL query string
-    if (getCausalChain() != null) {
-      joiner.add(String.format("%scausal_chain%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCausalChain()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    // add `policy_compliance` to the URL query string
-    if (getPolicyCompliance() != null) {
-      joiner.add(String.format("%spolicy_compliance%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyCompliance()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    return joiner.toString();
-  }
-}
-
-/*
- * HELM Kernel API
- * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
- *
- * The version of the OpenAPI document: 0.11.3
- *
- *
- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
- * https://openapi-generator.tech
- * Do not edit the class manually.
- */
-
-
-
-
-
-/**
  * VerificationResultRoots
  */
 @JsonPropertyOrder({
-  VerificationResultRoots.JSON_PROPERTY_MANIFEST_ROOT_HASH,
-  VerificationResultRoots.JSON_PROPERTY_MERKLE_ROOT,
   VerificationResultRoots.JSON_PROPERTY_ENTRY_COUNT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class VerificationResultRoots {
-  public static final String JSON_PROPERTY_MANIFEST_ROOT_HASH = "manifest_root_hash";
-  private String manifestRootHash;
-
-  public static final String JSON_PROPERTY_MERKLE_ROOT = "merkle_root";
-  private String merkleRoot;
-
   public static final String JSON_PROPERTY_ENTRY_COUNT = "entry_count";
   private Integer entryCount;
 
   public VerificationResultRoots() {
   }
-
-  public VerificationResultRoots manifestRootHash(String manifestRootHash) {
-    this.manifestRootHash = manifestRootHash;
-    return this;
-  }
-
-   /**
-   * Get manifestRootHash
-   * @return manifestRootHash
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_MANIFEST_ROOT_HASH)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getManifestRootHash() {
-    return manifestRootHash;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_MANIFEST_ROOT_HASH)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setManifestRootHash(String manifestRootHash) {
-    this.manifestRootHash = manifestRootHash;
-  }
-
-
-  public VerificationResultRoots merkleRoot(String merkleRoot) {
-    this.merkleRoot = merkleRoot;
-    return this;
-  }
-
-   /**
-   * Get merkleRoot
-   * @return merkleRoot
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_MERKLE_ROOT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getMerkleRoot() {
-    return merkleRoot;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_MERKLE_ROOT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setMerkleRoot(String merkleRoot) {
-    this.merkleRoot = merkleRoot;
-  }
-
 
   public VerificationResultRoots entryCount(Integer entryCount) {
     this.entryCount = entryCount;
@@ -66275,7 +66164,7 @@ public static class VerificationResultRoots {
   }
 
    /**
-   * Get entryCount
+   * Number of receipts in the bundle.
    * @return entryCount
   **/
   @javax.annotation.Nullable
@@ -66306,22 +66195,18 @@ public static class VerificationResultRoots {
       return false;
     }
     VerificationResultRoots verificationResultRoots = (VerificationResultRoots) o;
-    return Objects.equals(this.manifestRootHash, verificationResultRoots.manifestRootHash) &&
-        Objects.equals(this.merkleRoot, verificationResultRoots.merkleRoot) &&
-        Objects.equals(this.entryCount, verificationResultRoots.entryCount);
+    return Objects.equals(this.entryCount, verificationResultRoots.entryCount);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(manifestRootHash, merkleRoot, entryCount);
+    return Objects.hash(entryCount);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class VerificationResultRoots {\n");
-    sb.append("    manifestRootHash: ").append(toIndentedString(manifestRootHash)).append("\n");
-    sb.append("    merkleRoot: ").append(toIndentedString(merkleRoot)).append("\n");
     sb.append("    entryCount: ").append(toIndentedString(entryCount)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -66365,16 +66250,6 @@ public static class VerificationResultRoots {
     }
 
     StringJoiner joiner = new StringJoiner("&");
-
-    // add `manifest_root_hash` to the URL query string
-    if (getManifestRootHash() != null) {
-      joiner.add(String.format("%smanifest_root_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getManifestRootHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    // add `merkle_root` to the URL query string
-    if (getMerkleRoot() != null) {
-      joiner.add(String.format("%smerkle_root%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMerkleRoot()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
 
     // add `entry_count` to the URL query string
     if (getEntryCount() != null) {

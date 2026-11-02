@@ -73,14 +73,15 @@ def main():
     # 7. Verify evidence pack integrity
     result = client.verify_evidence(evidence)
     print(f"\n🔍 Verification result:")
-    print(f"  Valid:     {result.valid}")
-    print(f"  Integrity: {result.integrity_check}")
-    print(f"  Receipts:  {result.receipt_count}")
+    print(f"  Outcome:   {result.outcome}")
+    for check in result.checks_run:
+        print(f"  {check.name}: {check.status} ({check.detail})")
+    print(f"  Receipts:  {result.roots.entry_count}")
 
-    if result.valid:
-        print("\n✅ Evidence pack integrity VERIFIED")
+    if result.outcome == "VERIFIED":
+        print("\n✅ Evidence pack VERIFIED against this kernel's signer")
     else:
-        print("\n❌ Evidence pack verification FAILED")
+        print(f"\n❌ Evidence pack {result.outcome}: {result.errors}")
 
 if __name__ == "__main__":
     main()

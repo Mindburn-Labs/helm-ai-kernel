@@ -99,6 +99,11 @@ required=(
   helm-ai-kernel-darwin-amd64
   helm-ai-kernel-darwin-arm64
   helm-ai-kernel-windows-amd64.exe
+  receipt_verify-linux-amd64
+  receipt_verify-linux-arm64
+  receipt_verify-darwin-amd64
+  receipt_verify-darwin-arm64
+  receipt_verify-windows-amd64.exe
   helm-ai-kernel.mcpb
   sbom.json
   "v$VERSION.openvex.json"
@@ -225,6 +230,11 @@ required_names = {
     "helm-ai-kernel-darwin-amd64",
     "helm-ai-kernel-darwin-arm64",
     "helm-ai-kernel-windows-amd64.exe",
+    "receipt_verify-linux-amd64",
+    "receipt_verify-linux-arm64",
+    "receipt_verify-darwin-amd64",
+    "receipt_verify-darwin-arm64",
+    "receipt_verify-windows-amd64.exe",
     "helm-ai-kernel.mcpb",
     "sbom.json",
     f"v{version}.openvex.json",

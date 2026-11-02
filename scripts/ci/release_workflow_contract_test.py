@@ -7,6 +7,7 @@ post-quantum assurance.
 """
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import os
@@ -30,6 +31,21 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW = WORKFLOWS / "release.yml"
 DEV_IMAGE_WORKFLOW = WORKFLOWS / "dev-image.yml"
 VERSION_SURFACES = ROOT / "release" / "version-surfaces.yaml"
+MAKEFILE = ROOT / "Makefile"
+STAGE_RELEASE_ASSETS = ROOT / "scripts" / "release" / "stage_release_assets.sh"
+RELEASE_SMOKE = ROOT / "scripts" / "ci" / "release_smoke.sh"
+DEADCODE_ROOTS = ROOT / "scripts" / "ci" / "deadcode-roots.txt"
+RECEIPT_VERIFY_CHECKER = ROOT / "scripts" / "release" / "check_receipt_verify_assets.py"
+
+
+def receipt_verify_assets() -> tuple[str, ...]:
+    """The asset names the release gate checks; every release surface must agree."""
+    spec = importlib.util.spec_from_file_location("check_receipt_verify_assets", RECEIPT_VERIFY_CHECKER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.ASSETS)
+
 
 TAG_RELEASE_MUTATION_JOBS = frozenset(
     {
@@ -707,6 +723,96 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle",
         ):
             self.assertIn(asset, github_release)
+
+    def test_receipt_verify_ships_as_a_release_asset(self) -> None:
+        """The standalone offline verifier is built, staged, signed, attested and checked."""
+        assets = receipt_verify_assets()
+        self.assertEqual(len(assets), 5, assets)
+        self.assertEqual(len(set(assets)), len(assets))
+
+        # Build: the reproducible release build produces every asset with the
+        # reproducible flags and without the kernel's version or sidecar stamps.
+        makefile = MAKEFILE.read_text(encoding="utf-8")
+        recipe = re.search(r"^release-binaries-reproducible:\n((?:\t[^\n]*\n)+)", makefile, re.MULTILINE)
+        self.assertIsNotNone(recipe, "release-binaries-reproducible recipe not found")
+        recipe_text = recipe.group(1)
+        build_lines = [line for line in recipe_text.splitlines() if "./cmd/receipt_verify/" in line]
+        self.assertEqual(len(build_lines), len(assets), build_lines)
+        for name in assets:
+            line = next((line for line in build_lines if f"-o ../bin/{name} " in line), None)
+            self.assertIsNotNone(line, f"{name} is not built by release-binaries-reproducible")
+            self.assertIn("CGO_ENABLED=0", line)
+            self.assertIn("$(REPRO_GOFLAGS)", line)
+            self.assertIn('-ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)"', line)
+        self.assertRegex(makefile, r"(?m)^RECEIPT_VERIFY_REPRO_LDFLAGS := -s -w -buildid=$")
+
+        # Stage: required inputs, copied into the asset directory, checked
+        # before the checksum set and attestation are written.
+        stage = STAGE_RELEASE_ASSETS.read_text(encoding="utf-8")
+        for name in assets:
+            self.assertIn(f"    bin/{name} \\\n", stage, f"{name} is not a required staging input")
+            self.assertIn(f'cp "$SNAPSHOT_ROOT"/bin/{name} "$ASSETS_DIR/"', stage)
+        stage_check = 'python3 "$SNAPSHOT_ROOT/scripts/release/check_receipt_verify_assets.py" "$ASSETS_DIR"'
+        self.assertIn(stage_check, stage)
+        last_copy = max(stage.index(f'cp "$SNAPSHOT_ROOT"/bin/{name} "$ASSETS_DIR/"') for name in assets)
+        self.assertGreater(stage.index(stage_check), last_copy)
+        self.assertLess(stage.index(stage_check), stage.index("release-attestation.json"))
+        self.assertLess(stage.index(stage_check), stage.index("> SHA256SUMS.txt"))
+
+        # Workflow: checked after staging and before provenance is attested, so
+        # the attested, signed and SLSA-subject set is the checked set.
+        binaries = self.job("binaries")
+        check_step = "name: Check receipt_verify release assets"
+        self.assertIn(check_step, binaries)
+        self.assertIn("run: python3 scripts/release/check_receipt_verify_assets.py dist/release-assets", binaries)
+        self.assertLess(binaries.index("Build and stage release assets"), binaries.index(check_step))
+        self.assertLess(binaries.index(check_step), binaries.index("Attest release artifacts"))
+        self.assertLess(binaries.index(check_step), binaries.index("Aggregate digest set"))
+        self.assertIn("subject-path: dist/release-assets/*", binaries)
+        self.assertIn("find dist/release-assets -maxdepth 1 -type f", binaries)
+
+        # Signing and publication take every staged file, so nothing excludes
+        # the verifier from its keyless signature or from the GitHub Release.
+        cosign = self.job("cosign-binaries")
+        self.assertIn("for f in *; do", cosign)
+        self.assertNotIn("receipt_verify", cosign)
+        github_release = self.job("github-release")
+        self.assertIn("            dist/*\n", github_release)
+        self.assertIn("            cosign/**/*.cosign.bundle\n", github_release)
+        self.assertNotIn("receipt_verify", github_release)
+
+        # Reproducibility: both reproducible builds compare the verifier too.
+        reproducibility = self.job("reproducibility-check")
+        self.assertIn("cp -r bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt /tmp/build1/", reproducibility)
+        self.assertIn("shasum -a 256 /tmp/build1/helm-* /tmp/build1/receipt_verify-*", reproducibility)
+        self.assertIn("rm -f bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt", reproducibility)
+        self.assertIn("shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-*", reproducibility)
+
+        # Smoke: `make release-smoke` checks the build output and any staged
+        # release, and runs the checker's own self-test.
+        smoke = RELEASE_SMOKE.read_text(encoding="utf-8")
+        self.assertIn("python3 scripts/release/check_receipt_verify_assets.py bin", smoke)
+        self.assertIn('python3 scripts/release/check_receipt_verify_assets.py "$STAGED_DIR"', smoke)
+        self.assertIn("REQUIRE_STAGED_RELEASE_ASSETS", smoke)
+        self.assertIn("python3 scripts/release/check_receipt_verify_assets_test.py", makefile)
+
+        # Reachability: the verifier is a declared shipped binary.
+        roots = [
+            line.split("#", 1)[0].strip()
+            for line in DEADCODE_ROOTS.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertIn("core/cmd/receipt_verify", roots)
+
+        # Post-release: the published release must carry each asset and its
+        # keyless signature bundle.
+        surfaces = yaml.safe_load(VERSION_SURFACES.read_text(encoding="utf-8"))["published_surfaces"]
+        surface = next((item for item in surfaces if item["id"] == "github-release-receipt-verify"), None)
+        self.assertIsNotNone(surface, "published surface github-release-receipt-verify is missing")
+        self.assertEqual(surface["kind"], "github_release_assets")
+        self.assertEqual(
+            sorted(surface["required_assets"]),
+            sorted([*assets, *(f"{name}.cosign.bundle" for name in assets)]),
+        )
 
     def test_release_workflow_never_exposes_raw_evidence_private_pem(self) -> None:
         self.assertNotIn("HELM_EVIDENCE_KMS_PRIVATE_PEM", self.workflow)

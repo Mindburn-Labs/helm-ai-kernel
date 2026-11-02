@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Release-surface smoke: reproducible binaries, SBOM, OpenVEX, and optional
-# cosign bundle verification for a local artifact tree.
+# Release-surface smoke: reproducible binaries (the kernel and the standalone
+# receipt_verify verifier), SBOM, OpenVEX, and optional cosign bundle
+# verification for a local artifact tree.
 # quantum_posture: this smoke only checks release artifact plumbing; it does not
 # certify signature algorithms or hybrid/PQ posture.
 set -euo pipefail
@@ -33,18 +34,37 @@ cd "$ROOT"
 echo "release smoke: first reproducible build"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
 mkdir -p "$TMP_DIR/build1"
-cp bin/helm-ai-kernel-* bin/SHA256SUMS.txt "$TMP_DIR/build1/"
-shasum -a 256 "$TMP_DIR"/build1/helm-* | sed 's#.*/##' >"$TMP_DIR/build1.sha256"
+cp bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt "$TMP_DIR/build1/"
+shasum -a 256 "$TMP_DIR"/build1/helm-* "$TMP_DIR"/build1/receipt_verify-* | sed 's#.*/##' >"$TMP_DIR/build1.sha256"
 
 echo "release smoke: second reproducible build"
-rm -f bin/helm-ai-kernel-* bin/SHA256SUMS.txt
+rm -f bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
-shasum -a 256 bin/helm-ai-kernel-* | sed 's#.*/##' >"$TMP_DIR/build2.sha256"
+shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#.*/##' >"$TMP_DIR/build2.sha256"
 diff "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" >/dev/null || {
     echo "::error::reproducible binary hashes differ"
     diff -u "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" || true
     exit 1
 }
+
+# The verifier ships as release assets of its own. Fail when the build output
+# lacks any of them or when the host's build does not behave like a verifier.
+echo "release smoke: receipt_verify assets (build output)"
+python3 scripts/release/check_receipt_verify_assets.py bin
+
+# A staged release (make release-assets) has to carry the same assets. The
+# staged tree needs the release evidence trust inputs, so a plain smoke run has
+# none; set REQUIRE_STAGED_RELEASE_ASSETS=1 where the staged tree must exist.
+STAGED_DIR="${RELEASE_ASSETS_DIR:-$ROOT/dist/release-assets}"
+if [ -d "$STAGED_DIR" ]; then
+    echo "release smoke: receipt_verify assets (staged release $STAGED_DIR)"
+    python3 scripts/release/check_receipt_verify_assets.py "$STAGED_DIR"
+elif [ "${REQUIRE_STAGED_RELEASE_ASSETS:-0}" = "1" ]; then
+    echo "::error::a staged release is required but $STAGED_DIR does not exist"
+    exit 1
+else
+    echo "release smoke: no staged release at $STAGED_DIR; set REQUIRE_STAGED_RELEASE_ASSETS=1 where it is mandatory"
+fi
 
 echo "release smoke: SBOM and VEX"
 make sbom >/dev/null

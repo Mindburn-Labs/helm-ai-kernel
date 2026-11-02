@@ -152,6 +152,11 @@ for artifact in \
     bin/helm-ai-kernel-darwin-amd64 \
     bin/helm-ai-kernel-darwin-arm64 \
     bin/helm-ai-kernel-windows-amd64.exe \
+    bin/receipt_verify-linux-amd64 \
+    bin/receipt_verify-linux-arm64 \
+    bin/receipt_verify-darwin-amd64 \
+    bin/receipt_verify-darwin-arm64 \
+    bin/receipt_verify-windows-amd64.exe \
     bin/helm-ai-kernel \
     dist/helm-ai-kernel.mcpb \
     sbom.json \
@@ -178,10 +183,23 @@ cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-linux-arm64 "$ASSETS_DIR/"
 cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-darwin-amd64 "$ASSETS_DIR/"
 cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-darwin-arm64 "$ASSETS_DIR/"
 cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-windows-amd64.exe "$ASSETS_DIR/"
+# The standalone offline verifier ships as its own assets, separate from the
+# kernel: a counterparty checking a receipt does not download the issuer.
+cp "$SNAPSHOT_ROOT"/bin/receipt_verify-linux-amd64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/receipt_verify-linux-arm64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/receipt_verify-darwin-amd64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/receipt_verify-darwin-arm64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/receipt_verify-windows-amd64.exe "$ASSETS_DIR/"
 cp "$SNAPSHOT_ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
 cp "$SNAPSHOT_ROOT"/sbom.json "$ASSETS_DIR/"
 cp "$vex_path" "$ASSETS_DIR/$(basename "$vex_path")"
 cp "$SNAPSHOT_ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
+
+# Fail the staging, not a later download, when the verifier assets are absent or
+# do not behave like a verifier (accepts the frozen chain, rejects a wrong key
+# and a tampered receipt).
+log_step "checking receipt_verify release assets"
+python3 "$SNAPSHOT_ROOT/scripts/release/check_receipt_verify_assets.py" "$ASSETS_DIR" --root "$SNAPSHOT_ROOT"
 
 if [ -n "${HELM_CONSOLE_LOCAL_SIDECAR_DIR:-}" ]; then
     log_step "verifying pinned Console local-sidecar release input"

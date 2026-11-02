@@ -421,10 +421,10 @@ curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evidence/export" \
     -H 'Content-Type: application/json' \
     --data-binary "{\"session_id\":\"${AGENT_ID}\",\"format\":\"tar.gz\"}" \
     -o "$TMP_DIR/evidence.tar.gz"
-curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/replay/verify" \
+curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evidence/verify" \
     -H 'Content-Type: application/octet-stream' \
-    --data-binary "@$TMP_DIR/evidence.tar.gz" >"$TMP_DIR/replay.json"
-python3 - "$TMP_DIR/replay.json" <<'PY'
+    --data-binary "@$TMP_DIR/evidence.tar.gz" >"$TMP_DIR/evidence-verify.json"
+python3 - "$TMP_DIR/evidence-verify.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
 if payload.get("outcome") != "VERIFIED":

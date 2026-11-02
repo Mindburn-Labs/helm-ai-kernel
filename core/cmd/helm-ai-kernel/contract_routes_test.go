@@ -855,13 +855,6 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	if payloadRec.Code != http.StatusOK {
 		t.Fatalf("payload status=%d body=%s", payloadRec.Code, payloadRec.Body.String())
 	}
-	verifyEnvelopeReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/envelopes/manifest-1/verify", nil)
-	authorizeTestRequest(verifyEnvelopeReq)
-	verifyEnvelopeRec := httptest.NewRecorder()
-	mux.ServeHTTP(verifyEnvelopeRec, verifyEnvelopeReq)
-	if verifyEnvelopeRec.Code != http.StatusOK {
-		t.Fatalf("envelope verify status=%d body=%s", verifyEnvelopeRec.Code, verifyEnvelopeRec.Body.String())
-	}
 }
 
 func TestMCPAuthorizeCallAPIFailsClosedWithUnverifiedPersistedApproval(t *testing.T) {
@@ -952,7 +945,7 @@ func TestMCPAuthorizeCallAPIFailsClosedWithUnverifiedPersistedApproval(t *testin
 	}
 }
 
-func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
+func TestEvidenceVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
@@ -970,7 +963,7 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/replay/verify", bytes.NewReader(tampered))
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(tampered))
 	verifyReq.Header.Set("Content-Type", "application/octet-stream")
 	verifyRec := httptest.NewRecorder()
 	mux.ServeHTTP(verifyRec, verifyReq)
@@ -991,7 +984,7 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 
 // A bundle sealed and signed by a key it carries about itself is intact but
 // unproven: UNVERIFIABLE, never VERIFIED, and not FAILED either.
-func TestEvidenceAndReplayVerifyReportForgedSelfConsistentBundleUnverifiable(t *testing.T) {
+func TestEvidenceVerifyReportsForgedSelfConsistentBundleUnverifiable(t *testing.T) {
 	t.Setenv("HELM_PRODUCTION", "")
 	trustedSigner, err := helmcrypto.NewHybridSigner("trusted")
 	if err != nil {
@@ -1036,7 +1029,7 @@ func TestEvidenceAndReplayVerifyReportForgedSelfConsistentBundleUnverifiable(t *
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, &Services{ReceiptSigner: trustedSigner})
 
-	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
+	for _, endpoint := range []string{"/api/v1/evidence/verify"} {
 		t.Run(endpoint+" trusted", func(t *testing.T) {
 			result := postEvidenceVerification(t, mux, endpoint, validBundle)
 			if result["outcome"] != "VERIFIED" {
@@ -1059,7 +1052,7 @@ func TestEvidenceAndReplayVerifyReportForgedSelfConsistentBundleUnverifiable(t *
 	}
 }
 
-func TestEvidenceAndReplayVerifyRejectTamperedUnsignedReceiptAttachments(t *testing.T) {
+func TestEvidenceVerifyRejectsTamperedUnsignedReceiptAttachments(t *testing.T) {
 	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
 	defer cleanup()
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
@@ -1136,7 +1129,7 @@ func TestEvidenceAndReplayVerifyRejectTamperedUnsignedReceiptAttachments(t *test
 		t.Fatalf("tampered unsigned fields unexpectedly broke receipt signature: %v", err)
 	}
 
-	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
+	for _, endpoint := range []string{"/api/v1/evidence/verify"} {
 		result := postEvidenceVerification(t, mux, endpoint, tampered)
 		if result["outcome"] != "FAILED" {
 			t.Fatalf("%s expected tampered unsigned fields to fail, got %+v", endpoint, result)
@@ -1418,7 +1411,7 @@ func TestProofGraphSessionRouteRejectsUnsafeCompatibilityValues(t *testing.T) {
 	}
 }
 
-func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
+func TestEvidenceVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("chain-test")
 	if err != nil {
 		t.Fatal(err)
@@ -1459,7 +1452,7 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
 
-	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/replay/verify", bytes.NewReader(bundle))
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(bundle))
 	verifyReq.Header.Set("Content-Type", "application/octet-stream")
 	verifyRec := httptest.NewRecorder()
 	mux.ServeHTTP(verifyRec, verifyReq)
@@ -1476,9 +1469,6 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	statuses := evidenceCheckStatuses(t, result)
 	if statuses["receipt_chain"] != "FAILED" || statuses["receipt_signatures"] != "VERIFIED" {
 		t.Fatalf("expected only the receipt chain to fail, got %+v", result)
-	}
-	if _, ok := statuses["replay"]; ok {
-		t.Fatalf("no replay runs, so no replay check may be reported: %+v", result)
 	}
 }
 
@@ -2552,5 +2542,38 @@ func TestEvidenceVerifySealErrorsDoNotLeakWorkspacePath(t *testing.T) {
 	}
 	if resultErrorsContain(result, "helm-evidence-verify-") || resultErrorsContain(result, os.TempDir()) {
 		t.Fatalf("errors leak the verify workspace path: %+v", result["errors"])
+	}
+}
+
+// The verify routes that could not fail are gone: none of them may answer a
+// verification again, and none may stay in the route registry.
+func TestTautologicalVerifyRoutesAreNotServed(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{})
+	removed := []string{
+		"/api/v1/replay/verify",
+		"/api/v1/boundary/records/rec-1/verify",
+		"/api/v1/boundary/checkpoints/cp-1/verify",
+		"/api/v1/evidence/verification-scopes/scope-1/verify",
+		"/api/v1/telemetry/harness-traces/trace-1/verify",
+		"/api/v1/plans/transactions/tx-1/verify",
+		"/api/v1/harness/change-contracts/change-1/verify",
+		"/api/v1/evidence/envelopes/manifest-1/verify",
+		"/api/v1/sandbox/grants/grant-1/verify",
+	}
+	for _, path := range removed {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		authorizeTestRequest(req)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), `"verified"`) {
+			t.Fatalf("POST %s still answers a verification: status=%d body=%s", path, rec.Code, rec.Body.String())
+		}
+	}
+	for _, spec := range PublicRuntimeRouteSpecs() {
+		if strings.HasSuffix(spec.Path, "/verify") && spec.Path != "/api/v1/evidence/verify" && spec.Path != "/api/demo/verify" {
+			t.Errorf("route registry still lists verify route %s %s", spec.Method, spec.Path)
+		}
 	}
 }

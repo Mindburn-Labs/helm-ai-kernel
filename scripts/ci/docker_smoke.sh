@@ -351,10 +351,7 @@ export_and_verify_evidence() {
     curl -fsS -X POST "$(base_url)/api/v1/evidence/verify" \
         -H 'Content-Type: application/octet-stream' \
         --data-binary "@$ARTIFACT_DIR/evidence.tar.gz" >"$ARTIFACT_DIR/evidence-verify.json"
-    curl -fsS -X POST "$(base_url)/api/v1/replay/verify" \
-        -H 'Content-Type: application/octet-stream' \
-        --data-binary "@$ARTIFACT_DIR/evidence.tar.gz" >"$ARTIFACT_DIR/replay-verify.json"
-    python3 - "$ARTIFACT_DIR/evidence-verify.json" "$ARTIFACT_DIR/replay-verify.json" <<'PY'
+    python3 - "$ARTIFACT_DIR/evidence-verify.json" <<'PY'
 import json, sys
 for path in sys.argv[1:]:
     payload = json.load(open(path))

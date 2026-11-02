@@ -144,12 +144,6 @@ func (c *HelmClient) GetEvidenceEnvelopeManifest(manifestID string) (*EvidenceEn
 	return &out, err
 }
 
-func (c *HelmClient) VerifyEvidenceEnvelopeManifest(manifestID string) (*EvidenceEnvelopeVerification, error) {
-	var out EvidenceEnvelopeVerification
-	err := c.do("POST", "/api/v1/evidence/envelopes/"+url.PathEscape(manifestID)+"/verify", nil, &out)
-	return &out, err
-}
-
 func (c *HelmClient) GetEvidenceEnvelopePayload(manifestID string) (*EvidenceEnvelopePayload, error) {
 	var out EvidenceEnvelopePayload
 	err := c.do("GET", "/api/v1/evidence/envelopes/"+url.PathEscape(manifestID)+"/payload", nil, &out)
@@ -184,12 +178,6 @@ func (c *HelmClient) GetBoundaryRecord(recordID string) (*ExecutionBoundaryRecor
 	return &out, err
 }
 
-func (c *HelmClient) VerifyBoundaryRecord(recordID string) (*BoundaryRecordVerification, error) {
-	var out BoundaryRecordVerification
-	err := c.do("POST", "/api/v1/boundary/records/"+url.PathEscape(recordID)+"/verify", nil, &out)
-	return &out, err
-}
-
 func (c *HelmClient) ListBoundaryCheckpoints() ([]BoundaryCheckpoint, error) {
 	var out []BoundaryCheckpoint
 	err := c.do("GET", "/api/v1/boundary/checkpoints", nil, &out)
@@ -199,12 +187,6 @@ func (c *HelmClient) ListBoundaryCheckpoints() ([]BoundaryCheckpoint, error) {
 func (c *HelmClient) CreateBoundaryCheckpoint() (*BoundaryCheckpoint, error) {
 	var out BoundaryCheckpoint
 	err := c.do("POST", "/api/v1/boundary/checkpoints", nil, &out)
-	return &out, err
-}
-
-func (c *HelmClient) VerifyBoundaryCheckpoint(checkpointID string) (*SurfaceRecord, error) {
-	var out SurfaceRecord
-	err := c.do("POST", "/api/v1/boundary/checkpoints/"+url.PathEscape(checkpointID)+"/verify", nil, &out)
 	return &out, err
 }
 
@@ -307,12 +289,6 @@ func (c *HelmClient) CreateSandboxGrant(req SurfaceRecord) (*SandboxGrant, error
 func (c *HelmClient) GetSandboxGrant(grantID string) (*SandboxGrant, error) {
 	var out SandboxGrant
 	err := c.do("GET", "/api/v1/sandbox/grants/"+url.PathEscape(grantID), nil, &out)
-	return &out, err
-}
-
-func (c *HelmClient) VerifySandboxGrant(grantID string) (*SandboxPreflightResult, error) {
-	var out SandboxPreflightResult
-	err := c.do("POST", "/api/v1/sandbox/grants/"+url.PathEscape(grantID)+"/verify", nil, &out)
 	return &out, err
 }
 

@@ -793,7 +793,7 @@ func frameworkScaffold(framework string) contracts.FrameworkScaffold {
 		Framework:      name,
 		Language:       language,
 		Files:          []string{"middleware/helm-boundary." + languageExt(language), "README.md"},
-		RequiredRoutes: []string{"/api/v1/mcp/authorize-call", "/api/v1/boundary/records/{record_id}/verify", "/api/v1/evidence/export"},
+		RequiredRoutes: []string{"/api/v1/mcp/authorize-call", "/api/v1/evidence/export", "/api/v1/evidence/verify"},
 		Mode:           "pre-dispatch-required",
 		Notes:          "Passive tracing alone is not HELM conformance; middleware must call HELM before tool dispatch.",
 	}

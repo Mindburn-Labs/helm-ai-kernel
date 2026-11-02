@@ -267,7 +267,9 @@ func consoleSurfaceDefinitions() []consoleSurfaceDefinition {
 		{ID: "connectors", Label: "Connectors", Group: "Connectors", Source: "/mcp/v1/capabilities"},
 		{ID: "receipts", Label: "Receipts", Group: "Proof", Source: "/api/v1/receipts"},
 		{ID: "evidence", Label: "Evidence", Group: "Proof", Source: "/api/v1/evidence/export"},
-		{ID: "replay", Label: "Replay", Group: "Proof", Source: "/api/v1/replay/verify"},
+		// The surface id stays "replay" for existing Console links; nothing is
+		// replayed, so the label and source name the bundle verifier.
+		{ID: "replay", Label: "Verify", Group: "Proof", Source: "/api/v1/evidence/verify"},
 		{ID: "proofgraph", Label: "ProofGraph", Group: "Proof", Source: "/api/v1/proofgraph/sessions"},
 		{ID: "harness", Label: "Harness", Group: "Developer", Source: "/api/v1/harness/change-contracts"},
 		{ID: "launchpad", Label: "Launchpad", Group: "Runtime", Source: "/api/v1/launchpad/matrix"},
@@ -323,7 +325,7 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["records"] = policyRecords(opts)
 	case "replay":
 		base["status"] = statusFromStore(svc)
-		base["source"] = "/api/v1/replay/verify"
+		base["source"] = "/api/v1/evidence/verify"
 		base["summary"] = map[string]any{
 			"verifier":        "evidence bundle verifier",
 			"receipt_count":   len(receipts),

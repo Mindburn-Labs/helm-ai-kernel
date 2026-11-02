@@ -2086,6 +2086,8 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/boundary/records/{record_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyBoundaryRecord
       tags: [boundary]
       summary: Verify a boundary record hash and receipt linkage
@@ -2146,6 +2148,8 @@ paths:
 
   /api/v1/boundary/checkpoints/{checkpoint_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyBoundaryCheckpoint
       tags: [boundary]
       summary: Verify a boundary checkpoint and inclusion proof
@@ -2409,6 +2413,8 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/evidence/verification-scopes/{scope_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyVerificationScope
       tags: [evidence]
       summary: Verify a verification scope hash
@@ -2512,6 +2518,8 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces/{trace_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyHarnessTrace
       tags: [telemetry]
       summary: Verify a harness trace hash
@@ -2615,6 +2623,8 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions/{transaction_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyPlanTransaction
       tags: [plans]
       summary: Verify a plan transaction hash
@@ -2751,6 +2761,8 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts/{change_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Recomputes a hash the kernel stored itself, so it shows storage consistency, not authenticity, and reports checks that cannot fail. Removed in a following change; verify exported evidence with POST /api/v1/evidence/verify or the offline receipt_verify binary."
       operationId: verifyHarnessChangeContract
       tags: [harness]
       summary: Verify a harness change contract hash
@@ -2879,6 +2891,8 @@ paths:
 
   /api/v1/evidence/envelopes/{manifest_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "When no payload is stored the route rebuilds it from the manifest and checks it against itself, and envelopes are unsigned wrappers. Removed in a following change; use POST /api/v1/evidence/verify."
       operationId: verifyEvidenceEnvelopeManifest
       tags: [evidence]
       summary: Verify an evidence envelope manifest against its HELM root
@@ -2903,6 +2917,8 @@ paths:
 
   /api/v1/replay/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "No replay runs: the response repeats the evidence bundle checks under a replay label. Removed in a following change; use POST /api/v1/evidence/verify."
       operationId: replayVerify
       tags: [evidence]
       summary: Replay and verify execution from tapes
@@ -3378,6 +3394,8 @@ paths:
 
   /api/v1/sandbox/grants/{grant_id}/verify:
     post:
+      deprecated: true
+      x-helm-deprecation: "Checks only that a grant hash is present; no hash binding is tested. Removed in a following change."
       operationId: verifySandboxGrant
       tags: [sandbox]
       summary: Verify a sealed sandbox grant before execution

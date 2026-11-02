@@ -140,13 +140,13 @@ func readPrincipalBinding(w http.ResponseWriter, r *http.Request, svc *Services)
 		return
 	}
 	if svc == nil || svc.PrincipalBindings == nil {
-		api.WriteErrorR(w, r, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
+		api.WriteError(w, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
 		return
 	}
 	bound, err := svc.PrincipalBindings.Exists(r.Context(), req.TenantID, req.PrincipalID)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "principal binding lookup unavailable", "error", err)
-		api.WriteErrorR(w, r, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
+		api.WriteError(w, http.StatusServiceUnavailable, "Service Unavailable", "Principal binding lookup is unavailable")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

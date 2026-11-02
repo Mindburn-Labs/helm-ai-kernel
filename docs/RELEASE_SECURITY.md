@@ -142,6 +142,17 @@ make verify-fixtures
 make docs-coverage docs-truth
 ```
 
+The standalone offline receipt verifier ships as five
+`receipt_verify-<os>-<arch>` release assets, each with its own `.cosign.bundle`.
+The `binaries` job and `make release-smoke` run
+`scripts/release/check_receipt_verify_assets.py`, which fails when an asset is
+missing, smaller than a real build or not an executable for the operating system
+and CPU architecture its name states, or when the build for the running host
+does not verify the frozen receipt chain and reject a wrong key and a tampered
+receipt. Only the host's build is executed; the other four are checked by size
+and executable header. The assets are attached from the first release after
+`v0.11.3`; `v0.11.3` and earlier releases do not carry them.
+
 Release artifacts should not be treated as trustworthy only because they are
 downloaded from a release page. Verify checksums, release metadata,
 receipt/evidence material, reproducible-build behavior, and signatures when

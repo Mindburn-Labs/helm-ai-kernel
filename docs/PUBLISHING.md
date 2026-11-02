@@ -168,6 +168,26 @@ The release workflow attaches these assets:
 - `v0.11.3.json`
 - matching `*.cosign.bundle` files for every primary asset
 
+From the first release after `v0.11.3`, the workflow also attaches the
+standalone offline receipt verifier, built from `core/cmd/receipt_verify` and
+shipped separately from the kernel binary: `receipt_verify-darwin-amd64`,
+`receipt_verify-darwin-arm64`, `receipt_verify-linux-amd64`,
+`receipt_verify-linux-arm64` and `receipt_verify-windows-amd64.exe`, each with
+its `.cosign.bundle`. `v0.11.3` and earlier releases do not carry them.
+
+`make release-assets` builds the `receipt_verify-*` binaries with the same
+reproducible flags as the kernel and stages them beside it. The release
+workflow's `cosign-binaries` job signs every staged file, these included; `make
+release-assets` itself signs nothing.
+`scripts/release/check_receipt_verify_assets.py` fails the staging, the
+`binaries` job and `make release-smoke` when any of the five is missing, smaller
+than a real build, or not an executable for the operating system and CPU
+architecture its name states, or when the build for the running host does not
+verify the frozen receipt chain under its own key and reject it under a wrong key
+and after a tamper. Only the host's build is executed; the other four are
+checked by size and executable header. See
+[LLM audit receipts](use-cases/llm-audit-receipts.md) for the command a user runs.
+
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The local Console sidecars and standalone
 browser UI layouts are Kernel release assets; the Homebrew formula does not

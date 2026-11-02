@@ -329,7 +329,13 @@
         "scripts/release/publish_go_module_tags.sh",
         "scripts/release/publish_go_module_tags_test.py",
         "scripts/release/prepare_dev_chart.py",
-        "deploy/helm-chart/**"
+        "deploy/helm-chart/**",
+        "Makefile",
+        "scripts/release/stage_release_assets.sh",
+        "scripts/ci/release_smoke.sh",
+        "scripts/ci/deadcode-roots.txt",
+        "release/version-surfaces.yaml",
+        "scripts/release/check_receipt_verify_assets.py"
       ]
     },
     {

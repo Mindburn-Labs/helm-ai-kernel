@@ -23,6 +23,10 @@ assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
 `*.cosign.bundle` files for every primary asset.
 
+From the first release after `v0.11.3`, each release also carries the
+standalone `receipt_verify-*` offline verifier for the same five platforms,
+each with its `.cosign.bundle`. `v0.11.3` and earlier releases do not.
+
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 

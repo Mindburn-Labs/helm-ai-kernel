@@ -47,8 +47,6 @@ G104 core/cmd/helm-ai-kernel/proxy_cmd.go 3c8e7b5702f8
 G104 core/cmd/helm-ai-kernel/proxy_cmd.go 930e744e4129
 G104 core/cmd/helm-ai-kernel/verify_cmd.go 281c4b9a7fff
 G104 core/cmd/helm-ai-kernel/verify_cmd.go 281c4b9a7fff
-G104 core/cmd/skill_pack/main.go 8e70fb35caba
-G104 core/cmd/skill_pack/main.go 8e70fb35caba
 G104 core/pkg/api/server.go f1802794e419
 G104 core/pkg/conform/adversarial/suites.go 19dda6a343c6
 G104 core/pkg/connectors/arc/client.go 930e744e4129
@@ -57,8 +55,6 @@ G104 core/pkg/connectors/github/client.go 930e744e4129
 G104 core/pkg/connectors/linear/client.go 930e744e4129
 G104 core/pkg/connectors/slack/client.go 930e744e4129
 G104 core/pkg/delegation/manager.go 8c01b7231840
-G104 core/pkg/edge/sync.go 060a689d49c5
-G104 core/pkg/edge/sync.go 5e50387450f9
 G104 core/pkg/identity/file_store.go 26fea49d9f88
 G104 core/pkg/launchpad/cmd/connect.go 930e744e4129
 G104 core/pkg/metrics/governance.go e6cfe1127a26
@@ -102,9 +98,6 @@ G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d
 G115 core/pkg/trust/registry/store_pg.go ae337a7575fe
-G115 core/pkg/truth/types.go fddfe7be435f
-G115 core/pkg/truth/types.go fddfe7be435f
-G115 core/pkg/truth/types.go fddfe7be435f
 G117 core/pkg/evidence/seal.go 68fb71c61e81
 G117 core/pkg/launchpad/cmd/connect.go e0521f979223
 G122 core/cmd/helm-ai-kernel/boundary_profile_cmd.go cea0f3d77997
@@ -315,18 +308,10 @@ G304 core/cmd/helm-ai-kernel/watch_cmd.go 3fab255c5028
 G304 core/cmd/helm-ai-kernel/workstation_cmd.go cb487a9a88dd
 G304 core/cmd/helm-ai-kernel/workstation_signing.go 60e78bae6b82
 G304 core/cmd/helm-ai-kernel/workstation_signing.go ec35404e84d7
-G304 core/cmd/pack_verify/main.go 0e13c6bdbce1
-G304 core/cmd/pack_verify/main.go 9b1de902df22
 G304 core/cmd/receipt_verify/main.go ec35404e84d7
 G304 core/cmd/receipt_verify/main.go ef25ef080adc
 G304 core/cmd/release-permit-verify/main.go ac55ecf0d40a
-G304 core/cmd/skill_lint/main.go 6d3ab38598d3
-G304 core/cmd/skill_pack/main.go 4093daa948a0
-G304 core/cmd/skill_pack/main.go 6d3ab38598d3
-G304 core/cmd/skill_pack/main.go a3e5680e7e6e
-G304 core/cmd/skill_pack/main.go ce537c0d83aa
 G304 core/pkg/agentruntime/storelock_flock.go 4454b0931305
-G304 core/pkg/aibom/generator.go 2dbe5b068c3c
 G304 core/pkg/boundary/profile/probe.go ad3f9cda0030
 G304 core/pkg/boundary/surface_registry.go e002b30f196c
 G304 core/pkg/bundles/loader.go dbfffc239169

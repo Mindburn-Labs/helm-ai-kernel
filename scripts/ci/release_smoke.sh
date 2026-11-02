@@ -35,12 +35,14 @@ echo "release smoke: first reproducible build"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
 mkdir -p "$TMP_DIR/build1"
 cp bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt "$TMP_DIR/build1/"
-shasum -a 256 "$TMP_DIR"/build1/helm-* "$TMP_DIR"/build1/receipt_verify-* | sed 's#.*/##' >"$TMP_DIR/build1.sha256"
+# Drop only the directory: each line keeps its hash, so the diff below compares
+# contents, not just file names.
+shasum -a 256 "$TMP_DIR"/build1/helm-* "$TMP_DIR"/build1/receipt_verify-* | sed 's#  .*/#  #' >"$TMP_DIR/build1.sha256"
 
 echo "release smoke: second reproducible build"
 rm -f bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
-shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#.*/##' >"$TMP_DIR/build2.sha256"
+shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#  .*/#  #' >"$TMP_DIR/build2.sha256"
 diff "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" >/dev/null || {
     echo "::error::reproducible binary hashes differ"
     diff -u "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" || true
@@ -52,19 +54,11 @@ diff "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" >/dev/null || {
 echo "release smoke: receipt_verify assets (build output)"
 python3 scripts/release/check_receipt_verify_assets.py bin
 
-# A staged release (make release-assets) has to carry the same assets. The
-# staged tree needs the release evidence trust inputs, so a plain smoke run has
-# none; set REQUIRE_STAGED_RELEASE_ASSETS=1 where the staged tree must exist.
-STAGED_DIR="${RELEASE_ASSETS_DIR:-$ROOT/dist/release-assets}"
-if [ -d "$STAGED_DIR" ]; then
-    echo "release smoke: receipt_verify assets (staged release $STAGED_DIR)"
-    python3 scripts/release/check_receipt_verify_assets.py "$STAGED_DIR"
-elif [ "${REQUIRE_STAGED_RELEASE_ASSETS:-0}" = "1" ]; then
-    echo "::error::a staged release is required but $STAGED_DIR does not exist"
-    exit 1
-else
-    echo "release smoke: no staged release at $STAGED_DIR; set REQUIRE_STAGED_RELEASE_ASSETS=1 where it is mandatory"
-fi
+# The smoke checks the build output only. A staged release checks itself:
+# stage_release_assets.sh runs the same checker on the staged directory before
+# it writes SHA256SUMS.txt and the attestation, and the release workflow's
+# binaries job runs it again on dist/release-assets before attesting. The
+# release-smoke job runs before any staging, so there is no staged tree here.
 
 echo "release smoke: SBOM and VEX"
 make sbom >/dev/null

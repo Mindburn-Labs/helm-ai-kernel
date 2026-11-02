@@ -8,6 +8,7 @@ post-quantum assurance.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -745,6 +746,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIn("$(REPRO_GOFLAGS)", line)
             self.assertIn('-ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)"', line)
         self.assertRegex(makefile, r"(?m)^RECEIPT_VERIFY_REPRO_LDFLAGS := -s -w -buildid=$")
+        # Each build line's target must be the platform its output name states;
+        # a swapped GOARCH would ship an amd64 binary named arm64.
+        for line in build_lines:
+            target = re.search(r"\bGOOS=(\w+)\s+GOARCH=(\w+)\b", line)
+            output = re.search(r"-o \.\./bin/receipt_verify-(\w+)-(\w+?)(\.exe)? ", line)
+            self.assertIsNotNone(target, line)
+            self.assertIsNotNone(output, line)
+            self.assertEqual(target.groups(), output.groups()[:2], line)
+            self.assertEqual(output.group(3) == ".exe", target.group(1) == "windows", line)
 
         # Stage: required inputs, copied into the asset directory, checked
         # before the checksum set and attestation are written.
@@ -784,17 +794,32 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         # Reproducibility: both reproducible builds compare the verifier too.
         reproducibility = self.job("reproducibility-check")
         self.assertIn("cp -r bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt /tmp/build1/", reproducibility)
-        self.assertIn("shasum -a 256 /tmp/build1/helm-* /tmp/build1/receipt_verify-*", reproducibility)
+        self.assertIn(
+            "shasum -a 256 /tmp/build1/helm-* /tmp/build1/receipt_verify-* | sed 's#  .*/#  #' > /tmp/build1.sha256",
+            reproducibility,
+        )
         self.assertIn("rm -f bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt", reproducibility)
-        self.assertIn("shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-*", reproducibility)
+        self.assertIn(
+            "shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#  .*/#  #' > /tmp/build2.sha256",
+            reproducibility,
+        )
 
-        # Smoke: `make release-smoke` checks the build output and any staged
-        # release, and runs the checker's own self-test.
+        # Smoke: `make release-smoke` checks the build output and runs the
+        # checker's own self-test. Staged trees are checked by staging itself
+        # and by the binaries job, so the smoke has no unset knob for them.
         smoke = RELEASE_SMOKE.read_text(encoding="utf-8")
         self.assertIn("python3 scripts/release/check_receipt_verify_assets.py bin", smoke)
-        self.assertIn('python3 scripts/release/check_receipt_verify_assets.py "$STAGED_DIR"', smoke)
-        self.assertIn("REQUIRE_STAGED_RELEASE_ASSETS", smoke)
+        self.assertNotIn("REQUIRE_STAGED_RELEASE_ASSETS", smoke)
         self.assertIn("python3 scripts/release/check_receipt_verify_assets_test.py", makefile)
+        self.assertIn(
+            'shasum -a 256 "$TMP_DIR"/build1/helm-* "$TMP_DIR"/build1/receipt_verify-* '
+            "| sed 's#  .*/#  #' >\"$TMP_DIR/build1.sha256\"",
+            smoke,
+        )
+        self.assertIn(
+            "shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#  .*/#  #' >\"$TMP_DIR/build2.sha256\"",
+            smoke,
+        )
 
         # Reachability: the verifier is a declared shipped binary.
         roots = [
@@ -813,6 +838,42 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             sorted(surface["required_assets"]),
             sorted([*assets, *(f"{name}.cosign.bundle" for name in assets)]),
         )
+
+    def test_reproducibility_hash_lists_compare_contents(self) -> None:
+        """The hash lists keep each hash, so two builds that differ fail the diff.
+
+        `sed 's#.*/##'` once stripped the hash together with the path, which left
+        only file names to compare and made the check unable to fail.
+        """
+        sources = {
+            "release.yml reproducibility-check": self.job("reproducibility-check"),
+            "scripts/ci/release_smoke.sh": RELEASE_SMOKE.read_text(encoding="utf-8"),
+        }
+        for label, text in sources.items():
+            scripts = re.findall(r"shasum -a 256 [^|\n]+\| sed '([^']+)'", text)
+            self.assertEqual(len(scripts), 2, f"{label}: expected two hashed builds, got {scripts}")
+            for script in scripts:
+                with self.subTest(source=label, sed=script):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        base = Path(tmp)
+                        builds = {}
+                        for build, payload in (("build1", b"one"), ("build2", b"one"), ("build3", b"two")):
+                            directory = base / build / "nested"
+                            directory.mkdir(parents=True)
+                            (directory / "receipt_verify-linux-amd64").write_bytes(payload)
+                            digest = hashlib.sha256(payload).hexdigest()
+                            listing = f"{digest}  {directory / 'receipt_verify-linux-amd64'}\n"
+                            builds[build] = subprocess.run(
+                                ["sed", script], input=listing, capture_output=True, text=True, check=True
+                            ).stdout
+                        # Same bytes under different directories: equal lists.
+                        self.assertEqual(builds["build1"], builds["build2"])
+                        self.assertEqual(
+                            builds["build1"],
+                            f"{hashlib.sha256(b'one').hexdigest()}  receipt_verify-linux-amd64\n",
+                        )
+                        # Different bytes under the same name: the lists differ.
+                        self.assertNotEqual(builds["build1"], builds["build3"])
 
     def test_release_workflow_never_exposes_raw_evidence_private_pem(self) -> None:
         self.assertNotIn("HELM_EVIDENCE_KMS_PRIVATE_PEM", self.workflow)

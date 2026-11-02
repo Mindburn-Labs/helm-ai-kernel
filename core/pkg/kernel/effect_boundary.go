@@ -33,7 +33,7 @@ const (
 // IsExecutableEffectType admits canonical production and legacy boundary types;
 // preview registration is always denied and PDP approval remains mandatory.
 func IsExecutableEffectType(effectType EffectType) bool {
-	if contracts.IsLaunchMissionEffectPreview(string(effectType)) {
+	if contracts.IsReservedPreviewEffect(string(effectType)) {
 		return false
 	}
 	if contracts.LookupEffectType(string(effectType)) != nil {

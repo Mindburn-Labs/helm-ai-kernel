@@ -70,14 +70,21 @@ func TestInMemoryEffectBoundaryRejectsLaunchPreviewBeforeStorageOrPDP(t *testing
 	pdp := &mockPDPEvaluator{decision: "ALLOW", decisionID: "must-not-run"}
 	boundary := NewInMemoryEffectBoundary(pdp, nil)
 
-	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+	for _, preview := range []string{
+		contracts.EffectTypeProviderProvision,
+		contracts.EffectTypeDeployProductionActivate,
+		contracts.EffectTypeSpendAuthorize,
+		contracts.EffectTypeProviderRollback,
+		contracts.EffectTypeProviderTeardown,
+		contracts.EffectTypeCompanyArtifactUpdate,
+	} {
 		req := &EffectRequest{
-			EffectType: EffectType(preview.TypeID),
+			EffectType: EffectType(preview),
 			Subject:    EffectSubject{SubjectID: "user-1", SubjectType: "human"},
 			Payload:    EffectPayload{Data: map[string]interface{}{"mission_id": "mission-1"}},
 		}
 		if _, err := boundary.Submit(context.Background(), req); err == nil {
-			t.Errorf("preview effect %s reached the production boundary", preview.TypeID)
+			t.Errorf("preview effect %s reached the production boundary", preview)
 		}
 	}
 	if pdp.calls != 0 {

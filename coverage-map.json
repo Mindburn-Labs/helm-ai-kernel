@@ -6,8 +6,8 @@
   ],
   "summary": {
     "total": 83,
-    "enforced": 43,
-    "observed_only": 28,
+    "enforced": 44,
+    "observed_only": 27,
     "unmanaged": 12,
     "retired_invariants": 11,
     "build_plane": 1
@@ -2875,51 +2875,352 @@
       "id": "CTL-046",
       "title": "Mandates only narrow on delegation",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "A delegated mandate is within every mandate above it, and no stop on the tenant, the delegator or the chain is active. A narrowing (stop, revoke, narrow, add or lower a limit) bumps its scope's control-row version in the same transaction. A widening (a root mandate, a lift) needs an active human approver who is neither the requester nor the principal whose authority widens (HELM-750, ADR-0001).",
-      "status": "observed-only",
+      "claim": "When helm-gateway's authority adapter applies a helm.authority.provision.v1 or narrow.v1 plan, the authority store's transaction (authorityrows.Tx) delegates a mandate only within every mandate above it as they stand at that moment, in each term the rule compares (effect types, per-call limit, approval threshold, validity window, targets, risk classes, approval requirements); only the parent's holder delegates, over a chain with no revoked link, and no stop on the tenant, the delegator or a mandate of the chain may be active. A mandate narrows in place only to terms within its own and never replaces a condition it has. A new limit on a delegated mandate is no higher than the lowest limit of its unit, measure, window and span on any mandate above it, and a limit is lowered, never raised. A narrowing bumps, in the same transaction, the version of the row it changes (a revoked or narrowed mandate, a lowered limit) or, when it adds a limit, of the limit's scope (the mandate, or the tenant). A root mandate needs an active human approver who is neither the requester nor its holder (HELM-750, ADR-0001). Admission re-checks every link of the chain it resolves against the link above it. The store's own Stop and Lift are not part of this claim.",
+      "status": "enforced",
       "plane": "runtime",
-      "reason": "The write store is shipped only on the plan path: helm-gateway's authority adapter (core/pkg/gateway/adapters/provision, contract 5) writes the rows through authorityrows.Tx when it applies a helm.authority.provision.v1 or narrow.v1 plan (root mandate, delegation, narrowing, revocation, limits, principals), and AuthorityAdminService.EnsurePrincipals registers principals. The entry points named here (Store.Delegate, Store.Stop, Store.Lift) still have no shipped caller: the gateway's own stops and lifts are admission.Service Stop and Lift (CTL-055). The read side is shipped: helm-gateway admission (CTL-052) reads the same rows through core/pkg/kernel/authority/mandates, re-checks that every link of the chain is within the one above it (DELEGATION_SCOPE_VIOLATION), and denies under a stop on any holder or delegator of the chain.",
       "entry_points": [
         {
-          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Delegate",
+          "symbol": "core/pkg/kernel/authority/mandates.Terms.Within",
           "reachability": "reachable"
         },
         {
-          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Stop",
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.CreateMandate",
           "reachability": "reachable"
         },
         {
-          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Lift",
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.Delegate",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.Narrow",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.Revoke",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.CreateLimit",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.SetLimit",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Tx.LowerLimit",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/provision.Check",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Decide",
           "reachability": "reachable"
         }
       ],
       "gates": [],
       "config": [],
       "protected_operations": [
-        "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
+        "Delegating a mandate, narrowing it in place, revoking it, and adding or lowering a limit on it, in the authority rows.",
+        "Activating a root mandate.",
+        "Applying a helm.authority.provision.v1 or narrow.v1 plan through helm-gateway's authority adapter, and the admission of an effect under the chain those rows form."
       ],
       "bypass_assumptions": [
-        "Only a plan applied by the authority adapter, and EnsurePrincipals, write the rows in a shipped binary; admission enforces what they say (CTL-052), not how they were written.",
-        "A plan's root mandate takes its requester and approver from the gateway's approval record of the plan attempt (CTL-053); the WideningApproval argument stays a bare pair of principal ids for any other caller of the library."
+        "The schema holds no narrowing constraint. A role with INSERT or UPDATE on authority_mandates or authority_limits can write a row wider than the one above it without the store. Admission re-checks every link of the chain it resolves and denies a wider mandate (DELEGATION_SCOPE_VIOLATION, bypass test below). A limit written that way is not compared with the one above it again; admission counts every limit of every mandate of the chain and the tenant's, so the lower limit above it still binds.",
+        "Only a plan applied by the authority adapter, and EnsurePrincipals, write the rows in a shipped binary; admission enforces what they say (CTL-052), not how they were written. The Store methods that wrap the same Tx calls in their own transaction (Store.CreateMandate, Delegate, Narrow, Revoke, CreateLimit, LowerLimit) have no shipped caller; the Postgres-gated tests drive the Tx code through them, and the plan path is what is enforced.",
+        "A plan's root mandate takes its requester and approver from the gateway's approval record of the plan attempt (CTL-053). The store checks that the approver is an active human distinct from the requester and the holder, and takes the pair as given: the WideningApproval argument stays a bare pair of principal ids for any other caller of the library.",
+        "Narrowing a mandate in place leaves the mandates delegated from it as they are. Admission holds them to the narrowed terms; a new delegation from them is refused by the store.",
+        "Conditions are not compared when delegating: admission requires every link's condition to hold, so a child's condition only narrows. A narrowing in place keeps or adds a condition and never replaces one.",
+        "Store.Stop and Store.Lift have no shipped caller, and are not claimed: the gateway's own stops and lifts are admission.Service.Stop and Lift (CTL-055). Delegate reads the stops they write.",
+        "The removal proofs run on a scripted driver, without a database. They show that each check is in the code path and that the statement bumping a control row's version is issued by the transaction. What Postgres then does with it (the row lock, the bump itself, waiting for a concurrent narrowing, constraints, tenant isolation) is proved by the Postgres-gated tests, which are listed in scripts/ci/postgres-proofs.txt and carry no removal proof."
       ],
       "tests": {
         "allowed": [
-          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
+          "core/pkg/kernel/authority/authorityrows.TestDelegateStoresTermsWithinEveryLinkOfTheChain",
+          "core/pkg/kernel/authority/authorityrows.TestNarrowStoresTermsWithinTheCurrentOnesAndBumpsTheVersion",
+          "core/pkg/kernel/authority/authorityrows.TestCreateLimitStaysUnderTheLowestLimitAboveAndBumpsItsControlRow",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationHoldsEveryTermToTheCeiling",
+          "core/pkg/gateway/admission.TestPostgresNarrowPlanIsAdmittedDispatchedAndObserved"
         ],
         "forbidden": [
+          "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension",
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanTheParentInAnyOneTerm",
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop",
+          "core/pkg/kernel/authority/authorityrows.TestNarrowRefusesWideningARevokedMandateAndAReplacedCondition",
+          "core/pkg/kernel/authority/authorityrows.TestLowerLimitBumpsTheVersionAndNeverRaises",
+          "core/pkg/kernel/authority/authorityrows.TestSetLimitLowersOrKeepsAndRefusesToRaise",
+          "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover",
+          "core/pkg/kernel/authority/authorityrows.TestWideningApprovalMustNameTwoDistinctPrincipals",
+          "core/pkg/kernel/authority/authorityrows.TestMandateTermsTargetsRiskAndCondition",
           "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationWaitsForAConcurrentNarrowing",
           "core/pkg/kernel/authority/authorityrows.TestPostgresStoppedAuthorityCannotDelegate",
           "core/pkg/kernel/authority/authorityrows.TestPostgresRootMandateNeedsADistinctHumanApprover",
-          "core/pkg/kernel/authority/authorityrows.TestPostgresStopExpiresAndLiftNeedsApproval",
           "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion",
           "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole",
           "core/pkg/kernel/authority/authorityrows.TestPostgresMandateTermsRoundTripAndOnlyNarrow",
-          "core/pkg/kernel/authority/authorityrows.TestMandateTermsTargetsRiskAndCondition"
+          "core/pkg/gateway/adapters/provision.TestCompileRefusesWhatTheStoreWould",
+          "core/pkg/gateway/admission.TestPostgresNarrowPlanThatWidensChangesNothing",
+          "core/pkg/gateway/admission.TestPostgresOverwideBudgetPlanIsRefusedBeforeDelegation"
         ],
-        "removal": [],
-        "bypass": []
+        "removal": [
+          "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension",
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanTheParentInAnyOneTerm",
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanAnAncestorTheParentExceeds",
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop",
+          "core/pkg/kernel/authority/authorityrows.TestNarrowStoresTermsWithinTheCurrentOnesAndBumpsTheVersion",
+          "core/pkg/kernel/authority/authorityrows.TestNarrowRefusesWideningARevokedMandateAndAReplacedCondition",
+          "core/pkg/kernel/authority/authorityrows.TestRevokeBumpsTheVersionOnceAndRefusesASecondRevoke",
+          "core/pkg/kernel/authority/authorityrows.TestCreateLimitStaysUnderTheLowestLimitAboveAndBumpsItsControlRow",
+          "core/pkg/kernel/authority/authorityrows.TestLowerLimitBumpsTheVersionAndNeverRaises",
+          "core/pkg/kernel/authority/authorityrows.TestSetLimitLowersOrKeepsAndRefusesToRaise",
+          "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover",
+          "core/pkg/kernel/authority/authorityrows.TestWideningApprovalMustNameTwoDistinctPrincipals",
+          "core/pkg/gateway/adapters/provision.TestCompileRefusesWhatTheStoreWould",
+          "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
+        ],
+        "bypass": [
+          "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanAnAncestorTheParentExceeds",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresNarrowedAuthorityCannotBeRegainedThroughAnyLink",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresLimitsNeverExceedALimitAboveAtAnyDepth",
+          "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
+          "core/pkg/gateway/admission.TestPostgresAWiderChildWrittenAroundTheStoreIsDeniedAtAdmission"
+        ]
       },
-      "removal_proofs": []
+      "removal_proofs": [
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/mandates.TestWithinNamesEachWideningDimension"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateLimitStaysUnderTheLowestLimitAboveAndBumpsItsControlRow"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/mandates/mandates.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateLimitStaysUnderTheLowestLimitAboveAndBumpsItsControlRow"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanTheParentInAnyOneTerm"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesTermsWiderThanAnAncestorTheParentExceeds"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestDelegateRefusesARevokedLinkAWrongDelegatorAndAnActiveStop"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestNarrowRefusesWideningARevokedMandateAndAReplacedCondition"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestNarrowRefusesWideningARevokedMandateAndAReplacedCondition"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestNarrowRefusesWideningARevokedMandateAndAReplacedCondition"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestNarrowStoresTermsWithinTheCurrentOnesAndBumpsTheVersion"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestRevokeBumpsTheVersionOnceAndRefusesASecondRevoke"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateLimitStaysUnderTheLowestLimitAboveAndBumpsItsControlRow"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestLowerLimitBumpsTheVersionAndNeverRaises"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestLowerLimitBumpsTheVersionAndNeverRaises"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestSetLimitLowersOrKeepsAndRefusesToRaise"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/tx.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/store.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover",
+            "core/pkg/kernel/authority/authorityrows.TestWideningApprovalMustNameTwoDistinctPrincipals"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/store.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover",
+            "core/pkg/kernel/authority/authorityrows.TestWideningApprovalMustNameTwoDistinctPrincipals"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/store.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover"
+          ]
+        },
+        {
+          "file": "core/pkg/kernel/authority/authorityrows/store.go",
+          "tests": [
+            "core/pkg/kernel/authority/authorityrows.TestCreateMandateNeedsAnApprovalByADistinctEligibleApprover"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/provision/compile.go",
+          "tests": [
+            "core/pkg/gateway/adapters/provision.TestCompileRefusesWhatTheStoreWould"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/provision/compile.go",
+          "tests": [
+            "core/pkg/gateway/adapters/provision.TestCompileRefusesWhatTheStoreWould"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/decide.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-047",

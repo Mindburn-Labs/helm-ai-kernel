@@ -1,3 +1,4 @@
+// quantum_posture: test fixtures use classical SHA-256 Merkle hashing only; no post-quantum assurance.
 package evidencepack
 
 import (

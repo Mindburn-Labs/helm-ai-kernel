@@ -5,6 +5,8 @@ last_reviewed: 2026-05-05
 
 # Architecture
 
+<!-- quantum_posture: this page describes classical Ed25519 and SHA-256 proof surfaces and adds no post-quantum cryptographic control. -->
+
 ## Audience
 
 Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, API, or integration docs.

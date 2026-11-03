@@ -1,3 +1,4 @@
+// quantum_posture: classical SHA-256 Merkle hashing only; no post-quantum assurance.
 // merkle.go implements a deterministic Merkle tree over EvidencePack manifest
 // entries, enabling privacy-preserving single-entry inclusion proofs (MIN-512).
 //

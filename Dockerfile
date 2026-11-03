@@ -10,7 +10,7 @@ ARG BUILD_VERSION=unknown
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME=unknown
 
-RUN mkdir -p /runtime-data
+RUN mkdir -p /runtime-data && chmod 0755 /runtime-data
 
 WORKDIR /src
 COPY core/go.mod core/go.sum ./core/
@@ -50,6 +50,8 @@ EXPOSE 8080
 EXPOSE 8081
 
 ENV HELM_DATA_DIR=/var/lib/helm-ai-kernel
+
+WORKDIR /var/lib/helm-ai-kernel
 
 USER nonroot:nonroot
 

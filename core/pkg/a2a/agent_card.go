@@ -29,8 +29,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -92,37 +90,6 @@ const (
 	AuthMethodMTLS   AuthMethod = "MTLS"
 )
 
-// ValidateAgentCard checks that a card meets all required invariants.
-func ValidateAgentCard(card *AgentCard) error {
-	if card == nil {
-		return errors.New("agent_card: nil card")
-	}
-	if card.AgentID == "" {
-		return errors.New("agent_card: agent_id is required")
-	}
-	if card.Endpoint == "" {
-		return errors.New("agent_card: endpoint is required")
-	}
-	if len(card.SupportedVersions) == 0 {
-		return errors.New("agent_card: at least one supported_version is required")
-	}
-	if len(card.Skills) == 0 {
-		return errors.New("agent_card: at least one skill is required")
-	}
-	if card.Provider != nil && card.Provider.Organization == "" {
-		return errors.New("agent_card: provider.organization is required when provider is set")
-	}
-	for i, skill := range card.Skills {
-		if skill.ID == "" {
-			return fmt.Errorf("agent_card: skill[%d].id is required", i)
-		}
-		if skill.Name == "" {
-			return fmt.Errorf("agent_card: skill[%d].name is required", i)
-		}
-	}
-	return nil
-}
-
 // ComputeCardHash creates a deterministic SHA-256 hash of the card content.
 // All identity-bearing fields are included; mutable metadata (timestamps,
 // signature) is excluded so the hash is stable across re-signings.
@@ -163,119 +130,4 @@ type AgentRegistry struct {
 	cards        map[string]*AgentCard           // agentID -> card
 	skillIndex   map[string]map[string]struct{}  // skillID -> agentIDs
 	featureIndex map[Feature]map[string]struct{} // feature -> agentIDs
-}
-
-// NewAgentRegistry creates an empty agent registry.
-func NewAgentRegistry() *AgentRegistry {
-	return &AgentRegistry{
-		cards:        make(map[string]*AgentCard),
-		skillIndex:   make(map[string]map[string]struct{}),
-		featureIndex: make(map[Feature]map[string]struct{}),
-	}
-}
-
-// Register adds or updates an agent card in the registry.
-// Returns an error if the card fails validation.
-func (r *AgentRegistry) Register(card *AgentCard) error {
-	if err := ValidateAgentCard(card); err != nil {
-		return fmt.Errorf("registry: %w", err)
-	}
-	card.ContentHash = ComputeCardHash(card)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.removeAgentFromIndexes(card.AgentID)
-	r.cards[card.AgentID] = card
-	r.addCardToIndexes(card)
-	return nil
-}
-
-// Lookup returns the card for the given agent ID.
-func (r *AgentRegistry) Lookup(agentID string) (*AgentCard, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	card, ok := r.cards[agentID]
-	return card, ok
-}
-
-// Deregister removes an agent card from the registry.
-func (r *AgentRegistry) Deregister(agentID string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	_, existed := r.cards[agentID]
-	delete(r.cards, agentID)
-	r.removeAgentFromIndexes(agentID)
-	return existed
-}
-
-// ListAgents returns all registered agent IDs.
-func (r *AgentRegistry) ListAgents() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	ids := make([]string, 0, len(r.cards))
-	for id := range r.cards {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-// FindBySkill returns all agents that offer the given skill ID.
-func (r *AgentRegistry) FindBySkill(skillID string) []*AgentCard {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.cardsForAgentIDs(r.skillIndex[skillID])
-}
-
-// FindByFeature returns all agents that support the given feature.
-func (r *AgentRegistry) FindByFeature(feature Feature) []*AgentCard {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.cardsForAgentIDs(r.featureIndex[feature])
-}
-
-func (r *AgentRegistry) addCardToIndexes(card *AgentCard) {
-	for _, skill := range card.Skills {
-		agents, found := r.skillIndex[skill.ID]
-		if !found {
-			agents = make(map[string]struct{})
-			r.skillIndex[skill.ID] = agents
-		}
-		agents[card.AgentID] = struct{}{}
-	}
-	for _, feature := range card.Features {
-		agents, found := r.featureIndex[feature]
-		if !found {
-			agents = make(map[string]struct{})
-			r.featureIndex[feature] = agents
-		}
-		agents[card.AgentID] = struct{}{}
-	}
-}
-
-func (r *AgentRegistry) removeAgentFromIndexes(agentID string) {
-	for skillID, agents := range r.skillIndex {
-		delete(agents, agentID)
-		if len(agents) == 0 {
-			delete(r.skillIndex, skillID)
-		}
-	}
-	for feature, agents := range r.featureIndex {
-		delete(agents, agentID)
-		if len(agents) == 0 {
-			delete(r.featureIndex, feature)
-		}
-	}
-}
-
-func (r *AgentRegistry) cardsForAgentIDs(agentIDs map[string]struct{}) []*AgentCard {
-	if len(agentIDs) == 0 {
-		return nil
-	}
-	result := make([]*AgentCard, 0, len(agentIDs))
-	for agentID := range agentIDs {
-		if card, found := r.cards[agentID]; found {
-			result = append(result, card)
-		}
-	}
-	return result
 }

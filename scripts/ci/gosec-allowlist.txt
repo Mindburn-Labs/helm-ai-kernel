@@ -51,7 +51,6 @@ G104 core/pkg/api/server.go f1802794e419
 G104 core/pkg/conform/adversarial/suites.go 19dda6a343c6
 G104 core/pkg/connectors/github/client.go 930e744e4129
 G104 core/pkg/connectors/linear/client.go 930e744e4129
-G104 core/pkg/identity/file_store.go 26fea49d9f88
 G104 core/pkg/launchpad/cmd/connect.go 930e744e4129
 G104 core/pkg/metrics/governance.go e6cfe1127a26
 G104 core/pkg/spendproxy/server.go ee260a174c83
@@ -345,8 +344,6 @@ G304 core/pkg/evidence/seal.go e002b30f196c
 G304 core/pkg/evidence/storage.go 64f674508bdf
 G304 core/pkg/evidence/storage.go dbfffc239169
 G304 core/pkg/evidence/storage.go eab592a5a322
-G304 core/pkg/identity/file_store.go dbfffc239169
-G304 core/pkg/identity/file_store.go dbfffc239169
 G304 core/pkg/integrations/manifest/loader.go dbfffc239169
 G304 core/pkg/kms/kms.go a3710b880658
 G304 core/pkg/kms/kms.go d415d308cf18

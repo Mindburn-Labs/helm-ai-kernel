@@ -144,7 +144,8 @@ func TestNewProductionGuardianRejectsNilSigner(t *testing.T) {
 }
 
 func TestNewProductionGuardianRejectsTypedNilDelegationStore(t *testing.T) {
-	var typedNil *identity.FileStore
+	type nilDelegationStore struct{ identity.DelegationStore }
+	var typedNil *nilDelegationStore
 	options := productionProfileOptions(GateDelegation)
 	options = append(options, WithDelegationStore(typedNil))
 

@@ -7,10 +7,6 @@
 package identity
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"time"
 )
 
@@ -60,56 +56,4 @@ type SafetyInterlock struct {
 	Type        string `json:"type"` // "ESTOP", "GEOFENCE", "SPEED_LIMIT", "FORCE_LIMIT"
 	Active      bool   `json:"active"`
 	Description string `json:"description"`
-}
-
-// NewDeviceIdentity creates a device identity.
-func NewDeviceIdentity(id, tenantID, name string, class DeviceClass, ownerID string, capabilities []string) *DeviceIdentity {
-	d := &DeviceIdentity{
-		ID:           id,
-		TenantID:     tenantID,
-		Name:         name,
-		Class:        class,
-		TrustLevel:   DeviceTrustUnverified,
-		OwnerID:      ownerID,
-		Capabilities: capabilities,
-		RegisteredAt: time.Now().UTC(),
-	}
-	d.ContentHash = d.computeHash()
-	return d
-}
-
-// Attest raises trust level after verification.
-func (d *DeviceIdentity) Attest(firmwareHash string) {
-	d.FirmwareHash = firmwareHash
-	d.TrustLevel = DeviceTrustAttested
-	d.ContentHash = d.computeHash()
-}
-
-// Validate ensures the device identity is well-formed.
-func (d *DeviceIdentity) Validate() error {
-	if d.ID == "" {
-		return errors.New("device: id is required")
-	}
-	if d.TenantID == "" {
-		return errors.New("device: tenant_id is required")
-	}
-	if d.Class == "" {
-		return errors.New("device: class is required")
-	}
-	if d.OwnerID == "" {
-		return errors.New("device: owner_id is required")
-	}
-	return nil
-}
-
-func (d *DeviceIdentity) computeHash() string {
-	canon, _ := json.Marshal(struct {
-		ID       string           `json:"id"`
-		TenantID string           `json:"tenant_id"`
-		Class    DeviceClass      `json:"class"`
-		Trust    DeviceTrustLevel `json:"trust"`
-		FW       string           `json:"fw_hash"`
-	}{d.ID, d.TenantID, d.Class, d.TrustLevel, d.FirmwareHash})
-	h := sha256.Sum256(canon)
-	return "sha256:" + hex.EncodeToString(h[:])
 }

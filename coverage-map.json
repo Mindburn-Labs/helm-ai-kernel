@@ -2769,25 +2769,13 @@
       "id": "CTL-043",
       "title": "Unwired adapters",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Browser-split interception, Sentinel webhooks, Vaultak state reversibility and AIP delegation verification govern their actions.",
+      "claim": "Browser-split interception governs the actions it intercepts.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "BrowserSplitAdapter, SentinelConnector, VaultakStateBridge and AIPVerifier are libraries that no shipped binary mounts or calls; their methods are in scripts/ci/deadcode-allowlist.txt.",
+      "reason": "BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266).",
       "entry_points": [
         {
           "symbol": "core/pkg/runtimeadapters.BrowserSplitAdapter.Intercept",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/mcp.SentinelConnector.ServeHTTP",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/sandbox.VaultakStateBridge.RollbackTransaction",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/mcp.AIPVerifier.VerifyAuthority",
           "reachability": "unreachable"
         }
       ],

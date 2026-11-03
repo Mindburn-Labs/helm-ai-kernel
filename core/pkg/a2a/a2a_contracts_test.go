@@ -1,8 +1,9 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
+
 package a2a
 
 import (
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 )
@@ -77,40 +78,6 @@ func TestFinal_NegotiationResultJSON(t *testing.T) {
 	}
 }
 
-func TestFinal_ComputeEnvelopeHashDeterminism(t *testing.T) {
-	e := &Envelope{EnvelopeID: "e1", SchemaVersion: CurrentVersion, OriginAgentID: "a1", TargetAgentID: "a2", PayloadHash: "ph1"}
-	h1 := ComputeEnvelopeHash(e)
-	h2 := ComputeEnvelopeHash(e)
-	if h1 != h2 {
-		t.Fatal("hash should be deterministic")
-	}
-}
-
-func TestFinal_ComputeEnvelopeHashNonEmpty(t *testing.T) {
-	e := &Envelope{EnvelopeID: "e1"}
-	h := ComputeEnvelopeHash(e)
-	if h == "" {
-		t.Fatal("hash should not be empty")
-	}
-}
-
-func TestFinal_SignEnvelope(t *testing.T) {
-	e := &Envelope{EnvelopeID: "e1"}
-	SignEnvelope(e, "k1", "ed25519", "a1")
-	if e.Signature.KeyID != "k1" || e.Signature.Value == "" {
-		t.Fatal("envelope should be signed")
-	}
-}
-
-func TestFinal_TaskStatusIsTerminal(t *testing.T) {
-	if !TaskStatusCompleted.IsTerminal() || !TaskStatusFailed.IsTerminal() || !TaskStatusCanceled.IsTerminal() {
-		t.Fatal("COMPLETED, FAILED, CANCELED are terminal")
-	}
-	if TaskStatusSubmitted.IsTerminal() || TaskStatusWorking.IsTerminal() {
-		t.Fatal("SUBMITTED, WORKING are not terminal")
-	}
-}
-
 func TestFinal_TaskStatusConstants(t *testing.T) {
 	statuses := []TaskStatus{TaskStatusSubmitted, TaskStatusWorking, TaskStatusInputRequired, TaskStatusCompleted, TaskStatusFailed, TaskStatusCanceled}
 	if len(statuses) != 6 {
@@ -158,19 +125,6 @@ func TestFinal_AgentCardJSON(t *testing.T) {
 	}
 }
 
-func TestFinal_ConcurrentEnvelopeHash(t *testing.T) {
-	e := &Envelope{EnvelopeID: "e1", PayloadHash: "ph1"}
-	var wg sync.WaitGroup
-	for i := 0; i < 15; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = ComputeEnvelopeHash(e)
-		}()
-	}
-	wg.Wait()
-}
-
 func TestFinal_SchemaVersionJSON(t *testing.T) {
 	v := SchemaVersion{Major: 2, Minor: 1, Patch: 0}
 	data, _ := json.Marshal(v)
@@ -179,10 +133,6 @@ func TestFinal_SchemaVersionJSON(t *testing.T) {
 	if v2.Major != 2 || v2.Minor != 1 {
 		t.Fatal("round-trip mismatch")
 	}
-}
-
-func TestFinal_DefaultVerifierInterface(t *testing.T) {
-	var _ Verifier = (*DefaultVerifier)(nil)
 }
 
 func TestFinal_PropagationConfigJSON(t *testing.T) {

@@ -175,7 +175,7 @@
     {
       "id": "conformance-profile",
       "category": "protocol",
-      "surface": "Conformance profile and L1/L2 checks",
+      "surface": "Conformance G0 gate and vector checks",
       "status": "supported",
       "public_doc_slug": "conformance",
       "source_paths": [
@@ -191,8 +191,8 @@
       ],
       "claim_terms": [
         "conformance",
-        "L1",
-        "L2"
+        "G0",
+        "vectors"
       ]
     },
     {

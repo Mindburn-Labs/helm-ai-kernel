@@ -21,7 +21,10 @@ or release artifacts.
 - Decisions, approvals, and revocations write local receipts.
 - EvidencePacks can be checked from local material without trusting a hosted
   service.
-- The public conformance proof path supports `L1` and `L2` CLI shortcuts.
+- `helm-ai-kernel conform` runs the G0 build-identity gate and checks a single
+  external failure vector. It lists the negative execution-boundary vectors
+  without running them, and it has no `L1` or `L2` level shortcuts: `--level`
+  was retired and exits 2.
 
 ## Coverage Labels
 
@@ -37,14 +40,14 @@ or release artifacts.
 - No full operating-system, browser, IDE, eBPF, seccomp, TPM, hardware enclave,
   packet blocking, or proprietary hosted-agent control is claimed unless a
   tested path proves the specific effect crossed HELM.
-- No `L4` conformance claim is public. `L3` remains source/test coverage until
-  a public proof path is wired and tested.
+- No `L4` conformance claim is public. `L1`, `L2` and `L3` are test-level
+  labels in `core/pkg/conformance`; none has a public CLI or API proof path.
 
 ## Local Checks
 
 ```bash
 python3 scripts/check_documentation_truth.py
 cd core
-go test ./cmd/helm-ai-kernel -run TestConformLevelAliasesSeedBaselineEvidence -count=1
+go test ./cmd/helm-ai-kernel -run 'TestConformLevelsAreRetired|TestConformRejectsRetiredProfilesAndGates' -count=1
 go test ./pkg/conformance -run 'TestCoreSuiteRegistrationAndRun|TestOWASP_LLM_Top10' -count=1
 ```

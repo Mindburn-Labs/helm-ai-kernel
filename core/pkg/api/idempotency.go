@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"net/http"
 	"sync"
 	"time"
@@ -29,11 +28,4 @@ type MemoryIdempotencyStore struct {
 	// inflight tracks keys currently being processed to prevent TOCTOU races.
 	inflight map[string]chan struct{}
 	ttl      time.Duration
-}
-
-// responseCapture wraps http.ResponseWriter to capture the response.
-type responseCapture struct {
-	http.ResponseWriter
-	statusCode int
-	body       bytes.Buffer
 }

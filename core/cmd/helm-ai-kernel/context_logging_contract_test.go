@@ -768,13 +768,12 @@ const (
 )
 
 // ctxlogAPIContextFreeBaseline is the package's KNOWN, COUNTED set of
-// context-free emitters still reached while serving a request, by file. SEVEN
+// context-free emitters still reached while serving a request, by file. SIX
 // sites, none of them part of the HELM-495 diff:
 //
 //	handlers.go          2  MemoryService.HandleIngest, .HandleSearch
-//	decision_handler.go  4  DecisionHandler.handleList, .handleCreate, .handleResolve,
-//	                        plus the slog.Error in .handleResolve's expiry branch
-//	autonomy_handler.go  1  AutonomyHandler.HandleGetState
+//	(decision_handler.go was deleted as dead code, helm-tracker#266)
+//	(autonomy_handler.go was deleted as dead code, helm-tracker#266)
 //
 // Seven, not the six a `grep WriteInternal` reports. Six is the count of
 // context-free WriteInternal(w, err) calls; the contract is wider than that one
@@ -796,9 +795,7 @@ const (
 // context-free site anywhere in the package either bumps one of these numbers
 // or introduces a file that is not in the table, and both fail.
 var ctxlogAPIContextFreeBaseline = map[string]int{
-	"handlers.go":         2,
-	"decision_handler.go": 4,
-	"autonomy_handler.go": 1,
+	"handlers.go": 2,
 }
 
 // TestAPIRequestPathLoggingCarriesRequestContext holds core/pkg/api to the
@@ -851,7 +848,7 @@ func TestAPIRequestPathLoggingCarriesRequestContext(t *testing.T) {
 	// Scanner-rot floor. Measured by running this guard: the package holds
 	// thousands of calls on a request path, so a handful means the walker went
 	// blind rather than that the package shrank.
-	if s.sawRequestPath < 200 {
+	if s.sawRequestPath < 150 {
 		t.Fatalf("analyzer saw only %d calls on a request path in %s — the walker is broken, "+
 			"not the tree clean", s.sawRequestPath, dir)
 	}

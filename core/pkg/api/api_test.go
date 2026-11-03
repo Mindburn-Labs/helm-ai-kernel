@@ -181,26 +181,3 @@ func TestGlobalRateLimiter_Middleware_RejectsOverLimit(t *testing.T) {
 		t.Errorf("expected 429 rate limit, got %d", rr2.Code)
 	}
 }
-
-// ── responseCapture ─────────────────────────────────────────
-
-func TestResponseCapture(t *testing.T) {
-	rr := httptest.NewRecorder()
-	rc := &responseCapture{ResponseWriter: rr, statusCode: http.StatusOK}
-
-	rc.WriteHeader(http.StatusCreated)
-	n, err := rc.Write([]byte("hello"))
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if n != 5 {
-		t.Errorf("expected 5 bytes written, got %d", n)
-	}
-	if rc.statusCode != http.StatusCreated {
-		t.Errorf("expected captured status 201, got %d", rc.statusCode)
-	}
-	if rc.body.String() != "hello" {
-		t.Errorf("expected captured body 'hello', got %s", rc.body.String())
-	}
-}

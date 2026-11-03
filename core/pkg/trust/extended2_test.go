@@ -1,3 +1,5 @@
+// quantum_posture: test fixtures use classical Ed25519/SHA-256 only; no post-quantum assurance.
+
 package trust
 
 import (

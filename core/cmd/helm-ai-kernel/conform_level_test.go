@@ -47,3 +47,19 @@ func TestConformRejectsRetiredProfilesAndGates(t *testing.T) {
 		}
 	}
 }
+
+// The usage text of `test conformance` must not advertise the retired
+// --level L1|L2 shortcuts as something that works.
+func TestTestConformanceUsageDoesNotAdvertiseRetiredLevels(t *testing.T) {
+	for _, args := range [][]string{{}, {"--help"}, {"bogus"}} {
+		var stdout, stderr bytes.Buffer
+		runTestCmd(args, &stdout, &stderr)
+		usage := stdout.String() + stderr.String()
+		if strings.Contains(usage, "<L1|L2>") || strings.Contains(usage, "L1|L2") {
+			t.Fatalf("%v usage advertises retired levels: %s", args, usage)
+		}
+		if !strings.Contains(usage, "--profile SMB") || !strings.Contains(usage, "retired") {
+			t.Fatalf("%v usage does not state the real boundary: %s", args, usage)
+		}
+	}
+}

@@ -9,13 +9,10 @@ curl-auth-header examples/governed_local_inference/run.sh dba73d3fcb67
 curl-auth-header examples/governed_local_inference/run.sh dba73d3fcb67
 generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
 generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
-generic-api-key core/pkg/conformance/owasp_llm_top10.go ec12bec21f55
-generic-api-key core/pkg/contracts/launch_effect_types_test.go c94237b3626e
 generic-api-key core/pkg/governance/agent_safety.go a35aada80bc9
 generic-api-key core/pkg/governance/governance_integration_coverage_test.go 2dfbec468270
 generic-api-key core/pkg/identity/did/did.go e83ccbb94ce4
 generic-api-key core/pkg/identity/did/document.go 44c8054e2347
-generic-api-key core/pkg/kernel/secrets_test.go 6a376fc0ee06
 generic-api-key core/pkg/launchpad/session/runtime_starter.go 4026d1d3357a
 generic-api-key core/pkg/networkproof/types.go 40ca42358f37
 generic-api-key tools/launchpad/egressproxy/main_test.go 5223dd08d6cd

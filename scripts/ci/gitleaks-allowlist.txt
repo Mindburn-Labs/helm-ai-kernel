@@ -15,7 +15,6 @@ generic-api-key core/pkg/governance/agent_safety.go a35aada80bc9
 generic-api-key core/pkg/governance/governance_integration_coverage_test.go 2dfbec468270
 generic-api-key core/pkg/identity/did/did.go e83ccbb94ce4
 generic-api-key core/pkg/identity/did/document.go 44c8054e2347
-generic-api-key core/pkg/kernel/secrets_test.go 6a376fc0ee06
 generic-api-key core/pkg/launchpad/session/runtime_starter.go 4026d1d3357a
 generic-api-key core/pkg/networkproof/types.go 40ca42358f37
 generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go ac6e7bfb8d7f

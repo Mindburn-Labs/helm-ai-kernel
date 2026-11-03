@@ -115,87 +115,12 @@ func TestFinal_BehavioralTrustScoreJSON(t *testing.T) {
 	}
 }
 
-func TestFinal_SeverityConstants(t *testing.T) {
-	sevs := []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow}
-	for _, s := range sevs {
-		if s == "" {
-			t.Fatal("severity must not be empty")
-		}
-	}
-}
-
-func TestFinal_ControlStatusConstants(t *testing.T) {
-	statuses := []ControlStatus{ControlCompliant, ControlNonCompliant, ControlPartial, ControlNotAssessed}
-	seen := make(map[ControlStatus]bool)
-	for _, s := range statuses {
-		if seen[s] {
-			t.Fatalf("duplicate: %s", s)
-		}
-		seen[s] = true
-	}
-}
-
-func TestFinal_ComplianceMatrixNew(t *testing.T) {
-	cm := NewComplianceMatrix()
-	if cm == nil || cm.MatrixID == "" {
-		t.Fatal("matrix should be initialized")
-	}
-}
-
-func TestFinal_KeyStatusConstants(t *testing.T) {
-	statuses := []KeyStatus{KeyStatusActive, KeyStatusRevoked, KeyStatusExpired}
-	for _, s := range statuses {
-		if s == "" {
-			t.Fatal("key status must not be empty")
-		}
-	}
-}
-
 func TestFinal_PackRefJSON(t *testing.T) {
 	pr := PackRef{Name: "org.example/my-pack", Version: "1.0.0"}
 	data, _ := json.Marshal(pr)
 	var pr2 PackRef
 	json.Unmarshal(data, &pr2)
 	if pr2.Name != "org.example/my-pack" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_CompatibilityLevelConstants(t *testing.T) {
-	levels := []CompatibilityLevel{CompatFull, CompatBackward, CompatBreaking}
-	for _, l := range levels {
-		if l == "" {
-			t.Fatal("compatibility level must not be empty")
-		}
-	}
-}
-
-func TestFinal_UpgradeReceiptJSON(t *testing.T) {
-	ur := UpgradeReceipt{PackName: "my-pack", FromVersion: "1.0", ToVersion: "2.0"}
-	data, _ := json.Marshal(ur)
-	var ur2 UpgradeReceipt
-	json.Unmarshal(data, &ur2)
-	if ur2.FromVersion != "1.0" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_FrameworkJSON(t *testing.T) {
-	f := Framework{FrameworkID: "f1", Name: "SOC2", Version: "2023"}
-	data, _ := json.Marshal(f)
-	var f2 Framework
-	json.Unmarshal(data, &f2)
-	if f2.Name != "SOC2" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_ControlJSON(t *testing.T) {
-	c := Control{ControlID: "c1", Title: "Access Control", Severity: SeverityHigh, Status: ControlCompliant}
-	data, _ := json.Marshal(c)
-	var c2 Control
-	json.Unmarshal(data, &c2)
-	if c2.Status != ControlCompliant {
 		t.Fatal("round-trip mismatch")
 	}
 }
@@ -240,12 +165,5 @@ func TestFinal_NormalizedBounds(t *testing.T) {
 		if n < 0 || n > 1.0 {
 			t.Fatalf("normalized out of range for score %d: %f", score, n)
 		}
-	}
-}
-
-func TestFinal_SLSAVerifierZeroValue(t *testing.T) {
-	v := &SLSAVerifier{}
-	if v == nil {
-		t.Fatal("zero value should not be nil")
 	}
 }

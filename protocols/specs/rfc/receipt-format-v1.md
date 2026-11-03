@@ -5,7 +5,7 @@ version: "1.0.0"
 created: 2026-02-25
 finalized: 2026-03-06
 specifies: launch_effect_receipt.v1
-deployment_status: preview
+deployment_status: withdrawn
 authors:
   - HELM Core Team
 ---
@@ -29,8 +29,19 @@ implementing anything here.
 
 ## Status
 
+**Withdrawn profile.** The `launch_effect_receipt.v1` profile (§2.1–§2.5, §3,
+§4 and §5.2 as they apply to it) is withdrawn. Its JSON schema
+(`protocols/json-schemas/effects/launch/`), its Go implementation
+(`core/pkg/contracts/launch_*.go`) and its reference pack
+(`reference_packs/launch-mission-v1/`) were removed because the profile never
+had a production emitter or consumer (Mindburn-Labs/helm-tracker#266). The text
+below is kept as a record and makes no normative claim about the withdrawn
+profile; the paths it cites for that profile no longer exist. §2.6, the
+`CounterfactualReceipt` signing preimage, remains in force, as does §1.2's
+mapping of the other receipt families.
+
 **Specification maturity:** Final — Normative Standard, for the
-`launch_effect_receipt.v1` profile only.
+`launch_effect_receipt.v1` profile only (now withdrawn, see above).
 
 **Deployment status:** **Preview**, `execution_enabled: false`
 (`protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json`

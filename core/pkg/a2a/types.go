@@ -13,9 +13,6 @@ package a2a
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -137,34 +134,3 @@ const (
 	PolicyAllow PolicyAction = "ALLOW"
 	PolicyDeny  PolicyAction = "DENY"
 )
-
-// ComputeEnvelopeHash creates a deterministic hash of envelope content.
-func ComputeEnvelopeHash(env *Envelope) string {
-	hashable := struct {
-		EnvelopeID    string        `json:"envelope_id"`
-		SchemaVersion SchemaVersion `json:"schema_version"`
-		OriginAgentID string        `json:"origin_agent_id"`
-		TargetAgentID string        `json:"target_agent_id"`
-		PayloadHash   string        `json:"payload_hash"`
-	}{
-		EnvelopeID:    env.EnvelopeID,
-		SchemaVersion: env.SchemaVersion,
-		OriginAgentID: env.OriginAgentID,
-		TargetAgentID: env.TargetAgentID,
-		PayloadHash:   env.PayloadHash,
-	}
-	data, _ := json.Marshal(hashable)
-	h := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(h[:])
-}
-
-// SignEnvelope signs an A2A envelope with the given key identity.
-func SignEnvelope(env *Envelope, keyID, algorithm, agentID string) {
-	hash := ComputeEnvelopeHash(env)
-	env.Signature = Signature{
-		KeyID:     keyID,
-		Algorithm: algorithm,
-		Value:     hash,
-		AgentID:   agentID,
-	}
-}

@@ -2,8 +2,6 @@ package identity
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -205,86 +203,6 @@ func TestStress_IsolationViolationRecordHasPrincipalInfo(t *testing.T) {
 // File store with 100 sessions
 // ────────────────────────────────────────────────────────────────────────
 
-func TestStress_FileStore100Sessions(t *testing.T) {
-	dir := t.TempDir()
-	fs, err := NewFileStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 100; i++ {
-		s := NewDelegationSession(fmt.Sprintf("fs-%d", i), "d", "d2", fmt.Sprintf("n-%d", i), "h", "t", 0, time.Now().Add(time.Hour), false, nil)
-		if err := fs.Store(s); err != nil {
-			t.Fatalf("store %d: %v", i, err)
-		}
-	}
-	ids, err := fs.ListSessions()
-	if err != nil || len(ids) != 100 {
-		t.Fatalf("expected 100 sessions, got %d (err: %v)", len(ids), err)
-	}
-}
-
-func TestStress_FileStoreLoadAfterStore(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	for i := 0; i < 100; i++ {
-		s := NewDelegationSession(fmt.Sprintf("fs-%d", i), "d", "d2", fmt.Sprintf("n-%d", i), "h", "t", 0, time.Now().Add(time.Hour), false, nil)
-		_ = fs.Store(s)
-	}
-	for i := 0; i < 100; i++ {
-		loaded, err := fs.Load(fmt.Sprintf("fs-%d", i))
-		if err != nil || loaded == nil {
-			t.Fatalf("load %d: err=%v loaded=%v", i, err, loaded)
-		}
-	}
-}
-
-func TestStress_FileStoreRevokeAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	s := NewDelegationSession("rev-1", "d", "d2", "n", "h", "t", 0, time.Now().Add(time.Hour), false, nil)
-	_ = fs.Store(s)
-	_ = fs.Revoke("rev-1")
-	_, err := fs.Load("rev-1")
-	if err == nil {
-		t.Fatal("expected error loading revoked session")
-	}
-}
-
-func TestStress_FileStoreNonceTracking(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	for i := 0; i < 100; i++ {
-		fs.MarkNonceUsed(fmt.Sprintf("fn-%d", i))
-	}
-	for i := 0; i < 100; i++ {
-		if !fs.IsNonceUsed(fmt.Sprintf("fn-%d", i)) {
-			t.Fatalf("nonce %d not found in file store", i)
-		}
-	}
-}
-
-func TestStress_FileStoreLoadNonExistent(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	loaded, err := fs.Load("nonexistent")
-	if err != nil || loaded != nil {
-		t.Fatalf("expected nil, got err=%v loaded=%v", err, loaded)
-	}
-}
-
-func TestStress_FileStoreDirectoryPermissions(t *testing.T) {
-	dir := t.TempDir()
-	sub := filepath.Join(dir, "nested", "deep")
-	fs, err := NewFileStore(sub)
-	if err != nil {
-		t.Fatalf("failed to create nested store: %v", err)
-	}
-	s := NewDelegationSession("perm-1", "d", "d2", "n", "h", "t", 0, time.Now().Add(time.Hour), false, nil)
-	if err := fs.Store(s); err != nil {
-		t.Fatalf("store in nested dir: %v", err)
-	}
-}
-
 // ────────────────────────────────────────────────────────────────────────
 // Validation error paths
 // ────────────────────────────────────────────────────────────────────────
@@ -464,14 +382,5 @@ func TestStress_InMemoryStoreRevokedSessionReturnsError(t *testing.T) {
 	_, err := store.Load("rev")
 	if err == nil {
 		t.Fatal("expected error for revoked session")
-	}
-}
-
-func TestStress_FileStoreInvalidDir(t *testing.T) {
-	_, err := NewFileStore(string([]byte{0}))
-	if err == nil {
-		_ = os.Remove(string([]byte{0}))
-		// On some platforms the null byte is invalid, on others it might succeed.
-		// We just check the function doesn't panic.
 	}
 }

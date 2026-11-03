@@ -40,26 +40,33 @@ func (m *mockPolicy) IssueIntent(_ context.Context, decision *contracts.Decision
 	}, nil
 }
 
-func TestEvaluate_RejectsLaunchPreviewBeforePolicyOrIntent(t *testing.T) {
-	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+func TestEvaluate_RejectsReservedPreviewBeforePolicyOrIntent(t *testing.T) {
+	for _, preview := range []string{
+		contracts.EffectTypeProviderProvision,
+		contracts.EffectTypeDeployProductionActivate,
+		contracts.EffectTypeSpendAuthorize,
+		contracts.EffectTypeProviderRollback,
+		contracts.EffectTypeProviderTeardown,
+		contracts.EffectTypeCompanyArtifactUpdate,
+	} {
 		policy := &mockPolicy{}
 		eval := effectgraph.NewGraphEvaluator(policy)
 		result, err := eval.Evaluate(context.Background(), &effectgraph.EvaluationRequest{
-			Plan:  singleNodeDAG("preview", preview.TypeID),
+			Plan:  singleNodeDAG("preview", preview),
 			Actor: "test-user",
 		})
 		if err != nil {
-			t.Fatalf("%s evaluation failed: %v", preview.TypeID, err)
+			t.Fatalf("%s evaluation failed: %v", preview, err)
 		}
 		if policy.evaluateCalls != 0 || policy.intentCalls != 0 {
-			t.Errorf("%s reached policy=%d intent=%d", preview.TypeID, policy.evaluateCalls, policy.intentCalls)
+			t.Errorf("%s reached policy=%d intent=%d", preview, policy.evaluateCalls, policy.intentCalls)
 		}
 		if len(result.AllowedSteps) != 0 || len(result.DeniedSteps) != 1 {
-			t.Errorf("%s result allowed=%v denied=%v", preview.TypeID, result.AllowedSteps, result.DeniedSteps)
+			t.Errorf("%s result allowed=%v denied=%v", preview, result.AllowedSteps, result.DeniedSteps)
 		}
 		verdict := result.Verdicts["preview"]
 		if verdict == nil || verdict.Intent != nil || verdict.Decision == nil || verdict.Decision.ReasonCode != "PREVIEW_EFFECT_NOT_EXECUTABLE" {
-			t.Errorf("%s did not produce a fail-closed preview verdict: %+v", preview.TypeID, verdict)
+			t.Errorf("%s did not produce a fail-closed preview verdict: %+v", preview, verdict)
 		}
 	}
 }

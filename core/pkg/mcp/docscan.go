@@ -60,13 +60,6 @@ type DocScanner struct {
 	clock    func() time.Time
 }
 
-// WithDocScanClock sets a custom clock function (primarily for testing).
-func WithDocScanClock(clock func() time.Time) DocScanOption {
-	return func(s *DocScanner) {
-		s.clock = clock
-	}
-}
-
 // defaultPatterns returns the built-in set of DDIPE detection patterns.
 // These patterns are compiled once at construction time.
 func defaultPatterns() []docPattern {
@@ -133,11 +126,6 @@ type ToolDefinition struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema,omitempty"`
-}
-
-// ScanToolDescription scans a single tool description string for DDIPE patterns.
-func (s *DocScanner) ScanToolDescription(serverID, toolName, description string) []DocScanFinding {
-	return s.scanText(serverID, toolName, description, "description")
 }
 
 // ScanToolDefinition scans a ToolDefinition's description and input schema

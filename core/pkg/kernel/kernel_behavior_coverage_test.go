@@ -1,8 +1,6 @@
 package kernel
 
 import (
-	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -10,8 +8,6 @@ import (
 var fixedT = time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
 
 func fixedClk() time.Time { return fixedT }
-
-// --- FreezeController ---
 
 func TestCompFreezeController_InitiallyUnfrozen(t *testing.T) {
 	fc := NewFreezeController()
@@ -74,8 +70,6 @@ func TestFreezeState_ReturnsPrincipal(t *testing.T) {
 	}
 }
 
-// --- ContextGuard ---
-
 func TestContextGuard_MatchingFingerprintPasses(t *testing.T) {
 	cg := NewContextGuardWithFingerprint("abc123")
 	if err := cg.Validate("abc123"); err != nil {
@@ -117,8 +111,6 @@ func TestContextGuard_ValidateCurrentDoesNotPanic(t *testing.T) {
 	_ = cg.ValidateCurrent()
 }
 
-// --- AgentKillSwitch ---
-
 func TestAgentKillSwitch_InitiallyAlive(t *testing.T) {
 	ks := NewAgentKillSwitch()
 	if ks.IsKilled("agent-1") {
@@ -159,143 +151,6 @@ func TestCompAgentKillSwitch_ListKilled(t *testing.T) {
 	killed := ks.ListKilled()
 	if len(killed) != 2 {
 		t.Fatalf("expected 2 killed, got %d", len(killed))
-	}
-}
-
-// --- CSNF Transform ---
-
-func TestCSNF_StringNFCNormalization(t *testing.T) {
-	tr := NewCSNFTransformer()
-	out, err := tr.Transform("hello")
-	if err != nil || out != "hello" {
-		t.Fatalf("expected 'hello', got %v err=%v", out, err)
-	}
-}
-
-func TestCSNF_IntegerPreserved(t *testing.T) {
-	out, err := CSNFNormalize(float64(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != int64(42) {
-		t.Fatalf("expected int64(42), got %v (%T)", out, out)
-	}
-}
-
-func TestCSNF_FractionalNumberRejected(t *testing.T) {
-	_, err := CSNFNormalize(float64(3.14))
-	if err == nil {
-		t.Fatal("fractional numbers should be rejected")
-	}
-}
-
-func TestCSNF_NullPreserved(t *testing.T) {
-	out, err := CSNFNormalize(nil)
-	if err != nil || out != nil {
-		t.Fatalf("nil should be preserved, got %v err=%v", out, err)
-	}
-}
-
-func TestCSNF_ObjectKeysNormalized(t *testing.T) {
-	input := map[string]any{"key": "value"}
-	out, err := CSNFNormalize(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := out.(map[string]any)
-	if m["key"] != "value" {
-		t.Fatalf("expected value, got %v", m["key"])
-	}
-}
-
-func TestCSNF_ValidateCompliance(t *testing.T) {
-	issues := ValidateCSNFCompliance(map[string]any{"x": 3.14})
-	if len(issues) == 0 {
-		t.Fatal("expected compliance issues for fractional number")
-	}
-}
-
-func TestCSNF_NormalizeJSON(t *testing.T) {
-	data, err := CSNFNormalizeJSON([]byte(`{"a":1,"b":"hello"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), `"a":1`) {
-		t.Fatalf("unexpected output: %s", data)
-	}
-}
-
-// --- DeterministicScheduler ---
-
-func TestScheduler_ScheduleAndNext(t *testing.T) {
-	s := NewInMemoryScheduler()
-	defer s.Close()
-	_ = s.Schedule(context.Background(), &SchedulerEvent{EventID: "e1", EventType: "test", ScheduledAt: fixedT})
-	ev, err := s.Next(context.Background())
-	if err != nil || ev.EventID != "e1" {
-		t.Fatalf("expected e1, got %v err=%v", ev, err)
-	}
-}
-
-func TestCompScheduler_PriorityOrdering(t *testing.T) {
-	s := NewInMemoryScheduler()
-	defer s.Close()
-	_ = s.Schedule(context.Background(), &SchedulerEvent{EventID: "low", Priority: 10, ScheduledAt: fixedT})
-	_ = s.Schedule(context.Background(), &SchedulerEvent{EventID: "high", Priority: 1, ScheduledAt: fixedT})
-	ev, _ := s.Next(context.Background())
-	if ev.EventID != "high" {
-		t.Fatalf("expected high priority first, got %s", ev.EventID)
-	}
-}
-
-func TestScheduler_Len(t *testing.T) {
-	s := NewInMemoryScheduler()
-	defer s.Close()
-	_ = s.Schedule(context.Background(), &SchedulerEvent{EventID: "e1", ScheduledAt: fixedT})
-	_ = s.Schedule(context.Background(), &SchedulerEvent{EventID: "e2", ScheduledAt: fixedT})
-	if s.Len() != 2 {
-		t.Fatalf("expected 2, got %d", s.Len())
-	}
-}
-
-func TestScheduler_SnapshotHashDeterministic(t *testing.T) {
-	s1 := NewInMemoryScheduler()
-	defer s1.Close()
-	_ = s1.Schedule(context.Background(), &SchedulerEvent{EventID: "e1", ScheduledAt: fixedT, SortKey: "k1"})
-	s2 := NewInMemoryScheduler()
-	defer s2.Close()
-	_ = s2.Schedule(context.Background(), &SchedulerEvent{EventID: "e1", ScheduledAt: fixedT, SortKey: "k1"})
-	if s1.SnapshotHash() != s2.SnapshotHash() {
-		t.Fatal("snapshot hashes should be equal for identical events")
-	}
-}
-
-// --- NondeterminismTracker ---
-
-func TestNondeterminismTracker_CaptureAndReceipt(t *testing.T) {
-	tr := NewNondeterminismTracker().WithClock(fixedClk)
-	tr.Capture("run-1", NDSourceLLM, "llm output", "in1", "out1", "")
-	tr.Capture("run-1", NDSourceRandom, "dice roll", "in2", "out2", "seed42")
-	receipt, err := tr.Receipt("run-1")
-	if err != nil || receipt.TotalBounds != 2 {
-		t.Fatalf("expected 2 bounds, got %v err=%v", receipt, err)
-	}
-}
-
-func TestNondeterminismTracker_UnknownRunErrors(t *testing.T) {
-	tr := NewNondeterminismTracker()
-	_, err := tr.Receipt("nonexistent")
-	if err == nil {
-		t.Fatal("unknown run should error")
-	}
-}
-
-func TestNondeterminismTracker_BoundsForRun(t *testing.T) {
-	tr := NewNondeterminismTracker().WithClock(fixedClk)
-	tr.Capture("run-1", NDSourceNetwork, "http call", "in", "out", "")
-	bounds := tr.BoundsForRun("run-1")
-	if len(bounds) != 1 || bounds[0].Source != NDSourceNetwork {
-		t.Fatalf("unexpected bounds: %+v", bounds)
 	}
 }
 

@@ -382,13 +382,20 @@ func TestValidator_NilDAG(t *testing.T) {
 	}
 }
 
-func TestValidator_RejectsEveryLaunchPreviewEffect(t *testing.T) {
+func TestValidator_RejectsEveryReservedPreviewEffect(t *testing.T) {
 	v := intentcompiler.NewGraphValidator(contracts.DefaultEffectCatalog())
-	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
-		plan := &contracts.PlanSpec{DAG: &contracts.DAG{Nodes: []contracts.PlanStep{{ID: "preview", EffectType: preview.TypeID}}}}
+	for _, preview := range []string{
+		contracts.EffectTypeProviderProvision,
+		contracts.EffectTypeDeployProductionActivate,
+		contracts.EffectTypeSpendAuthorize,
+		contracts.EffectTypeProviderRollback,
+		contracts.EffectTypeProviderTeardown,
+		contracts.EffectTypeCompanyArtifactUpdate,
+	} {
+		plan := &contracts.PlanSpec{DAG: &contracts.DAG{Nodes: []contracts.PlanStep{{ID: "preview", EffectType: preview}}}}
 		errs := v.Validate(plan)
 		if len(errs) == 0 {
-			t.Errorf("preview effect %s passed intent validation", preview.TypeID)
+			t.Errorf("preview effect %s passed intent validation", preview)
 		}
 	}
 }
@@ -445,12 +452,19 @@ func TestProfiler_UnknownEffect_FailClosed(t *testing.T) {
 	}
 }
 
-func TestProfiler_LaunchPreviewEffectsAreDenied(t *testing.T) {
+func TestProfiler_ReservedPreviewEffectsAreDenied(t *testing.T) {
 	p := intentcompiler.NewSandboxProfiler()
-	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
-		backend, profile := p.AssignProfile(&contracts.PlanStep{EffectType: preview.TypeID})
+	for _, preview := range []string{
+		contracts.EffectTypeProviderProvision,
+		contracts.EffectTypeDeployProductionActivate,
+		contracts.EffectTypeSpendAuthorize,
+		contracts.EffectTypeProviderRollback,
+		contracts.EffectTypeProviderTeardown,
+		contracts.EffectTypeCompanyArtifactUpdate,
+	} {
+		backend, profile := p.AssignProfile(&contracts.PlanStep{EffectType: preview})
 		if backend != intentcompiler.BackendDocker || profile != intentcompiler.ProfilePrivileged {
-			t.Errorf("preview effect %s received executable profile %s/%s", preview.TypeID, backend, profile)
+			t.Errorf("preview effect %s received executable profile %s/%s", preview, backend, profile)
 		}
 	}
 }

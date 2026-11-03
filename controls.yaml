@@ -2366,12 +2366,11 @@ controls:
       sent, so a duplicate never creates a second dispatch (binding rule R6).
     status: observed-only
     reason: >-
-      Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and
-      EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt,
-      as is the generic api.IdempotencyMiddleware. The Postgres tests prove the
-      library only.
-    entry_points:
-      - "core/pkg/boundary/approvalceremony.EffectReservationAdmitter.Admit"
+      Retired (helm-tracker#266): the effect reservation admitter and the generic
+      api.IdempotencyMiddleware had no shipped caller and were deleted, with the
+      Postgres tests that proved only the library. No code in this tree holds the
+      rule.
+    entry_points: []
     config: []
     protected_operations:
       - "Reserving an effect for an admitted dispatch."
@@ -2379,8 +2378,7 @@ controls:
       - "No shipped caller exists."
     tests:
       allowed: []
-      forbidden:
-        - "core/pkg/boundary/approvalceremony.TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle"
+      forbidden: []
       removal: []
       bypass: []
 
@@ -3060,10 +3058,9 @@ controls:
       fence.
     status: observed-only
     reason: >-
-      EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped
-      path closes an effect.
-    entry_points:
-      - "core/pkg/boundary/approvalceremony.EffectCloser.Close"
+      Retired (helm-tracker#266): EffectCloser and its signed close records had
+      no shipped caller and were deleted. No code in this tree holds the rule.
+    entry_points: []
     config: []
     protected_operations:
       - "Closing an admitted effect."

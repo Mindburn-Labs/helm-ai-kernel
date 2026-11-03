@@ -1,3 +1,5 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
+
 // aip.go implements the Agent Identity Protocol (AIP) for verifiable delegation
 // verification in the MCP gateway.
 // Per arXiv 2603.24775, no mechanism currently verifies an agent's authority

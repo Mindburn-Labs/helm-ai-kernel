@@ -1595,13 +1595,8 @@
       "claim": "An admitted dispatch reserves its effect in Postgres before anything is sent, so a duplicate never creates a second dispatch (binding rule R6).",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/boundary/approvalceremony.EffectReservationAdmitter.Admit",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -1612,9 +1607,7 @@
       ],
       "tests": {
         "allowed": [],
-        "forbidden": [
-          "core/pkg/boundary/approvalceremony.TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle"
-        ],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -2650,13 +2643,8 @@
       "claim": "An effect is closed with a signed record bound to its reservation and fence.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped path closes an effect.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/boundary/approvalceremony.EffectCloser.Close",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [

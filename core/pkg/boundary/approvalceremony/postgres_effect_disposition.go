@@ -441,17 +441,6 @@ func queryEffectDispositionByCommandID(
 		WHERE tenant_id = $1 AND workspace_id = $2 AND command_id = $3`, tenantID, workspaceID, commandID))
 }
 
-func queryLatestEffectDispositionForEffect(
-	ctx context.Context,
-	tx *sql.Tx,
-	tenantID, workspaceID, admissionID string,
-) (EffectDispositionRecord, error) {
-	return scanEffectDispositionRecord(tx.QueryRowContext(ctx, `SELECT `+effectDispositionColumns+`
-		FROM approval_effect_dispositions
-		WHERE tenant_id = $1 AND workspace_id = $2 AND admission_id = $3
-		ORDER BY disposition_sequence DESC LIMIT 1`, tenantID, workspaceID, admissionID))
-}
-
 func queryEffectDispositionRecordsForEffect(
 	ctx context.Context,
 	tx *sql.Tx,

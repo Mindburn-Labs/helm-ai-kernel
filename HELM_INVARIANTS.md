@@ -112,7 +112,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
-| CTL-015 | Effect reservation before dispatch | observed-only | Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only. |
+| CTL-015 | Effect reservation before dispatch | observed-only | Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule. |
 | CTL-016 | Spend proxy quotes before dispatch | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 | CTL-018 | Tainted-data egress deny | enforced | — |
@@ -137,7 +137,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-037 | Workstation decision-receipt verification | observed-only | Tested, but no removal proof deletes the check yet, so R1 does not count it as enforced. |
 | CTL-038 | Kubernetes transparent egress for Launchpad | observed-only | Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them. |
 | CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
-| CTL-040 | Effect close | observed-only | EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped path closes an effect. |
+| CTL-040 | Effect close | observed-only | Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule. |
 | CTL-041 | Connector release authority | observed-only | The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce. |
 | CTL-042 | Guardian governance options not installed | observed-only | The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt. |
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266). |

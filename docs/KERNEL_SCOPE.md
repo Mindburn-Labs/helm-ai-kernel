@@ -80,7 +80,7 @@ non-TCB supporting infrastructure:
 | `contracts/`       | Canonical data structures (Decision, Effect, Receipt, Intent) | ✅ Active |
 | `crypto/`          | Ed25519 signing, JCS canonicalization                         | ✅ Active |
 | `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
-| `executor/`        | SafeExecutor with receipt generation                          | ✅ Active |
+| `executor/`        | Receipt ID derivation and receipt types; the standalone SafeExecutor was removed (no shipped caller) | Library only |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
 | `trust/registry/`  | Event-sourced trust registry                                  | ✅ Active |
 | `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |

@@ -30,7 +30,7 @@ Primary implementation surface:
 - `core/pkg/verifier`
 - `core/pkg/observability`
 
-Existing adjacent coverage includes the OWASP LLM Top 10 fixture suite, sandbox conformance, receipt and trust-chain tests, signed evidence pack tests, and scenario tests for CI prompt injection, data egress, Terraform destroy, crypto mining, agent impersonation, and environment recreation.
+Existing adjacent coverage includes sandbox conformance, receipt and trust-chain tests, signed evidence pack tests, and scenario tests for CI prompt injection, data egress, Terraform destroy, crypto mining, agent impersonation, and environment recreation.
 
 ## Evidence Base
 

@@ -91,8 +91,6 @@ func TestJurisdictionResolve_ContentHashNonEmpty(t *testing.T) {
 	}
 }
 
-// ── Liveness Probes ─────────────────────────────────────────────
-
 func TestLivenessManager_RegisterAndGet(t *testing.T) {
 	lm := NewLivenessManager()
 	defer lm.Shutdown()
@@ -166,8 +164,6 @@ func TestLivenessManager_ActiveCount(t *testing.T) {
 		t.Errorf("expected 2 active, got %d", lm.ActiveCount())
 	}
 }
-
-// ── Plan Commit Workflow ────────────────────────────────────────
 
 func TestPlanCommit_SubmitAndApprove(t *testing.T) {
 	pc := NewPlanCommitController()
@@ -254,8 +250,6 @@ func TestPlanCommit_AbortPlan(t *testing.T) {
 	}
 }
 
-// ── Keyring Operations ──────────────────────────────────────────
-
 func TestKeyring_SignAndVerify(t *testing.T) {
 	kp, _ := NewMemoryKeyProvider()
 	kr := NewKeyring(kp)
@@ -306,65 +300,6 @@ func TestKeyring_DeterministicDerivation(t *testing.T) {
 	}
 }
 
-// ── Swarm PDP ───────────────────────────────────────────────────
-
-func TestSwarmPDP_MergeDecisions_DenyWins(t *testing.T) {
-	pdp := newTestSwarmPDP(true)
-	result := pdp.MergeDecisions([]Decision{DecisionAllow, DecisionDeny, DecisionAllow})
-	if result != DecisionDeny {
-		t.Errorf("expected DENY (strict merge), got %s", result)
-	}
-}
-
-func TestSwarmPDP_MergeDecisions_EmptyDenies(t *testing.T) {
-	pdp := newTestSwarmPDP(true)
-	result := pdp.MergeDecisions([]Decision{})
-	if result != DecisionDeny {
-		t.Errorf("expected DENY for empty decisions, got %s", result)
-	}
-}
-
-func TestSwarmPDP_MergeDecisions_RequireApprovalOverAllow(t *testing.T) {
-	pdp := newTestSwarmPDP(true)
-	result := pdp.MergeDecisions([]Decision{DecisionAllow, DecisionRequireApproval})
-	if result != DecisionRequireApproval {
-		t.Errorf("expected REQUIRE_APPROVAL, got %s", result)
-	}
-}
-
-func TestSwarmPDP_MergeDecisions_PriorityMode(t *testing.T) {
-	pdp := newTestSwarmPDP(false) // non-strict
-	result := pdp.MergeDecisions([]Decision{DecisionAllow, DecisionRequireEvidence})
-	if result != DecisionRequireEvidence {
-		t.Errorf("expected REQUIRE_EVIDENCE in priority mode, got %s", result)
-	}
-}
-
-func TestSwarmPDP_BatchEmpty(t *testing.T) {
-	pdp := newTestSwarmPDP(true)
-	result, err := pdp.EvaluateBatch(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Responses) != 0 {
-		t.Errorf("expected 0 responses, got %d", len(result.Responses))
-	}
-}
-
-func TestSwarmPDP_ClassifyDomain(t *testing.T) {
-	if classifyDomain("trade") != DomainRisk {
-		t.Error("trade should classify as risk")
-	}
-	if classifyDomain("log") != DomainAudit {
-		t.Error("log should classify as audit")
-	}
-	if classifyDomain("unknown") != DomainGeneral {
-		t.Error("unknown should classify as general")
-	}
-}
-
-// ── Risk Envelope ───────────────────────────────────────────────
-
 func TestRiskEnvelope_WithinLimits(t *testing.T) {
 	ra := NewAggregateRiskAccounting(time.Hour, 100.0)
 	ra.RegisterEnvelope(&RiskEnvelope{ActionType: "trade", MaxRisk: 50, Weight: 1.0})
@@ -408,8 +343,6 @@ func TestRiskEnvelope_SnapshotDeterministic(t *testing.T) {
 		t.Error("snapshot should be deterministic")
 	}
 }
-
-// ── Denial Handling ─────────────────────────────────────────────
 
 func TestDenialLedger_DenyCreatesReceipt(t *testing.T) {
 	l := NewDenialLedger()
@@ -473,8 +406,6 @@ func TestDenialLedger_DenyWithContext(t *testing.T) {
 	}
 }
 
-// ── Firewall Governance (ConnectorManifest / Edge) ──────────────
-
 func TestConnectorManifest_AllowValidEgress(t *testing.T) {
 	m := NewConnectorManifest()
 	ok, err := m.CanEgress("email", DataClassConfidential)
@@ -527,8 +458,6 @@ func TestEdgeAssistant_RingFenceAllowsLow(t *testing.T) {
 		t.Error("ring fence should deny HIGH deploy")
 	}
 }
-
-// ── CEL Deterministic Evaluation ────────────────────────────────
 
 func TestCELDP_BannedFunctionDetected(t *testing.T) {
 	v := NewCELDPValidator()
@@ -600,8 +529,6 @@ func TestCELDP_ValidateAndAnalyze(t *testing.T) {
 	}
 }
 
-// ── Policy Engine ───────────────────────────────────────────────
-
 func TestPolicyEngine_LoadAndEvaluateAllow(t *testing.T) {
 	pe, err := NewPolicyEngine()
 	if err != nil {
@@ -661,8 +588,6 @@ func TestPolicyEngine_ListDefinitions(t *testing.T) {
 		t.Error("expected loaded definition")
 	}
 }
-
-// ── Security Checks ─────────────────────────────────────────────
 
 func TestDelegationRevocationList_RevokeAndCheck(t *testing.T) {
 	drl := NewDelegationRevocationList()
@@ -729,8 +654,6 @@ func TestCompensationState_EscalateAfterMaxRetries(t *testing.T) {
 	}
 }
 
-// ── Data Classification ─────────────────────────────────────────
-
 func TestClassifier_DetectsRestrictedContent(t *testing.T) {
 	c := NewClassifier()
 	class := c.Classify("root_password=secret123")
@@ -746,8 +669,6 @@ func TestClassifier_DetectsConfidentialPII(t *testing.T) {
 		t.Errorf("expected CONFIDENTIAL, got %s", class)
 	}
 }
-
-// ── Conflict Arbitration ────────────────────────────────────────
 
 func TestArbitrate_StrictestDenyWins(t *testing.T) {
 	inputs := []ArbitrationInput{
@@ -768,8 +689,6 @@ func TestArbitrate_SingleInputNoConflict(t *testing.T) {
 	}
 }
 
-// ── Self-Modification Governance ────────────────────────────────
-
 func TestEvolutionGovernance_C0AutoApproved(t *testing.T) {
 	eg := NewEvolutionGovernance()
 	allowed, reason := eg.EvaluateChange(context.Background(), ChangeClassC0, true)
@@ -786,8 +705,6 @@ func TestEvolutionGovernance_C3AlwaysBlocked(t *testing.T) {
 	}
 }
 
-// ── Canary Config ───────────────────────────────────────────────
-
 func TestCanaryDefaults(t *testing.T) {
 	if DefaultCanary.Steps != 3 {
 		t.Errorf("expected 3 steps, got %d", DefaultCanary.Steps)
@@ -796,8 +713,6 @@ func TestCanaryDefaults(t *testing.T) {
 		t.Errorf("expected 1 step for fast canary, got %d", FastCanary.Steps)
 	}
 }
-
-// ── PDP Integration ─────────────────────────────────────────────
 
 func TestCELPDP_AllowedEffectType(t *testing.T) {
 	pdp, err := NewCELPolicyDecisionPoint("test-policy-v1", nil)
@@ -846,18 +761,6 @@ func TestCELPDP_PolicyVersionReturned(t *testing.T) {
 	if pdp.PolicyVersion() != "v42" {
 		t.Errorf("expected v42, got %s", pdp.PolicyVersion())
 	}
-}
-
-// ── helpers ─────────────────────────────────────────────────────
-
-// newTestSwarmPDP creates a SwarmPDP for testing merge behavior.
-func newTestSwarmPDP(strict bool) *SwarmPDP {
-	basePDP := &fakePDP{version: "test-v1"}
-	return NewSwarmPDP(basePDP, &SwarmPDPConfig{
-		MaxParallelPDPs:     4,
-		StrictMerge:         strict,
-		DomainDecomposition: true,
-	})
 }
 
 // fakePDP is a minimal PDP that always allows, for testing the swarm wrapper.

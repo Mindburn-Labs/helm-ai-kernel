@@ -141,7 +141,7 @@ This is the arbitration answer. Every row was originally audited at
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
 | `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **SPECIFIED** | `protocols/specs/receipts/receipt-v5.md` + `reference_packs/receipt-v5/`; source-owned Go parity and independent stdlib-Python verification run from `make verify-fixtures` | `api/openapi/helm.openapi.yaml:4218-4267` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
-| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 excluding §2.6, plus §§3–5; `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313`; `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
+| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **WITHDRAWN** (Mindburn-Labs/helm-tracker#266: schema, implementation and reference pack removed; the cells that follow are the historical record) | `protocols/specs/rfc/receipt-format-v1.md` §2 excluding §2.6, plus §§3–5; `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313`; `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
 | `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md` §2.6 states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
 | External decision receipt (`helm_external.v1`) | **SPECIFIED** | `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` §3, matching `core/pkg/verifier/decisionreceipt/helm_external.go:74-85` field-for-field | same | — |
 
@@ -223,7 +223,6 @@ canonicalization substrate. The target is run by `.github/workflows/ci.yml`.
 | `reference_packs/effect-permit-v1/` | `make verify-effect-permit-vectors`, included by `make verify-fixtures` |
 | `reference_packs/boundary-profile-v1/` | `make verify-boundary-profile-vectors` |
 | `reference_packs/update-bundle-v1/` | `make verify-update-bundle-vectors` |
-| `reference_packs/launch-mission-v1/` | `make verify-launch-mission-vectors` |
 
 `reference_packs/adversarial-policy-v1/verify_vectors.py` exists but is invoked
 from no Makefile target and no workflow; its verification command lives only as

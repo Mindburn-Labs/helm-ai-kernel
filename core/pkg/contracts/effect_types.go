@@ -28,11 +28,10 @@ const (
 	// Resource effects
 	EffectTypeCloudComputeBudget = "CLOUD_COMPUTE_BUDGET" // Consume cloud compute resources against budget
 
-	// Governed company launch effect identifiers are reserved by the
-	// provider-neutral route and preview effect contracts. They remain
-	// intentionally absent from DefaultEffectCatalog until the authority,
-	// connector, and conformance layers are promoted together. Route validation
-	// explicitly rejects them whenever dispatch authority is requested.
+	// Reserved preview identifiers. The Launch Mission preview contracts
+	// that defined them were removed before promotion; the identifiers stay
+	// reserved and non-executable (see IsReservedPreviewEffect) so no catalog,
+	// plan or boundary can admit them without a deliberate promotion.
 	EffectTypeProviderProvision        = "PROVIDER_PROVISION"         // Create one exact provider resource set under an approved launch plan
 	EffectTypeDeployProductionActivate = "DEPLOY_PRODUCTION_ACTIVATE" // Activate one exact verified deployment without standing authority
 	EffectTypeSpendAuthorize           = "SPEND_AUTHORIZE"            // Authorize bounded monthly exposure without moving or holding funds
@@ -363,6 +362,23 @@ func EffectRiskClass(effectTypeID string) string {
 	default:
 		return "E3" // Fail-closed: unknown effect types default to high risk
 	}
+}
+
+// IsReservedPreviewEffect reports whether typeID is a reserved preview
+// identifier. Reserved identifiers are never executable: plan validation,
+// graph evaluation and the effect boundary refuse them before policy
+// evaluation.
+func IsReservedPreviewEffect(typeID string) bool {
+	switch typeID {
+	case EffectTypeProviderProvision,
+		EffectTypeDeployProductionActivate,
+		EffectTypeSpendAuthorize,
+		EffectTypeProviderRollback,
+		EffectTypeProviderTeardown,
+		EffectTypeCompanyArtifactUpdate:
+		return true
+	}
+	return false
 }
 
 // LookupEffectType returns the EffectType definition for a given type ID

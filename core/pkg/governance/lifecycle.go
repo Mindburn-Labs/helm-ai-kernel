@@ -2,12 +2,9 @@ package governance
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ModuleBundle represents a compiled module artifact.
@@ -41,107 +38,5 @@ type PolicyEvaluator interface {
 	VerifyModulePolicy(ctx context.Context, newModule ModuleBundle) error
 }
 
-func NewLifecycleManager(reg interface {
-	ApplyPhenotype([]ModuleBundle) error
-}, policyEngine PolicyEvaluator) *LifecycleManager {
-	return &LifecycleManager{
-		registry:     reg,
-		policyEngine: policyEngine,
-	}
-}
-
-// ValidateModuleDependencies ensures that adding the new module does not create cycles or deadlocks.
-// currentModules: map of existing module ID -> ModuleBundle
-func (l *LifecycleManager) ValidateModuleDependencies(ctx context.Context, newModule ModuleBundle, currentModules map[string]ModuleBundle) error {
-	// 1. Cycle Detection (DFS)
-	// We construct a temporary graph including the new module
-
-	// Create adjacency list
-	graph := make(map[string][]string)
-	for id, mod := range currentModules {
-		graph[id] = mod.Dependencies
-	}
-	// Add new module
-	graph[newModule.ID] = newModule.Dependencies
-
-	visited := make(map[string]bool)
-	recursionStack := make(map[string]bool)
-
-	var detectCycle func(node string) error
-	detectCycle = func(node string) error {
-		visited[node] = true
-		recursionStack[node] = true
-
-		for _, dep := range graph[node] {
-			if !visited[dep] {
-				if err := detectCycle(dep); err != nil {
-					return err
-				}
-			} else if recursionStack[dep] {
-				return fmt.Errorf("cycle detected: %s depends on %s", node, dep)
-			}
-		}
-
-		recursionStack[node] = false
-		return nil
-	}
-
-	// Check starting from the new module
-	if err := detectCycle(newModule.ID); err != nil {
-		return err
-	}
-
-	// 2. Anti-Lockout (Self-Preservation) via Policy Engine
-	// Replaces previous regex heuristic.
-	if l.policyEngine != nil {
-		if err := l.policyEngine.VerifyModulePolicy(ctx, newModule); err != nil {
-			return fmt.Errorf("policy violation: %w", err)
-		}
-	}
-
-	return nil
-}
-
 // SimplePolicyEvaluator is a concrete implementation returning simple decisions.
 type SimplePolicyEvaluator struct{}
-
-func (e *SimplePolicyEvaluator) VerifyModulePolicy(ctx context.Context, newModule ModuleBundle) error {
-	return nil
-}
-
-func (l *LifecycleManager) ExecuteActivation(ctx context.Context, action ActionActivateModule, decision *contracts.DecisionRecord, currentModules map[string]ModuleBundle) error {
-	// 1. Verify Decision (must allow "ACTIVATE_MODULE")
-	if decision.Verdict != string(contracts.VerdictAllow) {
-		return fmt.Errorf("activation denied by decision: %s", decision.Reason)
-	}
-
-	// 2. Validate Module Dependencies (GAP-03)
-	if err := l.ValidateModuleDependencies(ctx, action.ModuleBundle, currentModules); err != nil {
-		return fmt.Errorf("module dependency validation failed: %w", err)
-	}
-
-	// 3. Canary Logic
-	//nolint:staticcheck // suppressed
-	if action.CanaryStrategy == "BLUE_GREEN" {
-		// Blue/green rollout orchestration is handled outside this manager.
-	}
-
-	return l.registry.ApplyPhenotype(mergeModuleSet(currentModules, action.ModuleBundle))
-}
-
-func mergeModuleSet(currentModules map[string]ModuleBundle, newModule ModuleBundle) []ModuleBundle {
-	modules := make(map[string]ModuleBundle, len(currentModules)+1)
-	for id, module := range currentModules {
-		modules[id] = module
-	}
-	modules[newModule.ID] = newModule
-
-	ordered := make([]ModuleBundle, 0, len(modules))
-	for _, module := range modules {
-		ordered = append(ordered, module)
-	}
-	sort.Slice(ordered, func(i, j int) bool {
-		return ordered[i].ID < ordered[j].ID
-	})
-	return ordered
-}

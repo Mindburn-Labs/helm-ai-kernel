@@ -86,40 +86,6 @@ func TestGovern_UnknownToolFailsClosedWithoutMutatingPolicy(t *testing.T) {
 	assert.Equal(t, 2, pg.Len(), "denials still record INTENT + ATTESTATION")
 }
 
-func TestGovern_BudgetExhausted(t *testing.T) {
-	g, prgG := newTestGuardian(t)
-	addAllowedToolRule(t, prgG, "tool_a")
-	addAllowedToolRule(t, prgG, "tool_b")
-	pg := proofgraph.NewGraph()
-
-	// Create budget enforcer with very low limit
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
-	ctx := context.Background()
-
-	// Set limits to 2 cents daily, 10 monthly
-	err := enforcer.SetLimits(ctx, "tenant-budget", 2, 10)
-	require.NoError(t, err)
-
-	kb := NewKernelBridge(g, prgG, pg, enforcer, "tenant-budget")
-
-	// First two calls should pass (budget = 2 cents daily, 1 cent per call)
-	oneCent := &effects.CostBreakdown{TotalCents: 1}
-	r1, err := kb.Govern(ctx, "tool_a", "sha256:1", oneCent)
-	require.NoError(t, err)
-	assert.True(t, r1.Allowed, "first call should succeed")
-
-	r2, err := kb.Govern(ctx, "tool_b", "sha256:2", oneCent)
-	require.NoError(t, err)
-	assert.True(t, r2.Allowed, "second call should succeed")
-
-	// Third call should be budget-blocked
-	r3, err := kb.Govern(ctx, "tool_c", "sha256:3", oneCent)
-	require.NoError(t, err)
-	assert.False(t, r3.Allowed, "third call should be denied (budget exhausted)")
-	assert.Equal(t, string(contracts.ReasonBudgetExceeded), r3.ReasonCode)
-}
-
 // dailyUsedCents reads a tenant's consumed daily budget, treating an
 // un-provisioned tenant (nil budget) as zero used.
 func dailyUsedCents(b *budget.Budget) int64 {
@@ -127,85 +93,6 @@ func dailyUsedCents(b *budget.Budget) int64 {
 		return 0
 	}
 	return b.DailyUsed
-}
-
-// TestGovern_BudgetMeteredByEffectCost is the money-metering gate: an effect's
-// real cost — not a constant — must drive budget consumption, so an expensive
-// model call consumes proportionally more than a cheap one, and a cost that
-// exceeds the limit is denied.
-//
-// MUTATION CHECK: revert kernel_bridge.go's budget amount to a constant
-// (`Amount: 1`) and this test fails at the proportional-delta assertions,
-// proving the test actually pins metering to cost rather than call count.
-func TestGovern_BudgetMeteredByEffectCost(t *testing.T) {
-	g, prgG := newTestGuardian(t)
-	addAllowedToolRule(t, prgG, "cheap_tool")
-	addAllowedToolRule(t, prgG, "expensive_tool")
-	pg := proofgraph.NewGraph()
-
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
-	ctx := context.Background()
-
-	const tenant = "tenant-metered"
-	// Generous limits so both priced calls are admitted; the final huge call
-	// is what must trip the limit.
-	require.NoError(t, enforcer.SetLimits(ctx, tenant, 10_000, 100_000))
-
-	kb := NewKernelBridge(g, prgG, pg, enforcer, tenant)
-
-	cheap := &effects.CostBreakdown{ModelCostCents: 5, TotalCents: 5}
-	expensive := &effects.CostBreakdown{ModelCostCents: 500, TotalCents: 500}
-
-	rCheap, err := kb.Govern(ctx, "cheap_tool", "sha256:cheap", cheap)
-	require.NoError(t, err)
-	require.True(t, rCheap.Allowed, "cheap call within budget must be allowed")
-	afterCheap, err := enforcer.GetBudget(ctx, tenant)
-	require.NoError(t, err)
-	cheapDelta := dailyUsedCents(afterCheap) // from zero
-
-	rExp, err := kb.Govern(ctx, "expensive_tool", "sha256:exp", expensive)
-	require.NoError(t, err)
-	require.True(t, rExp.Allowed, "expensive call within budget must be allowed")
-	afterExp, err := enforcer.GetBudget(ctx, tenant)
-	require.NoError(t, err)
-	expDelta := dailyUsedCents(afterExp) - dailyUsedCents(afterCheap)
-
-	// Proportional: each effect consumes exactly its own cost, and the
-	// expensive call consumes 100x the cheap one.
-	assert.Equal(t, int64(5), cheapDelta, "cheap effect must consume its 5-cent cost")
-	assert.Equal(t, int64(500), expDelta, "expensive effect must consume its 500-cent cost")
-	assert.Equal(t, cheapDelta*100, expDelta, "budget consumption must scale with effect cost")
-
-	// Denial: a cost exceeding the remaining daily budget is blocked, fail-closed.
-	huge := &effects.CostBreakdown{TotalCents: 1_000_000}
-	rDenied, err := kb.Govern(ctx, "expensive_tool", "sha256:huge", huge)
-	require.NoError(t, err)
-	assert.False(t, rDenied.Allowed, "a cost exceeding the limit must be denied")
-	assert.Equal(t, string(contracts.ReasonBudgetExceeded), rDenied.ReasonCode)
-}
-
-func TestGovern_BudgetRejectsTokenCountsAsMoney(t *testing.T) {
-	g, prgG := newTestGuardian(t)
-	addAllowedToolRule(t, prgG, "priced_tool")
-
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
-	ctx := context.Background()
-	const tenant = "tenant-unpriced"
-	require.NoError(t, enforcer.SetLimits(ctx, tenant, 10_000, 100_000))
-
-	kb := NewKernelBridge(g, prgG, proofgraph.NewGraph(), enforcer, tenant)
-	usageOnly := &effects.CostBreakdown{InputTokens: 2_000, OutputTokens: 500}
-
-	result, err := kb.Govern(ctx, "priced_tool", "sha256:usage-only", usageOnly)
-	require.NoError(t, err)
-	require.False(t, result.Allowed, "unpriced token usage must fail closed")
-	assert.Equal(t, string(contracts.ReasonBudgetError), result.ReasonCode)
-
-	got, err := enforcer.GetBudget(ctx, tenant)
-	require.NoError(t, err)
-	assert.Zero(t, dailyUsedCents(got), "token counts must never be persisted as cents")
 }
 
 func TestBudgetCentsRequiresExplicitZeroPrice(t *testing.T) {

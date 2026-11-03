@@ -8,7 +8,6 @@
 package governance
 
 import (
-	"sort"
 	"time"
 )
 
@@ -54,122 +53,9 @@ type ArbitrationInput struct {
 	Scope    string `json:"scope"` // "GLOBAL", "ORG", "TEAM", "AGENT"
 }
 
-// Arbitrate resolves conflicts between multiple rule decisions.
-// Default strategy: STRICTEST_WINS (deny trumps allow).
-func Arbitrate(inputs []ArbitrationInput, strategy ArbitrationStrategy) *ConflictRecord {
-	if len(inputs) <= 1 {
-		return nil // no conflict
-	}
-
-	switch strategy {
-	case StrategyStrictest:
-		return arbitrateStrictest(inputs)
-	case StrategyPriority:
-		return arbitratePriority(inputs)
-	case StrategySpecific:
-		return arbitrateSpecific(inputs)
-	case StrategyEscalate:
-		return arbitrateEscalate(inputs)
-	default:
-		return arbitrateStrictest(inputs) // fail to strictest
-	}
-}
-
-func arbitrateStrictest(inputs []ArbitrationInput) *ConflictRecord {
-	// DENY > ESCALATE > ALLOW
-	decision := "ALLOW"
-	var winnerID, loserID string
-	for _, in := range inputs {
-		if in.Decision == "DENY" {
-			decision = "DENY"
-			winnerID = in.RuleID
-		} else if in.Decision == "ESCALATE" && decision != "DENY" {
-			decision = "ESCALATE"
-			winnerID = in.RuleID
-		}
-		if winnerID == "" {
-			winnerID = in.RuleID
-		} else if in.RuleID != winnerID {
-			loserID = in.RuleID
-		}
-	}
-
-	return &ConflictRecord{
-		Type:       ConflictPolicyOverlap,
-		RuleAID:    winnerID,
-		RuleBID:    loserID,
-		Resolution: decision,
-		Strategy:   StrategyStrictest,
-		Reason:     "strictest policy prevails",
-		ResolvedAt: time.Now().UTC(),
-	}
-}
-
-func arbitratePriority(inputs []ArbitrationInput) *ConflictRecord {
-	sort.Slice(inputs, func(i, j int) bool {
-		return inputs[i].Priority > inputs[j].Priority
-	})
-	winner := inputs[0]
-	loser := inputs[len(inputs)-1]
-
-	return &ConflictRecord{
-		Type:       ConflictPolicyOverlap,
-		RuleAID:    winner.RuleID,
-		RuleBID:    loser.RuleID,
-		DecisionA:  winner.Decision,
-		DecisionB:  loser.Decision,
-		Resolution: winner.Decision,
-		Strategy:   StrategyPriority,
-		Reason:     "highest priority rule prevails",
-		ResolvedAt: time.Now().UTC(),
-	}
-}
-
 var scopePriority = map[string]int{
 	"AGENT":  4,
 	"TEAM":   3,
 	"ORG":    2,
 	"GLOBAL": 1,
-}
-
-func arbitrateSpecific(inputs []ArbitrationInput) *ConflictRecord {
-	sort.Slice(inputs, func(i, j int) bool {
-		return scopePriority[inputs[i].Scope] > scopePriority[inputs[j].Scope]
-	})
-	winner := inputs[0]
-	loser := inputs[len(inputs)-1]
-
-	return &ConflictRecord{
-		Type:       ConflictPolicyOverlap,
-		RuleAID:    winner.RuleID,
-		RuleBID:    loser.RuleID,
-		DecisionA:  winner.Decision,
-		DecisionB:  loser.Decision,
-		Resolution: winner.Decision,
-		Strategy:   StrategySpecific,
-		Reason:     "most specific scope prevails",
-		ResolvedAt: time.Now().UTC(),
-	}
-}
-
-func arbitrateEscalate(inputs []ArbitrationInput) *ConflictRecord {
-	sorted := append([]ArbitrationInput(nil), inputs...)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Priority != sorted[j].Priority {
-			return sorted[i].Priority > sorted[j].Priority
-		}
-		return sorted[i].RuleID < sorted[j].RuleID
-	})
-
-	return &ConflictRecord{
-		Type:       ConflictPolicyOverlap,
-		RuleAID:    sorted[0].RuleID,
-		RuleBID:    sorted[len(sorted)-1].RuleID,
-		DecisionA:  sorted[0].Decision,
-		DecisionB:  sorted[len(sorted)-1].Decision,
-		Resolution: string(StrategyEscalate),
-		Strategy:   StrategyEscalate,
-		Reason:     "conflicting rules require human escalation",
-		ResolvedAt: time.Now().UTC(),
-	}
 }

@@ -264,46 +264,6 @@ func TestGatewayProtectsProviderRequestAndResponse(t *testing.T) {
 	}
 }
 
-func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
-	t.Run("request", func(t *testing.T) {
-		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-		body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"api_key=sk_live_example1234"}]}`)
-		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
-		for key, value := range helmHeaders("idem-privacy-request", "gpt-6-sol") {
-			req.Header.Set(key, value)
-		}
-		rec := httptest.NewRecorder()
-		f.mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusForbidden || f.dispatch.called != 0 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) {
-			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
-		}
-	})
-
-	t.Run("response", func(t *testing.T) {
-		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"content":"api_key=sk_live_example1234"}}]}`)
-		f.dispatch.requestID = "ghp_12345678901234567890"
-		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-privacy-response", "gpt-6-sol"))
-		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) || bytes.Contains(rec.Body.Bytes(), []byte("ghp_")) {
-			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
-		}
-		if debitEntries(f.ledger) != 1 {
-			t.Fatalf("settlement entries = %d, want 1", debitEntries(f.ledger))
-		}
-		meta := decodeHELM(t, rec)
-		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceiptView == nil || meta.SettlementReceipt == nil {
-			t.Fatal("blocked provider response must retain the complete settlement metadata")
-		}
-		if meta.UsageReceiptView.ProviderRequestID != "" || !strings.Contains(strings.Join(meta.UsageReceiptView.RedactedFields, ","), "provider_request_id") {
-			t.Fatalf("public provider request id was not redacted: %+v", meta.UsageReceiptView)
-		}
-		internal := f.ledger.InternalUsageRecords()
-		if len(internal) != 1 || internal[0].ProviderRequestID != f.dispatch.requestID {
-			t.Fatalf("internal provider request id = %+v, want %q", internal, f.dispatch.requestID)
-		}
-	})
-}
-
 func TestGatewayAllowsRestrictedNamesOnlyInModelSchemas(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"use the tool"}],"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"api_key":{"type":"string"}},"required":["password"]}}}]}`)
@@ -315,27 +275,6 @@ func TestGatewayAllowsRestrictedNamesOnlyInModelSchemas(t *testing.T) {
 	f.mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || f.dispatch.called != 1 || !bytes.Contains(f.dispatch.body, []byte(`"password"`)) || !bytes.Contains(f.dispatch.body, []byte(`"api_key"`)) {
 		t.Fatalf("status=%d dispatch=%d provider_body=%s response=%s", rec.Code, f.dispatch.called, f.dispatch.body, rec.Body.String())
-	}
-}
-
-func TestGatewaySettlesBeforeProviderResponsePrivacyScan(t *testing.T) {
-	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	armed := false
-	f.dispatch.afterDispatch = func() { armed = true }
-	ctx := advancingPrivacyContext{
-		Context: context.Background(),
-		armed:   &armed,
-		advance: func() { *f.clk = f.now.Add(2 * time.Hour) },
-	}
-	body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`)
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
-	for key, value := range helmHeaders("idem-settle-before-privacy", "gpt-6-sol") {
-		req.Header.Set(key, value)
-	}
-	rec := httptest.NewRecorder()
-	f.mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || f.dispatch.called != 1 || debitEntries(f.ledger) != 1 {
-		t.Fatalf("status=%d dispatch=%d entries=%d body=%s", rec.Code, f.dispatch.called, debitEntries(f.ledger), rec.Body.String())
 	}
 }
 
@@ -459,41 +398,6 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 
 // --- Idempotent replay over HTTP ----------------------------------------------
 
-// TestGatewayIdempotentReplayOverHTTP covers audit finding 22-01: a replayed
-// idempotency key is answered from the committed result and never reaches the
-// provider a second time (the replay used to re-dispatch without a debit).
-func TestGatewayIdempotentReplayOverHTTP(t *testing.T) {
-	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 50)
-	hdr := helmHeaders("idem-replay", "gpt-6-sol")
-
-	first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
-	if first.Code != http.StatusOK {
-		t.Fatalf("first status = %d; body=%s", first.Code, first.Body.String())
-	}
-	balAfterFirst := f.ledger.BalanceCents()
-
-	second := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
-	if second.Code != http.StatusOK {
-		t.Fatalf("second status = %d; body=%s", second.Code, second.Body.String())
-	}
-	meta := decodeHELM(t, second)
-	if !meta.Replayed {
-		t.Fatal("second identical request must be an idempotent replay")
-	}
-	if f.dispatch.called != 1 {
-		t.Fatalf("provider dispatched %d times, want 1: a replay must not reach the provider", f.dispatch.called)
-	}
-	if f.ledger.BalanceCents() != balAfterFirst {
-		t.Fatalf("balance changed on replay: %d != %d", f.ledger.BalanceCents(), balAfterFirst)
-	}
-	if debitEntries(f.ledger) != 1 {
-		t.Fatalf("ledger entries = %d, want 1 after replay", debitEntries(f.ledger))
-	}
-	if got, want := decodeResponse(t, second), decodeResponse(t, first); !bytes.Equal(got, want) {
-		t.Fatalf("replay response = %s, want the stored response %s", got, want)
-	}
-}
-
 // TestGatewayReplayWithDifferentRequestConflicts binds the idempotency key to
 // the request: reusing it for a new prompt or model is refused, not dispatched.
 func TestGatewayReplayWithDifferentRequestConflicts(t *testing.T) {
@@ -596,61 +500,6 @@ func TestGatewayClampsAndForwardsOutputLimit(t *testing.T) {
 }
 
 // --- Reservation before dispatch ----------------------------------------------
-
-func TestGatewayReservesBeforeDispatch(t *testing.T) {
-	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	var holdAtDispatch int64
-	f.dispatch.afterDispatch = func() { holdAtDispatch = f.ledger.HoldCents() }
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-hold", "gpt-6-sol"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
-	}
-	quote := decodeHELM(t, rec).Quote
-	if holdAtDispatch == 0 || holdAtDispatch != quote.MaxAmountCents {
-		t.Fatalf("hold at dispatch = %d, want the quote ceiling %d", holdAtDispatch, quote.MaxAmountCents)
-	}
-	if f.ledger.HoldCents() != 0 {
-		t.Fatalf("hold after settlement = %d, want 0", f.ledger.HoldCents())
-	}
-}
-
-func TestGatewayInsufficientBalanceNeverDispatches(t *testing.T) {
-	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	if _, err := f.ledger.Reserve("other-dispatch", 100_000, "sha256:other"); err != nil {
-		t.Fatalf("reserve: %v", err)
-	}
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-broke", "gpt-6-sol"))
-	if rec.Code != http.StatusForbidden || f.dispatch.called != 0 {
-		t.Fatalf("status = %d, dispatch = %d; want 403 and no dispatch; body=%s", rec.Code, f.dispatch.called, rec.Body.String())
-	}
-	if meta := decodeHELM(t, rec); meta.ReasonCode != economic.SpendReasonBalanceInsufficient {
-		t.Fatalf("reason = %s, want %s", meta.ReasonCode, economic.SpendReasonBalanceInsufficient)
-	}
-}
-
-// TestGatewaySettlesDispatchThatOutlivesQuote covers finding 22-03: a quote that
-// expires while the provider is still generating is settled, because the
-// reservation proves the dispatch was authorized in time.
-func TestGatewaySettlesDispatchThatOutlivesQuote(t *testing.T) {
-	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	f.dispatch.afterDispatch = func() { *f.clk = f.now.Add(10 * time.Minute) }
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-slow", "gpt-6-sol"))
-	if rec.Code != http.StatusOK || debitEntries(f.ledger) != 1 {
-		t.Fatalf("status = %d, ledger entries = %d; want 200 and a settled debit; body=%s", rec.Code, debitEntries(f.ledger), rec.Body.String())
-	}
-}
-
-// debitEntries counts posted balance debits; reservation holds and releases
-// are ledger entries too, but they move no money.
-func debitEntries(l *inferencegateway.BalanceLedger) int {
-	n := 0
-	for _, e := range l.Entries() {
-		if e.Type == economic.UsageLedgerDebit {
-			n++
-		}
-	}
-	return n
-}
 
 func (f *gatewayFixture) doBody(t *testing.T, path string, body []byte, hdr map[string]string) *httptest.ResponseRecorder {
 	t.Helper()

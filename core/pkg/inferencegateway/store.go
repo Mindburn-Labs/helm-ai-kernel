@@ -163,23 +163,6 @@ func NewBalanceLedger(account *economic.BalanceAccount) (*BalanceLedger, error) 
 	}, nil
 }
 
-// EnableEnterpriseInvoicing turns on deferred (invoice-accrual) billing for the
-// account, which is the only condition under which the balance may go negative.
-// It is fail-closed by default: a plain USAGE_BALANCE account never goes
-// negative unless this is explicitly enabled.
-func (l *BalanceLedger) EnableEnterpriseInvoicing() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.allowNegativeBalance = true
-}
-
-// AvailableCents returns funds currently available for debit.
-func (l *BalanceLedger) AvailableCents() int64 {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.account.AvailableCents()
-}
-
 // BalanceCents returns the current posted balance.
 func (l *BalanceLedger) BalanceCents() int64 {
 	l.mu.Lock()
@@ -193,15 +176,6 @@ func (l *BalanceLedger) Lookup(idempotencyKey string) (*SettlementRecord, bool) 
 	defer l.mu.Unlock()
 	rec, ok := l.settled[idempotencyKey]
 	return rec, ok
-}
-
-// Entries returns a snapshot copy of all posted ledger entries.
-func (l *BalanceLedger) Entries() []*economic.UsageLedgerEntry {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	out := make([]*economic.UsageLedgerEntry, len(l.entries))
-	copy(out, l.entries)
-	return out
 }
 
 // RestoreSettlement re-registers a settlement committed in a previous process

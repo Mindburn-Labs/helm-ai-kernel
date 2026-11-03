@@ -1,19 +1,8 @@
 package capability
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"sort"
 	"time"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // Rollback plan schema version (rollback-plan/v1, see
@@ -139,16 +128,6 @@ func (p *RollbackPlan) AppliesToCapability(capabilityID string) bool {
 	return p != nil && p.AppliesTo.CapabilityID == capabilityID
 }
 
-// HashRollbackPlan computes the content hash (sha256 over JCS-canonical JSON).
-func HashRollbackPlan(p *RollbackPlan) (string, error) {
-	canonical, err := canonicalize.JCS(p)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(canonical)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
-}
-
 // RollbackPlanEntry is a validated plan plus its content hash.
 type RollbackPlanEntry struct {
 	Plan       RollbackPlan `json:"plan"`
@@ -165,69 +144,6 @@ type RollbackPlanStore interface {
 // RollbackPlanRegistry is a hash-pinned, load-time-validated plan store.
 type RollbackPlanRegistry struct {
 	entries map[string]RollbackPlanEntry
-}
-
-// LoadRollbackDir loads every *.json plan in dir (non-recursive), validates
-// each (including step cross-validation against reg), and pins its hash.
-// Any invalid plan fails the whole load (fail closed). Plan lookup key is
-// the plan_id, which must match the manifest's rollback.plan_ref exactly.
-func LoadRollbackDir(dir string, reg *Registry) (*RollbackPlanRegistry, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
-	if err != nil {
-		return nil, fmt.Errorf("rollback registry: glob %s: %w", dir, err)
-	}
-	if len(files) == 0 {
-		return nil, fmt.Errorf("rollback registry: no plan files in %s", dir)
-	}
-	sort.Strings(files)
-	store := &RollbackPlanRegistry{entries: make(map[string]RollbackPlanEntry, len(files))}
-	for _, f := range files {
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			return nil, fmt.Errorf("rollback registry: read %s: %w", f, err)
-		}
-		var p RollbackPlan
-		dec := json.NewDecoder(bytes.NewReader(raw))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&p); err != nil {
-			return nil, fmt.Errorf("rollback registry: parse %s: %w", f, err)
-		}
-		if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("rollback registry: parse %s: trailing JSON value", f)
-		}
-		if err := p.Validate(reg); err != nil {
-			return nil, fmt.Errorf("rollback registry: validate %s: %w", f, err)
-		}
-		if _, dup := store.entries[p.PlanID]; dup {
-			return nil, fmt.Errorf("rollback registry: duplicate plan_id %q (%s)", p.PlanID, f)
-		}
-		hash, err := HashRollbackPlan(&p)
-		if err != nil {
-			return nil, fmt.Errorf("rollback registry: hash %s: %w", f, err)
-		}
-		store.entries[p.PlanID] = RollbackPlanEntry{Plan: p, Hash: hash, SourcePath: f}
-	}
-	return store, nil
-}
-
-// ResolvePlan returns the plan for planRef, or nil.
-func (s *RollbackPlanRegistry) ResolvePlan(planRef string) *RollbackPlanEntry {
-	if s == nil {
-		return nil
-	}
-	e, ok := s.entries[planRef]
-	if !ok {
-		return nil
-	}
-	return &e
-}
-
-// Len returns the number of registered plans.
-func (s *RollbackPlanRegistry) Len() int {
-	if s == nil {
-		return 0
-	}
-	return len(s.entries)
 }
 
 // Expired reports whether the plan's rollback guarantee has lapsed. Guardian

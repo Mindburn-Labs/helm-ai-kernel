@@ -2,7 +2,6 @@ package capability
 
 import (
 	"bytes"
-	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -62,71 +61,6 @@ type InMemoryTokenStore struct {
 	uses   map[string]int
 }
 
-// NewInMemoryTokenStore creates an empty store.
-func NewInMemoryTokenStore() *InMemoryTokenStore {
-	return &InMemoryTokenStore{
-		tokens: make(map[string]*Token),
-		uses:   make(map[string]int),
-	}
-}
-
-func (s *InMemoryTokenStore) Put(t *Token) error {
-	if t == nil {
-		return &TokenError{Reason: TokenRejectMalformed, Details: "nil token"}
-	}
-	if err := t.ValidateShape(); err != nil {
-		return &TokenError{Reason: TokenRejectMalformed, Details: err.Error()}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, exists := s.tokens[t.TokenID]; exists {
-		return &TokenError{Reason: TokenRejectMalformed, Details: "duplicate token_id " + t.TokenID}
-	}
-	cp := *t
-	s.tokens[t.TokenID] = &cp
-	return nil
-}
-
-func (s *InMemoryTokenStore) Get(tokenID string) (*Token, int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tokens[tokenID]
-	if !ok {
-		return nil, 0, &TokenError{Reason: TokenRejectUnknown, Details: tokenID}
-	}
-	cp := *t
-	return &cp, s.uses[tokenID], nil
-}
-
-func (s *InMemoryTokenStore) ConsumeUse(tokenID string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tokens[tokenID]
-	if !ok {
-		return 0, &TokenError{Reason: TokenRejectUnknown, Details: tokenID}
-	}
-	if t.Status.Terminal() {
-		return s.uses[tokenID], &TokenError{Reason: string(t.Status), Details: tokenID}
-	}
-	s.uses[tokenID]++
-	if t.Grant.MaxUses > 0 && s.uses[tokenID] >= t.Grant.MaxUses {
-		t.Status = TokenStatusUsedUp
-	}
-	return s.uses[tokenID], nil
-}
-
-func (s *InMemoryTokenStore) Revoke(tokenID, receiptRef string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tokens[tokenID]
-	if !ok {
-		return &TokenError{Reason: TokenRejectUnknown, Details: tokenID}
-	}
-	t.Status = TokenStatusRevoked
-	t.RevocationReceiptRef = receiptRef
-	return nil
-}
-
 // TokenAuthority mints signed tokens bound to registry manifest revisions.
 //
 // quantum_posture: classical Ed25519 only (matches the kernel receipt
@@ -136,27 +70,6 @@ type TokenAuthority struct {
 	registry *Registry
 	store    TokenStore
 	clock    func() time.Time
-}
-
-// NewTokenAuthority creates an authority. store may be nil to use a fresh
-// in-memory store. clock is explicit: minting without an authority clock
-// fails closed rather than reading wall time from the kernel process.
-func NewTokenAuthority(signer kcrypto.Signer, registry *Registry, store TokenStore, clock func() time.Time) *TokenAuthority {
-	if store == nil {
-		store = NewInMemoryTokenStore()
-	}
-	return &TokenAuthority{signer: signer, registry: registry, store: store, clock: clock}
-}
-
-// Store returns the authority's token store.
-func (a *TokenAuthority) Store() TokenStore { return a.store }
-
-// PubKeyHex returns the authority signer's public key (hex), for verifier setup.
-func (a *TokenAuthority) PubKeyHex() string {
-	if a == nil || a.signer == nil {
-		return ""
-	}
-	return a.signer.PublicKey()
 }
 
 // MintRequest describes a desired grant.
@@ -169,85 +82,6 @@ type MintRequest struct {
 	Constraints  TokenConstraints
 }
 
-// Mint creates, signs, and stores a new active token. Minting against an
-// unregistered capability fails closed.
-func (a *TokenAuthority) Mint(req MintRequest) (*Token, error) {
-	if a == nil || a.registry == nil {
-		return nil, &TokenError{Reason: TokenRejectUnknownCapability, Details: req.CapabilityID}
-	}
-	if a.signer == nil || a.store == nil {
-		return nil, &TokenError{Reason: TokenRejectMalformed, Details: "token authority is incomplete"}
-	}
-	if a.clock == nil {
-		return nil, &TokenError{Reason: TokenRejectClockUnavailable}
-	}
-	entry := a.registry.Resolve(req.CapabilityID)
-	if entry == nil {
-		return nil, &TokenError{Reason: TokenRejectUnknownCapability, Details: req.CapabilityID}
-	}
-	ttl := req.TTL
-	if ttl <= 0 {
-		ttl = DefaultTokenTTL
-	}
-	now := a.clock().UTC()
-	token := &Token{
-		SchemaVersion: TokenSchemaVersion,
-		TokenID:       "tok_" + randomHex(16),
-		TaskID:        req.TaskID,
-		Subject:       req.Subject,
-		CapabilityRef: TokenCapabilityRef{
-			CapabilityID: entry.Manifest.CapabilityID,
-			Version:      entry.Manifest.Version,
-			ManifestHash: entry.Hash,
-		},
-		Grant: TokenGrant{
-			IssuedAt:    now,
-			ExpiresAt:   now.Add(ttl),
-			MaxUses:     req.MaxUses,
-			Constraints: req.Constraints,
-		},
-		Status: TokenStatusActive,
-	}
-	if err := token.validateShape(false); err != nil {
-		return nil, &TokenError{Reason: TokenRejectMalformed, Details: err.Error()}
-	}
-	if err := a.sign(token); err != nil {
-		return nil, err
-	}
-	if err := token.ValidateShape(); err != nil {
-		return nil, &TokenError{Reason: TokenRejectMalformed, Details: err.Error()}
-	}
-	if err := a.store.Put(token); err != nil {
-		return nil, err
-	}
-	return token, nil
-}
-
-func (a *TokenAuthority) sign(t *Token) error {
-	if a == nil || a.signer == nil {
-		return &TokenError{Reason: TokenRejectMalformed, Details: "token authority signer is not configured"}
-	}
-	payload := t.signedPayload()
-	canonical, err := canonicalize.JCS(payload)
-	if err != nil {
-		return fmt.Errorf("canonicalize token: %w", err)
-	}
-	sig, err := a.signer.Sign(canonical)
-	if err != nil {
-		return fmt.Errorf("sign token: %w", err)
-	}
-	t.Signature = sig
-	return nil
-}
-
-func randomHex(n int) string {
-	buf := make([]byte, n)
-	if _, err := crand.Read(buf); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(buf)
-}
-
 // TokenVerifier checks presented tokens against the store, registry, and
 // authority public key, then records consumption.
 type TokenVerifier struct {
@@ -255,13 +89,6 @@ type TokenVerifier struct {
 	registry        *Registry
 	store           TokenStore
 	clock           func() time.Time
-}
-
-// NewTokenVerifier creates a verifier over the same registry/store as the
-// authority. pubKeyHex is the authority's Ed25519 public key (hex). clock is
-// explicit so verification has an authoritative TTL boundary.
-func NewTokenVerifier(pubKeyHex string, registry *Registry, store TokenStore, clock func() time.Time) *TokenVerifier {
-	return &TokenVerifier{authorityPubHex: pubKeyHex, registry: registry, store: store, clock: clock}
 }
 
 // VerifyRequest is one presented token plus its dispatch context.

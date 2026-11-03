@@ -17,7 +17,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -34,8 +33,6 @@ import (
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
-	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
@@ -591,33 +588,6 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	if services != nil && services.Observability != nil {
 		guardianOpts = append(guardianOpts, guardian.WithOTel())
-	}
-
-	if envBool("HELM_ENABLE_WARM_POOL") {
-		poolSize := 4
-		if sizeStr := os.Getenv("HELM_WARM_POOL_SIZE"); sizeStr != "" {
-			if s, err := strconv.Atoi(sizeStr); err == nil && s > 0 {
-				poolSize = s
-			}
-		}
-		imageDigest := os.Getenv("HELM_WARM_POOL_IMAGE_DIGEST")
-		if imageDigest == "" {
-			imageDigest = "sha256:test-digest"
-		}
-		fallbackMock := envBool("HELM_WARM_POOL_FALLBACK_MOCK")
-		if !fallbackMock {
-			cmd := exec.Command("docker", "info")
-			if err := cmd.Run(); err != nil {
-				logger.Warn("Docker daemon not reachable; falling back to mock warm sandboxes")
-				fallbackMock = true
-			}
-		}
-		log.Printf("[helm] Initializing Warm Sandbox Lease Pool: size=%d image=%s mock=%t", poolSize, imageDigest, fallbackMock)
-		factory := func(id string) sandbox.Runner {
-			return dockersandbox.NewDockerRunner()
-		}
-		warmMgr := sandbox.NewWarmLeaseManager(poolSize, imageDigest, fallbackMock, factory)
-		guardianOpts = append(guardianOpts, guardian.WithWarmLeaseManager(warmMgr))
 	}
 
 	guardianState := productionGuardianState{DataDir: dataDir}

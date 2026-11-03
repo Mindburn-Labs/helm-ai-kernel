@@ -33,7 +33,6 @@ require (
 	github.com/riverqueue/river/rivertype v0.49.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.12.1
-	github.com/tetratelabs/wazero v1.12.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.46.0

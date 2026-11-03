@@ -41,7 +41,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pack"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/obligation"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
@@ -71,7 +70,6 @@ type Services struct {
 	BoundaryEnforcer      *boundary.PerimeterEnforcer
 	BoundarySurfaces      *boundary.SurfaceRegistry
 	MerkleTree            *merkle.MerkleTree
-	Sandbox               sandbox.Sandbox
 	Obligation            *obligation.ObligationEngine
 	EmergencyStops        *kernel.ScopedStopStore
 	ApprovalConsumption   *approvalConsumptionRuntime
@@ -227,22 +225,6 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// --- 5. Memory ---
 	s.MemoryAPI = api.NewMemoryService()
 	logger.Info("subsystem ready", "component", " Memory Service initialized")
-
-	// --- 6. Sandbox ---
-	sandboxConfig := sandbox.SandboxConfig{
-		MemoryLimitBytes: 64 * 1024 * 1024, // 64MB
-		CPUTimeLimit:     500 * time.Millisecond,
-		NetworkEnabled:   false,
-	}
-	// Pack execution is fail-closed until a PackVerifier (trust.PackLoader
-	// with TUF roots) is configured; the nil verifier is that explicit
-	// posture, not an oversight — Run refuses with ERR_PACK_TRUST_UNVERIFIED.
-	wasiSandbox, err := sandbox.NewWasiSandboxWithVerifier(ctx, artStore, sandboxConfig, nil)
-	if err != nil {
-		return nil, fmt.Errorf("sandbox init: %w", err)
-	}
-	s.Sandbox = wasiSandbox
-	logger.Info("subsystem ready", "component", " Sandbox initialized (pack execution fail-closed: no PackVerifier configured)")
 
 	// --- 7. Boundary ---
 	// The version string must match boundary.PolicyVersion exactly; LoadPolicy

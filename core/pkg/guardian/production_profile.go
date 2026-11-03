@@ -56,7 +56,6 @@ func ProductionGateProfile() GateProfile {
 			GateScopedStop:         "requires a durable tenant/workspace stop store; supporting server deployments inject it as an additional gate",
 			GateSessionRisk:        "requires authoritative session history and a deployment-owned persistence boundary",
 			GateTemporal:           "requires a source-owned temporal/replay policy for the operation class",
-			GateWarmLease:          "applies only to sandbox allocations when the warm-pool subsystem is enabled",
 		},
 	}
 }

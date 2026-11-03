@@ -82,8 +82,6 @@ G115 core/pkg/otel/governance_tracer.go fa749bbe492b
 G115 core/pkg/privacy/mpc.go 5d8e07b03f73
 G115 core/pkg/privacy/privacy.go 160873b302bc
 G115 core/pkg/privacy/privacy.go b9a02391f631
-G115 core/pkg/runtime/sandbox/sandbox.go 05f4cb34b027
-G115 core/pkg/runtime/sandbox/wasi_sandbox.go 1958f801f9ae
 G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d

@@ -355,7 +355,6 @@ G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322
 G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
 G304 core/pkg/replay/replay.go 378b1b60131a
 G304 core/pkg/replay/tape_bridge.go 70cf39abc284
-G304 core/pkg/security/suites/dom_trap.go 537da70b9acb
 G304 core/pkg/skillpacks/github.go 60c09d522cae
 G304 core/pkg/skillpacks/loader.go 8f256b8ef0f4
 G304 core/pkg/skillpacks/loader.go aa9837404799

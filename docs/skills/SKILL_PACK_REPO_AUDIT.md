@@ -8,9 +8,9 @@ Date: 2026-05-18
 
 ## Current Implementation
 
-[KEEP] Existing Forge skill lifecycle remains separate and untouched.
+[DELETED] The Forge skill lifecycle (`core/pkg/skills`) had no importer and was removed (helm-tracker#266).
 
-[KEEP] Existing `core/pkg/registry/skills` conformance package remains a lower-level bundle registry.
+[DELETED] The `core/pkg/registry/skills` bundle registry was reached only by the unshipped `skill_lint` and `skill_pack` mains and was removed with them (helm-tracker#266).
 
 [MERGE] New OSS Skill Packs surface now lives in `core/pkg/skillpacks` and `core/cmd/helm-ai-kernel/skills_cmd.go`.
 

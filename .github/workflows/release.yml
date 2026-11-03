@@ -415,6 +415,8 @@ jobs:
           done
       - name: Build and stage release assets
         run: make release-assets
+      - name: Check receipt_verify release assets
+        run: python3 scripts/release/check_receipt_verify_assets.py dist/release-assets
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
@@ -485,13 +487,15 @@ jobs:
         run: |
           make release-binaries-reproducible
           mkdir -p /tmp/build1
-          cp -r bin/helm-ai-kernel-* bin/SHA256SUMS.txt /tmp/build1/
-          shasum -a 256 /tmp/build1/helm-* | sed 's#.*/##' > /tmp/build1.sha256
+          cp -r bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt /tmp/build1/
+          # Drop only the directory: each line keeps its hash, so the diff below
+          # compares contents, not just file names.
+          shasum -a 256 /tmp/build1/helm-* /tmp/build1/receipt_verify-* | sed 's#  .*/#  #' > /tmp/build1.sha256
       - name: Clean and second reproducible build
         run: |
-          rm -f bin/helm-ai-kernel-* bin/SHA256SUMS.txt
+          rm -f bin/helm-ai-kernel-* bin/receipt_verify-* bin/SHA256SUMS.txt
           make release-binaries-reproducible
-          shasum -a 256 bin/helm-ai-kernel-* | sed 's#.*/##' > /tmp/build2.sha256
+          shasum -a 256 bin/helm-ai-kernel-* bin/receipt_verify-* | sed 's#  .*/#  #' > /tmp/build2.sha256
       - name: Diff hashes (must be identical)
         run: |
           diff /tmp/build1.sha256 /tmp/build2.sha256 \

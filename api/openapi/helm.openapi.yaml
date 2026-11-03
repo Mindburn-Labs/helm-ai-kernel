@@ -2086,6 +2086,12 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/boundary/records/{record_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes the hash the
+        kernel stored itself and reports a hard-coded jcs PASS, so it shows
+        storage consistency, not authenticity. Boundary records are not exported
+        into evidence bundles, so no verify route replaces it.
       operationId: verifyBoundaryRecord
       tags: [boundary]
       summary: Verify a boundary record hash and receipt linkage
@@ -2146,6 +2152,12 @@ paths:
 
   /api/v1/boundary/checkpoints/{checkpoint_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes the checkpoint,
+        record root and count from the kernel's own stored copy, so it shows
+        storage consistency, not authenticity. Checkpoints are not exported into
+        evidence bundles, so no verify route replaces it.
       operationId: verifyBoundaryCheckpoint
       tags: [boundary]
       summary: Verify a boundary checkpoint and inclusion proof
@@ -2438,6 +2450,13 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/evidence/verification-scopes/{scope_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes a hash the kernel
+        stored itself and reports a hard-coded jcs PASS, so it shows storage
+        consistency, not authenticity. Exported bundles carry these artifacts;
+        verify them with POST /api/v1/evidence/verify or the offline
+        receipt_verify binary.
       operationId: verifyVerificationScope
       tags: [evidence]
       summary: Verify a verification scope hash
@@ -2541,6 +2560,13 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces/{trace_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes a hash the kernel
+        stored itself and reports a hard-coded jcs PASS, so it shows storage
+        consistency, not authenticity. Exported bundles carry these artifacts;
+        verify them with POST /api/v1/evidence/verify or the offline
+        receipt_verify binary.
       operationId: verifyHarnessTrace
       tags: [telemetry]
       summary: Verify a harness trace hash
@@ -2644,6 +2670,13 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions/{transaction_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes a hash the kernel
+        stored itself and reports a hard-coded jcs PASS, so it shows storage
+        consistency, not authenticity. Exported bundles carry these artifacts;
+        verify them with POST /api/v1/evidence/verify or the offline
+        receipt_verify binary.
       operationId: verifyPlanTransaction
       tags: [plans]
       summary: Verify a plan transaction hash
@@ -2780,6 +2813,13 @@ paths:
           $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts/{change_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Recomputes a hash the kernel
+        stored itself and reports a hard-coded jcs PASS, so it shows storage
+        consistency, not authenticity. Exported bundles carry these artifacts;
+        verify them with POST /api/v1/evidence/verify or the offline
+        receipt_verify binary.
       operationId: verifyHarnessChangeContract
       tags: [harness]
       summary: Verify a harness change contract hash
@@ -2908,6 +2948,12 @@ paths:
 
   /api/v1/evidence/envelopes/{manifest_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. When no payload is stored the
+        route rebuilds it from the manifest and checks it against itself, and
+        envelopes are unsigned wrappers. Use POST /api/v1/evidence/verify on the
+        exported bundle.
       operationId: verifyEvidenceEnvelopeManifest
       tags: [evidence]
       summary: Verify an evidence envelope manifest against its HELM root
@@ -2932,6 +2978,11 @@ paths:
 
   /api/v1/replay/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. No replay runs: the route
+        returns the evidence bundle verification. Use POST
+        /api/v1/evidence/verify.
       operationId: replayVerify
       tags: [evidence]
       summary: Verify an evidence bundle (no replay runs)
@@ -3407,6 +3458,11 @@ paths:
 
   /api/v1/sandbox/grants/{grant_id}/verify:
     post:
+      deprecated: true
+      description: |
+        Deprecated; removed in a following change. Checks the grant's fields
+        (digest, epoch, env mode, network deny-all) but never recomputes or
+        binds the grant hash, so it is a preflight, not a verification.
       operationId: verifySandboxGrant
       tags: [sandbox]
       summary: Verify a sealed sandbox grant before execution

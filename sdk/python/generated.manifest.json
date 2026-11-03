@@ -8,7 +8,7 @@
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "python",
   "source": {
-    "sha256": "9ae5a5a50d037f105991af24d77b58b10a678a4f4d1f8d62e700da0bf374ff6a",
+    "sha256": "5039acab5ee72ec58014d46e8aba439542953183bccf0c65f886c7cfee1ead08",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

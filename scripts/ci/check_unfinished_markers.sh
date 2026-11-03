@@ -24,7 +24,6 @@ rg -n --hidden -S "$PATTERN" \
   --glob '!sdk/python/helm_sdk/generated/**' \
   --glob '!scripts/check_documentation_*.py' \
   --glob '!scripts/sdk/gen.sh' \
-  --glob '!core/pkg/buildguard/verify.go' \
   --glob '!core/pkg/crypto/canonical_hardening_test.go'
 marker_status=$?
 set -e

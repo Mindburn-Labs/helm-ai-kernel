@@ -727,6 +727,25 @@
       ]
     },
     {
+      "id": "github-release-receipt-verify",
+      "kind": "github_release_assets",
+      "introduced_in": "0.11.4",
+      "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}",
+      "required_assets": [
+        "receipt_verify-linux-amd64",
+        "receipt_verify-linux-amd64.cosign.bundle",
+        "receipt_verify-linux-arm64",
+        "receipt_verify-linux-arm64.cosign.bundle",
+        "receipt_verify-darwin-amd64",
+        "receipt_verify-darwin-amd64.cosign.bundle",
+        "receipt_verify-darwin-arm64",
+        "receipt_verify-darwin-arm64.cosign.bundle",
+        "receipt_verify-windows-amd64.exe",
+        "receipt_verify-windows-amd64.exe.cosign.bundle"
+      ]
+    },
+    {
       "id": "github-release-slsa-subjects",
       "kind": "github_release_slsa_subjects",
       "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",

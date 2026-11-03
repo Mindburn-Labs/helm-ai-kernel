@@ -281,6 +281,7 @@ deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
 release-smoke:
 	python3 scripts/release/console_local_sidecar_test.py
 	python3 scripts/release/cosign_identity_test.py
+	python3 scripts/release/check_receipt_verify_assets_test.py
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
@@ -470,6 +471,11 @@ release-binaries:
 # a verifier bundled with the kernel invites exactly the question the tool
 # exists to answer. It is statically linked and has no runtime configuration:
 # the only inputs are the receipt file and the key you pass it.
+#
+# Release assets: release-binaries-reproducible (below) builds the same five
+# platform binaries with reproducible flags, and stage_release_assets.sh stages
+# them as separate GitHub Release assets next to the kernel binaries. This
+# target is the quick local build without those flags.
 receipt-verify-binaries:
 	@mkdir -p bin
 	cd core && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-linux-amd64 ./cmd/receipt_verify/
@@ -512,6 +518,10 @@ VEX_SOURCE_DATE_EPOCH := $(if $(filter undefined,$(SOURCE_DATE_EPOCH_ORIGIN)),$(
 REPRO_BUILD_TIME := $(shell { date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; })
 REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME) $(CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG)
 REPRO_GOFLAGS := -trimpath -buildvcs=false
+# receipt_verify has no version, commit or sidecar symbols to stamp, and it must
+# not inherit the kernel's Console sidecar manifest digest: reproducible flags
+# only.
+RECEIPT_VERIFY_REPRO_LDFLAGS := -s -w -buildid=
 
 release-binaries-reproducible:
 	@mkdir -p bin
@@ -527,6 +537,13 @@ release-binaries-reproducible:
 	cp bin/helm-ai-kernel-darwin-arm64 bin/helm-darwin-arm64
 	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
 	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
+	@echo "Reproducible build: receipt_verify"
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)" -o ../bin/receipt_verify-linux-amd64       ./cmd/receipt_verify/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)" -o ../bin/receipt_verify-linux-arm64       ./cmd/receipt_verify/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)" -o ../bin/receipt_verify-darwin-amd64      ./cmd/receipt_verify/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)" -o ../bin/receipt_verify-darwin-arm64      ./cmd/receipt_verify/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(RECEIPT_VERIFY_REPRO_LDFLAGS)" -o ../bin/receipt_verify-windows-amd64.exe ./cmd/receipt_verify/
+	cd bin && shasum -a 256 receipt_verify-* > SHA256SUMS-receipt_verify.txt
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:

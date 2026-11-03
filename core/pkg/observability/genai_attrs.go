@@ -2,9 +2,8 @@
 //
 // This file is the single source of truth for the OTel GenAI semconv attribute
 // keys helm-ai-kernel emits. Stable keys defined here MUST NOT be renamed without a
-// major version bump; the SIEM exporter packs in core/pkg/connectors/siem and
-// the OTel collector contract documented in docs/architecture/otel-genai.md
-// rely on these names.
+// major version bump; the OTel collector contract documented in
+// docs/architecture/otel-genai.md relies on these names.
 //
 // Reference: OpenTelemetry Semantic Conventions for Generative AI
 // https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai

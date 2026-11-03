@@ -47,7 +47,8 @@ make release-readiness
 make release-assets
 ```
 
-4. Confirm `dist/release-assets/` contains CLI binaries, `SHA256SUMS.txt`,
+4. Confirm `dist/release-assets/` contains CLI binaries, the five standalone
+   `receipt_verify-*` verifier binaries, `SHA256SUMS.txt`,
    `sbom.json`, `v<version>.openvex.json`, `release-attestation.json`,
    `evidence-pack.tar`, `release.high_risk.v3.toml`,
    `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, and `helm-ai-kernel.rb`.

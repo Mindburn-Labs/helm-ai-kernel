@@ -5,12 +5,16 @@
 # core/cmd/helm-ai-kernel: release.yml binaries and the container image.
 # core/cmd/helm-gateway: the effect gateway (HELM-751), a separate Zone C
 # process; its image and chart follow in a later HELM-751 slice.
+# core/cmd/receipt_verify: the standalone offline verifier. The release
+# workflow builds it for five platforms (release-binaries-reproducible) and
+# stage_release_assets.sh attaches it to every GitHub Release as
+# receipt_verify-<os>-<arch>.
 #
-# Not roots, because no release path builds them: receipt_verify (only the
-# stand-alone `make receipt-verify-binaries`), release-permit-verify,
-# pack_verify, bootstrap, semantic-model-gen,
-# skill_lint, skill_pack. Code only they reach counts as dead to the gate. Add a
+# Not roots, because no release path builds them: release-permit-verify,
+# semantic-model-gen (the go:generate source of threatscan's embedded model).
+# Code only they reach counts as dead to the gate. Add a
 # line here when one of them starts shipping.
 # The js/wasm verifier is declared separately in deadcode-wasm-roots.txt.
 core/cmd/helm-ai-kernel
 core/cmd/helm-gateway
+core/cmd/receipt_verify

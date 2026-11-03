@@ -20,7 +20,7 @@ authority boundary that keeps skills from granting tools or execution rights.
 ## Source Truth
 
 - Skill runtime commands: `core/cmd/helm-ai-kernel/skills_cmd.go`
-- Skill runtime packages: `core/pkg/skills/`
+- Skill runtime packages: `core/pkg/skillpacks/`
 - Skill registry: `registry/skills/`
 - Skill policy fixtures: `policies/skills/`
 - Skill docs: `docs/skills/`

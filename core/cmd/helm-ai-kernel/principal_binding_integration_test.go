@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -90,5 +91,62 @@ func TestPrincipalBindingEndpointToGateSharedStoreInvariant(t *testing.T) {
 
 	if negRec.Code != http.StatusForbidden {
 		t.Fatalf("tenant gate for unregistered non-env pair status = %d, want %d body=%s", negRec.Code, http.StatusForbidden, negRec.Body.String())
+	}
+}
+
+func TestPrincipalBindingReadUsesExactRealStoreWithoutWrites(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	// Keep PRAGMA query_only and total_changes on the same physical connection.
+	db.SetMaxOpenConns(1)
+	s, err := store.NewSQLitePrincipalBindingStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := s.Bind(context.Background(), store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-a"}, false); err != nil || result.Outcome != store.BindCreated {
+		t.Fatalf("fixture owner seed: %+v %v", result, err)
+	}
+	var before int
+	if err := db.QueryRow("SELECT total_changes()").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("PRAGMA query_only = ON"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DELETE FROM principal_bindings"); err == nil {
+		t.Fatal("read-only connection unexpectedly permits a binding write")
+	}
+	mux := http.NewServeMux()
+	RegisterPrincipalBindingRoutes(mux, &Services{PrincipalBindings: s}, serverOptions{Mode: "serve"})
+	for _, tc := range []struct {
+		query string
+		bound bool
+	}{
+		{"tenant_id=tenant-a&principal_id=principal-a", true},
+		{"tenant_id=tenant-b&principal_id=principal-a", false},
+		{"tenant_id=tenant-a&principal_id=principal-b", false},
+	} {
+		rec := getPrincipalBindingForTest(mux, testAdminAPIKey, tc.query)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("query-only read = %d %s", rec.Code, rec.Body.String())
+		}
+		var got principalBindingReadResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.Bound != tc.bound {
+			t.Fatalf("exact-pair read = %+v err=%v, want bound=%v", got, err, tc.bound)
+		}
+	}
+	var after, rows int
+	if err := db.QueryRow("SELECT total_changes()").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT count(*) FROM principal_bindings").Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if after != before || rows != 1 {
+		t.Fatalf("read mutated real registry: changes %d -> %d, rows=%d", before, after, rows)
 	}
 }

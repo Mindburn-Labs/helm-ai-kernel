@@ -4,9 +4,13 @@ Status: the effect gateway's admission transaction (`helm-gateway`, HELM-751
 s2; `docs/architecture/gateway-effect-api.md`) reads these rows. Nothing in
 `helm-ai-kernel` reads them: the Guardian's decision, the scoped
 emergency-stop fence (`docs/EMERGENCY_STOP_FENCE.md`) and the freeze
-controller are unchanged. No shipped binary writes them yet; the store below
-is a library until the authority-change effects (`helm.authority.*`,
-contract 5) dispatch through the gateway.
+controller are unchanged. `helm-gateway`'s authority adapter writes them
+through the store's `Tx` when it applies a `helm.authority.provision.v1` or
+`narrow.v1` plan, and `EnsurePrincipals` registers principals. The
+delegation, narrowing, limit and root-mandate rules below are control CTL-046
+in `controls.yaml`, which names the tests that show each one and what they do
+not cover. The store's own stops and lifts (`Store.Stop`, `Store.Lift`) have
+no shipped caller and are not part of it.
 
 ## What exists
 
@@ -26,9 +30,10 @@ contract 5) dispatch through the gateway.
 - **Store:** `core/pkg/kernel/authority/authorityrows`. It is a typed store for
   tenants, principals, effect types, mandates, delegation, revocation,
   narrowing, limits and stops. Every call runs in one READ COMMITTED
-  transaction bound to its tenant. It is a declared library root in
-  `scripts/ci/dead-packages-allowlist.txt` until an authority-change effect
-  calls it (CTL-046).
+  transaction bound to its tenant. The gateway's authority adapter calls the
+  `Tx` form (CTL-046). `Store.Stop` and `Store.Lift` have no shipped caller:
+  the gateway's own stops and lifts are `admission.Service` `Stop` and `Lift`
+  (CTL-055).
 
 ## Rules the store enforces
 
@@ -122,9 +127,19 @@ HELM_TEST_POSTGRES_URL=postgres://... bash scripts/ci/postgres_proofs.sh
 cd core && go test ./pkg/kernel/authority/... ./pkg/postgresmigration
 ```
 
+`make controls-check` also deletes each check of CTL-046 in turn (in the
+store, the narrowing rule, the plan compile and admission's re-check of the
+chain) and requires the database-free tests each `removal_proofs` entry names
+to fail. The store's are in `narrowing_scripted_test.go`, the narrowing rule's
+in `within_test.go`.
+
 The Postgres proofs are listed in `scripts/ci/postgres-proofs.txt`. They cover:
 
 - narrowing-only delegation over random chains;
+- every term of a mandate held to its ceiling, one term at a time;
+- a mandate narrowed after it was delegated still bounding what is delegated
+  from beneath it, and a limit held to the lowest limit above it at any depth;
+- a child written around the store, denied by admission;
 - a delegation that waits for a concurrent narrowing;
 - delegation refused under a tenant, delegator or chain stop, including a stop
   that is still committing;

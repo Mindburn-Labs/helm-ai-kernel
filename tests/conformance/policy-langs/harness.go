@@ -7,7 +7,7 @@
 //
 // Why a hand-rolled CEL leg here:
 // the policybundles registry advertises CEL but does not yet route CEL
-// compile through it (the existing celcheck path owns that surface).
+// compile through it (the kernel authority function owns that surface).
 // Until those two paths merge, the harness builds a minimal CEL evaluator
 // against the canonical DecisionRequest map shape so the equivalence
 // suite can exercise all three front-ends through one codepath.

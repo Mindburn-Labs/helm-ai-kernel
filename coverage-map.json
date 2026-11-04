@@ -7,9 +7,9 @@
   "summary": {
     "total": 83,
     "enforced": 44,
-    "observed_only": 26,
-    "unmanaged": 13,
-    "retired_invariants": 12,
+    "observed_only": 25,
+    "unmanaged": 14,
+    "retired_invariants": 13,
     "build_plane": 1
   },
   "controls": [
@@ -1395,13 +1395,8 @@
       "claim": "An action that passes policy draws down its budget, and a failed draw-down denies it.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, and `budget verify`, which printed a constant PASS, were removed (HELM-780). `budget set` records ceilings that nothing enforces.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/guardian.Guardian.SetBudgetTracker",
-          "reachability": "reachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the Guardian budget gate (BudgetGate, WithBudgetTracker, SetBudgetTracker) had no shipped installer and was deleted with its tests. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -1412,10 +1407,7 @@
       ],
       "tests": {
         "allowed": [],
-        "forbidden": [
-          "core/pkg/guardian.TestGuardian_BudgetConsumeFailureFailsClosed",
-          "core/pkg/guardian.TestGuardian_BudgetEnforcement"
-        ],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -2700,29 +2692,8 @@
       "claim": "The Guardian enforces capability registry entries, task capability tokens, rollback plans, session risk memory and privilege resolution.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/guardian.WithCapabilityRegistry",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithCapabilityTokenVerifier",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithRollbackPlanStore",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithSessionRiskMemory",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithPrivilegeResolver",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the capability registry, task capability token, rollback-plan, session risk memory and privilege resolver Guardian options had no shipped installer and were deleted with the gates they enabled and the core/pkg/capability package. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [

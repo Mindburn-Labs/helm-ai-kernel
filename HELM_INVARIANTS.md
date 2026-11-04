@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-83 controls: 44 enforced (1 of them by CI gates), 26 observed-only, 13 unmanaged (12 of them retired invariants).
+83 controls: 44 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-008 | Approval grant is consumed once | enforced | — |
 | CTL-009 | Evidence bundle verification | enforced | — |
 | CTL-010 | MCP tool-call mediation | enforced | — |
-| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, and `budget verify`, which printed a constant PASS, were removed (HELM-780). `budget set` records ceilings that nothing enforces. |
+| CTL-011 | Guardian budget draw-down | observed-only | Retired (helm-tracker#266): the Guardian budget gate (BudgetGate, WithBudgetTracker, SetBudgetTracker) had no shipped installer and was deleted with its tests. No code in this tree holds the rule. |
 | CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
@@ -139,7 +139,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
 | CTL-040 | Effect close | observed-only | Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule. |
 | CTL-041 | Connector release authority | observed-only | The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce. |
-| CTL-042 | Guardian governance options not installed | observed-only | The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt. |
+| CTL-042 | Guardian governance options not installed | observed-only | Retired (helm-tracker#266): the capability registry, task capability token, rollback-plan, session risk memory and privilege resolver Guardian options had no shipped installer and were deleted with the gates they enabled and the core/pkg/capability package. No code in this tree holds the rule. |
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266). |
 | CTL-044 | WASI sandbox containment | retired | Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential broker and policy enforcer were deleted; the shipped server never ran a pack. Only sandbox grant and backend-profile records remain in core/pkg/runtime/sandbox. |
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |

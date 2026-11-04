@@ -193,7 +193,6 @@ package directory.
 | `core/pkg/runtimeadapters/websocket` | 136 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer — as generic_http |
 | `core/pkg/saga` | 256 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/scheduler` | 1136 | 2026-04-23 | yes | 1 | DELETED (helm-tracker#266 slice 2) | conformance suite: tests/conformance/scheduling |
-| `core/pkg/security/suites` | 153 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/signals` | 592 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/skills` | 995 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 1) | doc: docs/skills/SKILL_PACK_REPO_AUDIT.md |
 | `core/pkg/slo` | 367 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |

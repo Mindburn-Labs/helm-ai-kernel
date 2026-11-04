@@ -7,9 +7,9 @@
   "summary": {
     "total": 83,
     "enforced": 44,
-    "observed_only": 27,
-    "unmanaged": 12,
-    "retired_invariants": 11,
+    "observed_only": 26,
+    "unmanaged": 13,
+    "retired_invariants": 12,
     "build_plane": 1
   },
   "controls": [
@@ -290,33 +290,19 @@
       "id": "INV-006",
       "title": "An unclassified effect is irreversible until proven otherwise",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "An effect type the reversibility table has never seen is treated as irreversible.",
-      "status": "observed-only",
+      "claim": "An unclassified effect is irreversible until proven otherwise.",
+      "status": "unmanaged",
       "plane": "runtime",
-      "reason": "The reversibility classifier is unreachable from core/cmd/helm-ai-kernel: ReversibilityClassifier.Classify and DefaultForType are in scripts/ci/deadcode-allowlist.txt. No shipped path classifies an effect, so the default governs nothing at runtime.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/effects.ReversibilityClassifier.Classify",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/effects.ReversibilityClassifier.DefaultForType",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the reversibility classifier was deleted without ever having a production caller. Its rule survives as INV-005.",
+      "retired": true,
+      "entry_points": [],
       "gates": [],
       "config": [],
-      "protected_operations": [
-        "Classifying an effect's reversibility before its approval requirement is set."
-      ],
-      "bypass_assumptions": [
-        "No shipped caller exists."
-      ],
+      "protected_operations": [],
+      "bypass_assumptions": [],
       "tests": {
         "allowed": [],
-        "forbidden": [
-          "core/pkg/effects.TestUnknownEffectTypeDefaultsToIrreversible"
-        ],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -1609,13 +1595,8 @@
       "claim": "An admitted dispatch reserves its effect in Postgres before anything is sent, so a duplicate never creates a second dispatch (binding rule R6).",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/boundary/approvalceremony.EffectReservationAdmitter.Admit",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -1626,9 +1607,7 @@
       ],
       "tests": {
         "allowed": [],
-        "forbidden": [
-          "core/pkg/boundary/approvalceremony.TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle"
-        ],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -2664,13 +2643,8 @@
       "claim": "An effect is closed with a signed record bound to its reservation and fence.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped path closes an effect.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/boundary/approvalceremony.EffectCloser.Close",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [

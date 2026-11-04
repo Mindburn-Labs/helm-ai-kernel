@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-83 controls: 44 enforced (1 of them by CI gates), 27 observed-only, 12 unmanaged (11 of them retired invariants).
+83 controls: 44 enforced (1 of them by CI gates), 26 observed-only, 13 unmanaged (12 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -78,7 +78,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | INV-003 | EvidencePack roots are deterministic and inclusion is tamper-evident | enforced | — |
 | INV-004 | Egress enforcement is fail-closed | enforced | — |
 | INV-005 | A policy runtime that cannot evaluate denies | enforced | — |
-| INV-006 | An unclassified effect is irreversible until proven otherwise | observed-only | The reversibility classifier is unreachable from core/cmd/helm-ai-kernel: ReversibilityClassifier.Classify and DefaultForType are in scripts/ci/deadcode-allowlist.txt. No shipped path classifies an effect, so the default governs nothing at runtime. |
+| INV-006 | An unclassified effect is irreversible until proven otherwise | retired | Retired (helm-tracker#266): the reversibility classifier was deleted without ever having a production caller. Its rule survives as INV-005. |
 | INV-007 | A verdict the gateway cannot verify is not a verdict | observed-only | The verifier is a library that no shipped binary calls: VerifyResponse and EvaluateGatewayResponse are in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
 | INV-008 | An EffectPermit authorizes one connector, one action, one scope | observed-only | The verifier is a library that no shipped binary calls: PermitLedger.ConsumePermit and EvaluateAndConsumeGatewayResponse are in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
 | INV-009 | DENY and ESCALATE carry no permit material | observed-only | The verifier is a library that no shipped binary calls: VerifyResponse is in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
@@ -112,7 +112,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
-| CTL-015 | Effect reservation before dispatch | observed-only | Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only. |
+| CTL-015 | Effect reservation before dispatch | observed-only | Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule. |
 | CTL-016 | Spend proxy quotes before dispatch | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 | CTL-018 | Tainted-data egress deny | enforced | — |
@@ -137,7 +137,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-037 | Workstation decision-receipt verification | observed-only | Tested, but no removal proof deletes the check yet, so R1 does not count it as enforced. |
 | CTL-038 | Kubernetes transparent egress for Launchpad | observed-only | Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them. |
 | CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
-| CTL-040 | Effect close | observed-only | EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped path closes an effect. |
+| CTL-040 | Effect close | observed-only | Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule. |
 | CTL-041 | Connector release authority | observed-only | The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce. |
 | CTL-042 | Guardian governance options not installed | observed-only | The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt. |
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266). |
@@ -217,11 +217,12 @@ verify: `core/pkg/kernel/authority/authority.go` · tests `TestDecideFailsClosed
 
 ### INV-006 — An unclassified effect is irreversible until proven otherwise
 
-An effect type the reversibility table has never seen is treated as
-irreversible, so it inherits the strictest approval requirement rather than the
-laxest. The safe default for an unknown is the expensive one.
+An effect type the reversibility table has never seen was treated as
+irreversible, so it inherited the strictest approval requirement rather than the
+laxest. The classifier that held this default had no shipped caller and was
+deleted; the fail-closed default for an unknown action is now carried by INV-005.
 
-verify: `core/pkg/effects/reversibility.go` · test `TestUnknownEffectTypeDefaultsToIrreversible`
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-007 — A verdict the gateway cannot verify is not a verdict
 

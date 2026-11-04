@@ -7,9 +7,9 @@
   "summary": {
     "total": 83,
     "enforced": 44,
-    "observed_only": 26,
-    "unmanaged": 13,
-    "retired_invariants": 12,
+    "observed_only": 25,
+    "unmanaged": 14,
+    "retired_invariants": 13,
     "build_plane": 1
   },
   "controls": [

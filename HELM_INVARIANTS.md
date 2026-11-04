@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-83 controls: 44 enforced (1 of them by CI gates), 26 observed-only, 13 unmanaged (12 of them retired invariants).
+83 controls: 44 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |

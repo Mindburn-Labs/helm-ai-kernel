@@ -251,6 +251,7 @@ func executeReceipt(t *testing.T, connector *Connector, action ActionURN, params
 		ExpiresAt:   time.Now().Add(time.Hour),
 	}
 	bindPermitToGrant(t, permit, connector.defaultGrant)
+	bindPermitToCeilings(t, permit, params)
 	out, err := connector.Execute(context.Background(), permit, string(action), params)
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +261,28 @@ func executeReceipt(t *testing.T, connector *Connector, action ActionURN, params
 		t.Fatalf("expected ActonReceipt, got %T", out)
 	}
 	return receipt
+}
+
+// bindPermitToCeilings binds the ceiling set the request carries to the
+// permit, the way a governance authority does when it approves a call under a
+// specific P0 policy. Without the binding the connector refuses a
+// caller-supplied ceiling set, because a caller may echo the policy the
+// permit decided but may not decide it.
+func bindPermitToCeilings(t *testing.T, permit *effects.EffectPermit, params map[string]any) {
+	t.Helper()
+	raw, ok := params["p0_ceilings"]
+	if !ok || raw == nil {
+		return
+	}
+	ceilings := policyFromParams(params)
+	hash := ceilings.Hash()
+	if hash == "" {
+		t.Fatal("ceiling set is not hashable")
+	}
+	if permit.EvidenceBindings == nil {
+		permit.EvidenceBindings = map[string]string{}
+	}
+	permit.EvidenceBindings["p0_ceilings_hash"] = hash
 }
 
 func bindPermitToGrant(t *testing.T, permit *effects.EffectPermit, grant *contracts.SandboxGrant) {

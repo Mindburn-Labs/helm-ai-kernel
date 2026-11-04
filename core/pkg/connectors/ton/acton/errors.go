@@ -34,6 +34,11 @@ const (
 	ReasonConnectorContractDrift         ReasonCode = "ERR_CONNECTOR_CONTRACT_DRIFT"
 	ReasonComputeGasExhausted            ReasonCode = "ERR_COMPUTE_GAS_EXHAUSTED"
 	ReasonComputeTimeExhausted           ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"
+	// ReasonPolicyHashMismatch reuses the kernel-wide POLICY_HASH_MISMATCH
+	// wire value (registered in protocols/json-schemas/reason-codes/, domain
+	// policy). A caller-supplied policy set that the permit does not bind is a
+	// policy hash mismatch, and one registry is the rule (R4).
+	ReasonPolicyHashMismatch ReasonCode = "POLICY_HASH_MISMATCH"
 )
 
 func (r ReasonCode) String() string {
@@ -70,5 +75,6 @@ func allReasonCodes() []ReasonCode {
 		ReasonConnectorContractDrift,
 		ReasonComputeGasExhausted,
 		ReasonComputeTimeExhausted,
+		ReasonPolicyHashMismatch,
 	}
 }

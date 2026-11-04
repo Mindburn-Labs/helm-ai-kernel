@@ -84,9 +84,19 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return receipt, receiptErr
 	}
 	env.PolicyHash = firstNonEmpty(env.PolicyHash, permit.PolicyHash)
+	ceilings, ceilingsErr := c.boundP0Ceilings(permit, params)
+	if ceilingsErr != nil {
+		receipt, receiptErr := NewPreDispatchReceipt(env, deny(ReasonPolicyHashMismatch, ceilingsErr.Error()))
+		if receiptErr == nil {
+			_ = c.appendProofNode(proofgraph.NodeTypeIntent, env)
+			_ = c.appendProofNode(proofgraph.NodeTypeAttestation, receipt)
+		}
+		return receipt, receiptErr
+	}
+	// The envelope records the ceilings this call was actually judged against,
+	// so a replay binds the same limits the receipt was decided under.
 	if env.P0CeilingsHash == "" {
-		p0 := policyFromParams(params)
-		env.P0CeilingsHash = p0.Hash()
+		env.P0CeilingsHash = ceilings.Hash()
 	}
 	grant, bindingErr := c.boundSandboxGrant(permit, params, env)
 	if bindingErr != nil {
@@ -98,10 +108,6 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return receipt, receiptErr
 	}
 	manifest := scriptManifestFromParams(params)
-	ceilings := c.defaultP0
-	if _, ok := params["p0_ceilings"]; ok {
-		ceilings = policyFromParams(params)
-	}
 	decision := EvaluatePolicy(env, ceilings, grant, manifest)
 	_ = c.appendProofNode(proofgraph.NodeTypeIntent, env)
 	if !decision.Dispatch {
@@ -143,6 +149,43 @@ func (c *Connector) boundSandboxGrant(permit *effects.EffectPermit, params map[s
 	}
 	env.SandboxGrantHash = boundHash
 	return c.defaultGrant, nil
+}
+
+// boundP0Ceilings resolves the P0 ceilings this call is allowed to be judged
+// against, and refuses a caller-supplied ceiling set that the permit does not
+// bind.
+//
+// The ceilings are the P0 spend and dispatch limits: they decide whether a
+// mainnet broadcast is allowed at all, whether a spend fits under the cap, and
+// which Acton/Tolk versions are accepted. A caller that could replace them
+// from the request body would therefore be able to widen its own policy, so
+// the connector trusts exactly one source: the connector's configured
+// defaults.
+//
+// p0_ceilings in the request body is accepted only as a restatement of the
+// policy the permit already carries, and only when the permit binds that
+// exact ceiling set by hash. This mirrors the sandbox_grant binding above:
+// the caller may echo what the permit decided, but it may not decide it.
+// A request that carries ceilings the permit does not bind is denied rather
+// than silently ignored, because a request that thinks it widened the
+// ceilings and was quietly narrowed is worse than one that is told no.
+func (c *Connector) boundP0Ceilings(permit *effects.EffectPermit, params map[string]any) (P0Ceilings, error) {
+	if _, ok := params["p0_ceilings"]; !ok {
+		return c.defaultP0, nil
+	}
+	ceilings := policyFromParams(params)
+	ceilingHash := ceilings.Hash()
+	if ceilingHash == "" {
+		return P0Ceilings{}, fmt.Errorf("%s: caller supplied p0_ceilings are not hashable", ReasonPolicyHashMismatch)
+	}
+	boundHash := strings.TrimSpace(permit.EvidenceBindings["p0_ceilings_hash"])
+	if boundHash == "" {
+		return P0Ceilings{}, fmt.Errorf("%s: permit missing p0_ceilings_hash binding", ReasonPolicyHashMismatch)
+	}
+	if boundHash != ceilingHash {
+		return P0Ceilings{}, fmt.Errorf("%s: permit p0_ceilings_hash mismatch", ReasonPolicyHashMismatch)
+	}
+	return ceilings, nil
 }
 
 func (c *Connector) appendProofNode(t proofgraph.NodeType, payload any) error {

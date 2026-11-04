@@ -364,12 +364,3 @@ func WriteLimitDenied(w http.ResponseWriter, status int, reason string, retryAft
 	}
 	WriteError(w, status, "Service Unavailable", reason)
 }
-
-// WithContextRateLimit enforces rate limits based on context values (e.g. TenantID).
-// This requires the context to be populated previously (e.g. by auth middleware).
-func WithContextRateLimit(next http.Handler, limitPerTenant int) http.Handler {
-	_ = limitPerTenant
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
-}

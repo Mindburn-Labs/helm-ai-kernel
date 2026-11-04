@@ -44,7 +44,6 @@ core/pkg/proofgraph/cloudevents # has tests
 core/pkg/proofgraph/graphql # has tests
 core/pkg/receipts # has tests
 core/pkg/replay # has tests
-core/pkg/security/suites # has tests
 core/pkg/store/objstore/fs # has tests
 core/pkg/verifier/agentprovenance # has tests
 core/pkg/witness # has tests

@@ -85,28 +85,6 @@ func EffectDispositionCommandSigningPayload(command contracts.EffectDispositionC
 	return payload, nil
 }
 
-func SignEffectDispositionCommand(
-	command contracts.EffectDispositionCommand,
-	signer crypto.Signer,
-) (contracts.EffectDispositionCommandEnvelope, error) {
-	if signer == nil {
-		return contracts.EffectDispositionCommandEnvelope{}, effectDispositionCommandRejected("signer is not configured")
-	}
-	payload, err := EffectDispositionCommandSigningPayload(command)
-	if err != nil {
-		return contracts.EffectDispositionCommandEnvelope{}, err
-	}
-	signature, err := signer.Sign(payload)
-	if err != nil {
-		return contracts.EffectDispositionCommandEnvelope{}, effectDispositionCommandRejected("sign command: " + err.Error())
-	}
-	envelope := contracts.EffectDispositionCommandEnvelope{Command: command, Signature: signature}
-	if err := envelope.Validate(); err != nil {
-		return contracts.EffectDispositionCommandEnvelope{}, effectDispositionCommandRejected("signer returned invalid signature encoding")
-	}
-	return envelope, nil
-}
-
 // VerifyEnvelope proves an effect-disposition command is signed by a currently
 // trusted key; used when recording (submitting) a new disposition, so it
 // rejects a disabled key.

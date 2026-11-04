@@ -19,8 +19,6 @@ G101 core/cmd/helm-ai-kernel/route_auth.go 3e07662ed5f1
 G101 core/cmd/helm-ai-kernel/route_auth.go ed50165573bd
 G101 core/cmd/helm-ai-kernel/watch_cmd.go c310b74b3b09
 G101 core/pkg/auth/apikey.go 3b88a5bebaf6
-G101 core/pkg/capability/manifest.go be7940187224
-G101 core/pkg/capability/token_authority.go 41f2ffd67cf5
 G101 core/pkg/conform/reason_codes.go 5743bbaffdaf
 G101 core/pkg/contracts/effect_types.go 4e8faaeff0d0
 G101 core/pkg/contracts/safe_deprecation.go 10e5e0cff1ff
@@ -297,8 +295,6 @@ G304 core/pkg/agentruntime/storelock_flock.go 4454b0931305
 G304 core/pkg/boundary/profile/probe.go ad3f9cda0030
 G304 core/pkg/boundary/surface_registry.go e002b30f196c
 G304 core/pkg/bundles/loader.go dbfffc239169
-G304 core/pkg/capability/registry.go 6042b9f81fb9
-G304 core/pkg/capability/rollback.go 6042b9f81fb9
 G304 core/pkg/conform/engine.go dbfffc239169
 G304 core/pkg/conform/engine.go dbfffc239169
 G304 core/pkg/conform/evidencepack.go ed76e3533e8c

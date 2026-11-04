@@ -92,30 +92,6 @@ func TestStress_1000SequentialDecisionsNoLeak(t *testing.T) {
 	}
 }
 
-// ── GuardianOption: WithBudgetTracker ───────────────────────────────────
-
-type fakeBudget struct{}
-
-func (fakeBudget) Check(string, BudgetCost) (bool, error) { return true, nil }
-func (fakeBudget) Consume(string, BudgetCost) error       { return nil }
-
-func TestStress_OptionWithBudgetTracker(t *testing.T) {
-	g := newTestGuardian(t, WithBudgetTracker(fakeBudget{}))
-	if g.tracker == nil {
-		t.Fatal("budget tracker not set")
-	}
-}
-
-// ── GuardianOption: WithAuditLog ────────────────────────────────────────
-
-func TestStress_OptionWithAuditLog(t *testing.T) {
-	log := NewAuditLog()
-	g := newTestGuardian(t, WithAuditLog(log))
-	if g.auditLog == nil {
-		t.Fatal("audit log not set")
-	}
-}
-
 // ── GuardianOption: WithTemporalGuardian ────────────────────────────────
 
 func TestStress_OptionWithTemporalGuardian(t *testing.T) {
@@ -143,16 +119,6 @@ func TestStress_OptionWithFreezeController(t *testing.T) {
 	g := newTestGuardian(t, WithFreezeController(fc))
 	if g.freezeCtrl == nil {
 		t.Fatal("freeze controller not set")
-	}
-}
-
-// ── GuardianOption: WithAgentKillSwitch ─────────────────────────────────
-
-func TestStress_OptionWithAgentKillSwitch(t *testing.T) {
-	ks := kernel.NewAgentKillSwitch()
-	g := newTestGuardian(t, WithAgentKillSwitch(ks))
-	if g.agentKillSwitch == nil {
-		t.Fatal("kill switch not set")
 	}
 }
 
@@ -256,44 +222,6 @@ func TestStress_ResponseLevelUnknown(t *testing.T) {
 	}
 }
 
-// ── Audit Log: 1000 entries ─────────────────────────────────────────────
-
-func TestStress_AuditLog1000Entries(t *testing.T) {
-	log := NewAuditLog()
-	for i := range 1000 {
-		_, err := log.Append("actor", "action", "target", "details-"+string(rune(i)))
-		if err != nil {
-			t.Fatalf("append failed at %d: %v", i, err)
-		}
-	}
-	if len(log.Entries) != 1000 {
-		t.Fatalf("expected 1000, got %d", len(log.Entries))
-	}
-}
-
-func TestStress_AuditLog1000VerifyChain(t *testing.T) {
-	log := NewAuditLog()
-	for i := range 1000 {
-		_, _ = log.Append("actor", "action", "target", "d-"+string(rune('A'+i%26)))
-	}
-	ok, err := log.VerifyChain()
-	if err != nil || !ok {
-		t.Fatalf("chain verification failed: ok=%v err=%v", ok, err)
-	}
-}
-
-func TestStress_AuditLogTamperDetect(t *testing.T) {
-	log := NewAuditLog()
-	for range 10 {
-		_, _ = log.Append("actor", "action", "target", "details")
-	}
-	log.Entries[5].Details = "TAMPERED"
-	ok, _ := log.VerifyChain()
-	if ok {
-		t.Fatal("tampered chain should fail verification")
-	}
-}
-
 // ── Controllability Envelope ────────────────────────────────────────────
 
 func TestStress_EnvelopeRecord1000(t *testing.T) {
@@ -372,25 +300,6 @@ func TestStress_GradedResponseAllowAtObserve(t *testing.T) {
 	}
 }
 
-func TestStress_AuditLogEmpty(t *testing.T) {
-	log := NewAuditLog()
-	ok, err := log.VerifyChain()
-	if err != nil || !ok {
-		t.Fatal("empty log should verify")
-	}
-}
-
-func TestStress_AuditLogGenesisHash(t *testing.T) {
-	log := NewAuditLog()
-	entry, _ := log.Append("a", "b", "c", "d")
-	if entry.PreviousHash != "" {
-		t.Fatal("genesis entry should have empty prev hash")
-	}
-	if entry.Hash == "" {
-		t.Fatal("genesis entry should have a hash")
-	}
-}
-
 func TestStress_EnvelopeEmptyWindow(t *testing.T) {
 	clk := newStressClock()
 	env := NewControllabilityEnvelope(1*time.Second, clk)
@@ -404,32 +313,6 @@ func TestStress_TemporalGuardianDefaultObserve(t *testing.T) {
 	tg := NewTemporalGuardian(DefaultEscalationPolicy(), clk)
 	if tg.CurrentLevel() != ResponseObserve {
 		t.Fatal("initial level should be OBSERVE")
-	}
-}
-
-func TestStress_AuditLogSingleEntry(t *testing.T) {
-	log := NewAuditLog()
-	_, _ = log.Append("actor", "action", "target", "details")
-	ok, err := log.VerifyChain()
-	if err != nil || !ok {
-		t.Fatal("single entry chain should verify")
-	}
-}
-
-func TestStress_AuditLogEntryHasID(t *testing.T) {
-	log := NewAuditLog()
-	entry, _ := log.Append("actor", "act", "tgt", "dtl")
-	if entry.ID == "" {
-		t.Fatal("entry should have an ID")
-	}
-}
-
-func TestStress_AuditLogHashLinkage(t *testing.T) {
-	log := NewAuditLog()
-	e1, _ := log.Append("a", "b", "c", "d")
-	e2, _ := log.Append("a", "b", "c", "d")
-	if e2.PreviousHash != e1.Hash {
-		t.Fatal("second entry prev hash should match first entry hash")
 	}
 }
 
@@ -466,13 +349,6 @@ func TestStress_GuardianNilRegistry(t *testing.T) {
 	g := newTestGuardian(t)
 	if g == nil {
 		t.Fatal("guardian should not be nil")
-	}
-}
-
-func TestStress_OptionWithComplianceChecker(t *testing.T) {
-	g := newTestGuardian(t) // no compliance checker
-	if g.complianceChecker != nil {
-		t.Fatal("compliance checker should be nil by default")
 	}
 }
 

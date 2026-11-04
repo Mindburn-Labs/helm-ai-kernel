@@ -191,7 +191,7 @@ The OSS kernel includes configurable surface containment primitives
 OSS includes:
 
 - **Surface containment** — capability manifests, tool bundles, sandbox profiles
-- **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate has no tracker in a shipped binary (CTL-011)
+- **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate had no shipped installer and was removed (CTL-011, retired)
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs

@@ -111,49 +111,6 @@ func TestContextGuard_ValidateCurrentDoesNotPanic(t *testing.T) {
 	_ = cg.ValidateCurrent()
 }
 
-func TestAgentKillSwitch_InitiallyAlive(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	if ks.IsKilled("agent-1") {
-		t.Fatal("agent should not be killed initially")
-	}
-}
-
-func TestCompAgentKillSwitch_KillAndCheck(t *testing.T) {
-	ks := NewAgentKillSwitch().WithKillSwitchClock(fixedClk)
-	_, _ = ks.Kill("agent-1", "admin", "misbehaving")
-	if !ks.IsKilled("agent-1") {
-		t.Fatal("agent should be killed after Kill()")
-	}
-}
-
-func TestAgentKillSwitch_DoubleKillErrors(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, _ = ks.Kill("a1", "admin", "reason")
-	_, err := ks.Kill("a1", "admin", "reason")
-	if err == nil {
-		t.Fatal("double kill should error")
-	}
-}
-
-func TestAgentKillSwitch_ReviveRestores(t *testing.T) {
-	ks := NewAgentKillSwitch().WithKillSwitchClock(fixedClk)
-	_, _ = ks.Kill("a1", "admin", "test")
-	_, _ = ks.Revive("a1", "admin")
-	if ks.IsKilled("a1") {
-		t.Fatal("agent should be alive after revive")
-	}
-}
-
-func TestCompAgentKillSwitch_ListKilled(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, _ = ks.Kill("a1", "admin", "x")
-	_, _ = ks.Kill("a2", "admin", "y")
-	killed := ks.ListKilled()
-	if len(killed) != 2 {
-		t.Fatalf("expected 2 killed, got %d", len(killed))
-	}
-}
-
 // errorAs is a simple helper matching errors.As without importing errors.
 func errorAs(err error, target interface{}) bool {
 	if e, ok := err.(*ContextMismatchError); ok {

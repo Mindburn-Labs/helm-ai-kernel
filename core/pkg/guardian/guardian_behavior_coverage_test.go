@@ -113,7 +113,7 @@ func TestNewGuardian_DefaultClock(t *testing.T) {
 
 func TestNewGuardian_NilFields(t *testing.T) {
 	g := newMinimalGuardian()
-	if g.tracker != nil || g.auditLog != nil || g.temporal != nil {
+	if g.temporal != nil || g.behavioralScorer != nil || g.freezeCtrl != nil {
 		t.Fatal("optional fields should be nil by default")
 	}
 }
@@ -159,22 +159,6 @@ func TestWithClock(t *testing.T) {
 	}
 }
 
-func TestWithBudgetTracker(t *testing.T) {
-	bt := newMockBudgetTracker(100)
-	g := newMinimalGuardian(WithBudgetTracker(bt))
-	if g.tracker != bt {
-		t.Fatal("WithBudgetTracker not applied")
-	}
-}
-
-func TestWithAuditLog(t *testing.T) {
-	al := NewAuditLog()
-	g := newMinimalGuardian(WithAuditLog(al))
-	if g.auditLog != al {
-		t.Fatal("WithAuditLog not applied")
-	}
-}
-
 func TestWithTemporalGuardian(t *testing.T) {
 	c := newTestClock()
 	tg := NewTemporalGuardian(DefaultEscalationPolicy(), c)
@@ -199,19 +183,11 @@ func TestWithBehavioralTrustScorer(t *testing.T) {
 	}
 }
 
-func TestWithPrivilegeResolver(t *testing.T) {
-	r := NewStaticPrivilegeResolver(TierStandard)
-	g := newMinimalGuardian(WithPrivilegeResolver(r))
-	if g.privilegeResolver != r {
-		t.Fatal("WithPrivilegeResolver not applied")
-	}
-}
-
 func TestMultipleOptions(t *testing.T) {
-	al := NewAuditLog()
 	c := newTestClock()
-	g := newMinimalGuardian(WithAuditLog(al), WithClock(c), WithEnvFingerprint("fp"))
-	if g.auditLog != al || g.clock != c || g.envFprint != "fp" {
+	tg := NewTemporalGuardian(DefaultEscalationPolicy(), c)
+	g := newMinimalGuardian(WithTemporalGuardian(tg), WithClock(c), WithEnvFingerprint("fp"))
+	if g.temporal != tg || g.clock != c || g.envFprint != "fp" {
 		t.Fatal("multiple options not all applied")
 	}
 }
@@ -405,195 +381,6 @@ func TestControllabilityEnvelope_EmptyRate(t *testing.T) {
 	env := NewControllabilityEnvelope(60*time.Second, c)
 	if env.Rate() != 0.0 {
 		t.Fatalf("expected 0 rate for empty envelope, got %f", env.Rate())
-	}
-}
-
-// ─── 41-50: Audit Log ───────────────────────────────────────────
-
-func TestNewAuditLog_EmptyEntries(t *testing.T) {
-	al := NewAuditLog()
-	if len(al.Entries) != 0 {
-		t.Fatalf("expected 0 entries, got %d", len(al.Entries))
-	}
-}
-
-func TestAuditLog_AppendOne(t *testing.T) {
-	al := NewAuditLog()
-	entry, err := al.Append("actor", "ACTION", "target", "details")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if entry.Actor != "actor" || entry.Action != "ACTION" {
-		t.Fatal("fields not stored")
-	}
-}
-
-func TestAuditLog_GenesisNoPreviousHash(t *testing.T) {
-	al := NewAuditLog()
-	entry, _ := al.Append("a", "b", "c", "d")
-	if entry.PreviousHash != "" {
-		t.Fatal("genesis entry should have empty previous hash")
-	}
-}
-
-func TestAuditLog_ChainLinking(t *testing.T) {
-	al := NewAuditLog()
-	e1, _ := al.Append("a", "b", "c", "d")
-	e2, _ := al.Append("a", "b", "c", "d")
-	if e2.PreviousHash != e1.Hash {
-		t.Fatal("second entry should reference first entry's hash")
-	}
-}
-
-func TestAuditLog_VerifyChainEmpty(t *testing.T) {
-	al := NewAuditLog()
-	valid, err := al.VerifyChain()
-	if err != nil || !valid {
-		t.Fatal("empty chain should verify")
-	}
-}
-
-func TestAuditLog_VerifyChainSingle(t *testing.T) {
-	al := NewAuditLog()
-	al.Append("a", "b", "c", "d")
-	valid, err := al.VerifyChain()
-	if err != nil || !valid {
-		t.Fatal("single entry chain should verify")
-	}
-}
-
-func TestAuditLog_VerifyChainMultiple(t *testing.T) {
-	al := NewAuditLog()
-	for i := 0; i < 5; i++ {
-		al.Append("a", "b", "c", "d")
-	}
-	valid, err := al.VerifyChain()
-	if err != nil || !valid {
-		t.Fatal("multi-entry chain should verify")
-	}
-}
-
-func TestAuditLog_TamperDetection(t *testing.T) {
-	al := NewAuditLog()
-	al.Append("a", "b", "c", "d")
-	al.Append("a", "b", "c", "d")
-	al.Entries[0].Details = "TAMPERED"
-	valid, _ := al.VerifyChain()
-	if valid {
-		t.Fatal("tampered chain should not verify")
-	}
-}
-
-func TestAuditLog_HashNonEmpty(t *testing.T) {
-	al := NewAuditLog()
-	entry, _ := al.Append("a", "b", "c", "d")
-	if entry.Hash == "" {
-		t.Fatal("hash should not be empty")
-	}
-}
-
-func TestAuditLog_WithClock(t *testing.T) {
-	c := newTestClock()
-	al := NewAuditLog(c)
-	entry, _ := al.Append("a", "b", "c", "d")
-	if !entry.Timestamp.Equal(c.Now().UTC()) {
-		t.Fatalf("expected timestamp from injected clock, got %v", entry.Timestamp)
-	}
-}
-
-// ─── 51-57: Privilege tiers ─────────────────────────────────────
-
-func TestPrivilegeTier_RestrictedString(t *testing.T) {
-	if TierRestricted.String() != "RESTRICTED" {
-		t.Fatalf("expected RESTRICTED, got %s", TierRestricted.String())
-	}
-}
-
-func TestPrivilegeTier_StandardString(t *testing.T) {
-	if TierStandard.String() != "STANDARD" {
-		t.Fatalf("expected STANDARD, got %s", TierStandard.String())
-	}
-}
-
-func TestPrivilegeTier_ElevatedString(t *testing.T) {
-	if TierElevated.String() != "ELEVATED" {
-		t.Fatalf("expected ELEVATED, got %s", TierElevated.String())
-	}
-}
-
-func TestPrivilegeTier_SystemString(t *testing.T) {
-	if TierSystem.String() != "SYSTEM" {
-		t.Fatalf("expected SYSTEM, got %s", TierSystem.String())
-	}
-}
-
-func TestPrivilegeTier_UnknownString(t *testing.T) {
-	unknown := PrivilegeTier(99)
-	if unknown.String() != "UNKNOWN(99)" {
-		t.Fatalf("expected UNKNOWN(99), got %s", unknown.String())
-	}
-}
-
-func TestRequiredTierForEffect_KnownEffect(t *testing.T) {
-	tier := RequiredTierForEffect("SEND_EMAIL")
-	if tier != TierStandard {
-		t.Fatalf("expected STANDARD for SEND_EMAIL, got %s", tier.String())
-	}
-}
-
-func TestRequiredTierForEffect_ElevatedEffect(t *testing.T) {
-	tier := RequiredTierForEffect("SOFTWARE_PUBLISH")
-	if tier != TierElevated {
-		t.Fatalf("expected ELEVATED for SOFTWARE_PUBLISH, got %s", tier.String())
-	}
-}
-
-func TestRequiredTierForEffect_SystemEffect(t *testing.T) {
-	tier := RequiredTierForEffect("INFRA_DESTROY")
-	if tier != TierSystem {
-		t.Fatalf("expected SYSTEM for INFRA_DESTROY, got %s", tier.String())
-	}
-}
-
-func TestRequiredTierForEffect_UnknownDefaultsStandard(t *testing.T) {
-	tier := RequiredTierForEffect("NONEXISTENT_EFFECT")
-	if tier != TierStandard {
-		t.Fatalf("expected STANDARD for unknown effect, got %s", tier.String())
-	}
-}
-
-func TestEffectiveTier_HostileForcesRestricted(t *testing.T) {
-	result := EffectiveTier(TierSystem, trust.TierHostile)
-	if result != TierRestricted {
-		t.Fatalf("expected RESTRICTED under HOSTILE, got %s", result.String())
-	}
-}
-
-func TestEffectiveTier_SuspectCapsAtStandard(t *testing.T) {
-	result := EffectiveTier(TierElevated, trust.TierSuspect)
-	if result != TierStandard {
-		t.Fatalf("expected STANDARD cap under SUSPECT, got %s", result.String())
-	}
-}
-
-func TestEffectiveTier_SuspectNoUpgrade(t *testing.T) {
-	result := EffectiveTier(TierRestricted, trust.TierSuspect)
-	if result != TierRestricted {
-		t.Fatalf("expected RESTRICTED unchanged under SUSPECT, got %s", result.String())
-	}
-}
-
-func TestEffectiveTier_NeutralNoChange(t *testing.T) {
-	result := EffectiveTier(TierElevated, trust.TierNeutral)
-	if result != TierElevated {
-		t.Fatalf("expected ELEVATED unchanged under NEUTRAL, got %s", result.String())
-	}
-}
-
-func TestEffectiveTier_TrustedNoChange(t *testing.T) {
-	result := EffectiveTier(TierSystem, trust.TierTrusted)
-	if result != TierSystem {
-		t.Fatalf("expected SYSTEM unchanged under TRUSTED, got %s", result.String())
 	}
 }
 

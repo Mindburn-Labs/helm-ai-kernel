@@ -25,7 +25,7 @@ Public docs should link here from:
 - Determinism and canonicalization: `csnf*.go`, `nondeterminism.go`, `prng.go`, `total_order_log.go`.
 - Boundary enforcement: `boundary_assertions.go`, `effect_boundary.go`, `context_guard.go`, `secret_ref.go`.
 - Policy decision path: `cel_dp.go`, `pdp_adapter.go`, `reducer.go`.
-- Runtime safety: `limiter.go`, `freeze.go`, `agent_kill.go`, `scheduler.go`, `concurrency.go`.
+- Runtime safety: `limiter.go`, `freeze.go`, `scheduler.go`, `concurrency.go`.
 - Memory and event integrity: `memory_integrity.go`, `memory_trust.go`, `event_log.go`, `merkle.go`.
 
 ## Documentation Rules

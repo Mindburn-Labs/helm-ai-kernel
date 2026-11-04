@@ -19,7 +19,6 @@ contracts 71.6
 crypto 82.0
 guardian
 proofgraph 81.4
-trust/registry
 runtime/sandbox 75.6
 receipts/policies 67.0
 verifier 83.6

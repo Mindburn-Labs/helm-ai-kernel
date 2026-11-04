@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -236,81 +234,11 @@ func TestDeep_PKCECorrectVerifier(t *testing.T) {
 
 // ── 20-23: FileStore with concurrent writes ─────────────────────
 
-func TestDeep_FileStoreConcurrentWrites(t *testing.T) {
-	dir := t.TempDir()
-	fs, err := NewFileStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			s := NewDelegationSession(fmt.Sprintf("fs-%d", i), "d", "del", "n", "h", "tr", 0, time.Now().Add(time.Hour), false, nil)
-			fs.Store(s)
-		}(i)
-	}
-	wg.Wait()
-	ids, err := fs.ListSessions()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 100 {
-		t.Fatalf("want 100 sessions got %d", len(ids))
-	}
-}
-
-func TestDeep_FileStoreLoadMissing(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	s, err := fs.Load("nonexistent")
-	if err != nil || s != nil {
-		t.Fatalf("missing session should return nil, nil; got %v, %v", s, err)
-	}
-}
-
-func TestDeep_FileStoreRevokeAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	s := NewDelegationSession("r1", "d", "del", "n", "h", "tr", 0, time.Now().Add(time.Hour), false, nil)
-	fs.Store(s)
-	fs.Revoke("r1")
-	_, err := fs.Load("r1")
-	if err == nil {
-		t.Error("revoked session load must return error")
-	}
-}
-
-func TestDeep_FileStoreNonce(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	if fs.IsNonceUsed("abc") {
-		t.Error("unused nonce should not be flagged")
-	}
-	fs.MarkNonceUsed("abc")
-	if !fs.IsNonceUsed("abc") {
-		t.Error("marked nonce should be flagged")
-	}
-}
-
 // ── 24-25: Edge cases ───────────────────────────────────────────
 
 func TestDeep_SessionClockOverride(t *testing.T) {
 	s := NewDelegationSession("s1", "d", "del", "n", "h", "tr", 0, time.Now().Add(time.Hour), false, deepFixedClock)
 	if !s.CreatedAt.Equal(deepFixedClock()) {
 		t.Fatalf("clock override should set CreatedAt to fixed time")
-	}
-}
-
-func TestDeep_FileStoreCreatesDirOnInit(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "sub", "deep")
-	_, err := NewFileStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		t.Fatal("NewFileStore must create nested directories")
 	}
 }

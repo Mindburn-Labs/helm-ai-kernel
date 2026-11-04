@@ -1,3 +1,5 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
+
 package a2a
 
 import (
@@ -448,68 +450,6 @@ func TestClosing_Envelope_Fields(t *testing.T) {
 	})
 }
 
-func TestClosing_ComputeEnvelopeHash(t *testing.T) {
-	env := &Envelope{
-		EnvelopeID:    "e1",
-		SchemaVersion: CurrentVersion,
-		OriginAgentID: "origin",
-		TargetAgentID: "target",
-		PayloadHash:   "sha256:abc",
-	}
-	t.Run("has_sha256_prefix", func(t *testing.T) {
-		h := ComputeEnvelopeHash(env)
-		if len(h) < 7 || h[:7] != "sha256:" {
-			t.Fatalf("expected sha256: prefix, got %q", h)
-		}
-	})
-	t.Run("deterministic", func(t *testing.T) {
-		h1 := ComputeEnvelopeHash(env)
-		h2 := ComputeEnvelopeHash(env)
-		if h1 != h2 {
-			t.Fatal("should be deterministic")
-		}
-	})
-	t.Run("different_env_different_hash", func(t *testing.T) {
-		env2 := &Envelope{EnvelopeID: "e2", SchemaVersion: CurrentVersion, OriginAgentID: "other", TargetAgentID: "target", PayloadHash: "sha256:def"}
-		h1 := ComputeEnvelopeHash(env)
-		h2 := ComputeEnvelopeHash(env2)
-		if h1 == h2 {
-			t.Fatal("different envelopes should have different hashes")
-		}
-	})
-}
-
-func TestClosing_SignEnvelope(t *testing.T) {
-	env := &Envelope{
-		EnvelopeID:    "e1",
-		SchemaVersion: CurrentVersion,
-		OriginAgentID: "origin",
-		TargetAgentID: "target",
-		PayloadHash:   "sha256:abc",
-	}
-	SignEnvelope(env, "key-1", "ed25519", "origin")
-	t.Run("signature_set", func(t *testing.T) {
-		if env.Signature.Value == "" {
-			t.Fatal("signature value should be set")
-		}
-	})
-	t.Run("key_id", func(t *testing.T) {
-		if env.Signature.KeyID != "key-1" {
-			t.Fatalf("got %q", env.Signature.KeyID)
-		}
-	})
-	t.Run("algorithm", func(t *testing.T) {
-		if env.Signature.Algorithm != "ed25519" {
-			t.Fatalf("got %q", env.Signature.Algorithm)
-		}
-	})
-	t.Run("agent_id", func(t *testing.T) {
-		if env.Signature.AgentID != "origin" {
-			t.Fatalf("got %q", env.Signature.AgentID)
-		}
-	})
-}
-
 func TestClosing_NegotiationResult_Fields(t *testing.T) {
 	nr := NegotiationResult{
 		Accepted:       true,
@@ -563,25 +503,6 @@ func TestClosing_PolicyRule_Fields(t *testing.T) {
 // 26-33: Propagation configs
 // ---------------------------------------------------------------------------
 
-func TestClosing_DefaultPropagationConfig(t *testing.T) {
-	cfg := DefaultPropagationConfig()
-	t.Run("decay_0.7", func(t *testing.T) {
-		if cfg.DecayPerHop != 0.7 {
-			t.Fatalf("got %f", cfg.DecayPerHop)
-		}
-	})
-	t.Run("max_hops_3", func(t *testing.T) {
-		if cfg.MaxHops != 3 {
-			t.Fatalf("got %d", cfg.MaxHops)
-		}
-	})
-	t.Run("min_score_400", func(t *testing.T) {
-		if cfg.MinScore != 400 {
-			t.Fatalf("got %d", cfg.MinScore)
-		}
-	})
-}
-
 func TestClosing_PropagationConfig_CustomValues(t *testing.T) {
 	cfg := PropagationConfig{DecayPerHop: 0.5, MaxHops: 5, MinScore: 200}
 	t.Run("custom_decay", func(t *testing.T) {
@@ -629,46 +550,6 @@ func TestClosing_TrustPath_Fields(t *testing.T) {
 // 34-40: AgentCard / AgentRegistry
 // ---------------------------------------------------------------------------
 
-func TestClosing_ValidateAgentCard(t *testing.T) {
-	validCard := &AgentCard{
-		AgentID:           "agent-1",
-		Endpoint:          "https://example.com",
-		SupportedVersions: []SchemaVersion{CurrentVersion},
-		Skills:            []AgentSkill{{ID: "s1", Name: "Skill One"}},
-	}
-	t.Run("valid_card", func(t *testing.T) {
-		if err := ValidateAgentCard(validCard); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-	t.Run("nil_card", func(t *testing.T) {
-		if err := ValidateAgentCard(nil); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("empty_agent_id", func(t *testing.T) {
-		c := *validCard
-		c.AgentID = ""
-		if err := ValidateAgentCard(&c); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("no_endpoint", func(t *testing.T) {
-		c := *validCard
-		c.Endpoint = ""
-		if err := ValidateAgentCard(&c); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("no_skills", func(t *testing.T) {
-		c := *validCard
-		c.Skills = nil
-		if err := ValidateAgentCard(&c); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-}
-
 func TestClosing_ComputeCardHash(t *testing.T) {
 	card := &AgentCard{
 		AgentID:           "agent-1",
@@ -700,157 +581,9 @@ func TestClosing_ComputeCardHash(t *testing.T) {
 	})
 }
 
-func TestClosing_AgentRegistry_RegisterLookup(t *testing.T) {
-	reg := NewAgentRegistry()
-	card := &AgentCard{AgentID: "a1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}}
-	t.Run("register", func(t *testing.T) {
-		err := reg.Register(card)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-	t.Run("lookup", func(t *testing.T) {
-		found, ok := reg.Lookup("a1")
-		if !ok || found == nil {
-			t.Fatal("should find card")
-		}
-	})
-	t.Run("lookup_missing", func(t *testing.T) {
-		_, ok := reg.Lookup("missing")
-		if ok {
-			t.Fatal("should not find")
-		}
-	})
-	t.Run("content_hash_set", func(t *testing.T) {
-		found, _ := reg.Lookup("a1")
-		if found.ContentHash == "" {
-			t.Fatal("content hash should be set")
-		}
-	})
-}
-
-func TestClosing_AgentRegistry_Deregister(t *testing.T) {
-	reg := NewAgentRegistry()
-	card := &AgentCard{AgentID: "a1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}}
-	reg.Register(card)
-	t.Run("deregister_exists", func(t *testing.T) {
-		ok := reg.Deregister("a1")
-		if !ok {
-			t.Fatal("should return true for existing agent")
-		}
-	})
-	t.Run("deregister_nonexistent", func(t *testing.T) {
-		ok := reg.Deregister("missing")
-		if ok {
-			t.Fatal("should return false")
-		}
-	})
-	t.Run("lookup_after_deregister", func(t *testing.T) {
-		_, ok := reg.Lookup("a1")
-		if ok {
-			t.Fatal("should not find after deregister")
-		}
-	})
-}
-
-func TestClosing_AgentRegistry_ListAgents(t *testing.T) {
-	reg := NewAgentRegistry()
-	reg.Register(&AgentCard{AgentID: "a1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}})
-	reg.Register(&AgentCard{AgentID: "a2", Endpoint: "https://a2.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s2", Name: "S2"}}})
-	t.Run("two_agents", func(t *testing.T) {
-		ids := reg.ListAgents()
-		if len(ids) != 2 {
-			t.Fatalf("got %d", len(ids))
-		}
-	})
-	t.Run("empty_registry", func(t *testing.T) {
-		empty := NewAgentRegistry()
-		if len(empty.ListAgents()) != 0 {
-			t.Fatal("should be empty")
-		}
-	})
-	t.Run("after_deregister", func(t *testing.T) {
-		reg.Deregister("a1")
-		ids := reg.ListAgents()
-		if len(ids) != 1 {
-			t.Fatalf("got %d", len(ids))
-		}
-	})
-}
-
-func TestClosing_AgentRegistry_FindBySkill(t *testing.T) {
-	reg := NewAgentRegistry()
-	reg.Register(&AgentCard{AgentID: "a1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "search", Name: "Search"}}})
-	reg.Register(&AgentCard{AgentID: "a2", Endpoint: "https://a2.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "translate", Name: "Translate"}}})
-	t.Run("find_search", func(t *testing.T) {
-		cards := reg.FindBySkill("search")
-		if len(cards) != 1 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-	t.Run("find_none", func(t *testing.T) {
-		cards := reg.FindBySkill("nonexistent")
-		if len(cards) != 0 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-	t.Run("find_translate", func(t *testing.T) {
-		cards := reg.FindBySkill("translate")
-		if len(cards) != 1 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-}
-
-func TestClosing_AgentRegistry_FindByFeature(t *testing.T) {
-	reg := NewAgentRegistry()
-	reg.Register(&AgentCard{AgentID: "a1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}, Features: []Feature{FeatureIATPAuth, FeatureEvidenceExport}})
-	reg.Register(&AgentCard{AgentID: "a2", Endpoint: "https://a2.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s2", Name: "S2"}}, Features: []Feature{FeatureIATPAuth}})
-	t.Run("find_iatp", func(t *testing.T) {
-		cards := reg.FindByFeature(FeatureIATPAuth)
-		if len(cards) != 2 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-	t.Run("find_evidence", func(t *testing.T) {
-		cards := reg.FindByFeature(FeatureEvidenceExport)
-		if len(cards) != 1 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-	t.Run("find_none", func(t *testing.T) {
-		cards := reg.FindByFeature(FeatureAgentPayments)
-		if len(cards) != 0 {
-			t.Fatalf("got %d", len(cards))
-		}
-	})
-}
-
 // ---------------------------------------------------------------------------
 // 41-50: AgentRegistry validation, TrustedKey, and misc
 // ---------------------------------------------------------------------------
-
-func TestClosing_AgentRegistry_InvalidCard(t *testing.T) {
-	reg := NewAgentRegistry()
-	t.Run("nil_card", func(t *testing.T) {
-		err := reg.Register(nil)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("empty_id", func(t *testing.T) {
-		err := reg.Register(&AgentCard{Endpoint: "https://x.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s", Name: "S"}}})
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("empty_skills", func(t *testing.T) {
-		err := reg.Register(&AgentCard{AgentID: "a", Endpoint: "https://x.com", SupportedVersions: []SchemaVersion{CurrentVersion}})
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-}
 
 func TestClosing_TrustedKey_Fields(t *testing.T) {
 	key := TrustedKey{KeyID: "k1", AgentID: "a1", Algorithm: "ed25519", PublicKey: "base64key", Active: true}
@@ -890,27 +623,6 @@ func TestClosing_Signature_Fields(t *testing.T) {
 	})
 }
 
-func TestClosing_AgentSkill_Validation(t *testing.T) {
-	t.Run("valid_skill", func(t *testing.T) {
-		card := &AgentCard{AgentID: "a", Endpoint: "https://x.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}}
-		if err := ValidateAgentCard(card); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-	t.Run("empty_skill_id", func(t *testing.T) {
-		card := &AgentCard{AgentID: "a", Endpoint: "https://x.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{Name: "S1"}}}
-		if err := ValidateAgentCard(card); err == nil {
-			t.Fatal("expected error for empty skill ID")
-		}
-	})
-	t.Run("empty_skill_name", func(t *testing.T) {
-		card := &AgentCard{AgentID: "a", Endpoint: "https://x.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1"}}}
-		if err := ValidateAgentCard(card); err == nil {
-			t.Fatal("expected error for empty skill name")
-		}
-	})
-}
-
 func TestClosing_AgentSkill_IOMode(t *testing.T) {
 	skill := AgentSkill{ID: "s1", Name: "Test", InputModes: []string{"text", "file"}, OutputModes: []string{"structured"}}
 	t.Run("input_modes", func(t *testing.T) {
@@ -929,64 +641,6 @@ func TestClosing_AgentSkill_IOMode(t *testing.T) {
 			t.Fatal("nil modes should be ok")
 		}
 	})
-}
-
-func TestClosing_AgentRegistry_UpdateCard(t *testing.T) {
-	reg := NewAgentRegistry()
-	card1 := &AgentCard{AgentID: "a1", Name: "V1", Endpoint: "https://a1.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1"}}}
-	reg.Register(card1)
-	card2 := &AgentCard{AgentID: "a1", Name: "V2", Endpoint: "https://a1-new.com", SupportedVersions: []SchemaVersion{CurrentVersion}, Skills: []AgentSkill{{ID: "s1", Name: "S1 Updated"}}}
-	reg.Register(card2)
-	t.Run("updated", func(t *testing.T) {
-		found, _ := reg.Lookup("a1")
-		if found.Name != "V2" {
-			t.Fatalf("got %q", found.Name)
-		}
-	})
-	t.Run("count_unchanged", func(t *testing.T) {
-		if len(reg.ListAgents()) != 1 {
-			t.Fatalf("got %d", len(reg.ListAgents()))
-		}
-	})
-	t.Run("new_hash", func(t *testing.T) {
-		found, _ := reg.Lookup("a1")
-		if found.ContentHash == "" {
-			t.Fatal("hash should be set")
-		}
-	})
-}
-
-func TestClosing_AgentRegistry_UpdateCardRefreshesIndexes(t *testing.T) {
-	reg := NewAgentRegistry()
-	reg.Register(&AgentCard{
-		AgentID:           "a1",
-		Name:              "V1",
-		Endpoint:          "https://a1.com",
-		SupportedVersions: []SchemaVersion{CurrentVersion},
-		Skills:            []AgentSkill{{ID: "s1", Name: "S1"}},
-		Features:          []Feature{FeatureIATPAuth},
-	})
-	reg.Register(&AgentCard{
-		AgentID:           "a1",
-		Name:              "V2",
-		Endpoint:          "https://a1.com",
-		SupportedVersions: []SchemaVersion{CurrentVersion},
-		Skills:            []AgentSkill{{ID: "s2", Name: "S2"}},
-		Features:          []Feature{FeatureEvidenceExport},
-	})
-
-	if cards := reg.FindBySkill("s1"); len(cards) != 0 {
-		t.Fatalf("old skill index should be empty, got %d", len(cards))
-	}
-	if cards := reg.FindBySkill("s2"); len(cards) != 1 || cards[0].AgentID != "a1" {
-		t.Fatalf("new skill index mismatch: %+v", cards)
-	}
-	if cards := reg.FindByFeature(FeatureIATPAuth); len(cards) != 0 {
-		t.Fatalf("old feature index should be empty, got %d", len(cards))
-	}
-	if cards := reg.FindByFeature(FeatureEvidenceExport); len(cards) != 1 || cards[0].AgentID != "a1" {
-		t.Fatalf("new feature index mismatch: %+v", cards)
-	}
 }
 
 func TestClosing_Envelope_Expiry(t *testing.T) {

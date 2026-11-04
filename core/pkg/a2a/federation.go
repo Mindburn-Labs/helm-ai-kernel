@@ -15,10 +15,6 @@
 package a2a
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -61,24 +57,6 @@ const (
 	DenyFederationCapsuleExpired DenyReason = "FEDERATION_CAPSULE_EXPIRED"
 	DenyFederationTrustTooLow    DenyReason = "FEDERATION_TRUST_TOO_LOW"
 )
-
-// ValidateFederationContext checks a FederationContext for structural validity.
-func ValidateFederationContext(fc *FederationContext) error {
-	if fc == nil {
-		return nil // absent = same-org, valid
-	}
-	if fc.OriginOrg == "" {
-		return errors.New("federation: origin_org is required")
-	}
-	if fc.TrustLevel == "" {
-		return errors.New("federation: trust_level is required")
-	}
-	validLevels := map[string]bool{"full": true, "limited": true, "verify_only": true}
-	if !validLevels[fc.TrustLevel] {
-		return fmt.Errorf("federation: invalid trust_level %q; must be full, limited, or verify_only", fc.TrustLevel)
-	}
-	return nil
-}
 
 // EvaluateFederationPolicy checks whether a FederationContext is permitted
 // by the given FederationPolicy. Returns a NegotiationResult with deny
@@ -152,73 +130,4 @@ func EvaluateFederationPolicy(fc *FederationContext, policy *FederationPolicy) *
 	}
 
 	return &NegotiationResult{Accepted: true, ReceiptID: "federation_allow", Timestamp: now}
-}
-
-// ValidateProofCapsule checks structural integrity and expiry of a proof capsule.
-func ValidateProofCapsule(capsule *ProofCapsule) error {
-	if capsule == nil {
-		return errors.New("federation: nil proof capsule")
-	}
-	if capsule.CapsuleID == "" {
-		return errors.New("federation: capsule_id is required")
-	}
-	if capsule.OriginOrg == "" {
-		return errors.New("federation: origin_org is required in capsule")
-	}
-	if capsule.MerkleRoot == "" {
-		return errors.New("federation: merkle_root is required in capsule")
-	}
-	if len(capsule.ProofNodes) == 0 {
-		return errors.New("federation: at least one proof_node is required")
-	}
-	if time.Now().After(capsule.ExpiresAt) {
-		return errors.New("federation: proof capsule has expired")
-	}
-
-	// Verify content hash.
-	computed := ComputeCapsuleHash(capsule)
-	if capsule.ContentHash != "" && capsule.ContentHash != computed {
-		return fmt.Errorf("federation: capsule content hash mismatch: expected %s, got %s", capsule.ContentHash, computed)
-	}
-
-	return nil
-}
-
-// ComputeCapsuleHash creates a deterministic SHA-256 hash of capsule content.
-func ComputeCapsuleHash(capsule *ProofCapsule) string {
-	hashable := struct {
-		CapsuleID     string   `json:"capsule_id"`
-		OriginOrg     string   `json:"origin_org"`
-		MerkleRoot    string   `json:"merkle_root"`
-		ProofNodes    []string `json:"proof_nodes"`
-		NodeCount     int      `json:"node_count"`
-		PolicyVersion string   `json:"policy_version"`
-	}{
-		CapsuleID:     capsule.CapsuleID,
-		OriginOrg:     capsule.OriginOrg,
-		MerkleRoot:    capsule.MerkleRoot,
-		ProofNodes:    capsule.ProofNodes,
-		NodeCount:     capsule.NodeCount,
-		PolicyVersion: capsule.PolicyVersion,
-	}
-	data, _ := json.Marshal(hashable)
-	h := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(h[:])
-}
-
-// ExportFederationProof packages a subset of the local proof graph into a portable capsule.
-func ExportFederationProof(orgID string, merkleRoot string, proofNodes []string, nodeCount int, policyVersion string, ttl time.Duration) *ProofCapsule {
-	now := time.Now()
-	capsule := &ProofCapsule{
-		CapsuleID:     "capsule:" + orgID + ":" + fmt.Sprintf("%d", now.UnixMilli()),
-		OriginOrg:     orgID,
-		MerkleRoot:    merkleRoot,
-		ProofNodes:    proofNodes,
-		NodeCount:     nodeCount,
-		PolicyVersion: policyVersion,
-		CreatedAt:     now,
-		ExpiresAt:     now.Add(ttl),
-	}
-	capsule.ContentHash = ComputeCapsuleHash(capsule)
-	return capsule
 }

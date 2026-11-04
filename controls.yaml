@@ -1228,36 +1228,29 @@ controls:
   - id: INV-006
     title: "An unclassified effect is irreversible until proven otherwise"
     owner: Mindburn Labs core team (kernel)
-    claim: >-
-      An effect type the reversibility table has never seen is treated as
-      irreversible.
-    status: observed-only
+    claim: An unclassified effect is irreversible until proven otherwise.
+    status: unmanaged
     reason: >-
-      The reversibility classifier is unreachable from core/cmd/helm-ai-kernel:
-      ReversibilityClassifier.Classify and DefaultForType are in
-      scripts/ci/deadcode-allowlist.txt. No shipped path classifies an effect,
-      so the default governs nothing at runtime.
-    entry_points:
-      - "core/pkg/effects.ReversibilityClassifier.Classify"
-      - "core/pkg/effects.ReversibilityClassifier.DefaultForType"
+      Retired (helm-tracker#266): the reversibility classifier was deleted
+      without ever having a production caller. Its rule survives as INV-005.
+    retired: true
+    entry_points: []
     config: []
-    protected_operations:
-      - "Classifying an effect's reversibility before its approval requirement is set."
-    bypass_assumptions:
-      - "No shipped caller exists."
+    protected_operations: []
+    bypass_assumptions: []
     tests:
       allowed: []
-      forbidden:
-        - "core/pkg/effects.TestUnknownEffectTypeDefaultsToIrreversible"
+      forbidden: []
       removal: []
       bypass: []
     section: fail-closed
     body: |
-      An effect type the reversibility table has never seen is treated as
-      irreversible, so it inherits the strictest approval requirement rather than the
-      laxest. The safe default for an unknown is the expensive one.
+      An effect type the reversibility table has never seen was treated as
+      irreversible, so it inherited the strictest approval requirement rather than the
+      laxest. The classifier that held this default had no shipped caller and was
+      deleted; the fail-closed default for an unknown action is now carried by INV-005.
     verify:
-      - "`core/pkg/effects/reversibility.go` · test `TestUnknownEffectTypeDefaultsToIrreversible`"
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
 
   - id: INV-007
     title: "A verdict the gateway cannot verify is not a verdict"
@@ -2366,12 +2359,11 @@ controls:
       sent, so a duplicate never creates a second dispatch (binding rule R6).
     status: observed-only
     reason: >-
-      Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and
-      EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt,
-      as is the generic api.IdempotencyMiddleware. The Postgres tests prove the
-      library only.
-    entry_points:
-      - "core/pkg/boundary/approvalceremony.EffectReservationAdmitter.Admit"
+      Retired (helm-tracker#266): the effect reservation admitter and the generic
+      api.IdempotencyMiddleware had no shipped caller and were deleted, with the
+      Postgres tests that proved only the library. No code in this tree holds the
+      rule.
+    entry_points: []
     config: []
     protected_operations:
       - "Reserving an effect for an admitted dispatch."
@@ -2379,8 +2371,7 @@ controls:
       - "No shipped caller exists."
     tests:
       allowed: []
-      forbidden:
-        - "core/pkg/boundary/approvalceremony.TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle"
+      forbidden: []
       removal: []
       bypass: []
 
@@ -3060,10 +3051,9 @@ controls:
       fence.
     status: observed-only
     reason: >-
-      EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped
-      path closes an effect.
-    entry_points:
-      - "core/pkg/boundary/approvalceremony.EffectCloser.Close"
+      Retired (helm-tracker#266): EffectCloser and its signed close records had
+      no shipped caller and were deleted. No code in this tree holds the rule.
+    entry_points: []
     config: []
     protected_operations:
       - "Closing an admitted effect."
@@ -3133,18 +3123,15 @@ controls:
     title: "Unwired adapters"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      Browser-split interception, Sentinel webhooks, Vaultak state reversibility
-      and AIP delegation verification govern their actions.
+      Browser-split interception governs the actions it intercepts.
     status: observed-only
     reason: >-
-      BrowserSplitAdapter, SentinelConnector, VaultakStateBridge and AIPVerifier
-      are libraries that no shipped binary mounts or calls; their methods are in
-      scripts/ci/deadcode-allowlist.txt.
+      BrowserSplitAdapter is a library that no shipped binary mounts or calls;
+      its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel
+      connector, Vaultak state bridge and AIP verifier were deleted
+      (helm-tracker#266).
     entry_points:
       - "core/pkg/runtimeadapters.BrowserSplitAdapter.Intercept"
-      - "core/pkg/mcp.SentinelConnector.ServeHTTP"
-      - "core/pkg/sandbox.VaultakStateBridge.RollbackTransaction"
-      - "core/pkg/mcp.AIPVerifier.VerifyAuthority"
     config: []
     protected_operations:
       - "The actions these adapters would govern."

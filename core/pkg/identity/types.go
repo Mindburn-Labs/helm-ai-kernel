@@ -75,6 +75,3 @@ type AgentIdentity struct {
 	DelegatorID string // User who delegated execution
 	Scopes      []string
 }
-
-func (a *AgentIdentity) ID() string          { return a.AgentID }
-func (a *AgentIdentity) Type() PrincipalType { return PrincipalAgent }

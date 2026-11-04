@@ -2,7 +2,6 @@ package approvalceremony
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -182,16 +181,4 @@ type EffectTransitionMeta struct {
 	ProofSessionRef       string
 	IntentRef             string
 	EffectRef             string
-}
-
-func validateEffectTransitionMeta(meta EffectTransitionMeta) error {
-	for field, value := range map[string]string{
-		"reason_code": meta.ReasonCode, "connector_execution_ref": meta.ConnectorExecutionRef,
-		"proof_session_ref": meta.ProofSessionRef, "intent_ref": meta.IntentRef, "effect_ref": meta.EffectRef,
-	} {
-		if value != "" && (!validToken(value) || len(value) > 512) {
-			return fmt.Errorf("%w: %s is invalid", ErrEffectReservationConflict, field)
-		}
-	}
-	return nil
 }

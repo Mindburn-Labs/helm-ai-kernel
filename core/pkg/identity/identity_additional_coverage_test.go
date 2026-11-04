@@ -1,90 +1,11 @@
 package identity
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 )
 
 // ── FileStore Persistence ───────────────────────────────────
-
-func TestExtFileStore_StoreAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	fs, err := NewFileStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	s := validSession(now)
-	_ = fs.Store(s)
-	loaded, err := fs.Load("s-valid")
-	if err != nil || loaded == nil || loaded.SessionID != "s-valid" {
-		t.Fatalf("FileStore round-trip failed: err=%v loaded=%v", err, loaded)
-	}
-}
-
-func TestExtFileStore_LoadNonexistentReturnsNil(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	loaded, err := fs.Load("ghost")
-	if err != nil || loaded != nil {
-		t.Fatalf("expected (nil, nil), got (%v, %v)", loaded, err)
-	}
-}
-
-func TestExtFileStore_RevokeBlocksLoad(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	now := time.Now()
-	s := validSession(now)
-	_ = fs.Store(s)
-	_ = fs.Revoke("s-valid")
-	_, err := fs.Load("s-valid")
-	if err == nil {
-		t.Fatal("loading revoked session should error")
-	}
-}
-
-func TestExtFileStore_NonceTracking(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	if fs.IsNonceUsed("n1") {
-		t.Fatal("fresh nonce should not be used")
-	}
-	fs.MarkNonceUsed("n1")
-	if !fs.IsNonceUsed("n1") {
-		t.Fatal("nonce should be marked used")
-	}
-}
-
-func TestExtFileStore_ListSessions(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	now := time.Now()
-	for i := 0; i < 3; i++ {
-		s := NewDelegationSession(fmt.Sprintf("ls-%d", i), "d", "g", fmt.Sprintf("n%d", i), "p", "t", 0, now.Add(time.Hour), false, staticClock(now))
-		_ = fs.Store(s)
-	}
-	ids, err := fs.ListSessions()
-	if err != nil || len(ids) != 3 {
-		t.Fatalf("expected 3 sessions, got %d (err=%v)", len(ids), err)
-	}
-}
-
-func TestExtFileStore_DirectoryCreatedIfMissing(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "sub", "nested")
-	fs, err := NewFileStore(dir)
-	if err != nil || fs == nil {
-		t.Fatalf("NewFileStore should create nested dirs: %v", err)
-	}
-	info, _ := os.Stat(dir)
-	if info == nil || !info.IsDir() {
-		t.Fatal("directory should exist")
-	}
-}
 
 // ── Delegation with MFA ─────────────────────────────────────
 
@@ -146,76 +67,8 @@ func TestAgentIdentity_DelegatorIDStored(t *testing.T) {
 	}
 }
 
-func TestAgentIdentity_ImplementsPrincipal(t *testing.T) {
-	var p Principal = &AgentIdentity{AgentID: "test"}
-	if p.ID() != "test" || p.Type() != PrincipalAgent {
-		t.Fatal("AgentIdentity should satisfy Principal interface")
-	}
-}
-
 // ── Device Identity ─────────────────────────────────────────
-
-func TestDeviceIdentity_NewSetsDefaults(t *testing.T) {
-	d := NewDeviceIdentity("d1", "t1", "Robot Arm", DeviceClassRobot, "owner1", []string{"move"})
-	if d.TrustLevel != DeviceTrustUnverified {
-		t.Errorf("expected UNVERIFIED, got %s", d.TrustLevel)
-	}
-	if d.ContentHash == "" {
-		t.Error("content hash should be computed")
-	}
-}
-
-func TestDeviceIdentity_AttestRaisesLevel(t *testing.T) {
-	d := NewDeviceIdentity("d1", "t1", "Sensor", DeviceClassSensor, "o1", nil)
-	d.Attest("sha256:firmware")
-	if d.TrustLevel != DeviceTrustAttested {
-		t.Errorf("expected ATTESTED, got %s", d.TrustLevel)
-	}
-}
-
-func TestDeviceIdentity_ValidateMissingID(t *testing.T) {
-	d := &DeviceIdentity{TenantID: "t", Class: DeviceClassSensor, OwnerID: "o"}
-	if d.Validate() == nil {
-		t.Error("missing ID should fail validation")
-	}
-}
-
-func TestDeviceIdentity_ValidateSuccess(t *testing.T) {
-	d := NewDeviceIdentity("d1", "t1", "G", DeviceClassGateway, "o1", nil)
-	if err := d.Validate(); err != nil {
-		t.Fatalf("valid device should pass: %v", err)
-	}
-}
 
 // ── Concurrent Store Access ─────────────────────────────────
 
-func TestExtFileStore_ConcurrentStoreAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	fs, _ := NewFileStore(dir)
-	now := time.Now()
-	var wg sync.WaitGroup
-	for i := 0; i < 30; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			s := NewDelegationSession(fmt.Sprintf("c-%d", idx), "d", "g", fmt.Sprintf("n%d", idx), "p", "t", 0, now.Add(time.Hour), false, staticClock(now))
-			_ = fs.Store(s)
-			_, _ = fs.Load(fmt.Sprintf("c-%d", idx))
-		}(i)
-	}
-	wg.Wait()
-}
-
 // ── InMemoryKeySet ──────────────────────────────────────────
-
-func TestInMemoryKeySet_RotateChangesKID(t *testing.T) {
-	ks, err := NewInMemoryKeySet()
-	if err != nil {
-		t.Fatal(err)
-	}
-	kid1 := ks.currentKID
-	_ = ks.Rotate()
-	if ks.currentKID == kid1 {
-		t.Error("Rotate should change currentKID")
-	}
-}

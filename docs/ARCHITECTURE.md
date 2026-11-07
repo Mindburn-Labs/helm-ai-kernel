@@ -5,6 +5,8 @@ last_reviewed: 2026-05-05
 
 # Architecture
 
+<!-- quantum_posture: this page describes classical Ed25519 and SHA-256 proof surfaces and adds no post-quantum cryptographic control. -->
+
 ## Audience
 
 Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, API, or integration docs.
@@ -102,7 +104,7 @@ Every retained proof surface is built around durable, verifiable records:
 - offline verification
 - tamper-evident boundary checkpoints and optional DSSE, JWS, in-toto, SLSA, and Sigstore envelope wrappers over HELM-native roots
 
-The export and verify paths are implemented in `core/pkg/evidence*`, `core/pkg/proofgraph/`, `core/pkg/replay/`, and supporting crypto packages.
+The export and verify paths are implemented in `core/pkg/evidence*`, `core/pkg/proofgraph/`, `core/pkg/tape/` (behind `helm-ai-kernel replay`), and supporting crypto packages.
 
 ## 4. Contracts and Schemas
 

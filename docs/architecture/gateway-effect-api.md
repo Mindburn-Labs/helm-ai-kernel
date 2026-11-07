@@ -1406,11 +1406,13 @@ Three pieces let a reader check the gateway's decision receipts without a
 gateway or a database in the trust path (helm-tracker#276, CTL-060).
 
 **The key.** `helm-gateway serve` publishes the public half of its receipt key
-at `GET /api/v1/receipt-keyring` on its API listener, in the Kernel's keyring
-document (`core/pkg/receiptkeyring`, CTL-050):
+at `GET /api/v1/receipt-keyring` on its API listener. The document has the
+Kernel's keyring shape (`core/pkg/receiptkeyring`, CTL-050) under the
+gateway's own label, `gateway-receipt-keyring.v1`, so it cannot be mistaken
+for the Kernel's `kernel-evaluate-receipt-keyring.v1`:
 
 ```json
-{"keyring_version":"kernel-evaluate-receipt-keyring.v1","keys":[{"key_id":"<key_id>","profile":"classical","ed25519_public_key_hex":"<public key hex>"}]}
+{"keyring_version":"gateway-receipt-keyring.v1","keys":[{"key_id":"<key_id>","profile":"classical","ed25519_public_key_hex":"<public key hex>"}]}
 ```
 
 The route is public and read-only like the Kernel's: no token, `GET` only,
@@ -1446,7 +1448,7 @@ effects.
   `not_found`. Page with consecutive ranges until `head_seq`.
 
 **The check.** Save the bundle unchanged and verify it against the published
-key:
+key, requiring a binding for every gateway receipt:
 
 ```bash
 curl -s https://<gateway>/api/v1/receipt-keyring \
@@ -1454,23 +1456,37 @@ curl -s https://<gateway>/api/v1/receipt-keyring \
 curl -s https://<gateway>/helm.gateway.v1.EffectGatewayService/ExportReceiptChain \
   -H "Authorization: Bearer $HELM_GATEWAY_READ_TOKEN" -H 'Content-Type: application/json' \
   -d '{"workspaceId":"<workspace>","fromSeq":"1","toSeq":"256"}' | jq -r .bundle > export.json
-receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --json
+receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --require-bindings --json
 ```
 
-Exit 0 means every signature verifies under that key, every `prev_hash`
-matches its predecessor, and the `binding` check passed: each binding's
-SHA-256 is its receipt's `output_hash`, the binding is the closed v1 document
-in its own JCS form, and its chain id (length-framed from its tenant and
-workspace), sequence, attempt and version, state, verdict, reason code, policy
-hash and argument digest equal the signed receipt's `session_id`,
-`lamport_clock`, `decision_id`, `effect_id`, `status`, `verdict`,
-`reason_code`, `policy_hash` and `args_hash`. A tampered binding, a binding for
-a receipt the bundle does not hold, or a gap in the range fails it (exit 1).
+Exit 0 means every signature verifies under that key and every `prev_hash`
+matches its predecessor. Bindings are checked only when supplied. For each
+receipt whose binding the bundle carries, the `binding` check requires:
+
+- a receipt.v5 signature;
+- the binding's SHA-256 equal to the receipt's `output_hash`;
+- the binding to be the closed document its `binding_version` names, in its
+  own JCS form;
+- its chain id (length-framed from its tenant and workspace), sequence,
+  attempt and version, state, verdict, reason code, policy hash, argument
+  digest and `decided_at` to equal the receipt's `session_id`,
+  `lamport_clock`, `decision_id`, `effect_id`, `status`, `verdict`,
+  `reason_code`, `policy_hash`, `args_hash` and `timestamp`. The timestamp
+  is outside the receipt.v5 preimage; this comparison is what binds it.
+
+A tampered binding, a binding for a receipt the bundle does not hold, a
+binding version the verifier does not know, or a gap in the range fails
+verification (exit 1). A receipt with no binding is not checked, and without
+`--require-bindings` exit 0 does not say otherwise: the JSON verdict counts
+`gateway_receipts` (receipts whose `session_id` names a gateway chain) and
+`bindings_checked`. With `--require-bindings`, a gateway receipt without a
+binding fails verification, so exit 0 covers every gateway receipt's own facts.
 For one receipt from `GetAttemptReceipts`, save `receipt` and `binding` to two
 files and run
-`receipt_verify --receipt receipt.json --binding <receipt_id>=binding.json --key "<key_id>=<public key hex>"`.
-Without a binding the check reports `not_applicable`, never a pass. The WASM
-verifier (`core/cmd/receipt_verify_wasm`) reads the same bundle.
+`receipt_verify --receipt receipt.json --binding <receipt_id>=binding.json --key "<key_id>=<public key hex>" --require-bindings`.
+The WASM verifier (`core/cmd/receipt_verify_wasm`) reads the same bundle and
+reports the same counts; it has no `--require-bindings` option, so a caller
+compares `bindings_checked` with `gateway_receipts`.
 
 A passing export shows its range is contiguous and signed. It does not show
 that nothing follows `to_seq`: `head_seq` is what the ledger held when it was

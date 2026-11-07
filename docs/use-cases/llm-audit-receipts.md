@@ -135,7 +135,8 @@ source** ([gateway effect API](../architecture/gateway-effect-api.md),
 "Reading and verifying receipts offline").
 
 Read the gateway's public key from `GET /api/v1/receipt-keyring` on its API
-listener (the same document the kernel publishes), export a range of a
+listener (the kernel's keyring shape under the gateway's own label,
+`gateway-receipt-keyring.v1`), export a range of a
 workspace's chain with the `ExportReceiptChain` RPC (a `helm.gateway.read`
 token of that workspace; at most 256 receipts per call, read up to the
 chain's head, which the response names as `head_seq`), and verify the
@@ -147,19 +148,25 @@ curl -s https://<gateway>/api/v1/receipt-keyring \
 curl -s https://<gateway>/helm.gateway.v1.EffectGatewayService/ExportReceiptChain \
   -H "Authorization: Bearer $HELM_GATEWAY_READ_TOKEN" -H 'Content-Type: application/json' \
   -d '{"workspaceId":"<workspace>","fromSeq":"1","toSeq":"256"}' | jq -r .bundle > export.json
-receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --json
+receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --require-bindings --json
 ```
 
 The bundle carries each binding as `gateway_bindings` (receipt id to the base64
 of the exact bytes). Besides signatures and chain linkage, `receipt_verify`
-then runs a `binding` check: each binding's SHA-256 must be its receipt's
-`output_hash`, the binding must be the closed v1 document in canonical form,
-and its chain, sequence, attempt, version, state, verdict, reason code, policy
-hash and argument digest must equal the signed receipt's. A tampered binding,
-a binding for a receipt that is not in the file, or a gap in the range fails
-verification. For one receipt read with `GetAttemptReceipts`, pass its binding
-with `--binding <receipt_id>=binding.json`. With no binding the check is
-`not_applicable`, never a pass.
+runs a `binding` check on every receipt whose binding is supplied. Each
+binding's SHA-256 must be its receipt's `output_hash`, and the receipt must be
+signed under receipt.v5. The binding must be the closed document its version
+names, in canonical form. Its chain, sequence, attempt, version, state,
+verdict, reason code, policy hash, argument digest and time must equal the
+signed receipt's fields and its timestamp. A tampered binding, a binding for a
+receipt that is not in the file, or a gap in the range fails verification.
+
+Bindings are checked only when supplied, and exit 0 alone does not say a
+gateway receipt's own facts were checked. `--require-bindings` makes it so: a
+gateway receipt without a binding then fails verification. The JSON verdict
+reports `gateway_receipts` and `bindings_checked`. For one receipt read with
+`GetAttemptReceipts`, pass its binding with `--binding
+<receipt_id>=binding.json`.
 
 The binding states what the gateway recorded; the verifier cannot see the
 gateway's ledger. A verified range is contiguous, but it does not show that

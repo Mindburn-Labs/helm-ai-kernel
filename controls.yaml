@@ -1086,11 +1086,42 @@ removal_proofs:
     tests:
       - "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast"
   - control: CTL-059
-    file: core/pkg/gateway/admission/receipts.go
-    find: "\tdoc := receiptBinding{Outcome: o.Outcome, OutcomeBasis: o.OutcomeBasis,\n"
-    replace: "\tdoc := receiptBinding{OutcomeBasis: o.OutcomeBasis,\n"
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\t\treturn false, recordOutcome(ctx, tx, s.cfg.ReceiptSigner, outcomeWrite{tenantID: c.tenantID, attemptID: c.attemptID,\n\t\t\tfrom: \"DISPATCHING\", to: \"OBSERVED\", outcome: adapters.OutcomeFailed, reason: result.Reason, observationID: observationID,\n\t\t\tsettledBy: settledByNotSent, reservation: \"released\"})\n"
+    replace: "\t\t_, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts SET state = 'OBSERVED', outcome = 'FAILED', outcome_basis = 'OBSERVED', reason_code = $3, version = version + 1 WHERE tenant_id = $1 AND attempt_id = $2`, c.tenantID, c.attemptID, string(result.Reason))\n\t\treturn false, err\n"
+    tests:
+      - "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/modelcall.go
+    find: "\t\tif err := recordOutcome(ctx, tx, s.cfg.ReceiptSigner, w); err != nil {\n"
+    replace: "\t\tif _, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts SET state = $3, version = version + 1 WHERE tenant_id = $1 AND attempt_id = $2`, w.tenantID, w.attemptID, w.to); err != nil {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/outcomes.go
+    find: "\t\tOutcome: o.Outcome, OutcomeBasis: o.OutcomeBasis, SettledBy: o.SettledBy,\n"
+    replace: "\t\tOutcomeBasis: o.OutcomeBasis, SettledBy: o.SettledBy,\n"
     tests:
       - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/outcomes.go
+    find: "\tif m := o.ModelCall; m != nil {\n"
+    replace: "\tif m := o.ModelCall; false && m != nil {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+      - "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/outcomes.go
+    find: "\tcase o.Observation.Outcome != o.Outcome:\n"
+    replace: "\tcase false && o.Observation.Outcome != o.Outcome:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/schema/016_outcome_receipts.sql
+    find: "    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', current_schema());\n"
+    replace: "\n"
+    tests:
+      - "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite"
   - control: CTL-059
     file: core/pkg/gateway/admission/schema/016_outcome_receipts.sql
     find: "DROP TRIGGER IF EXISTS authority_outcome_receipt_update ON authority_effect_attempts;\nCREATE CONSTRAINT TRIGGER authority_outcome_receipt_update\n    AFTER UPDATE OF state, version ON authority_effect_attempts\n    DEFERRABLE INITIALLY DEFERRED\n    FOR EACH ROW WHEN (NEW.state IN ('OBSERVED', 'RECONCILED', 'SETTLED')\n        AND (OLD.state IS DISTINCT FROM NEW.state OR OLD.version IS DISTINCT FROM NEW.version))\n    EXECUTE FUNCTION authority_require_outcome_receipt();\n"
@@ -4091,10 +4122,20 @@ controls:
       a model call's SETTLED; tested for each. An outcome receipt's status is
       the outcome state and its verdict empty; its policy_hash is that of the
       authority versions the permit was issued under (the decision
-      receipt's), and its binding adds the outcome, its basis, the stored
-      observation it rests on (source, trust class, outcome, evidence digest,
-      typed result kind and content address, observation time), the permit
-      and the settlement time. Receipts form one
+      receipt's), and its output_hash is the SHA-256 of its own closed
+      document, helm.gateway.outcome-binding.v1, so decision receipts keep
+      receipt-binding.v1 byte for byte. That document binds the attempt core
+      (tenant, workspace, attempt, version, from and to state, effect type,
+      request, target and argument digests, permit, authority versions), the
+      outcome and its basis, the stored observation it rests on, what
+      established it (read-back, NOT_SENT or model call), whether a read-back
+      found the object absent, what it did to the reservation, every
+      exposure as the ledger holds it after the write, and for a model call
+      its money row (held, estimated, confirmed and billable micros) and the
+      SHA-256 of its stored usage, so a late usage report re-settles with a
+      receipt of the new amounts. The builder refuses a (from, to) pair no
+      outcome write makes, an observation of another outcome, and settlement
+      facts that do not fit how the outcome was established. Receipts form one
       hash chain per (tenant, workspace): the chain row is the last row lock
       the transaction takes on a pre-existing row, so a workspace's decisions
       and outcomes serialize on it until commit; lamport_clock is the
@@ -4107,7 +4148,11 @@ controls:
       ADMITTED, DENIED or ESCALATED, or enters (or is rewritten at a new
       version in) OBSERVED, RECONCILED or SETTLED, without the receipt of that
       version and state, whoever writes it, including an older gateway still
-      serving during an upgrade.
+      serving during an upgrade. Migration 16 locks authority_effect_attempts
+      before it alters authority_receipts, and pins both fence functions'
+      search_path to the gateway schema, so a look-alike authority_receipts
+      on a writer's search_path or in its temporary schema satisfies neither
+      fence.
       admission refuses a nil signer and one whose receipts are not classical
       Ed25519 that verify offline under its published key; serve refuses to
       start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte seed,
@@ -4146,6 +4191,10 @@ controls:
       - "With gateway.receipts.autoSeed the key is generated by the chart and kept through Helm lookup. A pipeline that renders with helm template, or a deleted Secret, starts a new key (and, with the default derived key id, a new key id); receipts signed before verify only under the old public key, which must be recorded (helm-gateway receipt-key) to stay verifiable."
       - "The receipt.v5 timestamp is outside the signed preimage; the next receipt's prev_hash covers it, and decided_at (a decision) or settled_at (an outcome) is signed through the binding. Order is the signed sequence."
       - "The ledger fence is a database trigger; the database owner (or a superuser in replica mode) can drop or bypass it."
+      - "Outcome receipts sign helm.gateway.outcome-binding.v1, a second closed document beside receipt-binding.v1. receiptverify checks their signature, chain links and output_hash like any receipt.v5; reading what an outcome binding says needs its schema, which the verifier lane adds."
+      - "An outcome binding's settlement facts are the exposure and model-call rows its own transaction read just before signing. The runtime role holds UPDATE on authority_exposures and authority_model_calls, so a later in-place rewrite is not fenced; the signed receipt keeps what was settled, and a reader compares the rows with it."
+      - "Migration 16 takes authority_effect_attempts before authority_receipts, so an older gateway's decision cannot deadlock it. A transaction that reads authority_receipts and then writes an attempt (Propose's work-effect replay check) can still form a cycle with it; PostgreSQL's deadlock detector aborts one side, and a failed migration records nothing and runs again."
+      - "The fences' search_path is pinned to the schema migration 16 runs in, which is the schema every gateway migration creates its tables in; a deployment that moved the tables to another schema afterwards would have to pin the functions again."
     tests:
       allowed:
         - "core/pkg/gateway/admission.TestPostgresDecisionsCommitWithSignedChainedReceipts"
@@ -4159,6 +4208,8 @@ controls:
         - "core/pkg/gateway/mcpserver.TestPostgresMCPToolOutcomesAreReceipted"
         - "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast"
         - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+        - "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
+        - "core/pkg/gateway/admission.TestDecisionBindingIsUnchangedByOutcomeReceipts"
       forbidden:
         - "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner"
         - "core/pkg/gateway/admission.TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction"
@@ -4171,6 +4222,7 @@ controls:
         - "core/pkg/gateway/admission.TestAnOutcomeWhoseReceiptCannotBeSignedFailsTheTransaction"
         - "core/pkg/gateway/admission.TestPostgresAnOutcomeWithoutItsReceiptFailsAtCommit"
         - "core/pkg/gateway/admission.TestPostgresOutcomeReceiptsVerifyOfflineAsAChain"
+        - "core/pkg/gateway/admission.TestPostgresFencesIgnoreALookAlikeReceiptTable"
       removal:
         - "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast"
         - "core/pkg/gateway/admission.TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction"
@@ -4182,8 +4234,10 @@ controls:
         - "core/pkg/gateway/admission.TestAnOutcomeWhoseReceiptCannotBeSignedFailsTheTransaction"
         - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
         - "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite"
+        - "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
       bypass:
         - "core/pkg/gateway/admission.TestPostgresReceiptChainStaysContiguousUnderConcurrentProposals"
         - "core/pkg/gateway/admission.TestPostgresReceiptSchemaUpgradesFrom14"
         - "core/pkg/gateway/admission.TestPostgresOutcomeReceiptChainStaysContiguousUnderConcurrentSettles"
         - "core/pkg/gateway/admission.TestPostgresOutcomeReceiptSchemaUpgradesFrom15"
+        - "core/pkg/gateway/admission.TestPostgresFencesIgnoreALookAlikeReceiptTable"

@@ -1289,7 +1289,13 @@ attempt, version, state) (`outcome_receipt_missing`, SQLSTATE 23514
 otherwise). During an upgrade, an older gateway's outcome fails at commit. Its
 attempt keeps its state (`DISPATCHING`, `DISPATCHED` or `UNKNOWN`) for the
 reconciliation job its claim enqueued, and a model call keeps its hold. An
-outcome whose receipt cannot be signed rolls back the same way. The fence
+outcome whose receipt cannot be signed rolls back the same way. Migration 16
+locks `authority_effect_attempts` before it alters `authority_receipts`: an
+older gateway's decision writes its attempt row before its receipt, so the
+other order could deadlock against it during the upgrade. It also pins both
+fence functions' `search_path` to the gateway schema (with `pg_temp` last),
+so a look-alike `authority_receipts` on a writer's search path, or a
+temporary table, satisfies neither fence. The fence
 checks that the receipt exists when the state or version changes. It does not
 stop an in-place rewrite of the outcome columns at the same version, which the
 runtime role's `UPDATE` grant allows; the signed receipt keeps what was
@@ -1362,16 +1368,36 @@ An outcome receipt differs from a decision receipt in four fields:
   it equals the admitting decision receipt's;
 - `timestamp` is the database time of the outcome transaction.
 
-Its binding leaves `verdict`, `decided_at` and the approver and step-up
-members empty. It sets `outcome`, `outcome_basis`, the `permit_id` the effect
-was dispatched under and `settled_at`. It also names the stored observation
-the outcome rests on: `observation_id`, `observation_source`,
-`observation_trust_class`, `observation_outcome`, `evidence_digest` (the
-provider evidence; for a model call, the delivered response bytes),
-`result_kind`, `result_ref` (the typed result's content address) and
-`observed_at`. A decision's binding carries these members empty, with
-`observation_id` 0. `args_hash` stays the exact-argument digest, and
-`output_hash` is the SHA-256 of the binding.
+`args_hash` stays the exact-argument digest. `output_hash` is the SHA-256 of
+the outcome's own closed document, `helm.gateway.outcome-binding.v1`
+([schema](../../protocols/json-schemas/gateway/outcome-binding.v1.schema.json)),
+stored as exact RFC 8785 bytes beside the receipt. Decision receipts keep
+`helm.gateway.receipt-binding.v1` unchanged. The outcome document binds:
+
+- the attempt core that ties it to the decision: tenant, workspace, attempt,
+  version, the states it moved from and to, the effect type, the request,
+  target and argument digests, the `permit_id` the effect was dispatched
+  under and its authority versions with their `policy_hash`;
+- the `outcome`, its `outcome_basis` and `reason_code`, and `settled_by`:
+  `readback`, `not_sent` or `model_call`;
+- the stored `observation` the outcome rests on: its id, source, trust class,
+  outcome (always the receipt's), evidence digest (for a model call, the
+  digest of the delivered response bytes), typed result kind and content
+  address, and observation time;
+- the settlement as the ledger holds it after the write: `reservation` (the
+  exposure kind the held reservation moved to: `confirmed`, `released` or
+  `estimated`), `readback_absent` (a read-back found the object absent after
+  the fence), every exposure with its kind and amount, and for a model call
+  its money row (`held_micros`, `estimated_micros`, `confirmed_micros`,
+  `billable_micros` as decimal strings) and `usage_digest`, the SHA-256 of
+  the RFC 8785 form of the usage the row stores. A late usage report that
+  re-settles an estimated call therefore signs the new amounts and usage,
+  not only a new version;
+- `settled_at`.
+
+The builder refuses a (from, to) pair no outcome write makes, an observation
+that records another outcome, and settlement facts that do not fit how the
+outcome was established.
 
 **Chain.** One chain per (tenant, workspace), the read boundary of
 `helm.gateway.read`. `authority_receipt_chains` holds each chain's head;

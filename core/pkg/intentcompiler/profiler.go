@@ -29,7 +29,7 @@ func NewSandboxProfiler() *SandboxProfiler {
 // AssignProfile determines the appropriate backend and profile for a plan step
 // based on its effect type's risk classification.
 func (p *SandboxProfiler) AssignProfile(step *contracts.PlanStep) (backend string, profile string) {
-	if contracts.IsLaunchMissionEffectPreview(step.EffectType) {
+	if contracts.IsReservedPreviewEffect(step.EffectType) {
 		return BackendDocker, ProfilePrivileged
 	}
 	riskClass := contracts.EffectRiskClass(step.EffectType)

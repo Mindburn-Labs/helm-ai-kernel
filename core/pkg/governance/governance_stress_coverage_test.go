@@ -53,8 +53,6 @@ func TestStress_JurisdictionMissingRegion(t *testing.T) {
 	}
 }
 
-// ── Liveness with 50 probes ─────────────────────────────────────────────
-
 func TestStress_Liveness50Probes(t *testing.T) {
 	for i := range 50 {
 		bs := NewBlockingState(fmt.Sprintf("bs-%d", i), BlockingStateApproval, 1*time.Hour)
@@ -98,8 +96,6 @@ func TestStress_LivenessTimeRemaining(t *testing.T) {
 	}
 }
 
-// ── Plan Commit with 20 concurrent submitters ───────────────────────────
-
 func TestStress_PlanCommit20Concurrent(t *testing.T) {
 	pc := NewPlanCommitController()
 	var wg sync.WaitGroup
@@ -142,32 +138,6 @@ func TestStress_PlanCommitNilPlan(t *testing.T) {
 		t.Fatal("nil plan should fail")
 	}
 }
-
-// ── Swarm PDP ───────────────────────────────────────────────────────────
-
-func TestStress_SwarmPDPDefaultConfig(t *testing.T) {
-	cfg := DefaultSwarmPDPConfig()
-	if cfg.MaxParallelPDPs != 16 {
-		t.Fatalf("expected 16, got %d", cfg.MaxParallelPDPs)
-	}
-	if !cfg.StrictMerge {
-		t.Fatal("strict merge should be true by default")
-	}
-}
-
-func TestStress_SwarmPDPMetric(t *testing.T) {
-	m := NewSwarmPDPMetric()
-	for range 10 {
-		m.RecordBatch(5, []int{3}, 1)
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.TotalBatches != 10 {
-		t.Fatalf("expected 10 batches, got %d", m.TotalBatches)
-	}
-}
-
-// ── Risk Envelope with 100 actions ──────────────────────────────────────
 
 func TestStress_RiskEnvelope100Actions(t *testing.T) {
 	ra := NewAggregateRiskAccounting(1*time.Hour, 1000.0)
@@ -216,8 +186,6 @@ func TestStress_RiskEnvelopeCurrentAggregate(t *testing.T) {
 	}
 }
 
-// ── Policy Engine with 50 policies ──────────────────────────────────────
-
 func TestStress_PolicyEngine50Policies(t *testing.T) {
 	pe, err := NewPolicyEngine()
 	if err != nil {
@@ -257,8 +225,6 @@ func TestStress_PolicyEngineInvalidCEL(t *testing.T) {
 	}
 }
 
-// ── Security: delegation revocation ─────────────────────────────────────
-
 func TestStress_DelegationRevocation(t *testing.T) {
 	drl := NewDelegationRevocationList()
 	for i := range 20 {
@@ -292,8 +258,6 @@ func TestStress_DelegationGetEntry(t *testing.T) {
 	}
 }
 
-// ── Compensation state ──────────────────────────────────────────────────
-
 func TestStress_CompensationStateRetry(t *testing.T) {
 	cs := NewCompensationState("tx-1", "op-1", CompensationPolicyRetry)
 	outcome := cs.RecordAttempt(false, "fail")
@@ -320,8 +284,6 @@ func TestStress_CompensationStateSuccess(t *testing.T) {
 	}
 }
 
-// ── Risk level constants ────────────────────────────────────────────────
-
 func TestStress_RiskLevelConstants(t *testing.T) {
 	levels := map[RiskLevel]string{RiskNone: "NONE", RiskLow: "LOW", RiskMedium: "MEDIUM", RiskHigh: "HIGH", RiskCritical: "CRITICAL"}
 	for level, expected := range levels {
@@ -330,8 +292,6 @@ func TestStress_RiskLevelConstants(t *testing.T) {
 		}
 	}
 }
-
-// ── Liveness state types ────────────────────────────────────────────────
 
 func TestStress_BlockingStateTypes(t *testing.T) {
 	types := []BlockingStateType{BlockingStateApproval, BlockingStateObligation, BlockingStateLease, BlockingStateResource}
@@ -391,20 +351,6 @@ func TestStress_CompensationPolicyConstants(t *testing.T) {
 	policies := []CompensationFailurePolicy{CompensationPolicyRetry, CompensationPolicyEscalate, CompensationPolicyManual, CompensationPolicyFallback}
 	if len(policies) != 4 {
 		t.Fatal("expected 4 compensation policies")
-	}
-}
-
-func TestStress_SwarmPDPDomainDecomposition(t *testing.T) {
-	cfg := DefaultSwarmPDPConfig()
-	if !cfg.DomainDecomposition {
-		t.Fatal("domain decomposition should be enabled by default")
-	}
-}
-
-func TestStress_SwarmPDPEnableMetrics(t *testing.T) {
-	cfg := DefaultSwarmPDPConfig()
-	if !cfg.EnableMetrics {
-		t.Fatal("metrics should be enabled by default")
 	}
 }
 

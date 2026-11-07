@@ -278,8 +278,6 @@ visible in the receipt chain.
 | ProofGraph DAG | `core/pkg/proofgraph/` |
 | Cryptographic signing | `core/pkg/crypto/` |
 | Evidence export/verify | `core/pkg/evidence/` |
-| Replay engine (library; not linked into the shipped binary) | `core/pkg/replay/` |
-| Trust registry | `core/pkg/trust/registry/` |
 
 ---
 
@@ -344,7 +342,6 @@ Each layer protects against failures in the other two.
 | [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | Adversary classes and defenses |
 | [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | OWASP MCP alignment |
 | [core/pkg/manifest](../core/pkg/manifest/) | Layer A configuration primitives |
-| [core/pkg/trust/registry](../core/pkg/trust/registry/) | TCB boundary and trust-registry rules |
 | [CONFORMANCE.md](CONFORMANCE.md) | Gate definitions, levels |
 
 _Canonical revision: 2026-05-21 · HELM UCS v1.5_

@@ -105,13 +105,13 @@ func (e *GraphEvaluator) Evaluate(ctx context.Context, req *EvaluationRequest) (
 			continue
 		}
 
-		// Preview registration is never execution authority. Reject reserved
-		// Launch Mission effects before policy evaluation or intent issuance so
-		// direct GraphEvaluator consumers cannot bypass plan validation.
-		if contracts.IsLaunchMissionEffectPreview(step.EffectType) {
+		// Reserved preview identifiers are never execution authority. Reject
+		// them before policy evaluation or intent issuance so direct
+		// GraphEvaluator consumers cannot bypass plan validation.
+		if contracts.IsReservedPreviewEffect(step.EffectType) {
 			verdict.Decision = &contracts.DecisionRecord{
 				Verdict:    string(contracts.VerdictDeny),
-				Reason:     "Launch Mission effect is preview-only and not executable",
+				Reason:     "reserved preview effect is not executable",
 				ReasonCode: "PREVIEW_EFFECT_NOT_EXECUTABLE",
 			}
 			deniedSet[stepID] = true

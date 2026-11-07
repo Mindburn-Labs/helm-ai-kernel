@@ -520,5 +520,5 @@ func (f *multiFlag) Set(value string) error {
 }
 
 func init() {
-	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run the G0 release conformance gate (--profile SMB), or conformance vectors (vectors, negative)", RunFn: runConform})
+	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run the G0 release conformance gate (--profile SMB), check one failure vector (--vector), or list the conformance vectors (vectors, negative)", RunFn: runConform})
 }

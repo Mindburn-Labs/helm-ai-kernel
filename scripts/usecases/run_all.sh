@@ -108,9 +108,8 @@ run_uc "UC-008" "EvidencePack Replay" \
 run_uc "UC-009" "Output Drift" \
     "cd $CORE_DIR && go test ./pkg/manifest -run TestValidateToolOutput_DriftDetected -v"
 
-# UC-010: Trust Rotation Replay
-run_uc "UC-010" "Trust Rotation" \
-    "cd $CORE_DIR && go test ./pkg/trust/registry/... -v"
+# UC-010 (Trust Rotation Replay) is retired: pkg/trust/registry was reached
+# only from orphan packages and was deleted with them (helm-tracker#266).
 
 # UC-011 (Island Mode) was a `go build` and is retired: the island-mode check
 # (config.RegionalProfile.IsAllowed) has no production caller, so no use case

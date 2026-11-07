@@ -141,56 +141,6 @@ func TestDelegationAbuseHarsherThanViolation(t *testing.T) {
 
 // ── Leaderboard Operations ───────────────────────────────────
 
-func TestLeaderboard_EmptyGetTopN(t *testing.T) {
-	lb := NewLeaderboard()
-	top := lb.GetTopN(10)
-	if len(top) != 0 {
-		t.Errorf("empty leaderboard GetTopN should return 0, got %d", len(top))
-	}
-}
-
-func TestLeaderboard_RankOrderByScore(t *testing.T) {
-	scores := map[string]*TrustScore{
-		"org-a": {OverallScore: 0.80, ComputedAt: time.Now()},
-		"org-b": {OverallScore: 0.95, ComputedAt: time.Now()},
-	}
-	lb := NewLeaderboardFromScores(scores, map[string]string{"org-a": "Alpha", "org-b": "Beta"})
-	if lb.Entries[0].OrgID != "org-b" {
-		t.Errorf("expected org-b ranked first (0.95), got %s", lb.Entries[0].OrgID)
-	}
-}
-
-func TestLeaderboard_GetEntryNotFound(t *testing.T) {
-	lb := NewLeaderboard()
-	_, found := lb.GetEntry("nonexistent")
-	if found {
-		t.Error("GetEntry should return false for nonexistent org")
-	}
-}
-
-func TestLeaderboard_BadgeLevelBoundaries(t *testing.T) {
-	cases := []struct {
-		score float64
-		want  BadgeLevel
-	}{
-		{0.96, BadgePlatinum}, {0.86, BadgeGold}, {0.71, BadgeSilver}, {0.51, BadgeBronze}, {0.50, BadgeNone},
-	}
-	for _, tc := range cases {
-		if got := GetBadgeLevel(tc.score); got != tc.want {
-			t.Errorf("GetBadgeLevel(%f) = %s, want %s", tc.score, got, tc.want)
-		}
-	}
-}
-
-func TestLeaderboard_CountAfterUpdate(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-1", "Org1", &TrustScore{OverallScore: 0.5, ComputedAt: time.Now()})
-	lb.Rank()
-	if lb.Count() != 1 {
-		t.Errorf("expected count=1, got %d", lb.Count())
-	}
-}
-
 func TestNormalized_MaxScore(t *testing.T) {
 	b := BehavioralTrustScore{Score: 1000}
 	if b.Normalized() != 1.0 {

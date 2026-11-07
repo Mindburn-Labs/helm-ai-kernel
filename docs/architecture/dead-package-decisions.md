@@ -71,7 +71,7 @@ package directory.
 | `core/pkg/a2a/payments` | 837 | 2026-06-11 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/actiongraph` | 318 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/aibom` | 313 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/api/trust` | 287 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/api/trust` | 287 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/attention` | 463 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/authority` | 56 | 2026-05-12 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/buildguard` | 125 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -99,7 +99,7 @@ package directory.
 | `core/pkg/compliance/templates` | 88 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/compliance/zkprovider/gdpr17` | 628 | 2026-08-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | doc: docs/documentation-coverage.csv — own Go module; row in docs/documentation-coverage.csv |
 | `core/pkg/conformance/agentsafety` | 142 | 2026-06-04 | yes | 1 | KEEP | doc: docs/security/agent-safety-conformance-cases.md; test importer: core/pkg/conformance/scenarios |
-| `core/pkg/conformance/cases` | 402 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/conformance/cases` | 402 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/conformance/negative` | 303 | 2026-07-28 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/conformance/sandbox` | 987 | 2026-06-02 | yes | 4 | KEEP | doc: docs/INTEGRATIONS/claude-managed-agents-self-hosted.md; doc: docs/security/owasp-agentic-top10-coverage.md; doc: protocols/conformance/managed-agents/claude-self-hosted/v1/conformance-pack.json; ref: core/pkg/conformance/agentsafety/registry.go; test importer: core/pkg/connectors/sandbox/claudemanaged; test importer: core/pkg/connectors/sandbox/daytona; test importer: core/pkg/connectors/sandbox/e2b; test importer: core/pkg/connectors/sandbox/opensandbox |
 | `core/pkg/conformance/scenarios` | 16 | 2026-06-04 | yes | 0 | KEEP | doc: docs/security/agent-safety-conformance-cases.md; doc: docs/security/owasp-agentic-top10-coverage.md; ref: core/pkg/conformance/agentsafety/registry.go |
@@ -119,14 +119,14 @@ package directory.
 | `core/pkg/constitution` | 616 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/contracts/schemas` | 61 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/crypto/hsm` | 346 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6c, see docs/retirement/wave-1-inventory.md) | orphaned by the conform retirement (#1002): its only importer was gate G13; no workspace repo imports it |
-| `core/pkg/crypto/keystore` | 477 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/crypto/mtls` | 627 | 2026-06-11 | yes | 1 | KEEP | test importer: core/pkg/crypto |
-| `core/pkg/crypto/sdjwt` | 301 | 2026-04-23 | yes | 2 | KEEP | ref: core/pkg/evidencepack/inclusionproof.go; ref: core/pkg/evidencepack/merkle.go; test importer: core/pkg/crypto; test importer: core/pkg/evidencepack |
+| `core/pkg/crypto/keystore` | 477 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/crypto/mtls` | 627 | 2026-06-11 | yes | 1 | DELETED (helm-tracker#266 slice 3) | test importer: core/pkg/crypto |
+| `core/pkg/crypto/sdjwt` | 301 | 2026-04-23 | yes | 2 | DELETED (helm-tracker#266 slice 3) | ref: core/pkg/evidencepack/inclusionproof.go; ref: core/pkg/evidencepack/merkle.go; test importer: core/pkg/crypto; test importer: core/pkg/evidencepack |
 | `core/pkg/crypto/shredding` | 193 | 2026-04-23 | yes | 1 | KEEP | test importer: core/pkg/crypto |
 | `core/pkg/crypto/tee` | 1906 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6d, see docs/retirement/wave-1-inventory.md) | importer-less since the `tee` CLI was removed in s4c (#997); no workspace repo imports it (Enterprise has its own copy) |
 | `core/pkg/crypto/tee/collateral` | 219 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6d, see docs/retirement/wave-1-inventory.md) | importer-less since `core/cmd/tee-collateral` was removed in s4c (#997) |
-| `core/pkg/crypto/tls` | 98 | 2026-04-23 | yes | 1 | KEEP | test importer: core/pkg/crypto |
-| `core/pkg/crypto/zk` | 257 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/crypto/tls` | 98 | 2026-04-23 | yes | 1 | DELETED (helm-tracker#266 slice 3) | test importer: core/pkg/crypto |
+| `core/pkg/crypto/zk` | 257 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/database` | 142 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/delegation` | 308 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/delivery` | 286 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | doc: docs/architecture/agent-process-ownership.md; ref: core/pkg/patchdelivery/verifier.go — named only in 'not to be confused with' notes (agent-process-ownership.md, patchdelivery/verifier.go) |
@@ -138,9 +138,9 @@ package directory.
 | `core/pkg/escalation/ceremony` | 237 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | ref: core/pkg/genesis/ceremony/ceremony.go — named only in a 'not to be confused with' comment in core/pkg/genesis/ceremony |
 | `core/pkg/evaluation` | 62 | 2026-04-23 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/evidence/arc` | 64 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/evidence/externalhost/adapters` | 584 | 2026-06-20 | yes | 1 | KEEP | test importer: core/pkg/verifier/externalreceipt |
-| `core/pkg/evidencepack/retention` | 110 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/exportadmin` | 268 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/evidence/externalhost/adapters` | 584 | 2026-06-20 | yes | 1 | DELETED (helm-tracker#266 slice 3) | test importer: core/pkg/verifier/externalreceipt |
+| `core/pkg/evidencepack/retention` | 110 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/exportadmin` | 268 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/federation` | 533 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forensics` | 65 | 2026-04-23 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forge` | 681 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -148,16 +148,16 @@ package directory.
 | `core/pkg/genesis/ceremony` | 318 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/harness` | 2518 | 2026-09-01 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — named only by docs/architecture/agent-process-ownership.md ("not yet wired"); HELM-658/674/682 do not name the package; last commit 2026-09-01 (#921, Prime Agent harness adapter; introduced by HELM-319 in #772) - owner to confirm before deletion |
 | `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | conformance suite: tests/conformance/did |
-| `core/pkg/integrations/receipts` | 161 | 2026-08-02 | yes | 0 | KEEP | ref: tools/boundary/protected-dirs.sh |
+| `core/pkg/integrations/receipts` | 161 | 2026-08-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | ref: tools/boundary/protected-dirs.sh |
 | `core/pkg/intervention` | 136 | 2026-04-25 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/kernel/authority/authorityrows` | 791 | 2026-09-26 | yes | 0 | WIRED (HELM-751 contract 5: helm-gateway's authority adapter and EnsurePrincipals import the write store; admission still reads through core/pkg/kernel/authority/mandates) | ref: tools/boundary/protected-dirs.sh; doc: docs/architecture/authority-rows.md |
-| `core/pkg/kernel/celdp` | 231 | 2026-06-20 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/kernel/consistency` | 513 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/kernel/errorir` | 74 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/kernel/formal` | 59 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/celdp` | 231 | 2026-06-20 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/consistency` | 513 | 2026-04-24 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/errorir` | 74 | 2026-04-24 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/formal` | 59 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/kernel/pdp` | 87 | 2026-05-12 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/kernel/retry` | 156 | 2026-04-25 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/kernel/sovereignty` | 132 | 2026-06-03 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/retry` | 156 | 2026-04-25 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/kernel/sovereignty` | 132 | 2026-06-03 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/launchpad/conformance` | 229 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/launchpad/install` | 120 | 2026-05-18 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/launchpad/redact` | 104 | 2026-05-31 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -172,17 +172,17 @@ package directory.
 | `core/pkg/policy/verify` | 224 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/policy/wasm` | 325 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | doc: HELM_INVARIANTS.md; doc: docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md; doc: protocols/policy-schema/v1/canonicalization.md |
 | `core/pkg/policyloader` | 153 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/proofgraph/aigp` | 624 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/proofgraph/attribution` | 218 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/proofgraph/cloudevents` | 208 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/aigp` | 624 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/attribution` | 218 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/cloudevents` | 208 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/condensation` | 323 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6c, see docs/retirement/wave-1-inventory.md) | orphaned by the conform retirement (#1002): its only importer was gate G15; no workspace repo imports it |
 | `core/pkg/proofgraph/consensus` | 554 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/crdt` | 595 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/proofgraph/graphql` | 136 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/graphql` | 136 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/rbac` | 309 | 2026-05-17 | yes | 0 | DELETED (helm-tracker#266 slice 2) | doc: docs/security/agent-safety-conformance-cases.md |
 | `core/pkg/receipts` | 3 | 2026-05-21 | yes | 0 | KEEP | doc: docs/EXECUTION_SECURITY_MODEL.md; doc: docs/reference/execution-boundary.md; ref: tools/boundary/protected-dirs.sh — doc.go + policies fixtures + conformance test; named in docs/EXECUTION_SECURITY_MODEL.md, docs/reference/execution-boundary.md and tools/boundary/protected-dirs.sh |
 | `core/pkg/releasegovernance` | 69 | 2026-04-23 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/replay` | 1225 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/replay` | 1225 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/rir` | 197 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/router` | 685 | 2026-06-20 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/runtime` | 172 | 2026-08-03 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -193,17 +193,16 @@ package directory.
 | `core/pkg/runtimeadapters/websocket` | 136 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer — as generic_http |
 | `core/pkg/saga` | 256 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/scheduler` | 1136 | 2026-04-23 | yes | 1 | DELETED (helm-tracker#266 slice 2) | conformance suite: tests/conformance/scheduling |
-| `core/pkg/security/suites` | 153 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/signals` | 592 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/skills` | 995 | 2026-06-11 | yes | 0 | DELETED (helm-tracker#266 slice 1) | doc: docs/skills/SKILL_PACK_REPO_AUDIT.md |
 | `core/pkg/slo` | 367 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/store/objstore/fs` | 136 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/store/objstore/fs` | 136 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/surface` | 61 | 2026-04-23 | no | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/tenants` | 215 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 2) | doc: docs/security/agent-safety-conformance-cases.md |
 | `core/pkg/truth` | 557 | 2026-05-13 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/util/resiliency` | 148 | 2026-06-02 | yes | 0 | DELETED (helm-tracker#266 slice 2) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/verifier/agentprovenance` | 549 | 2026-07-27 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/verifier/agentprovenance` | 549 | 2026-07-27 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/versioning` | 329 | 2026-04-23 | yes | 0 | DELETED (helm-tracker#266 slice 1) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/witness` | 402 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/witness` | 402 | 2026-04-24 | yes | 0 | DELETED (helm-tracker#266 slice 3) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/worktree` | 253 | 2026-08-04 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md; ref: core/pkg/harness/harness.go; ref: core/pkg/patchdelivery/verifier.go — same doc; not named by HELM-658/674/682; imported only by core/pkg/harness (itself importer-less) |
 | `core/pkg/zkgov/proofmarket` | 482 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |

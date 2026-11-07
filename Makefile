@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
 .PHONY: contract-breaking-release test-contract-breaking release-rehearsal test-release-rehearsal
 .PHONY: check
@@ -57,10 +57,6 @@ test-connector-release-authority-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/registry/connectors -run TestPostgresReleaseAuthorityAppendOnlyCurrentStateAndIsolation -count=10
 
-test-effect-reservation-postgres:
-	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
-	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
-
 .PHONY: test-tenant-rls-postgres
 test-tenant-rls-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
@@ -102,14 +98,12 @@ verify-connector-release-authority-vectors:
 	python3 reference_packs/connector-release-authority-v1/verify_vectors.py
 
 verify-effect-close-vectors:
-	cd core && go test ./pkg/boundary/approvalceremony -run 'TestEffectClose(V[23]ReferencePackMatchesGoImplementation|ReferencePackMatchesGoImplementation|V3Schemas|Schemas)' -count=1
 	python3 reference_packs/effect-close-v1/verify_vectors.py
 	python3 reference_packs/effect-close-v2/verify_vectors.py
 	python3 reference_packs/effect-close-v3/verify_vectors.py
 
 verify-effect-disposition-vectors:
 	cd core && go test ./pkg/contracts -run '^TestEffectDisposition' -count=1
-	cd core && go test ./pkg/boundary/approvalceremony -run '^TestEffectDisposition' -count=1
 	python3 reference_packs/effect-disposition-v1/verify_vectors.py
 
 verify-evidence-pack-successor-vectors:
@@ -125,11 +119,6 @@ verify-update-bundle-vectors:
 	cd core && go test ./pkg/boundary/profile -run TestUpdateBundleManifestSchema -count=1
 	python3 reference_packs/update-bundle-v1/verify_vectors.py
 
-.PHONY: verify-launch-mission-vectors
-
-verify-launch-mission-vectors:
-	cd core && go test ./pkg/contracts -run TestLaunchMissionReferencePackMatchesGoImplementation -count=1
-	python3 reference_packs/launch-mission-v1/verify_vectors.py
 
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
@@ -183,7 +172,6 @@ verify-fixtures:
 	$(MAKE) verify-evidence-pack-successor-vectors
 	$(MAKE) verify-boundary-profile-vectors
 	$(MAKE) verify-update-bundle-vectors
-	$(MAKE) verify-launch-mission-vectors
 	python3 reference_packs/extauthz/verify_extauthz_vectors.py
 	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto

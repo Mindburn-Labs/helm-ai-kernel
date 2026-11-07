@@ -2,7 +2,6 @@ package identity
 
 import (
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 )
@@ -19,20 +18,6 @@ func TestFinal_PrincipalTypeConstants(t *testing.T) {
 		}
 		seen[pt] = true
 	}
-}
-
-func TestFinal_AgentIdentityPrincipal(t *testing.T) {
-	ai := &AgentIdentity{AgentID: "a1", DelegatorID: "u1"}
-	if ai.ID() != "a1" {
-		t.Fatal("ID mismatch")
-	}
-	if ai.Type() != PrincipalAgent {
-		t.Fatal("type mismatch")
-	}
-}
-
-func TestFinal_AgentIdentityInterface(t *testing.T) {
-	var _ Principal = (*AgentIdentity)(nil)
 }
 
 func TestFinal_IdentityTokenJSON(t *testing.T) {
@@ -175,20 +160,6 @@ func TestFinal_FileStoreZeroValue(t *testing.T) {
 
 func TestFinal_InMemoryDelegationStoreImpl(t *testing.T) {
 	var _ DelegationStore = (*InMemoryDelegationStore)(nil)
-}
-
-func TestFinal_ConcurrentPrincipalAccess(t *testing.T) {
-	var wg sync.WaitGroup
-	ai := &AgentIdentity{AgentID: "a1"}
-	for i := 0; i < 15; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = ai.ID()
-			_ = ai.Type()
-		}()
-	}
-	wg.Wait()
 }
 
 func TestFinal_DeviceIdentityJSON(t *testing.T) {

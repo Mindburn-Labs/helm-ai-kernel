@@ -122,8 +122,6 @@ func TestDeepCELDPNewError(t *testing.T) {
 	}
 }
 
-// ── Jurisdiction Tests ───────────────────────────────────────────
-
 func TestDeepJurisdictionResolveBasic(t *testing.T) {
 	r := NewJurisdictionResolver()
 	r.AddRule(JurisdictionRule{RuleID: "r1", LegalRegime: "EU/GDPR", Region: "eu-west-1", Priority: 1})
@@ -183,8 +181,6 @@ func TestDeepJurisdictionPriorityWins(t *testing.T) {
 		t.Fatal("higher priority rule should win")
 	}
 }
-
-// ── PlanCommit Tests ─────────────────────────────────────────────
 
 func TestDeepPlanCommitSubmitAndApprove(t *testing.T) {
 	pc := NewPlanCommitController()
@@ -276,8 +272,6 @@ func TestDeepPlanCommitPendingCount(t *testing.T) {
 	}
 }
 
-// ── SwarmPDP Tests ───────────────────────────────────────────────
-
 type mockPDP struct {
 	version string
 }
@@ -286,66 +280,6 @@ func (m *mockPDP) Evaluate(_ context.Context, req PDPRequest) (*PDPResponse, err
 	return &PDPResponse{Decision: DecisionAllow, DecisionID: req.RequestID, PolicyVersion: m.version}, nil
 }
 func (m *mockPDP) PolicyVersion() string { return m.version }
-
-func TestDeepSwarmPDPSingleRequest(t *testing.T) {
-	base := &mockPDP{version: "v1"}
-	swarm := NewSwarmPDP(base, nil)
-	resp, err := swarm.Evaluate(context.Background(), PDPRequest{RequestID: "r1"})
-	if err != nil || resp.Decision != DecisionAllow {
-		t.Fatal("single request should delegate to base PDP")
-	}
-}
-
-func TestDeepSwarmPDPBatchEmpty(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, nil)
-	result, err := swarm.EvaluateBatch(context.Background(), nil)
-	if err != nil || len(result.Responses) != 0 {
-		t.Fatal("empty batch should succeed")
-	}
-}
-
-func TestDeepSwarmPDPMergeDecisionsDenyWins(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	result := swarm.MergeDecisions([]Decision{DecisionAllow, DecisionDeny, DecisionAllow})
-	if result != DecisionDeny {
-		t.Fatal("strict merge: any DENY should win")
-	}
-}
-
-func TestDeepSwarmPDPMergeDecisionsAllAllow(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	result := swarm.MergeDecisions([]Decision{DecisionAllow, DecisionAllow})
-	if result != DecisionAllow {
-		t.Fatal("all ALLOW should yield ALLOW")
-	}
-}
-
-func TestDeepSwarmPDPMergeDecisionsRequireApproval(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	result := swarm.MergeDecisions([]Decision{DecisionAllow, DecisionRequireApproval})
-	if result != DecisionRequireApproval {
-		t.Fatal("REQUIRE_APPROVAL should take precedence over ALLOW")
-	}
-}
-
-func TestDeepSwarmPDPMergeDecisionsEmpty(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	result := swarm.MergeDecisions(nil)
-	if result != DecisionDeny {
-		t.Fatal("empty decisions should default to DENY")
-	}
-}
-
-func TestDeepSwarmPDPHash(t *testing.T) {
-	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	h1 := swarm.Hash()
-	h2 := swarm.Hash()
-	if h1 != h2 || h1 == "" {
-		t.Fatal("hash should be deterministic and non-empty")
-	}
-}
-
-// ── Liveness Tests ───────────────────────────────────────────────
 
 func TestDeepBlockingStateExpiry(t *testing.T) {
 	bs := NewBlockingState("s1", BlockingStateApproval, 1*time.Millisecond)

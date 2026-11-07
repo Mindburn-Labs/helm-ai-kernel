@@ -54,18 +54,6 @@ func TestRateLimitMiddleware(t *testing.T) {
 	assert.NoError(t, resp.Body.Close())
 }
 
-func TestWithContextRateLimit_Passthrough(t *testing.T) {
-	handler := WithContextRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}), 10)
-
-	req := httptest.NewRequest("GET", "/api/v1/test", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
 func TestRateLimitMiddleware_EndpointReason(t *testing.T) {
 	limiter := NewGlobalRateLimiter(100, 100).WithEndpointLimits(func(*http.Request) string {
 		return "kernel"

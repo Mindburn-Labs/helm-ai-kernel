@@ -85,10 +85,7 @@ A deny is written as a `DecisionRecord` with verdict `DENY`, the reason code
 above, the Guardian's environment fingerprint, and the request context as
 `InputContext`. It is signed with the Guardian's configured signer; if signing
 fails the interceptor returns an error and no decision, so the request cannot
-proceed. When an audit log is configured, the interceptor attempts to append
-the record under the event type `ZEROID_DENY`. The append is best-effort:
-failures are not propagated and do not change the signed `DENY` returned to the
-caller.
+proceed.
 
 The denial path calls the Guardian's configured `SignDecision`. The shipped
 kernel signers stamp `DecisionRecordSignatureV4`, whose preimage is

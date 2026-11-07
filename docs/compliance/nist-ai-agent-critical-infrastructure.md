@@ -76,7 +76,7 @@ The reference pack is `reference_packs/nist_ai_agent_cip.v1.json`. It should be 
 | NIST direction | HELM control surface | Evidence emitted |
 | --- | --- | --- |
 | Agents operate securely on behalf of users | `DecisionRequest.Principal`, machine identity schemas, delegation sessions | Signed `DecisionRecord`, `AuthorizedExecutionIntent`, delegation metadata |
-| Agent access and actions are authorized before execution | Guardian freeze, context, identity, egress, taint, threat, delegation, privilege, and PRG gates | Decision verdict, reason code, policy content hash, effect digest |
+| Agent access and actions are authorized before execution | Guardian freeze, context, identity, egress, taint, threat, delegation, and PRG gates | Decision verdict, reason code, policy content hash, effect digest |
 | Agent-to-tool protocols need secure interoperability | Connector manifests, MCP integration, effect schemas, capability packs | Tool schema reference, connector manifest hash, evidence pack export |
 | Critical-infrastructure AI needs lifecycle risk management | Reference-pack overlays, effect type catalog, P0/P1/P2 ceilings, approval artifacts | ProofGraph, receipt chain, approval references, audit logs |
 | Supply-chain trust must extend across AI and CI lifecycles | Pack verifier, module provenance, AI-BOM, content-addressed policy state | Pack attestation, policy hash, provenance envelope, evidence retention |

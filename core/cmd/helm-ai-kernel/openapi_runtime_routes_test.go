@@ -741,10 +741,6 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
 			Reason: "evidence envelope request contract not yet classified in HELM-481 phase 1",
 		},
-		"POST /api/v1/replay/verify": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
-			Reason: "replay verification request contract not yet classified in HELM-481 phase 1",
-		},
 		"POST /api/v1/mcp/registry": {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:808",
 			Reason: "MCP registry discovery request contract not yet classified in HELM-481 phase 1",

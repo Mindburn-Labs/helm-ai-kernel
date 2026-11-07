@@ -19,8 +19,6 @@ G101 core/cmd/helm-ai-kernel/route_auth.go 3e07662ed5f1
 G101 core/cmd/helm-ai-kernel/route_auth.go ed50165573bd
 G101 core/cmd/helm-ai-kernel/watch_cmd.go c310b74b3b09
 G101 core/pkg/auth/apikey.go 3b88a5bebaf6
-G101 core/pkg/capability/manifest.go be7940187224
-G101 core/pkg/capability/token_authority.go 41f2ffd67cf5
 G101 core/pkg/conform/reason_codes.go 5743bbaffdaf
 G101 core/pkg/contracts/effect_types.go 4e8faaeff0d0
 G101 core/pkg/contracts/safe_deprecation.go 10e5e0cff1ff
@@ -77,8 +75,6 @@ G115 core/pkg/otel/governance_tracer.go fa749bbe492b
 G115 core/pkg/privacy/mpc.go 5d8e07b03f73
 G115 core/pkg/privacy/privacy.go 160873b302bc
 G115 core/pkg/privacy/privacy.go b9a02391f631
-G115 core/pkg/runtime/sandbox/sandbox.go 05f4cb34b027
-G115 core/pkg/runtime/sandbox/wasi_sandbox.go 1958f801f9ae
 G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d
@@ -93,7 +89,6 @@ G122 core/cmd/helm-ai-kernel/pack_cmd.go dbfffc239169
 G122 core/pkg/conform/engine.go dbfffc239169
 G122 core/pkg/launchpad/importer/fetcher.go 63904c6e10a8
 G122 core/pkg/launchpad/receipts/evidence_pack.go dbfffc239169
-G122 core/pkg/pack/fs_registry.go ee50f21d9a4f
 G122 core/pkg/skillpacks/scanner.go dbfffc239169
 G122 core/pkg/spendproxy/savings.go dbfffc239169
 G122 core/pkg/verifier/eu_ai_act.go 661d7f65d05f
@@ -342,8 +337,6 @@ G304 core/pkg/launchpad/registry/loader.go f37f22a55956
 G304 core/pkg/launchpad/registry/validator.go dbfffc239169
 G304 core/pkg/launchpad/session/store.go 911b9cbd91ab
 G304 core/pkg/launchpad/session/store.go cf5dc9040eb2
-G304 core/pkg/pack/fs_registry.go 6d3ab38598d3
-G304 core/pkg/pack/fs_registry.go ee50f21d9a4f
 G304 core/pkg/packs/install/manifest.go dbfffc239169
 G304 core/pkg/policy/reconcile/persistent_store.go 9ef7bf203908
 G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322

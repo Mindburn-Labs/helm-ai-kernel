@@ -1,7 +1,7 @@
 """
 HELM SDK Example — Python
 
-Shows: chat completions, denial handling, conformance.
+Shows: chat completions, denial handling, evidence export and verification, health.
 Run: pip install httpx && python main.py
 """
 
@@ -34,7 +34,7 @@ def main():
         pack = helm.export_evidence()
         print(f"Exported {len(pack)} bytes")
         result = helm.verify_evidence(pack)
-        print(f"Verification: {result.verdict}")
+        print(f"Verification: {result.outcome}")
     except HelmApiError as e:
         print(f"Evidence error: {e.reason_code}")
 

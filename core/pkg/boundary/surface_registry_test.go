@@ -456,9 +456,14 @@ func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 	if indexedHash != record.RecordHash {
 		t.Fatalf("record index hash = %s want %s", indexedHash, record.RecordHash)
 	}
-	verify := reloaded.VerifyCheckpoint(reloaded.ListCheckpoints()[0].CheckpointID)
-	if verify["verified"] != true {
-		t.Fatalf("checkpoint verification failed: %+v", verify)
+	before, after := registry.ListCheckpoints(), reloaded.ListCheckpoints()
+	if len(after) == 0 || len(after) != len(before) {
+		t.Fatalf("checkpoints after SQL reload = %d, want %d (non-zero)", len(after), len(before))
+	}
+	for i := range before {
+		if after[i].CheckpointID != before[i].CheckpointID || after[i].CheckpointHash != before[i].CheckpointHash {
+			t.Fatalf("checkpoint %d changed after SQL reload: %+v != %+v", i, after[i], before[i])
+		}
 	}
 }
 

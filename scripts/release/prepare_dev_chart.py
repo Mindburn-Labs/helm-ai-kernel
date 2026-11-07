@@ -24,6 +24,22 @@ def replace_annotation(text: str, name: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def enable_receipt_auto_seed(text: str) -> str:
+    """Turn on gateway.receipts.autoSeed in the development chart's values.
+
+    helm-gateway refuses to start without a receipt signing key. Development
+    installs that follow charts-dev from main (qa-arm) set no receipt values,
+    so the development chart generates a per-install seed the way the release
+    chart does only when asked. The release chart keeps the default false.
+    """
+    lines = text.splitlines(keepends=True)
+    matches = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == "    autoSeed: false"]
+    if len(matches) != 1 or not any(line.rstrip("\r\n") == "  receipts:" for line in lines[max(0, matches[0] - 4):matches[0]]):
+        raise ValueError("expected exactly one gateway.receipts.autoSeed: false in values.yaml")
+    lines[matches[0]] = "    autoSeed: true\n"
+    return "".join(lines)
+
+
 def stage_chart(source: Path, destination: Path, image: str, platform: str) -> None:
     if not re.fullmatch(r"[a-z0-9./-]+:main-[0-9]{14}-[0-9a-f]{7}", image):
         raise ValueError("expected the main development image tag")
@@ -37,8 +53,10 @@ def stage_chart(source: Path, destination: Path, image: str, platform: str) -> N
     text = replace_annotation(text, "images", "|\n    " + json.dumps(images))
     changes = [{"kind": "changed", "description": f"Development chart for {image}."}]
     text = replace_annotation(text, "changes", "|\n    " + json.dumps(changes))
+    values = enable_receipt_auto_seed((source / "values.yaml").read_text(encoding="utf-8"))
     shutil.copytree(source, destination)
     (destination / "Chart.yaml").write_text(text, encoding="utf-8")
+    (destination / "values.yaml").write_text(values, encoding="utf-8")
 
 
 def main() -> None:

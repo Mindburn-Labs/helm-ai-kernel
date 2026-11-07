@@ -87,7 +87,7 @@ func newRecordingService(t *testing.T) (*Service, *recorder, *sql.DB) {
 	db, err := sql.Open(name, "")
 	must(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc, err := New(db, Config{})
+	svc, err := New(db, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	return svc, r, db
 }

@@ -301,6 +301,9 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 	for _, table := range []string{"authority_recovery_fences", "authority_recovery_members", "authority_recovery_checkpoints"} {
 		want[table] = "INSERT,SELECT"
 	}
+	// Signed receipts are append-only; the chain head moves with each append.
+	want["authority_receipts"] = "INSERT,SELECT"
+	want["authority_receipt_chains"] = "INSERT,SELECT,UPDATE"
 	if _, ok := want["authority_token_replay"]; ok {
 		want["authority_token_replay"] = "DELETE,INSERT,SELECT"
 	}
@@ -377,7 +380,7 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 	if version != HeadVersion() {
 		t.Fatalf("runtime role reads schema version %d, want %d", version, HeadVersion())
 	}
-	svc, err := New(runtimeDB, Config{})
+	svc, err := New(runtimeDB, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	authority, err := authorityrows.New(ownerDB)
 	must(t, err)
@@ -427,6 +430,9 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 		`DELETE FROM authority_provision_limits`,
 		`UPDATE authority_distinct_values SET attempt_id = attempt_id`,
 		`DELETE FROM authority_effect_attempts`,
+		`UPDATE authority_receipts SET state = state`,
+		`DELETE FROM authority_receipts`,
+		`DELETE FROM authority_receipt_chains`,
 		`TRUNCATE authority_postings`,
 		`CREATE TABLE authority_extra (tenant_id TEXT)`,
 		`CREATE TEMPORARY TABLE scratch (x int)`,

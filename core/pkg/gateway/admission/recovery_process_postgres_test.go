@@ -69,7 +69,7 @@ func TestRecoveryDispatchChildProcess(t *testing.T) {
 	must(t, err)
 	defer func() { _ = db.Close() }()
 	adapter := &recoveryProcessAdapter{endpoint: os.Getenv("HELM_RECOVERY_CHILD_PROVIDER")}
-	svc, err := New(db, Config{Adapters: []adapters.Adapter{adapter}, DispatchTimeout: time.Second, DispatchGrace: 10 * time.Millisecond})
+	svc, err := New(db, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter}, DispatchTimeout: time.Second, DispatchGrace: 10 * time.Millisecond})
 	must(t, err)
 	_, _, err = svc.Dispatch(context.Background(), episodeWorker("crash", "recovery-v1"), os.Getenv("HELM_RECOVERY_CHILD_ATTEMPT"))
 	must(t, err)
@@ -124,7 +124,7 @@ func TestPostgresRecoveryProcessCrashReconcilesOriginalWithoutDuplicate(t *testi
 		t.Fatal("dispatch child did not terminate at injected crash")
 	}
 	releaseProvider()
-	restarted, err := New(f.runtime, Config{Adapters: []adapters.Adapter{&recoveryProcessAdapter{endpoint: provider.URL}}})
+	restarted, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{&recoveryProcessAdapter{endpoint: provider.URL}}})
 	must(t, err)
 	deadline := time.Now().Add(5 * time.Second)
 	for {

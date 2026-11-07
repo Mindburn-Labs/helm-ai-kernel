@@ -38,6 +38,7 @@ func renderedBootstrapSQL(t *testing.T, chart string, unmanagedPassword bool) ma
 		"gateway.controlPlaneIdentity.audience=helm-gateway:smoke",
 		"gateway.controlPlaneIdentity.actor=spiffe://helm/control-plane",
 		"gateway.database.existingSecret=gw-db",
+		"gateway.receipts.existingSecret=gw-receipts",
 		"gateway.database.bootstrap.enabled=true",
 		"gateway.database.bootstrap.existingSecret=gw-db-admin",
 		"gateway.networkPolicy.controlPlane.namespaceSelector.matchLabels.helm-cp=enabled",

@@ -192,7 +192,7 @@ func (r *run) start(base string) error {
 	if err != nil {
 		return err
 	}
-	svc, err := admission.New(r.db, admission.Config{Adapters: []adapters.Adapter{r.adapter}, Credentials: app})
+	svc, err := admission.New(r.db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{r.adapter}, Credentials: app})
 	if err != nil {
 		return err
 	}

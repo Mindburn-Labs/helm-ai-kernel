@@ -57,7 +57,7 @@ func budgetFixture(t *testing.T) (*provisionFixture, *admission.Service) {
 	f := newProvisionFixtureWithPlan(t, func(f *provisionFixture) []byte {
 		return budgetPlanAt(f, effectargs.AuthorityProvision, "", "budget-v1", 200, "none")
 	})
-	s, err := admission.New(f.db, admission.Config{})
+	s, err := admission.New(f.db, admission.Config{ReceiptSigner: testReceiptSigner})
 	provisionMust(t, err)
 	return f, s
 }
@@ -190,7 +190,7 @@ func TestPostgresProvisionBudgetWindowChangeCannotEraseSpend(t *testing.T) {
 			f := newProvisionFixtureWithPlan(t, func(f *provisionFixture) []byte {
 				return budgetPlanAt(f, effectargs.AuthorityProvision, "", "window-v1", 200, window)
 			})
-			s, err := admission.New(f.db, admission.Config{})
+			s, err := admission.New(f.db, admission.Config{ReceiptSigner: testReceiptSigner})
 			provisionMust(t, err)
 			budgetSettle(f, s, budgetClaim(f, s, "old-spend", 20), admission.ModelCallConfirmed, 8)
 			budgetClaim(f, s, "old-hold", 10)

@@ -1029,6 +1029,49 @@ removal_proofs:
     replace: "\t\tif false && i > 0 && m.Terms.Within(in.Chain[i-1].Mandate.Terms) != nil {\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/admission.go
+    find: "\t_, err = appendReceipt(ctx, tx, s.cfg.ReceiptSigner, d)\n\treturn err\n"
+    replace: "\treturn nil\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast"
+      - "core/pkg/gateway/admission.TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/admission.go
+    find: "\tif cfg.ReceiptSigner == nil {\n\t\treturn nil, errors.New(\"admission requires a receipt signer: every decision is recorded with a signed receipt\")\n\t}\n\tif err := CheckReceiptSigner(cfg.ReceiptSigner); err != nil {\n"
+    replace: "\tif err := CheckReceiptSigner(cfg.ReceiptSigner); false && err != nil {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/receipts.go
+    find: "\tif !result.Valid {\n"
+    replace: "\tif false && !result.Valid {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/receipts.go
+    find: "\t\tPrevHash:     prevDigest,\n"
+    replace: "\t\tPrevHash:     \"\",\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/receipts.go
+    find: "\t\tOutputHash:   hex.EncodeToString(output[:]),\n"
+    replace: "\t\tOutputHash:   hex.EncodeToString(output[:0]),\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision"
+  - control: CTL-059
+    file: core/pkg/gateway/runtime/runtime.go
+    find: "\tif admissionConfig.ReceiptSigner, err = receiptSignerFromEnv(getenv); err != nil {\n\t\treturn err\n\t}\n"
+    replace: "\tadmissionConfig.ReceiptSigner, _ = receiptSignerFromEnv(getenv)\n"
+    tests:
+      - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutAUsableReceiptKey"
+  - control: CTL-059
+    file: core/pkg/gateway/admission/schema/015_receipts.sql
+    find: "DROP TRIGGER IF EXISTS authority_decision_receipt_update ON authority_effect_attempts;\nCREATE CONSTRAINT TRIGGER authority_decision_receipt_update\n    AFTER UPDATE OF state ON authority_effect_attempts\n    DEFERRABLE INITIALLY DEFERRED\n    FOR EACH ROW WHEN (NEW.state IN ('ADMITTED', 'DENIED', 'ESCALATED') AND OLD.state IS DISTINCT FROM NEW.state)\n    EXECUTE FUNCTION authority_require_decision_receipt();\n"
+    replace: "DROP TRIGGER IF EXISTS authority_decision_receipt_update ON authority_effect_attempts;\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite"
 
 controls:
 
@@ -3998,3 +4041,85 @@ controls:
         - "core/pkg/gateway/mcpserver.TestReassignmentReplayReturnsBeforeQuoteAdmissionAndProviderCalls"
       bypass:
         - "core/pkg/gateway/mcpserver.TestPostgresSignedCrossSeatGrantReplaysOnlyNativeMembers"
+
+  - id: CTL-059
+    title: "Gateway signed decision receipts"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Every decision helm-gateway admission writes through recordDecision
+      commits in its own transaction with one signed receipt
+      (helm-tracker#276); tested for ADMITTED, DENIED, ESCALATED, the
+      stepped-up re-admission of an approved escalation, a stop's lift and a
+      model-call admission. The receipt is a classical Ed25519 receipt.v5
+      envelope over the attempt row the decision's UPDATE returned:
+      decision_id is <attempt_id>:<version>, args_hash the hex SHA-256 of the
+      exact argument bytes the attempt stored (its argument_digest, not a JCS
+      re-encoding), policy_hash the SHA-256 of the locked authority versions,
+      and output_hash the SHA-256 of a closed helm.gateway.receipt-binding.v1
+      document, stored as exact JCS bytes with it, which also binds the
+      approver's workload and any step-up proof used up. Receipts form one
+      hash chain per (tenant, workspace): the chain row is the last row lock
+      the transaction takes on a pre-existing row, so a workspace's decisions
+      serialize on it until commit; lamport_clock is the sequence, prev_hash
+      the predecessor's chain hash, and the ledger refuses a fork, a second
+      genesis or a reused sequence. A signing failure, a refused profile or a
+      moved head rolls the decision back, and a deferred constraint trigger
+      (migration 15) refuses at commit any attempt that enters ADMITTED,
+      DENIED or ESCALATED without the receipt of that version, whoever writes
+      it, including an older gateway still serving during an upgrade.
+      admission refuses a nil signer and one whose receipts are not classical
+      Ed25519 that verify offline under its published key; serve refuses to
+      start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte seed,
+      never a passphrase or all zeros) and a key id, verbatim or derived from
+      a prefix and the key's fingerprint. The runtime role may only SELECT and
+      INSERT receipt rows, and the stored chain verifies with receiptverify
+      under the gateway key alone. EffectAttempt.receipts names each receipt
+      by chain, sequence, chain hash and key id.
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/runtime.serve"
+      - "core/pkg/gateway/runtime.receiptSignerFromEnv"
+      - "core/pkg/gateway/admission.New"
+      - "core/pkg/gateway/admission.CheckReceiptSigner"
+      - "core/pkg/gateway/admission.Service.recordDecision"
+      - "core/pkg/gateway/admission.appendReceipt"
+    config:
+      - "HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte Ed25519 seed, hex or base64) and HELM_GATEWAY_RECEIPT_KEY_ID or HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX; the chart mounts gateway.receipts.existingSecret, or its autoSeed Secret, into the gateway Pod only, and by default sets the prefix."
+      - "Gateway schema migration 15: authority_receipt_chains and authority_receipts under forced row security, and the deferred decision-receipt fence on authority_effect_attempts. The chart's 002_grants.sql gives the runtime role SELECT, INSERT only on authority_receipts."
+    protected_operations:
+      - "Every ADMITTED, DENIED and ESCALATED write of helm.gateway.v1.EffectGatewayService Propose, Approve and Lift, the MCP tools on the worker and executor listeners, and the model gateway's admissions on helm-gateway serve."
+    bypass_assumptions:
+      - "The receipt format is receipt.v5, an interim: the gateway's own facts are signed only through output_hash, and the binding bytes are retained beside the receipt. The gateway is one of the producers Mindburn-Labs/helm-tracker#53 moves to the DSSE v6 envelope; receipt.v5 stays verify-only after that. A gateway receipt's args_hash is the exact-argument-bytes digest, not the JCS-arguments hash contracts.Receipt documents for other producers."
+      - "Receipts cover decisions only. ESCALATED to REJECTED, CANCELLED and EXPIRED, and every lifecycle transition after a decision (dispatch, observation, reconciliation, settlement), are not receipted in this slice; the fence does not require receipts for them."
+      - "The signing key lives in the gateway process and its Secret. Whoever holds the seed, or the gateway's runtime database role together with it, can sign and insert a receipt the chain accepts; a row inserted without the key does not verify offline."
+      - "A missing receipt is detected only as a gap before a later receipt. The runtime role moves the chain head on every append; the database owner can also delete the newest receipts and rewind the head, which the chain alone cannot reveal. Chain export and external anchoring are the follow-up."
+      - "With gateway.receipts.autoSeed the key is generated by the chart and kept through Helm lookup. A pipeline that renders with helm template, or a deleted Secret, starts a new key (and, with the default derived key id, a new key id); receipts signed before verify only under the old public key, which must be recorded (helm-gateway receipt-key) to stay verifiable."
+      - "The receipt.v5 timestamp is outside the signed preimage; the next receipt's prev_hash covers it, and decided_at is signed through the binding. Order is the signed sequence."
+      - "The ledger fence is a database trigger; the database owner (or a superuser in replica mode) can drop or bypass it."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestPostgresDecisionsCommitWithSignedChainedReceipts"
+        - "core/pkg/gateway/admission.TestPostgresLiftAndModelCallDecisionsCarryReceipts"
+        - "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast"
+        - "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision"
+        - "core/pkg/gateway/server.TestPostgresAttemptReceiptRefsOnTheWire"
+        - "core/pkg/gateway/runtime.TestReceiptKeyAcceptsHexAndBase64SeedsAndPrintsOnlyThePublicHalf"
+      forbidden:
+        - "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner"
+        - "core/pkg/gateway/admission.TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction"
+        - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutAUsableReceiptKey"
+        - "core/pkg/gateway/admission.TestPostgresADecisionWithoutItsReceiptFailsAtCommit"
+        - "core/pkg/gateway/admission.TestPostgresSigningFailureCommitsNoDecision"
+        - "core/pkg/gateway/admission.TestPostgresReceiptRowsAreAppendOnlyForTheRuntimeRole"
+        - "core/pkg/gateway/admission.TestPostgresStoredReceiptsVerifyOfflineWithTheGatewayKey"
+        - "core/pkg/gateway/admission.TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants"
+      removal:
+        - "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast"
+        - "core/pkg/gateway/admission.TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction"
+        - "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision"
+        - "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner"
+        - "core/pkg/gateway/admission.TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite"
+        - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutAUsableReceiptKey"
+      bypass:
+        - "core/pkg/gateway/admission.TestPostgresReceiptChainStaysContiguousUnderConcurrentProposals"
+        - "core/pkg/gateway/admission.TestPostgresReceiptSchemaUpgradesFrom14"

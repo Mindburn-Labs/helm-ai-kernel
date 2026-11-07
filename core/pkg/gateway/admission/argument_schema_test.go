@@ -48,7 +48,7 @@ func TestDeclaredArgumentsAreRefusedBeforeAnyDatabaseUse(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	must(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc, err := New(db, Config{Adapters: []adapters.Adapter{argumentAdapter{declaration: noteArgumentDeclaration()}}})
+	svc, err := New(db, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{argumentAdapter{declaration: noteArgumentDeclaration()}}})
 	must(t, err)
 	for name, raw := range invalidDeclaredArguments() {
 		t.Run(name, func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestInvalidArgumentContractPreventsServiceRegistration(t *testing.T) {
 	for _, raw := range []string{`{"type":"object"}`, `{`, `{"type":"object","additionalProperties":false,"properties":{"x":{"$ref":"file:///etc/passwd"}}}`} {
 		d := noteArgumentDeclaration()
 		d.ArgumentSchema = []byte(raw)
-		if _, err := New(db, Config{Adapters: []adapters.Adapter{argumentAdapter{declaration: d}}}); err == nil {
+		if _, err := New(db, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{argumentAdapter{declaration: d}}}); err == nil {
 			t.Fatalf("invalid argument declaration was registered: %s", raw)
 		}
 	}
@@ -81,7 +81,7 @@ func TestDeclaredBuiltinSchemaPreservesSemanticRefusals(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	must(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc, err := New(db, Config{Adapters: []adapters.Adapter{github.New()}})
+	svc, err := New(db, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{github.New()}})
 	must(t, err)
 	for name, in := range map[string]ProposeInput{
 		"invalid git ref":    proposal("bad-ref", github.EffectBranchCreateFromChanges, repo, branchArgs("helm/../unsafe")),
@@ -101,7 +101,7 @@ func TestCurrentBuiltinAdaptersRegisterWithoutChangingTheirContracts(t *testing.
 	must(t, err)
 	r, err := reassignment.New(db)
 	must(t, err)
-	_, err = New(db, Config{Adapters: []adapters.Adapter{github.New(), p, r}})
+	_, err = New(db, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{github.New(), p, r}})
 	must(t, err)
 	must(t, mock.ExpectationsWereMet())
 }

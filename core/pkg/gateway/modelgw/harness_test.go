@@ -230,7 +230,7 @@ func newEnvWindow(t *testing.T, modelBudget int64, budgetWindow string) *env {
 	must(t, err)
 	runtime.SetMaxOpenConns(40)
 	t.Cleanup(func() { _ = runtime.Close() })
-	svc, err := admission.New(runtime, admission.Config{Adapters: []adapters.Adapter{NewAdapter()}})
+	svc, err := admission.New(runtime, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{NewAdapter()}})
 	must(t, err)
 	rows, err := authorityrows.New(owner)
 	must(t, err)

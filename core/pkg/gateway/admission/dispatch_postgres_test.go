@@ -130,7 +130,7 @@ func (fakeCredentials) Token(_ context.Context, tenantID string, effect adapters
 // dispatches through a.
 func (f *fixture) withAdapter(a adapters.Adapter) *Service {
 	f.t.Helper()
-	svc, err := New(f.runtime, Config{Adapters: []adapters.Adapter{a}, Credentials: fakeCredentials{}})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{a}, Credentials: fakeCredentials{}})
 	must(f.t, err)
 	return svc
 }
@@ -249,9 +249,11 @@ func TestPostgresPermitIsConsumedOnce(t *testing.T) {
 	a := f.propose(human, note("n1"))
 	_, _, err := svc.Dispatch(ctx, workload, a.ID)
 	must(t, err)
-	// Replay: the attempt is put back to ADMITTED, as if the claim had never
-	// committed. Its permit is consumed, so no second claim can use it.
-	f.exec(tenantA, `UPDATE authority_effect_attempts SET state = 'ADMITTED', outcome = NULL, outcome_basis = NULL WHERE attempt_id = $1`, a.ID)
+	// Replay: the attempt is put back to its ADMITTED version, as if the claim
+	// had never committed (that version's receipt is the ledger fence's
+	// condition). Its permit is consumed, so no second claim can use it.
+	f.exec(tenantA, `UPDATE authority_effect_attempts SET state = 'ADMITTED', outcome = NULL, outcome_basis = NULL, version = $2
+		WHERE attempt_id = $1`, a.ID, a.Version)
 	_, _, err = svc.Dispatch(ctx, workload, a.ID)
 	wantRefusal(t, "a replayed claim", err, CodeFailedPrecondition, "")
 	if n := fake.dispatched.Load(); n != 1 {
@@ -402,7 +404,7 @@ func TestPostgresNotSentIsObservedFailedAndReleased(t *testing.T) {
 	f.ledgerBalances()
 	wantState(t, "the released limit admits again", f.propose(human, quotaNote("n3")), "ADMITTED", "")
 	// No credential is NOT_SENT too, never UNKNOWN.
-	bare, err := New(f.runtime, Config{Adapters: []adapters.Adapter{&scripted{}}})
+	bare, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{&scripted{}}})
 	must(t, err)
 	free := note("no-credential")
 	free.Quote = []Amount{{Unit: "notes", Amount: 0}}

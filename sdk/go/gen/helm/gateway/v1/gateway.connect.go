@@ -58,8 +58,13 @@
 //     buf breaking would then reject the field that later takes the number.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
-// values and no signatures or keys. Token verification is ADR-0005's and adds
-// no cryptographic control here; no post-quantum claim is made.
+// values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
+// lowercase hex string its chain links with, and no signatures or keys. An
+// attempt names its signed decision receipts by reference only (ReceiptRef):
+// each is a classical Ed25519 receipt.v5 signature the gateway keeps in its
+// ledger, verified offline against the gateway's published key. Token
+// verification is ADR-0005's and adds no cryptographic control here; no
+// post-quantum claim is made.
 package gatewayv1
 
 import (

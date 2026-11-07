@@ -127,7 +127,7 @@ func TestPostgresBudgetExhaustionReconcilesAndStepUpRaiseReadmits(t *testing.T) 
 			close(readback.release)
 		}
 	}()
-	svc, err := New(f.runtime, Config{Adapters: []adapters.Adapter{f.adapter, readback},
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{f.adapter, readback},
 		Credentials: lifecycleGitHubCredentials{token: fake.Token()}})
 	must(t, err)
 	f.svc = svc

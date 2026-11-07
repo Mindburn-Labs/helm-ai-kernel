@@ -136,7 +136,7 @@ func TestPostgresDecideAndStopTokensAreSingleUse(t *testing.T) {
 	}
 	// The replay row lives in Postgres: a second Service over the same
 	// database refuses the jti too.
-	other, err := New(f.runtime, Config{})
+	other, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	_, _, err = other.Approve(ctx, approverB, token, approval(b, ""))
 	wantRefusal(t, "a reused token on another gateway process", err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)

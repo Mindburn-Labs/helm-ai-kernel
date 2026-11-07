@@ -61,7 +61,7 @@ func TestListAttemptsRefusesMalformedRequestsBeforeTheDatabase(t *testing.T) {
 	// connection asked for, proves the request was validated before anything
 	// was read.
 	var asked atomic.Int32
-	svc, err := New(sql.OpenDB(untouchable{&asked, new(atomic.Int64)}), Config{})
+	svc, err := New(sql.OpenDB(untouchable{&asked, new(atomic.Int64)}), Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	ctx := context.Background()
 	filters := ListInput{States: []string{"ESCALATED"}, EffectType: noteType}
@@ -164,7 +164,9 @@ func TestEveryTransactionBeginsUnderTheBound(t *testing.T) {
 	} {
 		var asked atomic.Int32
 		var deadline atomic.Int64
-		svc, err := New(sql.OpenDB(untouchable{&asked, &deadline}), test.cfg)
+		cfg := test.cfg
+		cfg.ReceiptSigner = testReceiptSigner
+		svc, err := New(sql.OpenDB(untouchable{&asked, &deadline}), cfg)
 		must(t, err)
 		caller := context.Background()
 		if test.caller > 0 {

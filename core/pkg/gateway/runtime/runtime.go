@@ -7,6 +7,8 @@
 //	helm-gateway serve     serve the API on :8443 (TLS) and health on :8081
 //	helm-gateway db scram-verifier
 //	                       print a PostgreSQL SCRAM-SHA-256 verifier of a password
+//	helm-gateway receipt-key
+//	                       print the receipt public key as <key_id>=<hex>
 //
 // serve requires TLS (HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE, and for mutual
 // TLS HELM_TLS_CLIENT_AUTH=require with HELM_TLS_CLIENT_CA_FILE) and the
@@ -14,6 +16,14 @@
 // audience, helm-gateway:<env>). --dev-insecure-listen serves plain HTTP on a
 // loopback address instead, for local development only; it relaxes nothing
 // else.
+//
+// Every decision serve records is signed (helm-tracker#276): serve refuses to
+// start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE, a file holding a
+// 32-byte Ed25519 seed (hex or base64), and the key id the receipts carry:
+// HELM_GATEWAY_RECEIPT_KEY_ID verbatim, or HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX
+// with a fingerprint of the public key appended. The chart mounts the seed
+// into the gateway Pod only (R8); `helm-gateway receipt-key` prints the
+// public half a verifier trusts.
 //
 // Dispatch and Observe act on GitHub through the GitHub App whose files the
 // chart mounts into the gateway Pod only (R8): HELM_GATEWAY_GITHUB_APP_ID_FILE,
@@ -41,8 +51,9 @@
 // HELM_GATEWAY_EXECUTOR_MAX_TTL of 15m. It never accepts internal worker tokens.
 package runtime
 
-// quantum_posture: the listener serves classical TLS 1.2+ (pkg/servetls) and
-// verifies classical RS256 tokens (pkg/auth/jwks); no post-quantum claim.
+// quantum_posture: the listener serves classical TLS 1.2+ (pkg/servetls),
+// verifies classical RS256 tokens (pkg/auth/jwks) and signs decision receipts
+// with classical Ed25519 (receiptkey.go); no hybrid or post-quantum claim.
 
 import (
 	"context"
@@ -97,7 +108,7 @@ type Configure func(context.Context, *sql.DB, *admission.Config) error
 // Run is the shared gateway command used by the OSS and HELM OS compositions.
 func Run(ctx context.Context, args []string, getenv func(string) string, stderr io.Writer, extensions ...Configure) error {
 	if len(args) == 0 {
-		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--worker-listen :8444] [--executor-listen :8445] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT] | db scram-verifier")
+		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--worker-listen :8444] [--executor-listen :8445] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT] | db scram-verifier | receipt-key")
 	}
 	switch args[0] {
 	case "migrate":
@@ -121,6 +132,8 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return serve(ctx, args[1:], getenv, stderr, extensions...)
 	case "db":
 		return runDB(args[1:], os.Stdin, os.Stdout, stderr)
+	case "receipt-key":
+		return runReceiptKey(args[1:], getenv, os.Stdout)
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }
@@ -216,6 +229,10 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	// Every decision is recorded with a signed receipt: no key, no gateway.
+	if admissionConfig.ReceiptSigner, err = receiptSignerFromEnv(getenv); err != nil {
+		return err
+	}
 	// The gateway's own authority effects (helm.authority.provision.v1 and
 	// narrow.v1) act on its own database, so their adapter needs no credential.
 	provisioner, err := provision.New(db)

@@ -567,6 +567,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             archive = fixture / "dist/chart/helm-ai-kernel-0.11.1-main.20000101000000.tgz"
             with tarfile.open(archive) as chart:
                 metadata = yaml.safe_load(chart.extractfile("helm-ai-kernel/Chart.yaml"))
+                packaged_values = yaml.safe_load(chart.extractfile("helm-ai-kernel/values.yaml"))
+            # The development chart generates a per-install receipt seed, so an
+            # install that follows charts-dev with no receipt values keeps
+            # starting the gateway; the release chart does not.
+            self.assertIs(packaged_values["gateway"]["receipts"]["autoSeed"], True)
+            source_values = yaml.safe_load((source / "values.yaml").read_text(encoding="utf-8"))
+            self.assertIs(source_values["gateway"]["receipts"]["autoSeed"], False)
             self.assertEqual(metadata["version"], "0.11.1-main.20000101000000")
             self.assertEqual(metadata["appVersion"], image.rsplit(":", 1)[1])
             annotations = metadata["annotations"]
@@ -581,6 +588,25 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             deployments = [d for d in yaml.safe_load_all(rendered.stdout) if d and d.get("kind") == "Deployment"]
             self.assertTrue(any(c["image"] == image for d in deployments
                                 for c in d["spec"]["template"]["spec"]["containers"]))
+            gateway_values = [
+                "gateway.enabled=true", "gateway.tls.existingSecret=gw-tls",
+                "gateway.controlPlaneIdentity.jwksURL=https://cp.example.internal/jwks",
+                "gateway.controlPlaneIdentity.issuer=https://cp.example.internal",
+                "gateway.controlPlaneIdentity.audience=helm-gateway:dev",
+                "gateway.controlPlaneIdentity.actor=spiffe://helm/control-plane",
+                "gateway.database.existingSecret=gw-db",
+                "gateway.networkPolicy.controlPlane.namespaceSelector.matchLabels.helm-cp=enabled",
+                "gateway.networkPolicy.database.to[0].ipBlock.cidr=10.20.30.40/32",
+            ]
+            gateway_args = [arg for value in gateway_values for arg in ("--set", value)]
+            dev_gateway = subprocess.run(["helm", "template", "dev", str(archive), *gateway_args],
+                                         text=True, capture_output=True)
+            self.assertEqual(dev_gateway.returncode, 0, dev_gateway.stdout + dev_gateway.stderr)
+            self.assertIn("# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml", dev_gateway.stdout)
+            release_gateway = subprocess.run(["helm", "template", "release", str(source), *gateway_args],
+                                             text=True, capture_output=True)
+            self.assertNotEqual(release_gateway.returncode, 0)
+            self.assertIn("requires gateway.receipts.existingSecret", release_gateway.stderr)
         self.assertEqual(before, {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()})
 
     def test_dev_chart_staging_refuses_release_images_and_missing_catalog_fields(self) -> None:
@@ -602,6 +628,14 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                                      text=True, capture_output=True)
             self.assertNotEqual(missing.returncode, 0)
             self.assertIn("expected exactly one artifacthub.io/prerelease:", missing.stderr)
+            self.assertFalse(destination.exists())
+            shutil.copy2(ROOT / "deploy/helm-chart/Chart.yaml", chart)
+            values = source / "values.yaml"
+            values.write_text(values.read_text().replace("    autoSeed: false\n", ""))
+            no_seed = subprocess.run(command + ["ghcr.io/mindburn-labs/helm-ai-kernel:main-20000101000000-abcdef0"],
+                                     text=True, capture_output=True)
+            self.assertNotEqual(no_seed.returncode, 0)
+            self.assertIn("expected exactly one gateway.receipts.autoSeed: false", no_seed.stderr)
             self.assertFalse(destination.exists())
 
     def test_no_workflow_re_attests_already_published_release_assets(self) -> None:

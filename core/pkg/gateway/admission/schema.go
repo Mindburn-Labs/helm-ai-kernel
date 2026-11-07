@@ -40,6 +40,8 @@ var Tables = []string{
 	"authority_recovery_scopes",
 	"authority_recovery_members",
 	"authority_recovery_checkpoints",
+	"authority_receipt_chains",
+	"authority_receipts",
 }
 
 // migration is one version of the gateway schema.
@@ -101,6 +103,9 @@ var migrations = []migration{
 	}},
 	{14, "exact recovery CP version lineage", func() (string, error) {
 		return withRowSecurity("", "schema/014_recovery_version_lineage.sql", nil)
+	}},
+	{15, "signed decision receipt chains", func() (string, error) {
+		return withRowSecurity("", "schema/015_receipts.sql", []string{"authority_receipt_chains", "authority_receipts"})
 	}},
 }
 

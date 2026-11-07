@@ -1,7 +1,9 @@
 package admission
 
-// quantum_posture: SHA-256 content addresses for observation results; nothing
-// here signs or verifies, and no post-quantum claim is made.
+// quantum_posture: SHA-256 content addresses for observation results; this
+// file signs and verifies nothing. The decisions admission records are signed
+// with classical Ed25519 receipts (receipts.go); no hybrid or post-quantum
+// claim is made.
 
 import (
 	"context"

@@ -155,7 +155,9 @@ func newWire(t *testing.T, cfg ...admission.Config) (gatewayv1.EffectGatewayServ
 		must(t, err)
 	}
 
-	svc, err := admission.New(db, append(cfg, admission.Config{})[0])
+	config := append(cfg, admission.Config{})[0]
+	config.ReceiptSigner = testReceiptSigner
+	svc, err := admission.New(db, config)
 	must(t, err)
 	iss := newIssuer(t)
 	api := &Server{Admission: svc, Auth: &Authenticator{Validator: iss.validator(), Actor: testActor}}

@@ -1135,6 +1135,34 @@
           "default": "",
           "description": "HELM_GATEWAY_DISPATCH_TIMEOUT, a Go duration. Empty keeps the binary default (2m)."
         },
+        "receipts": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Signed decision receipts (helm-tracker#276): the gateway's Ed25519 receipt signing seed, mounted into the gateway Pod only. The render fails unless existingSecret or autoSeed is set; existingSecret wins when both are.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Secret holding the 32-byte Ed25519 seed (hex or standard base64) under existingSecretKey, mounted at /var/run/secrets/helm-gateway-receipts/seed."
+            },
+            "existingSecretKey": {
+              "type": "string",
+              "default": "seed",
+              "description": "Key of the seed in existingSecret."
+            },
+            "autoSeed": {
+              "type": "boolean",
+              "default": false,
+              "description": "Create <gateway name>-receipts holding a random 32-byte seed, base64-encoded, kept across upgrades through Helm lookup and across uninstalls. Off in the release chart; the charts-dev development chart sets it."
+            },
+            "keyId": {
+              "type": "string",
+              "default": "",
+              "pattern": "^([A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?$",
+              "description": "HELM_GATEWAY_RECEIPT_KEY_ID, the key_id every receipt carries, used verbatim. Empty derives helm-gateway:<namespace>:<gateway name>:<first 16 hex of SHA-256 of the public key> in helm-gateway (HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX), so a new seed gets a new key id."
+            }
+          }
+        },
         "tls": {
           "type": "object",
           "additionalProperties": false,

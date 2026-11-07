@@ -75,9 +75,10 @@ binary, signature, certification, executor, sandbox, and drift-policy material
 cannot change under the same version. A database `BEFORE INSERT` trigger uses
 the same lock and independently enforces shadow-envelope parity, current-head
 succession, immutable material, and terminal revocation even for direct SQL.
-The trigger does not check signatures: the runtime reader verifies every
-stored envelope it loads, so a row inserted with a bad signature is refused at
-effect admission. Revocation is terminal. Trigger functions pin `search_path` to `pg_catalog` and dynamically
+The trigger does not check signatures. The reader's load methods verify every
+stored envelope they return, but no shipped path calls them today
+(helm-tracker#266); the shipped runtime only verifies the release-authority
+envelopes carried in effect reservation events. Revocation is terminal. Trigger functions pin `search_path` to `pg_catalog` and dynamically
 schema-qualify their trigger relation, preventing temporary-table namespace
 shadowing.
 

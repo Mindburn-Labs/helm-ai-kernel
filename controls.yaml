@@ -3069,10 +3069,11 @@ controls:
       Retired (helm-tracker#266): no shipped path ever appended a release
       authority, so the writer (PostgresReleaseAuthorityAdminStore.Append) and
       SignConnectorReleaseAuthority moved into a test fixture and the control
-      has no shipped entry point. Only the read side ships: the runtime reader,
-      PostgresReleaseAuthorityStore, verifies each stored envelope, and the
-      table's insert trigger enforces append-only succession for any row a
-      deployment inserts.
+      has no shipped entry point. The shipped runtime builds
+      PostgresReleaseAuthorityStore only to verify release-authority envelopes
+      carried in effect reservation events; its load methods verify what they
+      read but have no shipped caller. The table's insert trigger enforces
+      append-only succession for any row a deployment inserts.
     entry_points: []
     config: []
     protected_operations:
@@ -3167,9 +3168,10 @@ controls:
     status: observed-only
     reason: >-
       Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no
-      caller and was deleted with its tests. Shipped connector adapters report
-      ERR_CONNECTOR_CONTRACT_DRIFT from their own typed response checks; the
-      preview TON Acton connector is not linked into core/cmd/helm-ai-kernel.
+      caller and was deleted with its tests. No shipped schema pin remains. The
+      GitHub adapter linked into helm-gateway is the only shipped adapter that
+      reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own typed response checks;
+      the preview TON Acton connector is not linked into any shipped binary.
     entry_points: []
     config: []
     protected_operations:

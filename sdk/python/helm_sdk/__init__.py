@@ -27,15 +27,14 @@ from .types_gen import (
     EvaluateResponse,
     Receipt,
     Session,
+    EvidenceVerificationCheck,
     VerificationResult,
-    VerificationResultChecks,
     VersionInfo,
 )
 
 ChatMessage = ChatCompletionRequestMessagesInner
 ChatTool = ChatCompletionRequestToolsInner
 ChatToolFunction = ChatCompletionRequestToolsInnerFunction
-VerificationChecks = VerificationResultChecks
 
 __all__ = [
     "reason_codes",
@@ -62,6 +61,6 @@ __all__ = [
     "Receipt",
     "Session",
     "VerificationResult",
-    "VerificationChecks",
+    "EvidenceVerificationCheck",
     "VersionInfo",
 ]

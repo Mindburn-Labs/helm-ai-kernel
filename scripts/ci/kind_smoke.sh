@@ -427,8 +427,8 @@ curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/replay/verify" \
 python3 - "$TMP_DIR/replay.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
-if payload.get("verified") is not True and payload.get("verdict") != "PASS":
-    raise SystemExit(f"expected replay verification success: {payload}")
+if payload.get("outcome") != "VERIFIED":
+    raise SystemExit(f"expected evidence verification outcome VERIFIED: {payload}")
 PY
 
 # Persistence across a restart, judged by what the kernel serves: the receipt

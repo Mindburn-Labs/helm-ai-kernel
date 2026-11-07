@@ -325,7 +325,7 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["status"] = statusFromStore(svc)
 		base["source"] = "/api/v1/replay/verify"
 		base["summary"] = map[string]any{
-			"verifier":        "evidence bundle replay verifier",
+			"verifier":        "evidence bundle verifier",
 			"receipt_count":   len(receipts),
 			"storage_status":  statusFromStore(svc),
 			"verification_io": "operator-provided evidence bundle",

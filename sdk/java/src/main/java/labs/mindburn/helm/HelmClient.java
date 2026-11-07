@@ -397,11 +397,9 @@ public class HelmClient {
 
     /** POST /api/v1/evidence/verify */
     public VerificationResult verifyEvidence(byte[] bundle) {
-        // Send as JSON with base64-encoded bundle for simplicity
-        String body = toJson(Map.of("bundle_b64",
-                java.util.Base64.getEncoder().encodeToString(bundle)));
         HttpRequest r = req("POST", "/api/v1/evidence/verify")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .setHeader("Content-Type", "application/octet-stream")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(bundle))
                 .build();
         return send(r, VerificationResult.class);
     }

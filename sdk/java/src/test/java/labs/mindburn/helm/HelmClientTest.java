@@ -198,9 +198,10 @@ public class HelmClientTest {
     @Test
     @DisplayName("TypesGen: VerificationResult deserialization")
     void testVerificationResultDeserialization() throws Exception {
-        String json = "{\"verdict\":\"PASS\"}";
+        String json = "{\"outcome\":\"UNVERIFIABLE\",\"checks_run\":[{\"name\":\"bundle_seal\",\"status\":\"UNVERIFIABLE\",\"detail\":\"signed by another key\"}],\"roots\":{\"entry_count\":1},\"errors\":[]}";
         TypesGen.VerificationResult result = mapper.readValue(json, TypesGen.VerificationResult.class);
-        assertNotNull(result.getVerdict());
+        assertEquals(TypesGen.VerificationResult.OutcomeEnum.UNVERIFIABLE, result.getOutcome());
+        assertEquals(1, result.getChecksRun().size());
     }
 
     @Test

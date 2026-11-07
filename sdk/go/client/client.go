@@ -259,12 +259,27 @@ func (c *HelmClient) ExportEvidence(sessionID string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// VerifyEvidence calls POST /api/v1/evidence/verify.
+// VerifyEvidence calls POST /api/v1/evidence/verify with the bundle bytes.
 func (c *HelmClient) VerifyEvidence(bundle []byte) (*VerificationResult, error) {
+	req, err := http.NewRequest("POST", c.BaseURL+"/api/v1/evidence/verify", bytes.NewReader(bundle))
+	if err != nil {
+		return nil, err
+	}
+	c.applyHeaders(req)
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, helmAPIErrorFromResponse(resp)
+	}
 	var out VerificationResult
-	// Simplified: send as JSON with base64-encoded bundle
-	err := c.do("POST", "/api/v1/evidence/verify", map[string]any{"bundle_b64": bundle}, &out)
-	return &out, err
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ReplayVerify calls POST /api/v1/replay/verify.

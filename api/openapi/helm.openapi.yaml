@@ -2313,8 +2313,18 @@ paths:
       tags: [evidence]
       summary: Verify an EvidencePack
       description: |
-        Verifies signatures, causal chain, and policy compliance.
-        Works offline — no network calls made during verification.
+        Verifies an uploaded evidence bundle against this runtime's receipt
+        signer: archive format, EvidencePack seal, manifest file hashes,
+        referenced artifacts when a receipt requires them, receipt signatures
+        and the per-session receipt chain. No policy is evaluated.
+
+        `checks_run` lists only the checks that ran, each VERIFIED, FAILED or
+        UNVERIFIABLE. A seal or receipt signed by any key other than the
+        runtime's, including a key the bundle carries about itself, is
+        UNVERIFIABLE when its contents are intact and never VERIFIED. The
+        `outcome` is FAILED if any check failed, UNVERIFIABLE if any check was
+        unverifiable or a required check did not run, and VERIFIED only when
+        every required check verified. The route makes no network calls.
       requestBody:
         required: true
         content:
@@ -2326,6 +2336,11 @@ paths:
                   type: string
                   format: binary
                   description: EvidencePack .tar.gz file
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: EvidencePack .tar.gz bytes as the raw request body
       responses:
         '200':
           description: Verification result
@@ -2334,11 +2349,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerificationResult'
               example:
-                verdict: "PASS"
-                checks:
-                  signatures: "PASS"
-                  causal_chain: "PASS"
-                  policy_compliance: "PASS"
+                outcome: "VERIFIED"
+                checks_run:
+                  - name: bundle_format
+                    status: VERIFIED
+                    detail: gzip tar archive with a manifest and 2 receipts
+                  - name: bundle_seal
+                    status: VERIFIED
+                    detail: the seal signature verifies under the runtime key "kernel-1" and the pack inventory matches the seal
+                  - name: manifest_hashes
+                    status: VERIFIED
+                    detail: all 2 manifest files are present with matching SHA-256 and no file is unlisted
+                  - name: receipt_signatures
+                    status: VERIFIED
+                    detail: all 2 receipt signatures verify under the runtime trust anchor
+                  - name: receipt_chain
+                    status: VERIFIED
+                    detail: 2 receipts across 1 sessions link by prev_hash with increasing Lamport clocks
+                roots:
+                  entry_count: 2
                 errors: []
         '400':
           $ref: '#/components/responses/HelmError'
@@ -2956,7 +2985,7 @@ paths:
         /api/v1/evidence/verify.
       operationId: replayVerify
       tags: [evidence]
-      summary: Replay and verify execution from tapes
+      summary: Verify an evidence bundle (no replay runs)
       requestBody:
         required: true
         content:
@@ -2969,7 +2998,7 @@ paths:
                   format: binary
       responses:
         '200':
-          description: Replay verification result
+          description: Evidence bundle verification result
           content:
             application/json:
               schema:
@@ -5882,25 +5911,48 @@ components:
 
     VerificationResult:
       type: object
+      description: |
+        Evidence bundle verification. Replaces the retired `verdict` and
+        `checks` fields, which reported PASS for checks that did not run
+        (including a `policy_compliance` check no code evaluated).
+      required: [outcome, checks_run, roots, errors]
       properties:
-        verdict:
+        outcome:
           type: string
-          enum: [PASS, FAIL]
-        checks:
-          type: object
-          properties:
-            signatures: { type: string, enum: [PASS, FAIL] }
-            causal_chain: { type: string, enum: [PASS, FAIL] }
-            policy_compliance: { type: string, enum: [PASS, FAIL] }
+          enum: [VERIFIED, FAILED, UNVERIFIABLE]
+          description: FAILED if any check failed; UNVERIFIABLE if any check was unverifiable or a required check did not run; VERIFIED only when every required check verified.
+        checks_run:
+          type: array
+          description: The checks that ran, in order. A check that did not run is absent, never reported as passing.
+          items:
+            $ref: '#/components/schemas/EvidenceVerificationCheck'
         roots:
           type: object
           properties:
-            manifest_root_hash: { type: string }
-            merkle_root: { type: string }
-            entry_count: { type: integer }
+            entry_count:
+              type: integer
+              description: Number of receipts in the bundle.
         errors:
           type: array
           items: { type: string }
+
+    EvidenceVerificationCheck:
+      type: object
+      required: [name, status, detail]
+      properties:
+        name:
+          type: string
+          description: |
+            Check identifier: `bundle_format`, `bundle_seal`, `manifest_hashes`,
+            `required_artifacts` (only when a receipt requires a referenced
+            artifact), `receipt_signatures` or `receipt_chain`.
+        status:
+          type: string
+          enum: [VERIFIED, FAILED, UNVERIFIABLE]
+          description: UNVERIFIABLE means the material is intact but signed by a key the runtime does not trust, or the runtime has no trust anchor for it.
+        detail:
+          type: string
+          description: What the check established.
 
     EvidenceEnvelopeExportRequest:
       type: object

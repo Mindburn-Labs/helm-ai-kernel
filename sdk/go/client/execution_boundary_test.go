@@ -342,6 +342,13 @@ func responseForClientMatrix(method string, u *url.URL) any {
 		}
 	case "/healthz":
 		return map[string]string{"status": "ok", "version": "test"}
+	case "/api/v1/evidence/verify", "/api/v1/replay/verify":
+		return map[string]any{
+			"outcome":    "VERIFIED",
+			"checks_run": []map[string]any{{"name": "receipt_signatures", "status": "VERIFIED", "detail": "test"}},
+			"roots":      map[string]any{"entry_count": 1},
+			"errors":     []string{},
+		}
 	case "/api/v1/proofgraph/sessions",
 		"/api/v1/boundary/capabilities",
 		"/api/v1/boundary/records",

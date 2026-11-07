@@ -101,7 +101,7 @@ def main() -> None:
 
         evidence = helm.export_evidence("python-sdk-example")
         evidence_result = helm.verify_evidence(evidence)
-        if evidence_result.verdict != "PASS":
+        if evidence_result.outcome != "VERIFIED":
             raise AssertionError(f"evidence verification failed: {evidence_result.to_dict()}")
 
     print(
@@ -113,7 +113,7 @@ def main() -> None:
                 "mcp_unknown_server": mcp_verdict,
                 "receipt_verified": True,
                 "sandbox_preflight": preflight["verdict"],
-                "evidence_verification": evidence_result.verdict,
+                "evidence_verification": evidence_result.outcome,
             },
             indent=2,
             sort_keys=True,

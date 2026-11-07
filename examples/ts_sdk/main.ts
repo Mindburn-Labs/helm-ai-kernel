@@ -92,7 +92,7 @@ requireVerdict(preflight, 'ALLOW', 'sandbox preflight');
 
 const evidence = await helm.exportEvidence('ts-sdk-example');
 const evidenceResult = await helm.verifyEvidence(evidence);
-if (evidenceResult.verdict !== 'PASS') {
+if (evidenceResult.outcome !== 'VERIFIED') {
   throw new Error(`evidence verification failed: ${JSON.stringify(evidenceResult)}`);
 }
 
@@ -103,5 +103,5 @@ console.log(JSON.stringify({
   mcp_unknown_server: mcpVerdict,
   receipt_verified: true,
   sandbox_preflight: preflight.verdict,
-  evidence_verification: evidenceResult.verdict,
+  evidence_verification: evidenceResult.outcome,
 }, null, 2));

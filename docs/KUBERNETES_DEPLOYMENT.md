@@ -131,8 +131,38 @@ What renders:
 Required values fail the render with a message naming them:
 `gateway.tls.existingSecret` (or `gateway.tls.devInsecureLoopback=true`
 outside production), the four `gateway.controlPlaneIdentity.*` values,
-`gateway.database.existingSecret`, and, with the NetworkPolicy on, a Control
-Plane selector and `gateway.networkPolicy.database.to`.
+`gateway.database.existingSecret`, the receipt signing key
+(`gateway.receipts.existingSecret` or `gateway.receipts.autoSeed=true`), and,
+with the NetworkPolicy on, a Control Plane selector and
+`gateway.networkPolicy.database.to`.
+
+### Receipt signing key
+
+The gateway signs a receipt for every decision it records and does not start
+without its key: a 32-byte Ed25519 seed, hex or standard base64, mounted at
+`/var/run/secrets/helm-gateway-receipts/seed` in the gateway Pod and no other
+(R8). Choose one source:
+
+- `gateway.receipts.existingSecret` (key `gateway.receipts.existingSecretKey`,
+  default `seed`): a Secret you create and back up, for example with
+  `head -c 32 /dev/urandom | base64`;
+- `gateway.receipts.autoSeed=true`: the chart creates
+  `<release>-helm-ai-kernel-gateway-receipts` with a random seed on the first
+  install, reads it back with `lookup` on every upgrade, and keeps it on
+  uninstall (`helm.sh/resource-policy: keep`). It needs a real Helm install
+  or upgrade (Flux's helm-controller is one); a pipeline that renders with
+  `helm template` mints a new key on every render, so use `existingSecret`
+  there.
+
+The release chart's `autoSeed` is false; the development chart published from
+`main` to charts-dev sets it true, so a development install that names no key
+keeps starting. `gateway.receipts.keyId` sets the `key_id` receipts carry
+(default `helm-gateway:<namespace>:<gateway name>`). Record the public key
+once, out of band, with `helm-gateway receipt-key` in the gateway Pod: it
+prints `<key_id>=<public key hex>`, the form `receipt_verify --key` takes.
+Replacing the seed starts a new key; receipts signed before verify only under
+the old public key. Verification is described in
+[the gateway effect API note](architecture/gateway-effect-api.md#signed-decision-receipts).
 
 ### Database roles: owner and runtime
 
@@ -144,7 +174,7 @@ table owner can turn row-level security off. So migrate runs as the owner and
 | Role | Attributes | Does |
 | --- | --- | --- |
 | `helm_owner` | NOLOGIN | Owns the `helm_gateway` schema and every table. The migrate and grant steps `SET ROLE` to it through `PGOPTIONS`. |
-| `helm_gateway` | LOGIN | The runtime DSN. `SELECT, INSERT, UPDATE` on the `authority_*` tables; only `SELECT, INSERT` on `authority_postings` and `authority_distinct_values`; `SELECT, INSERT, DELETE` on `authority_token_replay`; `SELECT` on `gateway_schema_migrations`. River's job tables, once `helm-gateway migrate` has created them: `SELECT, INSERT, UPDATE, DELETE` on `river_job`, `river_leader`, `river_queue` and `river_notification`, `SELECT` on `river_migration`, and `USAGE` on the `river_*` sequences. |
+| `helm_gateway` | LOGIN | The runtime DSN. `SELECT, INSERT, UPDATE` on the `authority_*` tables; only `SELECT, INSERT` on `authority_postings`, `authority_distinct_values` and `authority_receipts` (signed receipts are append-only); `SELECT, INSERT, DELETE` on `authority_token_replay`; `SELECT` on `gateway_schema_migrations`. River's job tables, once `helm-gateway migrate` has created them: `SELECT, INSERT, UPDATE, DELETE` on `river_job`, `river_leader`, `river_queue` and `river_notification`, `SELECT` on `river_migration`, and `USAGE` on the `river_*` sequences. |
 
 Neither role has SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION,
 and the runtime role must not be a member of the owner role.

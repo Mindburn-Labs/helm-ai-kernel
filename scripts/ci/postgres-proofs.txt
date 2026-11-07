@@ -4,6 +4,13 @@
 # count against a real Postgres. A skip is a failure, not a pass.
 #
 # <package dir under core> <test> <count> <race|plain>
+pkg/gateway/admission TestPostgresDecisionsCommitWithSignedChainedReceipts 1 race
+pkg/gateway/admission TestPostgresReceiptChainStaysContiguousUnderConcurrentProposals 3 race
+pkg/gateway/admission TestPostgresSigningFailureCommitsNoDecision 1 race
+pkg/gateway/admission TestPostgresReceiptRowsAreAppendOnlyForTheRuntimeRole 1 race
+pkg/gateway/admission TestPostgresStoredReceiptsVerifyOfflineWithTheGatewayKey 1 race
+pkg/gateway/admission TestPostgresReceiptSchemaUpgradesFrom14 1 race
+pkg/gateway/server TestPostgresAttemptReceiptRefsOnTheWire 1 race
 pkg/gateway/admission TestPostgresRecoveryCoversExactCPLifecycleLineage 1 race
 pkg/gateway/admission TestPostgresRecoveryVersionLineageUpgradesLegacySingleton 1 race
 pkg/gateway/admission TestPostgresRecoveryScopeHoldsOriginalAuthorityAndKeepsNeighborsLive 1 race

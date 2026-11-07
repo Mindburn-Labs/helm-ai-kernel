@@ -1164,6 +1164,12 @@ removal_proofs:
     tests:
       - "core/pkg/receiptverify.TestRequireGatewayBindings"
   - control: CTL-060
+    file: core/pkg/receiptverify/gateway.go
+    find: "\t\t{\"verdict\", r.Verdict, \"\"},\n"
+    replace: ""
+    tests:
+      - "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt"
+  - control: CTL-060
     file: core/cmd/receipt_verify/main.go
     find: "receiptverify.Options{RequireGatewayBindings: *require}"
     replace: "receiptverify.Options{RequireGatewayBindings: *require && false}"
@@ -4235,13 +4241,18 @@ controls:
       <receipt_id>=<file>) and run a binding check: it passes only when every
       supplied binding's receipt is signed under receipt.v5, the binding's
       SHA-256 is that receipt's signed output_hash, the binding is the closed
-      document its binding_version names (helm.gateway.receipt-binding.v1; an
+      document its binding_version names (helm.gateway.receipt-binding.v1
+      for a decision, helm.gateway.outcome-binding.v1 for an outcome; an
       unknown version fails) in its own JCS form, and its chain id
       (length-framed from its tenant and workspace), sequence, attempt and
-      version, state, verdict, reason code, policy hash, argument digest and
-      decided_at equal the receipt's session_id, lamport_clock, decision_id,
-      effect_id, status, verdict, reason_code, policy_hash, args_hash and
-      timestamp (outside the receipt.v5 preimage, bound by this row). A
+      version, state, reason code, policy hash and argument digest equal the
+      receipt's session_id, lamport_clock, decision_id, effect_id, status,
+      reason_code, policy_hash and args_hash; a decision binding's verdict
+      and decided_at equal the receipt's verdict and timestamp, and an
+      outcome binding's state is OBSERVED, RECONCILED or SETTLED, it names
+      its permit, the receipt's verdict is empty and its settled_at equals
+      the receipt's timestamp (outside the receipt.v5 preimage, bound by
+      these rows). A
       binding for a receipt the bundle does not hold, or for a receipt id
       the bundle holds twice, fails; with no binding the check is
       not_applicable, never a pass. The result counts gateway_receipts and
@@ -4259,13 +4270,14 @@ controls:
       receipt_verify checks offline; it refuses a workspace_id other than the
       token's and an episode token, reads a range that runs past the chain's
       head up to the head and names it (one that starts past it is not
-      found), and never returns a range with a gap. A frozen gateway chain
-      signed by the gateway's builder keeps verifying.
+      found), and never returns a range with a gap. A frozen gateway chain of
+      three decisions and one outcome keeps verifying.
     status: enforced
     entry_points:
       - "core/pkg/receiptverify.VerifyBundle"
       - "core/pkg/receiptverify.VerifyBundleWith"
       - "core/pkg/receiptverify.ParseGatewayBinding"
+      - "core/pkg/receiptverify.ParseGatewayOutcomeBinding"
       - "core/cmd/receipt_verify.addBindings"
       - "core/pkg/gateway/admission.encodeReceiptBundle"
       - "core/pkg/gateway/admission.Service.GetReceipts"
@@ -4304,6 +4316,8 @@ controls:
         - "core/pkg/receiptverify.TestParseGatewayBindingIsClosedAndCanonical"
         - "core/pkg/receiptverify.TestABindingNeedsAReceiptV5Signature"
         - "core/pkg/receiptverify.TestDuplicateReceiptIDCannotPlaceABinding"
+        - "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt"
+        - "core/pkg/receiptverify.TestParseGatewayOutcomeBindingIsClosedAndCanonical"
         - "core/pkg/receiptverify.TestRequireGatewayBindings"
         - "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne"
         - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
@@ -4317,6 +4331,7 @@ controls:
         - "core/pkg/receiptverify.TestABindingNeedsAReceiptV5Signature"
         - "core/pkg/receiptverify.TestRequireGatewayBindings"
         - "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne"
+        - "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt"
         - "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt"
         - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
         - "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing"

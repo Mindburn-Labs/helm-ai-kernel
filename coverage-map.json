@@ -4631,7 +4631,7 @@
       "id": "CTL-060",
       "title": "Gateway receipts verify offline with their bindings",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "A reader verifies helm-gateway's signed decision receipts (CTL-059) offline, the gateway's own facts included (helm-tracker#276). receiptverify, receipt_verify and the WASM verifier take a gateway receipt's binding document (bundle member gateway_bindings, receipt id to the base64 of the exact bytes, or receipt_verify --binding \u003creceipt_id\u003e=\u003cfile\u003e) and run a binding check: it passes only when every supplied binding's receipt is signed under receipt.v5, the binding's SHA-256 is that receipt's signed output_hash, the binding is the closed document its binding_version names (helm.gateway.receipt-binding.v1; an unknown version fails) in its own JCS form, and its chain id (length-framed from its tenant and workspace), sequence, attempt and version, state, verdict, reason code, policy hash, argument digest and decided_at equal the receipt's session_id, lamport_clock, decision_id, effect_id, status, verdict, reason_code, policy_hash, args_hash and timestamp (outside the receipt.v5 preimage, bound by this row). A binding for a receipt the bundle does not hold, or for a receipt id the bundle holds twice, fails; with no binding the check is not_applicable, never a pass. The result counts gateway_receipts and bindings_checked, and receipt_verify --require-bindings (Options.RequireGatewayBindings) fails a gateway receipt that has no binding, so exit 0 then covers every gateway receipt's own facts. helm-gateway serves GET /api/v1/receipt-keyring on its API listener, public and read-only, in the Kernel's keyring shape (CTL-050) under its own label, gateway-receipt-keyring.v1, for the key it signs receipts with, and refuses to start with a signer it cannot publish. GetAttemptReceipts returns an attempt's receipts as the exact stored envelope and binding bytes, to a helm.gateway.read token that can read the attempt (its tenant, workspace and episode scope). ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of the chain of the token's tenant and workspace, in order, as the document receipt_verify checks offline; it refuses a workspace_id other than the token's and an episode token, reads a range that runs past the chain's head up to the head and names it (one that starts past it is not found), and never returns a range with a gap. A frozen gateway chain signed by the gateway's builder keeps verifying.",
+      "claim": "A reader verifies helm-gateway's signed decision receipts (CTL-059) offline, the gateway's own facts included (helm-tracker#276). receiptverify, receipt_verify and the WASM verifier take a gateway receipt's binding document (bundle member gateway_bindings, receipt id to the base64 of the exact bytes, or receipt_verify --binding \u003creceipt_id\u003e=\u003cfile\u003e) and run a binding check: it passes only when every supplied binding's receipt is signed under receipt.v5, the binding's SHA-256 is that receipt's signed output_hash, the binding is the closed document its binding_version names (helm.gateway.receipt-binding.v1 for a decision, helm.gateway.outcome-binding.v1 for an outcome; an unknown version fails) in its own JCS form, and its chain id (length-framed from its tenant and workspace), sequence, attempt and version, state, reason code, policy hash and argument digest equal the receipt's session_id, lamport_clock, decision_id, effect_id, status, reason_code, policy_hash and args_hash; a decision binding's verdict and decided_at equal the receipt's verdict and timestamp, and an outcome binding's state is OBSERVED, RECONCILED or SETTLED, it names its permit, the receipt's verdict is empty and its settled_at equals the receipt's timestamp (outside the receipt.v5 preimage, bound by these rows). A binding for a receipt the bundle does not hold, or for a receipt id the bundle holds twice, fails; with no binding the check is not_applicable, never a pass. The result counts gateway_receipts and bindings_checked, and receipt_verify --require-bindings (Options.RequireGatewayBindings) fails a gateway receipt that has no binding, so exit 0 then covers every gateway receipt's own facts. helm-gateway serves GET /api/v1/receipt-keyring on its API listener, public and read-only, in the Kernel's keyring shape (CTL-050) under its own label, gateway-receipt-keyring.v1, for the key it signs receipts with, and refuses to start with a signer it cannot publish. GetAttemptReceipts returns an attempt's receipts as the exact stored envelope and binding bytes, to a helm.gateway.read token that can read the attempt (its tenant, workspace and episode scope). ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of the chain of the token's tenant and workspace, in order, as the document receipt_verify checks offline; it refuses a workspace_id other than the token's and an episode token, reads a range that runs past the chain's head up to the head and names it (one that starts past it is not found), and never returns a range with a gap. A frozen gateway chain of three decisions and one outcome keeps verifying.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -4645,6 +4645,10 @@
         },
         {
           "symbol": "core/pkg/receiptverify.ParseGatewayBinding",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ParseGatewayOutcomeBinding",
           "reachability": "reachable"
         },
         {
@@ -4712,6 +4716,8 @@
           "core/pkg/receiptverify.TestParseGatewayBindingIsClosedAndCanonical",
           "core/pkg/receiptverify.TestABindingNeedsAReceiptV5Signature",
           "core/pkg/receiptverify.TestDuplicateReceiptIDCannotPlaceABinding",
+          "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt",
+          "core/pkg/receiptverify.TestParseGatewayOutcomeBindingIsClosedAndCanonical",
           "core/pkg/receiptverify.TestRequireGatewayBindings",
           "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne",
           "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger",
@@ -4726,6 +4732,7 @@
           "core/pkg/receiptverify.TestABindingNeedsAReceiptV5Signature",
           "core/pkg/receiptverify.TestRequireGatewayBindings",
           "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne",
+          "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt",
           "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt",
           "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger",
           "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing",
@@ -4828,6 +4835,12 @@
           "file": "core/pkg/receiptverify/gateway.go",
           "tests": [
             "core/pkg/receiptverify.TestRequireGatewayBindings"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/gateway.go",
+          "tests": [
+            "core/pkg/receiptverify.TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt"
           ]
         },
         {

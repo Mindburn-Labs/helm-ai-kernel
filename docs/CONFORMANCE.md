@@ -3,6 +3,8 @@ title: Conformance
 last_reviewed: 2026-07-01
 ---
 
+<!-- quantum_posture: this page describes classical Ed25519 report signing and SHA-256 digests and adds no post-quantum cryptographic control. -->
+
 # Conformance
 
 Conformance is the runnable check that HELM behaves like the public Kernel

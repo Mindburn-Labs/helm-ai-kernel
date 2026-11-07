@@ -1,5 +1,7 @@
 # HELM AI Kernel Claims
 
+<!-- quantum_posture: this page states classical Ed25519 signing and SHA-256 digest claims and adds no post-quantum cryptographic control. -->
+
 - Repo name: `helm-ai-kernel`
 - Canonical role: Public HELM AI Kernel implementation: fail-closed execution kernel, CLI/API (including operator TUI), SDK/contracts, receipts, replay/conformance surfaces, and local headless onboarding proof path.
 - Public/private: Public OSS repo.

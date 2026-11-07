@@ -99,7 +99,7 @@ func TestPostgresReceiptReadsOnTheWire(t *testing.T) {
 	bundle, err := receiptverify.ParseBundle(receipts[0].GetReceipt())
 	must(t, err)
 	bundle.GatewayBindings = map[string][]byte{receipts[0].GetReceiptId(): receipts[0].GetBinding()}
-	if res := receiptverify.VerifyBundle(bundle, receiptverify.TrustRoot{Keys: map[string]string{receipts[0].GetRef().GetKid(): testReceiptSigner.PublicKey()}}); !res.Valid || res.Bindings != 1 {
+	if res := receiptverify.VerifyBundle(bundle, receiptverify.TrustRoot{Keys: map[string]string{receipts[0].GetRef().GetKid(): testReceiptSigner.PublicKey()}}); !res.Valid || res.BindingsChecked != 1 {
 		t.Fatalf("the read receipt does not verify with its binding: %+v", res)
 	}
 
@@ -111,7 +111,7 @@ func TestPostgresReceiptReadsOnTheWire(t *testing.T) {
 		!bytes.Contains([]byte(export.Msg.GetBundle()), receipts[0].GetReceipt()) {
 		t.Fatalf("ExportReceiptChain = %v", export.Msg)
 	}
-	if res := receiptverify.VerifyJSON([]byte(export.Msg.GetBundle()), trust); res.Verdict != receiptverify.VerdictVerified || res.Verification.Bindings != 2 {
+	if res := receiptverify.VerifyJSON([]byte(export.Msg.GetBundle()), trust); res.Verdict != receiptverify.VerdictVerified || res.Verification.BindingsChecked != 2 {
 		t.Fatalf("the export does not verify offline: %+v", res)
 	}
 

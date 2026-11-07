@@ -72,7 +72,7 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 		}
 	}
 	got := receiptverify.VerifyJSON(export.Bundle, trustRootJSON(t))
-	if got.Verdict != receiptverify.VerdictVerified || got.Verification.Bindings != 5 ||
+	if got.Verdict != receiptverify.VerdictVerified || got.Verification.BindingsChecked != 5 ||
 		checkStatus(got.Verification, receiptverify.CheckBinding) != receiptverify.StatusPass ||
 		checkStatus(got.Verification, receiptverify.CheckClosure) != receiptverify.StatusPass {
 		t.Fatalf("the export does not verify offline: %+v", got)

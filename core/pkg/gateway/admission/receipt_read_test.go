@@ -51,10 +51,10 @@ func TestReceiptExportRefusesBeforeReadingTheLedger(t *testing.T) {
 	must(t, mock.ExpectationsWereMet())
 }
 
-func signedRows(t *testing.T, seqs ...int64) (*sqlmock.Rows, []receiptverify.GatewayReceipt) {
+func signedRows(t *testing.T, seqs ...int64) (*sqlmock.Rows, []SignedReceipt) {
 	t.Helper()
 	rows := sqlmock.NewRows([]string{"receipt_id", "chain_id", "seq", "digest", "key_id", "format", "state", "attempt_version", "envelope", "binding"})
-	var stored []receiptverify.GatewayReceipt
+	var stored []SignedReceipt
 	prev := ""
 	for i := int64(1); i <= seqs[len(seqs)-1]; i++ {
 		d := sampleDecision()
@@ -67,7 +67,7 @@ func signedRows(t *testing.T, seqs ...int64) (*sqlmock.Rows, []receiptverify.Gat
 		for _, want := range seqs {
 			if want == i {
 				rows.AddRow(id, receiptChainID(tenantA, workspace), i, digest, testReceiptSigner.GetKeyID(), ReceiptFormat, d.State, d.Version, envelope, binding)
-				stored = append(stored, receiptverify.GatewayReceipt{ReceiptID: id, Envelope: envelope, Binding: binding})
+				stored = append(stored, SignedReceipt{Ref: ReceiptRef{ReceiptID: id}, Envelope: envelope, Binding: binding})
 			}
 		}
 	}
@@ -97,7 +97,7 @@ func TestReceiptExportIsTheWholeRangeOrNothing(t *testing.T) {
 	mock.ExpectCommit()
 	export, err := svc.ExportReceiptChain(context.Background(), human, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 3})
 	must(t, err)
-	want, err := receiptverify.EncodeGatewayBundle(stored)
+	want, err := encodeReceiptBundle(stored)
 	must(t, err)
 	if !bytes.Equal(export.Bundle, want) || export.HeadSeq != 3 || len(export.Receipts) != 3 {
 		t.Fatalf("export = head %d, %d receipts, bundle %s", export.HeadSeq, len(export.Receipts), export.Bundle)

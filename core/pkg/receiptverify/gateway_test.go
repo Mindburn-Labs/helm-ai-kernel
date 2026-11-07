@@ -4,6 +4,7 @@ package receiptverify
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -56,7 +58,7 @@ func checkNamed(t *testing.T, res Result, name CheckName) Check {
 func TestFrozenGatewayChainStillVerifies(t *testing.T) {
 	_, b, trust := frozenGatewayChain(t)
 	res := VerifyBundle(b, trust)
-	if !res.Valid || res.PreimageVersion != contracts.ReceiptSignatureV5 || res.Bindings != 3 {
+	if !res.Valid || res.PreimageVersion != contracts.ReceiptSignatureV5 || res.BindingsChecked != 3 || res.GatewayReceipts != 3 {
 		t.Fatalf("the frozen gateway chain no longer verifies: %+v", res)
 	}
 	for _, name := range []CheckName{CheckIdentity, CheckIntegrity, CheckPolicy, CheckExecution, CheckClosure, CheckBinding} {
@@ -80,7 +82,7 @@ func TestGatewayBindingCheckIsNotApplicableWithoutBindings(t *testing.T) {
 	if c := checkNamed(t, res, CheckBinding); c.Status != StatusNotApplicable {
 		t.Fatalf("binding check without bindings = %+v", c)
 	}
-	if !res.Valid || res.Bindings != 0 {
+	if !res.Valid || res.BindingsChecked != 0 || res.GatewayReceipts != 3 {
 		t.Fatalf("result = %+v", res)
 	}
 
@@ -149,70 +151,220 @@ func TestGatewayChainGapFails(t *testing.T) {
 	}
 }
 
-// A binding can only describe the receipt that signed it: a receipt whose
-// signed fields disagree with its binding fails even when the binding's hash
-// is the receipt's output_hash and the signature is good.
-func TestGatewayBindingMustAgreeWithTheSignedReceipt(t *testing.T) {
+// gatewayResigner re-signs the frozen chain's first receipt, with whatever
+// binding bytes and receipt fields a case plants, under a test key: the
+// binding's hash is always the signed output_hash, so only the field checks
+// can refuse what it says.
+type gatewayResigner struct {
+	t      *testing.T
+	signer *crypto.Ed25519Signer
+	base   *contracts.Receipt
+	parsed GatewayBinding
+}
+
+func newGatewayResigner(t *testing.T) gatewayResigner {
+	t.Helper()
 	_, frozen, _ := frozenGatewayChain(t)
 	signer, err := crypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x33}, 32), "binding-test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	trust := TrustRoot{Keys: map[string]string{signer.GetKeyID(): signer.PublicKey()}}
-	base := frozen.Receipts[0]
-	binding := frozen.GatewayBindings[base.ReceiptID]
-	parsed, err := ParseGatewayBinding(binding)
+	parsed, err := ParseGatewayBinding(frozen.GatewayBindings[frozen.Receipts[0].ReceiptID])
 	if err != nil {
 		t.Fatal(err)
 	}
-	resign := func(t *testing.T, mutate func(r *contracts.Receipt, b *GatewayBinding)) Bundle {
-		t.Helper()
-		b := parsed
-		r := *base
-		r.Signature, r.SignatureProfile, r.SignatureAlgorithm, r.KeyID, r.PublicKeySet = "", "", "", "", nil
-		mutate(&r, &b)
-		raw, err := canonicalize.InteroperableJCS(b)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(raw)
-		r.OutputHash = hex.EncodeToString(sum[:])
-		if err := signer.SignReceipt(&r); err != nil {
-			t.Fatal(err)
-		}
-		return Bundle{Receipts: []*contracts.Receipt{&r}, GatewayBindings: map[string][]byte{r.ReceiptID: raw}}
+	return gatewayResigner{t: t, signer: signer, base: frozen.Receipts[0], parsed: parsed}
+}
+
+func (g gatewayResigner) trust() TrustRoot {
+	return TrustRoot{Keys: map[string]string{g.signer.GetKeyID(): g.signer.PublicKey()}}
+}
+
+func (g gatewayResigner) raw(binding []byte, mutate func(r *contracts.Receipt)) Bundle {
+	g.t.Helper()
+	r := *g.base
+	mutate(&r)
+	r.Signature, r.SignatureProfile, r.SignatureAlgorithm, r.KeyID, r.PublicKeySet = "", "", "", "", nil
+	sum := sha256.Sum256(binding)
+	r.OutputHash = hex.EncodeToString(sum[:])
+	if err := g.signer.SignReceipt(&r); err != nil {
+		g.t.Fatal(err)
 	}
+	return Bundle{Receipts: []*contracts.Receipt{&r}, GatewayBindings: map[string][]byte{r.ReceiptID: binding}}
+}
+
+func (g gatewayResigner) bundle(mutate func(r *contracts.Receipt, b *GatewayBinding)) Bundle {
+	g.t.Helper()
+	b, planted := g.parsed, *g.base
+	mutate(&planted, &b)
+	raw, err := canonicalize.InteroperableJCS(b)
+	if err != nil {
+		g.t.Fatal(err)
+	}
+	return g.raw(raw, func(r *contracts.Receipt) { *r = planted })
+}
+
+// A binding can only describe the receipt that signed it: a receipt whose
+// signed fields disagree with its binding fails even when the binding's hash
+// is the receipt's output_hash and the signature is good. Each case names the
+// row that must refuse it.
+func TestGatewayBindingMustAgreeWithTheSignedReceipt(t *testing.T) {
+	g := newGatewayResigner(t)
 	// Known good: re-signed unchanged, the receipt and binding agree.
-	if res := VerifyBundle(resign(t, func(*contracts.Receipt, *GatewayBinding) {}), trust); !res.Valid {
+	if res := VerifyBundle(g.bundle(func(*contracts.Receipt, *GatewayBinding) {}), g.trust()); !res.Valid || res.BindingsChecked != 1 {
 		t.Fatalf("re-signed frozen receipt does not verify: %+v", res)
 	}
-	for name, mutate := range map[string]func(r *contracts.Receipt, b *GatewayBinding){
-		"tenant":    func(_ *contracts.Receipt, b *GatewayBinding) { b.TenantID = "tenant-b" },
-		"workspace": func(_ *contracts.Receipt, b *GatewayBinding) { b.WorkspaceID = "ws-b" },
-		"chain id":  func(r *contracts.Receipt, b *GatewayBinding) { r.SessionID = GatewayChainID("tenant-b", "ws-a") },
-		"framing": func(r *contracts.Receipt, b *GatewayBinding) {
+	attempt := g.parsed.AttemptID
+	for name, test := range map[string]struct {
+		mutate func(r *contracts.Receipt, b *GatewayBinding)
+		want   string
+	}{
+		"tenant":    {func(_ *contracts.Receipt, b *GatewayBinding) { b.TenantID = "tenant-b" }, "chain_id framing"},
+		"workspace": {func(_ *contracts.Receipt, b *GatewayBinding) { b.WorkspaceID = "ws-b" }, "chain_id framing"},
+		"chain id":  {func(r *contracts.Receipt, b *GatewayBinding) { r.SessionID = GatewayChainID("tenant-b", "ws-a") }, "session_id"},
+		"framing": {func(r *contracts.Receipt, b *GatewayBinding) {
 			b.ChainID, r.SessionID = "helm-gateway:tenant-a:ws-a", "helm-gateway:tenant-a:ws-a"
-		},
-		"sequence":    func(r *contracts.Receipt, _ *GatewayBinding) { r.LamportClock++ },
-		"attempt":     func(_ *contracts.Receipt, b *GatewayBinding) { b.AttemptID = "0190a5b4-0000-7000-8000-000000000009" },
-		"version":     func(_ *contracts.Receipt, b *GatewayBinding) { b.AttemptVersion = 3 },
-		"effect id":   func(r *contracts.Receipt, _ *GatewayBinding) { r.EffectID = "other" },
-		"state":       func(_ *contracts.Receipt, b *GatewayBinding) { b.State = "ADMITTED" },
-		"verdict":     func(r *contracts.Receipt, _ *GatewayBinding) { r.Verdict = "ALLOW" },
-		"reason code": func(_ *contracts.Receipt, b *GatewayBinding) { b.ReasonCode = "" },
-		"policy hash": func(_ *contracts.Receipt, b *GatewayBinding) { b.PolicyHash = strings.Repeat("0", 64) },
-		"args hash":   func(r *contracts.Receipt, _ *GatewayBinding) { r.ArgsHash = strings.Repeat("0", 64) },
-		"no version":  func(_ *contracts.Receipt, b *GatewayBinding) { b.AttemptVersion = 0 },
+		}, "chain_id framing"},
+		"sequence":    {func(r *contracts.Receipt, _ *GatewayBinding) { r.LamportClock++ }, "lamport_clock"},
+		"attempt":     {func(_ *contracts.Receipt, b *GatewayBinding) { b.AttemptID = "0190a5b4-0000-7000-8000-000000000009" }, "decision_id"},
+		"version":     {func(_ *contracts.Receipt, b *GatewayBinding) { b.AttemptVersion = 3 }, "decision_id"},
+		"effect id":   {func(r *contracts.Receipt, _ *GatewayBinding) { r.EffectID = "other" }, "effect_id"},
+		"state":       {func(_ *contracts.Receipt, b *GatewayBinding) { b.State = "ADMITTED" }, "status"},
+		"verdict":     {func(r *contracts.Receipt, _ *GatewayBinding) { r.Verdict = "ALLOW" }, "verdict"},
+		"reason code": {func(_ *contracts.Receipt, b *GatewayBinding) { b.ReasonCode = "" }, "reason_code"},
+		"policy hash": {func(_ *contracts.Receipt, b *GatewayBinding) { b.PolicyHash = strings.Repeat("0", 64) }, "policy_hash"},
+		"args hash":   {func(r *contracts.Receipt, _ *GatewayBinding) { r.ArgsHash = strings.Repeat("0", 64) }, "args_hash"},
+		// The receipt.v5 timestamp is outside the signed preimage; its row
+		// against the signed decided_at is what binds it.
+		"timestamp":         {func(r *contracts.Receipt, _ *GatewayBinding) { r.Timestamp = r.Timestamp.Add(time.Microsecond) }, "timestamp"},
+		"timestamp missing": {func(r *contracts.Receipt, _ *GatewayBinding) { r.Timestamp = time.Time{} }, "timestamp"},
+		// The guard: a binding that names no tenant, attempt, version or
+		// sequence is refused even when every row would agree with it.
+		"no tenant": {func(r *contracts.Receipt, b *GatewayBinding) {
+			b.TenantID, b.ChainID = "", GatewayChainID("", b.WorkspaceID)
+			r.SessionID = b.ChainID
+		}, "names no tenant"},
+		"no workspace": {func(r *contracts.Receipt, b *GatewayBinding) {
+			b.WorkspaceID, b.ChainID = "", GatewayChainID(b.TenantID, "")
+			r.SessionID = b.ChainID
+		}, "names no tenant"},
+		"no attempt": {func(r *contracts.Receipt, b *GatewayBinding) {
+			b.AttemptID, r.EffectID, r.DecisionID = "", "", ":2"
+		}, "names no tenant"},
+		"no version": {func(r *contracts.Receipt, b *GatewayBinding) {
+			b.AttemptVersion, r.DecisionID = 0, attempt+":0"
+		}, "names no tenant"},
+		"no sequence": {func(r *contracts.Receipt, b *GatewayBinding) { b.Seq, r.LamportClock = 0, 0 }, "names no tenant"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			res := VerifyBundle(resign(t, mutate), trust)
-			if c := checkNamed(t, res, CheckBinding); c.Status != StatusFail || res.Valid {
-				t.Fatalf("a binding that disagrees with its receipt passed: %+v", res)
+			res := VerifyBundle(g.bundle(test.mutate), g.trust())
+			c := checkNamed(t, res, CheckBinding)
+			if c.Status != StatusFail || res.Valid || !strings.Contains(c.Detail, test.want) || res.BindingsChecked != 0 {
+				t.Fatalf("binding check = %+v, want a failure naming %q", c, test.want)
 			}
 			if checkNamed(t, res, CheckIdentity).Status != StatusPass {
 				t.Fatal("the planted receipt is not validly signed; the case proves nothing")
 			}
 		})
+	}
+
+	// A binding_version the verifier does not know, or none, is refused,
+	// never read as another version.
+	var document map[string]any
+	frozen := g.parsed
+	encoded, err := canonicalize.InteroperableJCS(frozen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(map[string]any){
+		"unknown version": func(m map[string]any) { m["binding_version"] = "helm.gateway.receipt-binding.v9" },
+		"no version":      func(m map[string]any) { delete(m, "binding_version") },
+		"numeric version": func(m map[string]any) { m["binding_version"] = 1 },
+	} {
+		clone := map[string]any{}
+		for k, v := range document {
+			clone[k] = v
+		}
+		mutate(clone)
+		raw, err := canonicalize.JCS(clone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := VerifyBundle(g.raw(raw, func(*contracts.Receipt) {}), g.trust())
+		if c := checkNamed(t, res, CheckBinding); c.Status != StatusFail || res.Valid {
+			t.Errorf("%s: binding check = %+v", name, c)
+		}
+	}
+}
+
+// A binding is checked only against a receipt.v5 signature: the legacy
+// preimage does not cover session_id, verdict, reason_code or policy_hash, so
+// those rows would compare unsigned fields.
+func TestABindingNeedsAReceiptV5Signature(t *testing.T) {
+	g := newGatewayResigner(t)
+	_, frozen, _ := frozenGatewayChain(t)
+	binding := frozen.GatewayBindings[g.base.ReceiptID]
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x44}, ed25519.SeedSize))
+	r := *g.base
+	r.SignatureVersion, r.SignatureProfile, r.SignatureAlgorithm, r.PublicKeySet, r.KeyID = "", "", "", nil, "legacy-key"
+	r.Signature = hex.EncodeToString(ed25519.Sign(key, canonicalizeV4(&r)))
+	trust := TrustRoot{Keys: map[string]string{"legacy-key": hex.EncodeToString(key.Public().(ed25519.PublicKey))}}
+	res := VerifyBundle(Bundle{Receipts: []*contracts.Receipt{&r}, GatewayBindings: map[string][]byte{r.ReceiptID: binding}}, trust)
+	if checkNamed(t, res, CheckIdentity).Status != StatusPass || res.PreimageVersion != "v4-fields" {
+		t.Fatalf("the planted v4 receipt does not verify as v4; the case proves nothing: %+v", res)
+	}
+	if c := checkNamed(t, res, CheckBinding); c.Status != StatusFail || res.Valid || !strings.Contains(c.Detail, "receipt.v5") {
+		t.Fatalf("a v4 receipt's binding was checked: %+v", c)
+	}
+}
+
+// Two receipts with one receipt id cannot have a binding placed on either:
+// the check fails, and does not index out of range.
+func TestDuplicateReceiptIDCannotPlaceABinding(t *testing.T) {
+	_, b, trust := frozenGatewayChain(t)
+	id := b.Receipts[0].ReceiptID
+	b.Receipts = append(b.Receipts, b.Receipts[0])
+	res := VerifyBundle(b, trust)
+	if c := checkNamed(t, res, CheckBinding); c.Status != StatusFail || res.Valid || !strings.Contains(c.Detail, "more than one receipt") {
+		t.Fatalf("binding check with a duplicated receipt id = %+v", c)
+	}
+	// Bound only on another receipt, the duplicate id is not placed at all.
+	delete(b.GatewayBindings, id)
+	res = VerifyBundle(b, trust)
+	if c := checkNamed(t, res, CheckBinding); c.Status != StatusPass {
+		t.Fatalf("binding check without a binding on the duplicate = %+v", c)
+	}
+}
+
+// RequireGatewayBindings makes a pass cover every gateway receipt's gateway
+// facts: a gateway receipt with no binding fails it, and the counts say what
+// was covered either way.
+func TestRequireGatewayBindings(t *testing.T) {
+	require := Options{RequireGatewayBindings: true}
+	_, b, trust := frozenGatewayChain(t)
+	if res := VerifyBundleWith(b, trust, require); !res.Valid || res.GatewayReceipts != 3 || res.BindingsChecked != 3 {
+		t.Fatalf("every binding supplied: %+v", res)
+	}
+	delete(b.GatewayBindings, b.Receipts[1].ReceiptID)
+	if res := VerifyBundle(b, trust); !res.Valid || res.GatewayReceipts != 3 || res.BindingsChecked != 2 {
+		t.Fatalf("one binding missing, not required: %+v", res)
+	}
+	res := VerifyBundleWith(b, trust, require)
+	if c := checkNamed(t, res, CheckBinding); c.Status != StatusFail || res.Valid || res.BindingsChecked != 0 {
+		t.Fatalf("one binding missing, required: %+v", res)
+	}
+	b.GatewayBindings = nil
+	if res := VerifyBundleWith(b, trust, require); checkNamed(t, res, CheckBinding).Status != StatusFail || res.Valid {
+		t.Fatalf("no binding, required: %+v", res)
+	}
+	// A chain with no gateway receipt has nothing to require.
+	fx := loadFrozen(t)
+	res = VerifyBundleWith(Bundle{Receipts: fx.Receipts}, fx.trust(), require)
+	if !res.Valid || res.GatewayReceipts != 0 || checkNamed(t, res, CheckBinding).Status != StatusNotApplicable {
+		t.Fatalf("a non-gateway chain under RequireGatewayBindings: %+v", res)
 	}
 }
 
@@ -263,54 +415,5 @@ func TestGatewayChainIDFramesTenantAndWorkspace(t *testing.T) {
 	}
 	if GatewayChainID("a:1:b", "c") == GatewayChainID("a", "b:1:c") {
 		t.Fatal("two (tenant, workspace) pairs share a chain id")
-	}
-}
-
-// EncodeGatewayBundle writes the document receipt_verify reads, keeping each
-// envelope's exact bytes, and refuses a bundle it cannot vouch for.
-func TestEncodeGatewayBundleRoundTrips(t *testing.T) {
-	_, frozen, trust := frozenGatewayChain(t)
-	var stored []GatewayReceipt
-	for _, r := range frozen.Receipts {
-		envelope, err := json.Marshal(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stored = append(stored, GatewayReceipt{ReceiptID: r.ReceiptID, Envelope: envelope, Binding: frozen.GatewayBindings[r.ReceiptID]})
-	}
-	doc, err := EncodeGatewayBundle(stored)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range stored {
-		if !bytes.Contains(doc, s.Envelope) {
-			t.Fatalf("the bundle does not hold receipt %s's exact bytes", s.ReceiptID)
-		}
-	}
-	parsed, err := ParseBundle(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if parsed.KeyID != frozen.KeyID || parsed.PublicKeyHex != "" {
-		t.Fatalf("bundle key_id %q, public_key_hex %q", parsed.KeyID, parsed.PublicKeyHex)
-	}
-	if res := VerifyBundle(parsed, trust); !res.Valid || res.Bindings != 3 {
-		t.Fatalf("encoded bundle does not verify: %+v", res)
-	}
-	if got := VerifyJSON(doc, []byte(`{"keys":{"`+frozen.KeyID+`":"`+frozen.PublicKeyHex+`"}}`)); got.Verdict != VerdictVerified {
-		t.Fatalf("VerifyJSON = %+v", got)
-	}
-
-	for name, bad := range map[string][]GatewayReceipt{
-		"empty":        nil,
-		"no binding":   {{ReceiptID: stored[0].ReceiptID, Envelope: stored[0].Envelope}},
-		"wrong id":     {{ReceiptID: stored[1].ReceiptID, Envelope: stored[0].Envelope, Binding: stored[0].Binding}},
-		"duplicate":    {stored[0], stored[0]},
-		"not receipt":  {{ReceiptID: "x", Envelope: []byte(`{"a":1`), Binding: []byte("{}")}},
-		"two receipts": {{ReceiptID: stored[0].ReceiptID, Envelope: []byte("[" + string(stored[0].Envelope) + "," + string(stored[1].Envelope) + "]"), Binding: stored[0].Binding}},
-	} {
-		if _, err := EncodeGatewayBundle(bad); err == nil {
-			t.Errorf("%s: encoded", name)
-		}
 	}
 }

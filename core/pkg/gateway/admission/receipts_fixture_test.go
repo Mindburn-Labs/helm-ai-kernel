@@ -68,21 +68,21 @@ func frozenGatewayDecisions() []storedDecision {
 // frozenGatewayChain signs the fixture decisions with the gateway's own
 // builder and sealer and encodes them as an export bundle, plus the public
 // key a test passes as its trust root (the bundle's own key is never trusted).
-func frozenGatewayChain(t *testing.T) ([]byte, []receiptverify.GatewayReceipt) {
+func frozenGatewayChain(t *testing.T) ([]byte, []SignedReceipt) {
 	t.Helper()
 	signer := frozenGatewaySigner(t)
 	ids := []string{"0190a5b4-0000-7000-8000-0000000000f1", "0190a5b4-0000-7000-8000-0000000000f2", "0190a5b4-0000-7000-8000-0000000000f3"}
-	var stored []receiptverify.GatewayReceipt
+	var stored []SignedReceipt
 	prev := ""
 	for i, d := range frozenGatewayDecisions() {
 		r, binding, err := buildDecisionReceipt(d, ids[i], uint64(i+1), prev)
 		must(t, err)
 		envelope, digest, err := sealReceipt(signer, r)
 		must(t, err)
-		stored = append(stored, receiptverify.GatewayReceipt{ReceiptID: ids[i], Envelope: envelope, Binding: binding})
+		stored = append(stored, SignedReceipt{Ref: ReceiptRef{ReceiptID: ids[i]}, Envelope: envelope, Binding: binding})
 		prev = digest
 	}
-	bundle, err := receiptverify.EncodeGatewayBundle(stored)
+	bundle, err := encodeReceiptBundle(stored)
 	must(t, err)
 	var document map[string]json.RawMessage
 	must(t, json.Unmarshal(bundle, &document))
@@ -126,8 +126,8 @@ func TestFrozenGatewayChainIsWhatTheBuilderSigns(t *testing.T) {
 			got.SignatureVersion != want.SignatureVersion || got.Signature != want.Signature || got.KeyID != want.KeyID {
 			t.Errorf("receipt[%d]: the builder now signs %+v, the frozen chain holds %+v; a change to what a gateway receipt signs is a new binding version (R12)", i, want, got)
 		}
-		if !bytes.Equal(frozen.GatewayBindings[s.ReceiptID], s.Binding) {
-			t.Errorf("receipt[%d]: the builder's binding differs from the frozen one:\n got %s\nwant %s", i, s.Binding, frozen.GatewayBindings[s.ReceiptID])
+		if !bytes.Equal(frozen.GatewayBindings[s.Ref.ReceiptID], s.Binding) {
+			t.Errorf("receipt[%d]: the builder's binding differs from the frozen one:\n got %s\nwant %s", i, s.Binding, frozen.GatewayBindings[s.Ref.ReceiptID])
 		}
 	}
 }

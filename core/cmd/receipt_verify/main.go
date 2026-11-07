@@ -17,8 +17,8 @@
 //	receipt_verify --receipt bundle.json --key <hex> --key issuer=<hex>
 //	receipt_verify --receipt chain.json --key-file pub.hex
 //	receipt_verify --receipt chain.json --allow-self-attested
-//	receipt_verify --receipt export.json --key "<key_id>=<hex>" --json
-//	receipt_verify --receipt r.json --key "<key_id>=<hex>" --binding <receipt_id>=binding.json
+//	receipt_verify --receipt export.json --key "<key_id>=<hex>" --require-bindings --json
+//	receipt_verify --receipt r.json --key "<key_id>=<hex>" --binding <receipt_id>=binding.json --require-bindings
 //
 // The receipt file is either a single receipt object, a JSON array of receipts
 // in causal order, or an object with a "receipts" array (an EvidencePack-shaped
@@ -37,7 +37,11 @@
 // as "gateway_bindings" (receipt id to the base64 of the exact bytes);
 // --binding <receipt_id>=<file> supplies one from a file and repeats. Each
 // supplied binding is checked against the receipt that signs it (the binding
-// check); with none supplied that check is not_applicable.
+// check); with none supplied that check is not_applicable, so a gateway
+// receipt's own facts go unchecked and the exit code is still 0.
+// --require-bindings fails verification instead when any receipt whose
+// session_id names a gateway chain has no binding; use it for gateway
+// exports. The JSON verdict counts gateway_receipts and bindings_checked.
 //
 // Exit codes: 0 verified, 1 verification failed, 2 no verdict reported (bad or
 // missing flags, no key, an unreadable receipt or key file, a receipt file that
@@ -74,7 +78,9 @@ func run(args []string, stdout, stderr *os.File) int {
 		selfAttest  = fs.Bool("allow-self-attested", false,
 			"verify against the key carried inside the receipt. This proves internal consistency only: "+
 				"whoever wrote the receipt also wrote the key. Never sufficient to trust a counterparty's receipt.")
-		asJSON = fs.Bool("json", false, "emit the verdict as JSON")
+		asJSON  = fs.Bool("json", false, "emit the verdict as JSON")
+		require = fs.Bool("require-bindings", false,
+			"fail when a receipt whose session_id names a gateway chain has no binding document, so a pass covers every gateway receipt's own facts")
 	)
 	fs.Var(&keyValues, "key", "hex-encoded Ed25519 public key to trust, optionally as <key-id>=<hex>; repeatable")
 	fs.Var(&keyFiles, "key-file", "file holding a hex-encoded Ed25519 public key, optionally as <key-id>=<path>; repeatable")
@@ -151,7 +157,7 @@ func run(args []string, stdout, stderr *os.File) int {
 		return 2
 	}
 
-	res := receiptverify.VerifyBundle(b, trust)
+	res := receiptverify.VerifyBundleWith(b, trust, receiptverify.Options{RequireGatewayBindings: *require})
 
 	if *asJSON {
 		out, merr := json.MarshalIndent(res, "", "  ")
@@ -232,8 +238,8 @@ func writeHuman(w *os.File, res receiptverify.Result) {
 	if res.Permits > 0 {
 		fmt.Fprintf(w, ", %d permit(s)", res.Permits)
 	}
-	if res.Bindings > 0 {
-		fmt.Fprintf(w, ", %d binding(s)", res.Bindings)
+	if res.GatewayReceipts > 0 {
+		fmt.Fprintf(w, ", %d gateway receipt(s) with %d binding(s) checked", res.GatewayReceipts, res.BindingsChecked)
 	}
 	if res.PreimageVersion != "" {
 		fmt.Fprintf(w, ", preimage %s", res.PreimageVersion)

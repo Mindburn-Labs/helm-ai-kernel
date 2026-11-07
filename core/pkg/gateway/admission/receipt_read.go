@@ -17,7 +17,6 @@ import (
 	"fmt"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
 // MaxExportReceipts bounds one ExportReceiptChain range. A caller pages with
@@ -161,17 +160,15 @@ func (s *Service) ExportReceiptChain(ctx context.Context, caller Caller, in Expo
 	if err != nil {
 		return ChainExport{}, err
 	}
-	stored := make([]receiptverify.GatewayReceipt, 0, len(out.Receipts))
 	for i, r := range out.Receipts {
 		if r.Ref.Seq != in.FromSeq+uint64(i) || r.Ref.ChainID != out.ChainID {
 			return ChainExport{}, fmt.Errorf("receipt chain %q: sequence %d is missing from the ledger", out.ChainID, in.FromSeq+uint64(i))
 		}
-		stored = append(stored, receiptverify.GatewayReceipt{ReceiptID: r.Ref.ReceiptID, Envelope: r.Envelope, Binding: r.Binding})
 	}
 	if uint64(len(out.Receipts)) != in.ToSeq-in.FromSeq+1 {
 		return ChainExport{}, fmt.Errorf("receipt chain %q: %d of %d receipts are in the ledger", out.ChainID, len(out.Receipts), in.ToSeq-in.FromSeq+1)
 	}
-	if out.Bundle, err = receiptverify.EncodeGatewayBundle(stored); err != nil {
+	if out.Bundle, err = encodeReceiptBundle(out.Receipts); err != nil {
 		return ChainExport{}, fmt.Errorf("receipt chain %q: %w", out.ChainID, err)
 	}
 	return out, nil

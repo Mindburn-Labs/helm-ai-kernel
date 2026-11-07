@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -91,21 +93,43 @@ func GatewayChainID(tenantID, workspaceID string) string {
 	return "helm-gateway:" + strconv.Itoa(len(tenantID)) + ":" + tenantID + ":" + strconv.Itoa(len(workspaceID)) + ":" + workspaceID
 }
 
-// ParseGatewayBinding parses binding bytes as the closed
-// helm.gateway.receipt-binding.v1 document. It refuses a duplicate or unknown
-// member, a missing one, a null array, an integer spelled any other way, a
-// binding_version it does not know, and bytes that are not their own RFC 8785
-// (JCS) encoding: the bytes a receipt signs are the canonical bytes, so any
-// other spelling of the same values is a different document.
-func ParseGatewayBinding(raw []byte) (GatewayBinding, error) {
+// gatewayChainPrefix starts every gateway chain id. A receipt whose
+// session_id has it is a gateway receipt, whose gateway facts only a binding
+// document carries.
+const gatewayChainPrefix = "helm-gateway:"
+
+// parseClosedBinding decodes raw into the closed document out points to. It
+// refuses a duplicate or unknown member and bytes that are not their own
+// RFC 8785 (JCS) encoding: the bytes a receipt signs are the canonical bytes,
+// so a missing member, or any other spelling of the same values, is a
+// different document.
+func parseClosedBinding(raw []byte, version string, out any) error {
 	if err := ValidateJSONStructure(raw); err != nil {
-		return GatewayBinding{}, err
+		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return fmt.Errorf("not a %s document: %w", version, err)
+	}
+	canonical, err := canonicalize.InteroperableJCS(out)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(canonical, raw) {
+		return errors.New("the bytes are not the canonical (JCS) encoding of a complete binding; a member is missing, misspelled or re-encoded")
+	}
+	return nil
+}
+
+// ParseGatewayBinding parses binding bytes as the closed
+// helm.gateway.receipt-binding.v1 document: no duplicate, unknown or missing
+// member, no null array, integers spelled as integers, its own
+// binding_version, and its own JCS bytes.
+func ParseGatewayBinding(raw []byte) (GatewayBinding, error) {
 	var binding GatewayBinding
-	if err := decoder.Decode(&binding); err != nil {
-		return GatewayBinding{}, fmt.Errorf("not a %s document: %w", GatewayBindingVersion, err)
+	if err := parseClosedBinding(raw, GatewayBindingVersion, &binding); err != nil {
+		return GatewayBinding{}, err
 	}
 	if binding.BindingVersion != GatewayBindingVersion {
 		return GatewayBinding{}, fmt.Errorf("binding_version %q is not %q", binding.BindingVersion, GatewayBindingVersion)
@@ -113,23 +137,29 @@ func ParseGatewayBinding(raw []byte) (GatewayBinding, error) {
 	if binding.Quote == nil || binding.AuthorityVersions == nil {
 		return GatewayBinding{}, errors.New("quote and authority_versions must be arrays")
 	}
-	canonical, err := canonicalize.InteroperableJCS(binding)
-	if err != nil {
-		return GatewayBinding{}, err
-	}
-	if !bytes.Equal(canonical, raw) {
-		return GatewayBinding{}, errors.New("the bytes are not the canonical (JCS) encoding of a complete binding; a member is missing, misspelled or re-encoded")
-	}
 	return binding, nil
 }
 
-// gatewayBindingMismatch names the first signed receipt field the binding does
-// not agree with, or "" when every one agrees.
-func gatewayBindingMismatch(r *contracts.Receipt, b GatewayBinding) string {
-	checks := []struct {
-		name      string
-		got, want string
-	}{
+// bindingRow is one signed receipt field and what its binding says it is.
+type bindingRow struct {
+	name, got, want string
+}
+
+// receiptTime is a receipt's timestamp as the gateway writes a binding's
+// times: UTC, RFC 3339 with nanoseconds. The timestamp is outside the
+// receipt.v5 preimage; the row that compares it with the signed binding is
+// what binds it.
+func receiptTime(r *contracts.Receipt) string {
+	return r.Timestamp.UTC().Format(time.RFC3339Nano)
+}
+
+// decisionRows are the receipt fields a helm.gateway.receipt-binding.v1
+// document must agree with.
+func decisionRows(r *contracts.Receipt, b GatewayBinding) ([]bindingRow, error) {
+	if b.TenantID == "" || b.WorkspaceID == "" || b.AttemptID == "" || b.AttemptVersion < 1 || b.Seq < 1 {
+		return nil, errors.New("the binding names no tenant, workspace, attempt, version or sequence")
+	}
+	return []bindingRow{
 		{"chain_id framing", b.ChainID, GatewayChainID(b.TenantID, b.WorkspaceID)},
 		{"session_id", r.SessionID, b.ChainID},
 		{"lamport_clock", strconv.FormatUint(r.LamportClock, 10), strconv.FormatUint(b.Seq, 10)},
@@ -140,22 +170,65 @@ func gatewayBindingMismatch(r *contracts.Receipt, b GatewayBinding) string {
 		{"reason_code", r.ReasonCode, b.ReasonCode},
 		{"policy_hash", r.PolicyHash, b.PolicyHash},
 		{"args_hash", r.ArgsHash, b.ArgumentDigest},
-	}
-	if b.TenantID == "" || b.WorkspaceID == "" || b.AttemptID == "" || b.AttemptVersion < 1 || b.Seq < 1 {
-		return "the binding names no tenant, workspace, attempt, version or sequence"
-	}
-	for _, c := range checks {
-		if c.got != c.want {
-			return fmt.Sprintf("%s %q does not match the binding's %q", c.name, c.got, c.want)
-		}
-	}
-	return ""
+		{"timestamp", receiptTime(r), b.DecidedAt},
+	}, nil
 }
 
-// checkBindings runs CheckBinding. No binding supplied is not_applicable,
-// never success. A binding for a receipt the bundle does not hold fails: a
-// verifier that ignored it would let a reader believe it had been checked.
-func checkBindings(receipts []*contracts.Receipt, bindings map[string][]byte) Check {
+// gatewayBindingMismatch parses a binding under the closed document its
+// binding_version names and returns the first signed receipt field it does
+// not agree with, or "" when every one agrees. A version this verifier does
+// not know fails: it is never read as another version.
+func gatewayBindingMismatch(r *contracts.Receipt, raw []byte) (string, error) {
+	if err := ValidateJSONStructure(raw); err != nil {
+		return "", err
+	}
+	var head struct {
+		BindingVersion *string `json:"binding_version"`
+	}
+	if err := json.Unmarshal(raw, &head); err != nil || head.BindingVersion == nil {
+		return "", errors.New("the binding names no binding_version")
+	}
+	var rows []bindingRow
+	switch *head.BindingVersion {
+	case GatewayBindingVersion:
+		binding, err := ParseGatewayBinding(raw)
+		if err != nil {
+			return "", err
+		}
+		if rows, err = decisionRows(r, binding); err != nil {
+			return "", err
+		}
+	default:
+		return "", fmt.Errorf("binding_version %q is not one this verifier knows (%s)", *head.BindingVersion, GatewayBindingVersion)
+	}
+	for _, row := range rows {
+		if row.got != row.want {
+			return fmt.Sprintf("%s %q does not match the binding's %q", row.name, row.got, row.want), nil
+		}
+	}
+	return "", nil
+}
+
+// checkBindings runs CheckBinding and counts what it covered into res. No
+// binding supplied is not_applicable, never success, unless require is set
+// and the bundle holds a gateway receipt: then it fails. A binding for a
+// receipt the bundle does not hold fails: a verifier that ignored it would let
+// a reader believe it had been checked.
+func checkBindings(receipts []*contracts.Receipt, bindings map[string][]byte, require bool, res *Result) Check {
+	for _, r := range receipts {
+		if strings.HasPrefix(r.SessionID, gatewayChainPrefix) {
+			res.GatewayReceipts++
+		}
+	}
+	if require {
+		for i, r := range receipts {
+			if _, bound := bindings[r.ReceiptID]; strings.HasPrefix(r.SessionID, gatewayChainPrefix) && !bound {
+				return Check{CheckBinding, StatusFail, fmt.Sprintf(
+					"receipt[%d] %q is a gateway receipt with no binding document, and bindings are required: its gateway facts would go unchecked",
+					i, r.ReceiptID)}
+			}
+		}
+	}
 	if len(bindings) == 0 {
 		return Check{CheckBinding, StatusNotApplicable,
 			"the bundle carries no gateway bindings; no output_hash was recomputed"}
@@ -184,86 +257,32 @@ func checkBindings(receipts []*contracts.Receipt, bindings map[string][]byte) Ch
 				"receipt id %q names more than one receipt; its binding cannot be placed", id)}
 		}
 		r := receipts[i]
+		if r.SignatureVersion != contracts.ReceiptSignatureV5 {
+			return Check{CheckBinding, StatusFail, fmt.Sprintf(
+				"receipt[%d] %q is signed under %q, not %s: its signature does not cover session_id, verdict, reason_code or policy_hash, so no binding can be checked against it",
+				i, id, r.SignatureVersion, contracts.ReceiptSignatureV5)}
+		}
 		sum := sha256.Sum256(bindings[id])
 		if r.OutputHash != hex.EncodeToString(sum[:]) {
 			return Check{CheckBinding, StatusFail, fmt.Sprintf(
 				"receipt[%d] %q: output_hash %q is not the SHA-256 of the supplied binding (%x); the binding is not the document the receipt signed",
 				i, id, r.OutputHash, sum)}
 		}
-		binding, err := ParseGatewayBinding(bindings[id])
+		mismatch, err := gatewayBindingMismatch(r, bindings[id])
 		if err != nil {
 			return Check{CheckBinding, StatusFail, fmt.Sprintf("receipt[%d] %q: binding: %v", i, id, err)}
 		}
-		if mismatch := gatewayBindingMismatch(r, binding); mismatch != "" {
+		if mismatch != "" {
 			return Check{CheckBinding, StatusFail, fmt.Sprintf("receipt[%d] %q: %s", i, id, mismatch)}
 		}
 	}
-	d := fmt.Sprintf("%d/%d receipt(s) carry a %s binding whose SHA-256 is the signed output_hash, in its canonical form, "+
-		"naming the receipt's chain, sequence, attempt, version, state, verdict, policy and argument digests; "+
-		"the binding states what the gateway recorded, which this verifier cannot see",
-		len(bindings), len(receipts), GatewayBindingVersion)
+	res.BindingsChecked = len(bindings)
+	d := fmt.Sprintf("%d/%d receipt(s) carry a binding document whose SHA-256 is the signed output_hash, closed, canonical "+
+		"and in agreement with the receipt's chain, sequence, attempt, version, state, verdict, reason, policy and argument "+
+		"digests and timestamp; the binding states what the gateway recorded, which this verifier cannot see",
+		len(bindings), len(receipts))
 	if len(bindings) < len(receipts) {
 		d += fmt.Sprintf(" (%d receipt(s) carry no binding and their output_hash was not recomputed)", len(receipts)-len(bindings))
 	}
 	return Check{CheckBinding, StatusPass, d}
-}
-
-// GatewayReceipt is one stored gateway receipt: the exact envelope bytes it
-// was signed and stored as, and the exact binding bytes its output_hash
-// covers.
-type GatewayReceipt struct {
-	ReceiptID string
-	Envelope  []byte
-	Binding   []byte
-}
-
-// gatewayBundle is the export document: the bundle shape ParseBundle reads.
-type gatewayBundle struct {
-	Receipts        []json.RawMessage `json:"receipts"`
-	GatewayBindings map[string][]byte `json:"gateway_bindings"`
-	KeyID           string            `json:"key_id,omitempty"`
-}
-
-// EncodeGatewayBundle writes receipts, in the order given, as the document
-// receipt_verify --receipt reads: a receipts array holding each envelope's
-// exact bytes, gateway_bindings mapping each receipt id to its binding bytes
-// (base64), and key_id, the signing key the receipts name, when they all name
-// one. Every envelope must parse as a receipt with that receipt id. Nothing
-// about trust travels in it: the verifier supplies the key.
-func EncodeGatewayBundle(receipts []GatewayReceipt) ([]byte, error) {
-	if len(receipts) == 0 {
-		return nil, errors.New("a gateway bundle needs at least one receipt")
-	}
-	out := gatewayBundle{Receipts: make([]json.RawMessage, 0, len(receipts)), GatewayBindings: make(map[string][]byte, len(receipts))}
-	keys := map[string]bool{}
-	for i, r := range receipts {
-		if len(r.Binding) == 0 {
-			return nil, fmt.Errorf("receipt[%d] %q has no binding", i, r.ReceiptID)
-		}
-		parsed, err := ParseBundle(r.Envelope)
-		if err != nil || len(parsed.Receipts) != 1 || parsed.Receipts[0] == nil {
-			return nil, fmt.Errorf("receipt[%d] %q does not parse as one receipt: %v", i, r.ReceiptID, err)
-		}
-		if parsed.Receipts[0].ReceiptID != r.ReceiptID {
-			return nil, fmt.Errorf("receipt[%d] carries receipt_id %q, not %q", i, parsed.Receipts[0].ReceiptID, r.ReceiptID)
-		}
-		if _, dup := out.GatewayBindings[r.ReceiptID]; dup {
-			return nil, fmt.Errorf("receipt %q appears twice", r.ReceiptID)
-		}
-		keys[parsed.Receipts[0].KeyID] = true
-		out.Receipts = append(out.Receipts, json.RawMessage(bytes.TrimSpace(r.Envelope)))
-		out.GatewayBindings[r.ReceiptID] = r.Binding
-	}
-	if len(keys) == 1 {
-		for id := range keys {
-			out.KeyID = id
-		}
-	}
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(out); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }

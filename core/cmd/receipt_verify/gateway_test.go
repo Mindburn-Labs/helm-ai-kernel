@@ -81,12 +81,47 @@ func TestGatewayExportVerifiesWithItsBindings(t *testing.T) {
 		t.Fatalf("exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	res, status := bindingStatus(t, stdout)
-	if status != receiptverify.StatusPass || !res.Valid || res.Bindings != 3 {
+	if status != receiptverify.StatusPass || !res.Valid || res.BindingsChecked != 3 || res.GatewayReceipts != 3 {
 		t.Fatalf("result = %+v", res)
 	}
-	code, stdout, _ = execute(t, "--receipt", gatewayChainFixture, "--key", f.KeyID+"="+f.PublicKeyHex)
-	if code != 0 || !strings.Contains(stdout, "3 binding(s)") || !strings.Contains(stdout, "binding") {
+	code, stdout, _ = execute(t, "--receipt", gatewayChainFixture, "--key", f.KeyID+"="+f.PublicKeyHex, "--require-bindings")
+	if code != 0 || !strings.Contains(stdout, "3 gateway receipt(s) with 3 binding(s) checked") {
 		t.Fatalf("human output, exit %d:\n%s", code, stdout)
+	}
+}
+
+// Exit 0 without --require-bindings covers only the bindings supplied: a
+// gateway export missing one still verifies, and says how many it checked.
+// --require-bindings turns the missing binding into a failure (exit 1).
+func TestRequireBindingsFailsAGatewayReceiptWithoutOne(t *testing.T) {
+	f := loadGatewayFixture(t)
+	key := f.KeyID + "=" + f.PublicKeyHex
+	delete(f.GatewayBindings, receiptID(t, f.Receipts[1]))
+	partial, err := json.Marshal(map[string]any{"receipts": f.Receipts, "gateway_bindings": f.GatewayBindings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, "partial.json", partial)
+
+	code, stdout, _ := execute(t, "--receipt", path, "--key", key, "--json")
+	res, status := bindingStatus(t, stdout)
+	if code != 0 || status != receiptverify.StatusPass || res.GatewayReceipts != 3 || res.BindingsChecked != 2 {
+		t.Fatalf("without --require-bindings: exit %d, %+v", code, res)
+	}
+	code, stdout, _ = execute(t, "--receipt", path, "--key", key, "--require-bindings", "--json")
+	res, status = bindingStatus(t, stdout)
+	if code != 1 || status != receiptverify.StatusFail || res.Valid || res.BindingsChecked != 0 {
+		t.Fatalf("with --require-bindings: exit %d, %+v", code, res)
+	}
+	// A single gateway receipt without its binding fails it too.
+	receipt := writeFile(t, "receipt.json", f.Receipts[0])
+	if code, _, _ := execute(t, "--receipt", receipt, "--key", key, "--require-bindings"); code != 1 {
+		t.Fatalf("a lone gateway receipt without --binding under --require-bindings exited %d", code)
+	}
+	// A chain with no gateway receipt has nothing to require.
+	chain := loadFixture(t, chainFixture)
+	if code, stdout, _ := execute(t, "--receipt", chainFixture, "--key", chain.PublicKeyHex, "--require-bindings"); code != 0 {
+		t.Fatalf("a non-gateway chain under --require-bindings exited %d\n%s", code, stdout)
 	}
 }
 

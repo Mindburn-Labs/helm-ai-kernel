@@ -38,7 +38,10 @@ or a bundle with `receipts` and optional `permits`, `key_id`,
 receipt's `receipt_id` to the base64 of the exact binding document its
 `output_hash` covers, as the gateway's `ExportReceiptChain` writes it; the
 `binding` check recomputes each hash and checks the binding against the
-signed receipt, and is `not_applicable` when no binding is supplied. The shared `receiptverify.ParseBundle` parser retains raw
+signed receipt, and is `not_applicable` when no binding is supplied. The
+result counts `gateway_receipts` and `bindings_checked`; the bridge has no
+option to require bindings, so a host that needs every gateway receipt's
+facts checked compares the two. The shared `receiptverify.ParseBundle` parser retains raw
 receipt objects until signed-member validation finishes. Do not parse and
 re-serialize untrusted JSON before handing it to the verifier: that can erase
 duplicate members or invalid number spellings.

@@ -6,9 +6,7 @@
 # package instead (docs/architecture/dead-package-decisions.md).
 # <core/pkg/...> # <what the census saw>
 # quantum_posture: package paths only (e.g. crypto/keystore); this list makes no cryptographic choice.
-core/pkg/api/trust # has tests
 core/pkg/conformance/agentsafety # 1 test-only importer(s)
-core/pkg/conformance/cases # has tests
 core/pkg/conformance/negative # has tests
 core/pkg/conformance/sandbox # 4 test-only importer(s)
 core/pkg/conformance/scenarios # has tests
@@ -17,34 +15,10 @@ core/pkg/connectors/sandbox # has tests
 core/pkg/connectors/sandbox/claudemanaged # has tests
 core/pkg/connectors/sandbox/opensandbox # has tests
 core/pkg/connectors/ton/acton # has tests
-core/pkg/crypto/keystore # has tests
-core/pkg/crypto/mtls # 1 test-only importer(s)
-core/pkg/crypto/sdjwt # 2 test-only importer(s)
 core/pkg/crypto/shredding # 1 test-only importer(s)
-core/pkg/crypto/tls # 1 test-only importer(s)
-core/pkg/crypto/zk # has tests
-core/pkg/evidence/externalhost/adapters # 1 test-only importer(s)
-core/pkg/evidencepack/retention # has tests
-core/pkg/exportadmin # has tests
 core/pkg/gateway # no tests
 core/pkg/httpsig # has tests
-core/pkg/integrations/receipts # has tests
-core/pkg/kernel/celdp # has tests
-core/pkg/kernel/consistency # has tests
-core/pkg/kernel/errorir # has tests
-core/pkg/kernel/formal # has tests
 core/pkg/kernel/pdp # has tests
-core/pkg/kernel/retry # has tests
-core/pkg/kernel/sovereignty # has tests
 core/pkg/networkproof # has tests
 core/pkg/packs/install # has tests
-core/pkg/proofgraph/aigp # has tests
-core/pkg/proofgraph/attribution # has tests
-core/pkg/proofgraph/cloudevents # has tests
-core/pkg/proofgraph/graphql # has tests
 core/pkg/receipts # has tests
-core/pkg/replay # has tests
-core/pkg/security/suites # has tests
-core/pkg/store/objstore/fs # has tests
-core/pkg/verifier/agentprovenance # has tests
-core/pkg/witness # has tests

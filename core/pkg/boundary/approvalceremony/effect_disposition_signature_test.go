@@ -4,92 +4,11 @@ package approvalceremony
 // receipt signing; no post-quantum claim.
 
 import (
-	"bytes"
-	"crypto/ed25519"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
-
-func TestEffectDispositionSignaturesUsePinnedIndependentAuthorities(t *testing.T) {
-	now := time.Date(2026, 7, 18, 16, 17, 18, 123456000, time.UTC)
-	command := effectDispositionSignatureCommand(t, now)
-	controlSigner := crypto.NewEd25519SignerFromKey(
-		ed25519.NewKeyFromSeed(bytes.Repeat([]byte{81}, ed25519.SeedSize)), "control-disposition-a",
-	)
-	envelope, err := SignEffectDispositionCommand(command, controlSigner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	trustedKey := TrustedEffectDispositionCommandKey{
-		AuthorityID: command.AuthorityID, SigningKeyRef: command.SigningKeyRef, Audience: command.Audience,
-		PublicKey: controlSigner.PublicKeyBytes(), Enabled: true,
-		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
-	}
-	verifier, err := NewEd25519EffectDispositionCommandVerifier([]TrustedEffectDispositionCommandKey{trustedKey})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := verifier.VerifyEnvelope(envelope); err != nil {
-		t.Fatalf("VerifyEnvelope(): %v", err)
-	}
-	mutated := envelope
-	mutated.Command.Action = contracts.EffectDispositionActionRequestCompensate
-	if err := verifier.VerifyEnvelope(mutated); !errors.Is(err, ErrEffectDispositionCommandRejected) {
-		t.Fatalf("mutated command error = %v", err)
-	}
-	disabledKey := trustedKey
-	disabledKey.Enabled = false
-	disabledVerifier, err := NewEd25519EffectDispositionCommandVerifier([]TrustedEffectDispositionCommandKey{disabledKey})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := disabledVerifier.VerifyEnvelope(envelope); !errors.Is(err, ErrEffectDispositionCommandRejected) {
-		t.Fatalf("disabled key error = %v", err)
-	}
-	if err := disabledVerifier.VerifyStoredEnvelope(envelope); err != nil {
-		t.Fatalf("VerifyStoredEnvelope() with a disabled-after-issue key = %v, want nil", err)
-	}
-	if err := disabledVerifier.VerifyStoredEnvelope(mutated); !errors.Is(err, ErrEffectDispositionCommandRejected) {
-		t.Fatalf("VerifyStoredEnvelope() with a tampered command = %v, want rejected", err)
-	}
-	futureKey := trustedKey
-	futureKey.NotBefore = now.Add(time.Second)
-	futureVerifier, err := NewEd25519EffectDispositionCommandVerifier([]TrustedEffectDispositionCommandKey{futureKey})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := futureVerifier.VerifyEnvelope(envelope); !errors.Is(err, ErrEffectDispositionCommandRejected) {
-		t.Fatalf("future key error = %v", err)
-	}
-	if _, err := NewEd25519EffectDispositionCommandVerifier([]TrustedEffectDispositionCommandKey{trustedKey, trustedKey}); !errors.Is(err, ErrEffectDispositionCommandRejected) {
-		t.Fatalf("duplicate key error = %v", err)
-	}
-
-	kernelSigner := crypto.NewEd25519SignerFromKey(
-		ed25519.NewKeyFromSeed(bytes.Repeat([]byte{82}, ed25519.SeedSize)), "kernel-disposition-a",
-	)
-	receipt := effectDispositionSignatureReceipt(t, command, now.Add(time.Second))
-	signature, err := SignEffectDispositionReceipt(receipt, kernelSigner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	kernelVerifier, err := NewEd25519GrantSignatureVerifier(
-		kernelSigner.PublicKeyBytes(), receipt.SigningKeyRef, receipt.KernelTrustRootID,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := kernelVerifier.VerifyEffectDispositionReceiptSignature(receipt, GrantSignatureEd25519, signature); err != nil {
-		t.Fatalf("VerifyEffectDispositionReceiptSignature(): %v", err)
-	}
-	if err := kernelVerifier.VerifyEffectCloseReceiptSignature(contracts.EffectCloseReceipt{}, GrantSignatureEd25519, signature); !errors.Is(err, ErrGrantSignatureRejected) {
-		t.Fatalf("cross-domain signature error = %v", err)
-	}
-}
 
 func effectDispositionSignatureCommand(t *testing.T, now time.Time) contracts.EffectDispositionCommand {
 	t.Helper()

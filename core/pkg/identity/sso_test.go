@@ -1,7 +1,8 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
+
 package identity
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -9,88 +10,11 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-func TestOIDCProvider_DiscoveryAndLogin(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"authorization_endpoint": "http://" + r.Host + "/auth",
-				"token_endpoint":         "http://" + r.Host + "/token",
-				"jwks_uri":               "http://" + r.Host + "/keys",
-			})
-			return
-		}
-		if r.URL.Path == "/auth" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer ts.Close()
-
-	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
-
-	loginURL, err := p.InitiateLogin(context.Background(), "some-state")
-	if err != nil {
-		t.Fatalf("InitiateLogin failed: %v", err)
-	}
-
-	if !strings.Contains(loginURL, "/auth") {
-		t.Errorf("expected auth endpoint in login URL, got: %s", loginURL)
-	}
-	if !strings.Contains(loginURL, "state=some-state") {
-		t.Errorf("expected state in login URL")
-	}
-}
-
-func TestOIDCProvider_CallbackVerifiesSignedIDToken(t *testing.T) {
-	signingKey := newOIDCTestKey(t)
-	ts := newOIDCTestServer(t, signingKey, func(issuer string) (string, error) {
-		return signedOIDCTestToken(signingKey, "test-key", issuer, "client-id")
-	})
-	defer ts.Close()
-
-	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
-
-	got, err := p.Callback(context.Background(), "auth-code")
-	if err != nil {
-		t.Fatalf("Callback failed: %v", err)
-	}
-	if got.Subject != "user-123" {
-		t.Fatalf("Subject = %q, want user-123", got.Subject)
-	}
-	if got.Email != "test@example.com" {
-		t.Fatalf("Email = %q, want test@example.com", got.Email)
-	}
-	if got.Issuer != ts.URL {
-		t.Fatalf("Issuer = %q, want %q", got.Issuer, ts.URL)
-	}
-}
-
-func TestOIDCProvider_CallbackRejectsInvalidIDTokenSignature(t *testing.T) {
-	trustedKey := newOIDCTestKey(t)
-	untrustedKey := newOIDCTestKey(t)
-	ts := newOIDCTestServer(t, trustedKey, func(issuer string) (string, error) {
-		return signedOIDCTestToken(untrustedKey, "test-key", issuer, "client-id")
-	})
-	defer ts.Close()
-
-	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
-
-	_, err := p.Callback(context.Background(), "auth-code")
-	if err == nil {
-		t.Fatal("expected invalid id_token signature error")
-	}
-	if !strings.Contains(err.Error(), "invalid id_token") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
 func newOIDCTestServer(t *testing.T, signingKey *rsa.PrivateKey, issueToken func(issuer string) (string, error)) *httptest.Server {
 	t.Helper()

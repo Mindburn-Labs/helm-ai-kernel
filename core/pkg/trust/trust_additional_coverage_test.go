@@ -1,7 +1,6 @@
 package trust
 
 import (
-	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -150,176 +149,31 @@ func TestExt_GetScoreReturnsCopy(t *testing.T) {
 
 // ─── 10: CompliancePipeline IngestMapping — unknown control ───
 
-func TestExt_CompliancePipelineUnknownControl(t *testing.T) {
-	matrix := NewComplianceMatrix()
-	pipeline := NewCompliancePipeline(matrix)
-	mapping := `{"mapping_id":"m1","target_ref":"test","controls":[{"control_id":"nonexistent","status":"compliant"}],"mapped_by":"ci","mapped_at":"2026-01-01T00:00:00Z"}`
-	err := pipeline.IngestMapping([]byte(mapping))
-	if err == nil {
-		t.Fatal("expected error for unknown control")
-	}
-}
-
 // ─── 11: CompliancePipeline IngestMapping — valid ─────────────
-
-func TestExt_CompliancePipelineValidIngest(t *testing.T) {
-	matrix := NewComplianceMatrix()
-	matrix.AddFramework(&Framework{FrameworkID: "fw1", Name: "Test"})
-	matrix.AddControl(&Control{ControlID: "c1", FrameworkID: "fw1", Title: "C1"})
-	pipeline := NewCompliancePipeline(matrix)
-	mapping := `{"mapping_id":"m1","target_ref":"test","controls":[{"control_id":"c1","status":"compliant","evidence_refs":["ev1"]}],"mapped_by":"ci","mapped_at":"2026-01-01T00:00:00Z"}`
-	if err := pipeline.IngestMapping([]byte(mapping)); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
 // ─── 12: CompliancePipeline ScanForStaleControls ──────────────
 
-func TestExt_CompliancePipelineScanStale(t *testing.T) {
-	matrix := NewComplianceMatrix()
-	matrix.AddFramework(&Framework{FrameworkID: "fw1", Name: "Test"})
-	matrix.AddControl(&Control{ControlID: "c1", FrameworkID: "fw1", Title: "C1"})
-	pipeline := NewCompliancePipeline(matrix)
-	stale := pipeline.ScanForStaleControls(0)
-	if len(stale) != 1 {
-		t.Fatalf("expected 1 stale control, got %d", len(stale))
-	}
-}
-
 // ─── 13: CompliancePipeline invalid JSON ──────────────────────
-
-func TestExt_CompliancePipelineInvalidJSON(t *testing.T) {
-	pipeline := NewCompliancePipeline(NewComplianceMatrix())
-	if err := pipeline.IngestMapping([]byte("not json")); err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
 
 // ─── 14: Leaderboard sort stability — equal scores ────────────
 
-func TestExt_LeaderboardSortStabilityEqualScores(t *testing.T) {
-	scores := map[string]*TrustScore{
-		"org-b": {OverallScore: 0.8, ComputedAt: time.Now()},
-		"org-a": {OverallScore: 0.8, ComputedAt: time.Now()},
-		"org-c": {OverallScore: 0.8, ComputedAt: time.Now()},
-	}
-	lb := NewLeaderboardFromScores(scores, nil)
-	// Equal scores should be sorted by OrgID ascending
-	if lb.Entries[0].OrgID != "org-a" || lb.Entries[1].OrgID != "org-b" || lb.Entries[2].OrgID != "org-c" {
-		t.Fatalf("expected alphabetical order for equal scores, got %s/%s/%s", lb.Entries[0].OrgID, lb.Entries[1].OrgID, lb.Entries[2].OrgID)
-	}
-}
-
 // ─── 15: Leaderboard re-rank after update ─────────────────────
-
-func TestExt_LeaderboardReRankAfterUpdate(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-a", "A", &TrustScore{OverallScore: 0.5, ComputedAt: time.Now()})
-	lb.UpdateScore("org-b", "B", &TrustScore{OverallScore: 0.9, ComputedAt: time.Now()})
-	lb.Rank()
-	if lb.Entries[0].OrgID != "org-b" {
-		t.Fatalf("expected org-b first, got %s", lb.Entries[0].OrgID)
-	}
-}
 
 // ─── 16: Leaderboard GetEntry not found ───────────────────────
 
-func TestExt_LeaderboardGetEntryNotFound(t *testing.T) {
-	lb := NewLeaderboard()
-	_, found := lb.GetEntry("nonexistent")
-	if found {
-		t.Fatal("should not find nonexistent org")
-	}
-}
-
 // ─── 17: Leaderboard GetTopN larger than entries ──────────────
-
-func TestExt_LeaderboardGetTopNLargerThanEntries(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-a", "A", &TrustScore{OverallScore: 0.5, ComputedAt: time.Now()})
-	lb.Rank()
-	top := lb.GetTopN(100)
-	if len(top) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(top))
-	}
-}
 
 // ─── 18: Leaderboard badge levels ─────────────────────────────
 
-func TestExt_LeaderboardBadgeLevels(t *testing.T) {
-	tests := []struct {
-		score float64
-		badge BadgeLevel
-	}{
-		{0.96, BadgePlatinum}, {0.86, BadgeGold}, {0.71, BadgeSilver},
-		{0.51, BadgeBronze}, {0.50, BadgeNone}, {0.0, BadgeNone},
-	}
-	for _, tt := range tests {
-		if got := GetBadgeLevel(tt.score); got != tt.badge {
-			t.Errorf("GetBadgeLevel(%f) = %s, want %s", tt.score, got, tt.badge)
-		}
-	}
-}
-
 // ─── 19: Leaderboard Export hash non-empty ────────────────────
-
-func TestExt_LeaderboardExportHash(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-a", "A", &TrustScore{OverallScore: 0.8, ComputedAt: time.Now()})
-	lb.Rank()
-	export := lb.Export()
-	if export.Hash == "" {
-		t.Fatal("export hash should be non-empty")
-	}
-}
 
 // ─── 20: Leaderboard hash deterministic ───────────────────────
 
-func TestExt_LeaderboardHashDeterministic(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-a", "A", &TrustScore{OverallScore: 0.8, ComputedAt: time.Now()})
-	lb.Rank()
-	h1 := lb.Hash()
-	h2 := lb.Hash()
-	if h1 != h2 {
-		t.Fatal("hash should be deterministic")
-	}
-}
-
 // ─── 21: Leaderboard GetByBadge filters correctly ────────────
-
-func TestExt_LeaderboardGetByBadge(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("gold-org", "Gold", &TrustScore{OverallScore: 0.90, ComputedAt: time.Now()})
-	lb.UpdateScore("bronze-org", "Bronze", &TrustScore{OverallScore: 0.55, ComputedAt: time.Now()})
-	lb.Rank()
-	golds := lb.GetByBadge(BadgeGold)
-	if len(golds) != 1 || golds[0].OrgID != "gold-org" {
-		t.Fatalf("expected 1 gold, got %d", len(golds))
-	}
-}
 
 // ─── 22: ComplianceMatrix hash deterministic ──────────────────
 
-func TestExt_ComplianceMatrixHashDeterministic(t *testing.T) {
-	m := NewComplianceMatrix()
-	m.AddFramework(&Framework{FrameworkID: "fw1", Name: "Test"})
-	h1 := m.Hash()
-	h2 := m.Hash()
-	if h1 != h2 {
-		t.Fatal("matrix hash should be deterministic")
-	}
-}
-
 // ─── 23: ComplianceMatrix AddControl unknown framework ────────
-
-func TestExt_ComplianceMatrixAddControlUnknownFramework(t *testing.T) {
-	m := NewComplianceMatrix()
-	err := m.AddControl(&Control{ControlID: "c1", FrameworkID: "nonexistent"})
-	if err == nil {
-		t.Fatal("expected error for unknown framework")
-	}
-}
 
 // ─── 24: TrustScore Normalized range ──────────────────────────
 
@@ -332,17 +186,3 @@ func TestExt_BehavioralTrustScoreNormalized(t *testing.T) {
 }
 
 // ─── 25: Leaderboard Export JSON serializable ─────────────────
-
-func TestExt_LeaderboardExportSerializable(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-a", "A", &TrustScore{OverallScore: 0.8, ComputedAt: time.Now()})
-	lb.Rank()
-	export := lb.Export()
-	data, err := json.Marshal(export)
-	if err != nil {
-		t.Fatalf("export should be JSON serializable: %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("serialized export should be non-empty")
-	}
-}

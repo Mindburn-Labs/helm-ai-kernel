@@ -25,23 +25,9 @@ func WriteError(w http.ResponseWriter, status int, title, detail string) {
 	httperr.WriteError(w, status, title, detail)
 }
 
-// WriteErrorR writes an RFC 7807 response enriched with request context
-// (trace_id from X-Request-ID, instance from request URI).
-func WriteErrorR(w http.ResponseWriter, r *http.Request, status int, title, detail string) {
-	httperr.WriteErrorR(w, r, status, title, detail)
-}
-
 // WriteBadRequest writes a 400 error response.
 func WriteBadRequest(w http.ResponseWriter, detail string) {
 	httperr.WriteBadRequest(w, detail)
-}
-
-// WriteUnauthorized writes a 401 error response.
-//
-// Deprecated: use httperr.WriteUnauthorized. Authentication middleware is a
-// library concern and must not import this server package.
-func WriteUnauthorized(w http.ResponseWriter, detail string) {
-	httperr.WriteUnauthorized(w, detail)
 }
 
 // WriteForbidden writes a 403 error response.
@@ -62,14 +48,6 @@ func WriteMethodNotAllowed(w http.ResponseWriter) {
 // WriteConflict writes a 409 error response (used for idempotency).
 func WriteConflict(w http.ResponseWriter, detail string) {
 	httperr.WriteConflict(w, detail)
-}
-
-// WriteTooManyRequests writes a 429 error response with Retry-After header.
-//
-// Deprecated: use httperr.WriteTooManyRequests. Rate-limit middleware is a
-// library concern and must not import this server package.
-func WriteTooManyRequests(w http.ResponseWriter, retryAfterSecs int) {
-	httperr.WriteTooManyRequests(w, retryAfterSecs)
 }
 
 // WriteInternal writes a 500 error response.

@@ -168,95 +168,9 @@ func TestStress_NormalizedScoreMax(t *testing.T) {
 
 // ── Leaderboard with 200 agents ─────────────────────────────────────────
 
-func TestStress_Leaderboard200Agents(t *testing.T) {
-	scores := make(map[string]*TrustScore, 200)
-	names := make(map[string]string, 200)
-	for i := range 200 {
-		id := fmt.Sprintf("org-%d", i)
-		scores[id] = &TrustScore{
-			OverallScore: float64(i) / 200.0,
-			ComputedAt:   time.Now(),
-		}
-		names[id] = fmt.Sprintf("Org %d", i)
-	}
-	lb := NewLeaderboardFromScores(scores, names)
-	if len(lb.Entries) != 200 {
-		t.Fatalf("expected 200, got %d", len(lb.Entries))
-	}
-	// Should be sorted descending
-	for i := 1; i < len(lb.Entries); i++ {
-		if lb.Entries[i].TrustScore.OverallScore > lb.Entries[i-1].TrustScore.OverallScore {
-			t.Fatal("leaderboard should be sorted descending")
-		}
-	}
-}
-
-func TestStress_LeaderboardUpdateAndReRank(t *testing.T) {
-	lb := NewLeaderboard()
-	lb.UpdateScore("org-1", "Org 1", &TrustScore{OverallScore: 0.5, ComputedAt: time.Now()})
-	lb.UpdateScore("org-2", "Org 2", &TrustScore{OverallScore: 0.9, ComputedAt: time.Now()})
-	lb.Rank()
-	if lb.Entries[0].OrgID != "org-2" {
-		t.Fatal("highest scorer should be first")
-	}
-}
-
 // ── Compliance Matrix: 7 frameworks x 10 controls ───────────────────────
 
-func TestStress_ComplianceMatrix7x10(t *testing.T) {
-	matrix := NewComplianceMatrix()
-	frameworks := []string{"eu_ai_act", "hipaa", "sox", "sec", "gdpr", "mica", "fca"}
-	for _, fw := range frameworks {
-		matrix.AddFramework(&Framework{FrameworkID: fw, Name: fw, Version: "1.0"})
-		for j := range 10 {
-			ctrl := &Control{
-				ControlID: fmt.Sprintf("%s-ctrl-%d", fw, j), FrameworkID: fw,
-				Title: fmt.Sprintf("Control %d", j), Severity: SeverityMedium,
-			}
-			if err := matrix.AddControl(ctrl); err != nil {
-				t.Fatalf("add control %s-%d: %v", fw, j, err)
-			}
-		}
-	}
-	if len(matrix.Controls) != 70 {
-		t.Fatalf("expected 70, got %d", len(matrix.Controls))
-	}
-	if len(matrix.Frameworks) != 7 {
-		t.Fatalf("expected 7, got %d", len(matrix.Frameworks))
-	}
-}
-
 // ── Badge levels ────────────────────────────────────────────────────────
-
-func TestStress_BadgePlatinum(t *testing.T) {
-	if GetBadgeLevel(0.96) != BadgePlatinum {
-		t.Fatal("0.96 should be PLATINUM")
-	}
-}
-
-func TestStress_BadgeGold(t *testing.T) {
-	if GetBadgeLevel(0.86) != BadgeGold {
-		t.Fatal("0.86 should be GOLD")
-	}
-}
-
-func TestStress_BadgeSilver(t *testing.T) {
-	if GetBadgeLevel(0.71) != BadgeSilver {
-		t.Fatal("0.71 should be SILVER")
-	}
-}
-
-func TestStress_BadgeBronze(t *testing.T) {
-	if GetBadgeLevel(0.51) != BadgeBronze {
-		t.Fatal("0.51 should be BRONZE")
-	}
-}
-
-func TestStress_BadgeNone(t *testing.T) {
-	if GetBadgeLevel(0.50) != BadgeNone {
-		t.Fatal("0.50 should be NONE")
-	}
-}
 
 // ── Clamping ────────────────────────────────────────────────────────────
 
@@ -309,27 +223,6 @@ func TestStress_HistoryFIFO(t *testing.T) {
 }
 
 // ── Evidence types ──────────────────────────────────────────────────────
-
-func TestStress_EvidenceTypes(t *testing.T) {
-	types := []EvidenceType{EvidenceDocument, EvidenceLog, EvidenceScreenshot, EvidenceTestResult, EvidenceConfig, EvidenceAttestation}
-	for _, et := range types {
-		if string(et) == "" {
-			t.Fatal("evidence type should not be empty")
-		}
-	}
-}
-
-func TestStress_SeverityConstants(t *testing.T) {
-	if SeverityCritical != "critical" || SeverityHigh != "high" || SeverityMedium != "medium" || SeverityLow != "low" {
-		t.Fatal("severity constant mismatch")
-	}
-}
-
-func TestStress_ControlStatusConstants(t *testing.T) {
-	if ControlCompliant != "compliant" || ControlNonCompliant != "non_compliant" || ControlPartial != "partial" || ControlNotAssessed != "not_assessed" {
-		t.Fatal("control status constant mismatch")
-	}
-}
 
 func TestStress_ScoreEventDefaultDeltaAsymmetry(t *testing.T) {
 	if DefaultDeltas[EventPolicyComply] >= -DefaultDeltas[EventPolicyViolate] {

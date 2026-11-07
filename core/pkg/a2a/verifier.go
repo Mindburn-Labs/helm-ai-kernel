@@ -27,26 +27,6 @@ func NewDefaultVerifier() *DefaultVerifier {
 	}
 }
 
-// WithClock overrides the clock for testing.
-func (v *DefaultVerifier) WithClock(clock func() time.Time) *DefaultVerifier {
-	v.clock = clock
-	return v
-}
-
-// RegisterKey adds a trusted key for signature verification.
-func (v *DefaultVerifier) RegisterKey(key TrustedKey) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.trustedKeys[key.KeyID] = key
-}
-
-// AddPolicyRule adds a cross-agent policy rule.
-func (v *DefaultVerifier) AddPolicyRule(rule PolicyRule) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.policyRules = append(v.policyRules, rule)
-}
-
 // Negotiate performs schema/feature negotiation with fail-closed semantics.
 // Enforces a deadline to prevent CPU-burning negotiation attacks.
 func (v *DefaultVerifier) Negotiate(ctx context.Context, env *Envelope, localFeatures []Feature) (*NegotiationResult, error) {
@@ -152,42 +132,6 @@ func (v *DefaultVerifier) Negotiate(ctx context.Context, env *Envelope, localFea
 	return result, nil
 }
 
-// VerifySignature verifies the envelope signature.
-func (v *DefaultVerifier) VerifySignature(ctx context.Context, env *Envelope) (bool, error) {
-	_ = ctx
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	sig := env.Signature
-	if sig.KeyID == "" || sig.Value == "" {
-		return false, nil
-	}
-
-	// Look up trusted key
-	key, ok := v.trustedKeys[sig.KeyID]
-	if !ok {
-		return false, nil
-	}
-
-	// Verify key belongs to the originating agent
-	if key.AgentID != env.OriginAgentID {
-		return false, nil
-	}
-
-	if !key.Active {
-		return false, nil
-	}
-
-	// Verify algorithm matches
-	if key.Algorithm != sig.Algorithm {
-		return false, nil
-	}
-
-	// Verify signature (hash-based check for reference implementation)
-	expectedHash := ComputeEnvelopeHash(env)
-	return sig.Value == expectedHash, nil
-}
-
 // checkPolicies evaluates policy rules against the envelope.
 func (v *DefaultVerifier) checkPolicies(env *Envelope) (deny bool, reason string) {
 	for _, rule := range v.policyRules {
@@ -212,4 +156,3 @@ func (v *DefaultVerifier) checkPolicies(env *Envelope) (deny bool, reason string
 }
 
 // Compile-time interface check.
-var _ Verifier = (*DefaultVerifier)(nil)

@@ -727,11 +727,15 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		}
 	}
 	// Expired responses are cleared as calls settle: the body goes, the row
-	// and its digest stay. Bounded, so no settlement pays for a backlog.
+	// and its digest stay. Bounded, so no settlement pays for a backlog. The
+	// rows it clears stay locked until the settlement commits, through the
+	// signing of its receipts, so a concurrent settlement skips the rows
+	// another is clearing instead of waiting for them.
 	if _, err := tx.ExecContext(ctx, `UPDATE authority_model_replays SET body = NULL, purged_at = now()
 		WHERE (tenant_id, attempt_id) IN (
 			SELECT tenant_id, attempt_id FROM authority_model_replays
-			WHERE tenant_id = $1 AND body IS NOT NULL AND expires_at < now() LIMIT 100)`, tenantID); err != nil {
+			WHERE tenant_id = $1 AND body IS NOT NULL AND expires_at < now() LIMIT 100
+			FOR UPDATE SKIP LOCKED)`, tenantID); err != nil {
 		return err
 	}
 	for _, w := range outcomes {

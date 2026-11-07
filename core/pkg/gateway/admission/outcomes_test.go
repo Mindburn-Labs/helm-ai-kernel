@@ -60,7 +60,7 @@ func sampleModelOutcome() storedOutcome {
 	o.Exposures[0].Amount = 1200
 	o.Observation = boundObservation{ID: sampleObservation, Source: modelObservationSource, TrustClass: modelProviderTrust, Outcome: "SUCCEEDED",
 		EvidenceDigest: sum256("event: message_stop"), ObservedAt: sampleSettledAt}
-	o.ModelCall = &settledModelCall{State: SettlementConfirmed, HeldMicros: 3000, ConfirmedMicros: &confirmed, BillableMicros: 1200,
+	o.ModelCall = &settledModelCall{State: SettlementConfirmed, CurrencyCode: "USD", HeldMicros: 3000, ConfirmedMicros: &confirmed, BillableMicros: 1200,
 		UsageDigest: sum256(`{"input_tokens":100,"output_tokens":40}`)}
 	return o
 }
@@ -215,7 +215,7 @@ func TestOutcomeReceiptBindsTheStoredOutcome(t *testing.T) {
 		t.Fatalf("the model call's binding does not match its schema: %v", err)
 	}
 	call := modelDoc["model_call"].(map[string]any)
-	if call["state"] != "CONFIRMED" || call["held_micros"] != "3000" || call["confirmed_micros"] != "1200" || call["estimated_micros"] != "" ||
+	if call["state"] != "CONFIRMED" || call["currency_code"] != "USD" || call["held_micros"] != "3000" || call["confirmed_micros"] != "1200" || call["estimated_micros"] != "" ||
 		call["billable_micros"] != "1200" || call["usage_digest"] != hex.EncodeToString(sum256(`{"input_tokens":100,"output_tokens":40}`)) {
 		t.Fatalf("binding model_call = %v", call)
 	}
@@ -257,6 +257,7 @@ func TestOutcomeReceiptBindsTheStoredOutcome(t *testing.T) {
 		"billable micros":  func(m *settledModelCall) { m.BillableMicros = 800 },
 		"usage":            func(m *settledModelCall) { m.UsageDigest = sum256(`{"output_tokens":1}`) },
 		"estimate":         func(m *settledModelCall) { v := int64(3000); m.EstimatedMicros = &v },
+		"currency":         func(m *settledModelCall) { m.CurrencyCode = "EUR" },
 	} {
 		changed := sampleModelOutcome()
 		mutate(changed.ModelCall)
@@ -297,6 +298,10 @@ func TestOutcomeReceiptBindsTheStoredOutcome(t *testing.T) {
 			o.SettledBy = settledByNotSent
 		},
 		"a model call without its row": func(o *storedOutcome) { *o = sampleModelOutcome(); o.ModelCall = nil },
+		"a model call without its currency": func(o *storedOutcome) {
+			*o = sampleModelOutcome()
+			o.ModelCall.CurrencyCode = ""
+		},
 		"an estimate that is SETTLED": func(o *storedOutcome) {
 			*o = sampleModelOutcome()
 			o.ModelCall.State, o.Reservation, o.Exposures[0].Kind = SettlementEstimated, "estimated", "estimated"
@@ -380,10 +385,10 @@ func expectOutcomeReceipt(mock sqlmock.Sqlmock, o storedOutcome, seq int64, prev
 	}
 	mock.ExpectQuery(`SELECT limit_id::text, bucket_start, kind, amount FROM authority_exposures`).WithArgs(tenantA, sampleAttempt).WillReturnRows(exposures)
 	if m := o.ModelCall; m != nil {
-		mock.ExpectQuery(`SELECT state, held_micros, estimated_micros, confirmed_micros, billable_micros, usage\s+FROM authority_model_calls`).
+		mock.ExpectQuery(`SELECT state, currency_code, held_micros, estimated_micros, confirmed_micros, billable_micros, usage\s+FROM authority_model_calls`).
 			WithArgs(tenantA, sampleAttempt).
-			WillReturnRows(sqlmock.NewRows([]string{"state", "held_micros", "estimated_micros", "confirmed_micros", "billable_micros", "usage"}).
-				AddRow(m.State, m.HeldMicros, nullInt(m.EstimatedMicros), nullInt(m.ConfirmedMicros), m.BillableMicros, []byte(`{"output_tokens": 40, "input_tokens": 100}`)))
+			WillReturnRows(sqlmock.NewRows([]string{"state", "currency_code", "held_micros", "estimated_micros", "confirmed_micros", "billable_micros", "usage"}).
+				AddRow(m.State, m.CurrencyCode, m.HeldMicros, nullInt(m.EstimatedMicros), nullInt(m.ConfirmedMicros), m.BillableMicros, []byte(`{"output_tokens": 40, "input_tokens": 100}`)))
 	}
 	mock.ExpectExec(`INSERT INTO authority_receipt_chains`).WithArgs(tenantA, chain, ReceiptFormat).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(`SELECT seq, head_digest, format FROM authority_receipt_chains\s+WHERE tenant_id = \$1 AND chain_id = \$2 FOR UPDATE`).
@@ -422,7 +427,8 @@ func wantOutcomeEnvelope(t *testing.T, name string, envelope, binding []byte, o 
 		len(doc.Exposures) != len(o.Exposures) || (doc.ModelCall == nil) != (o.ModelCall == nil) {
 		t.Fatalf("%s: the inserted receipt %+v binds %+v, not the stored outcome", name, r, doc)
 	}
-	if m := doc.ModelCall; m != nil && (m.ConfirmedMicros != decimal(o.ModelCall.ConfirmedMicros) || m.UsageDigest != hex.EncodeToString(o.ModelCall.UsageDigest)) {
+	if m := doc.ModelCall; m != nil && (m.ConfirmedMicros != decimal(o.ModelCall.ConfirmedMicros) || m.UsageDigest != hex.EncodeToString(o.ModelCall.UsageDigest) ||
+		m.CurrencyCode != o.ModelCall.CurrencyCode) {
 		t.Fatalf("%s: the model call binds %+v", name, m)
 	}
 }
@@ -567,7 +573,7 @@ func TestModelCallSettlementAppendsItsSignedReceiptsLast(t *testing.T) {
 	refused.Reservation, refused.Exposures = "released", nil
 	refused.Observation = boundObservation{ID: sampleObservation, Source: modelObservationSource, TrustClass: "adapter_refusal", Outcome: "FAILED",
 		ObservedAt: sampleSettledAt}
-	refused.ModelCall = &settledModelCall{State: SettlementReleased, HeldMicros: 3000, UsageDigest: usage}
+	refused.ModelCall = &settledModelCall{State: SettlementReleased, CurrencyCode: "USD", HeldMicros: 3000, UsageDigest: usage}
 
 	observed := sampleModelOutcome()
 	observed.State, observed.Version, observed.FromState = "OBSERVED", 4, "DISPATCHED"
@@ -727,8 +733,9 @@ func TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite(t *testing.T) {
 		"CREATE CONSTRAINT TRIGGER authority_outcome_receipt_insert AFTER INSERT ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('OBSERVED', 'RECONCILED', 'SETTLED')) EXECUTE FUNCTION authority_require_outcome_receipt();",
 		"CREATE CONSTRAINT TRIGGER authority_outcome_receipt_update AFTER UPDATE OF state, version ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('OBSERVED', 'RECONCILED', 'SETTLED') AND (OLD.state IS DISTINCT FROM NEW.state OR OLD.version IS DISTINCT FROM NEW.version)) EXECUTE FUNCTION authority_require_outcome_receipt();",
 		"WHERE tenant_id = NEW.tenant_id AND attempt_id = NEW.attempt_id AND attempt_version = NEW.version AND state = NEW.state ) THEN RAISE EXCEPTION 'outcome_receipt_missing'",
-		"EXECUTE format('ALTER FUNCTION authority_require_decision_receipt() SET search_path = %I, pg_temp', current_schema());",
-		"EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', current_schema());",
+		"FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = 'authority_receipts'::regclass;",
+		"EXECUTE format('ALTER FUNCTION authority_require_decision_receipt() SET search_path = %I, pg_temp', receipts_schema);",
+		"EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', receipts_schema);",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Errorf("migration 16 lacks the outcome fence clause %q", want)
@@ -741,5 +748,36 @@ func TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite(t *testing.T) {
 	}
 	if HeadVersion() < 16 {
 		t.Fatalf("the binary serves schema %d, without the outcome fence", HeadVersion())
+	}
+}
+
+// TestUsageDigestIsTheRFC8785Form: a model call's usage digest is the SHA-256
+// of the usage's RFC 8785 form, numbers serialized as ECMAScript does, so the
+// usage a provider sent and the JSONB rendering of it the call row returns
+// have one digest. HELM's number-literal canonical form would give two, and
+// its interoperable form refuses these numbers outright.
+func TestUsageDigestIsTheRFC8785Form(t *testing.T) {
+	const canonical = `{"cost":1.5,"input_tokens":100,"output_tokens":40,"rate":1e-7}`
+	sent := []byte(`{"output_tokens":40, "cost":1.50, "rate":1e-7, "input_tokens":100}`)
+	stored := []byte(`{"rate": 0.0000001, "cost": 1.50, "input_tokens": 100, "output_tokens": 40}`)
+	for name, usage := range map[string][]byte{"as sent": sent, "as JSONB renders it": stored} {
+		digest, err := usageDigest(usage)
+		must(t, err)
+		if !bytes.Equal(digest, sum256(canonical)) {
+			t.Errorf("%s: usage digest %x, want SHA-256 of %s", name, digest, canonical)
+		}
+	}
+	literalSent, err := canonicalize.JCS(json.RawMessage(sent))
+	must(t, err)
+	literalStored, err := canonicalize.JCS(json.RawMessage(stored))
+	must(t, err)
+	if bytes.Equal(literalSent, literalStored) {
+		t.Fatal("number-literal JCS already agrees on these numbers; the test no longer shows why RFC 8785 numbers are needed")
+	}
+	if _, err := canonicalize.InteroperableJCS(json.RawMessage(sent)); err == nil {
+		t.Fatal("the interoperable form accepted a fractional usage")
+	}
+	if _, err := usageDigest([]byte(`{"input_tokens":`)); err == nil {
+		t.Fatal("a usage that is not JSON was digested")
 	}
 }

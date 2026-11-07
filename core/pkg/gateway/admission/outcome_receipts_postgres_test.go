@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
@@ -146,8 +148,8 @@ func (f *fixture) wantSettlement(attemptID string, b outcomeBinding) {
 		var held, billable int64
 		var estimated, confirmed sql.NullInt64
 		var usage []byte
-		err = tx.QueryRow(`SELECT state, held_micros, estimated_micros, confirmed_micros, billable_micros, usage
-			FROM authority_model_calls WHERE attempt_id = $1`, attemptID).Scan(&m.State, &held, &estimated, &confirmed, &billable, &usage)
+		err = tx.QueryRow(`SELECT state, currency_code, held_micros, estimated_micros, confirmed_micros, billable_micros, usage
+			FROM authority_model_calls WHERE attempt_id = $1`, attemptID).Scan(&m.State, &m.CurrencyCode, &held, &estimated, &confirmed, &billable, &usage)
 		if err == sql.ErrNoRows {
 			return nil
 		}
@@ -162,17 +164,12 @@ func (f *fixture) wantSettlement(attemptID string, b outcomeBinding) {
 			m.ConfirmedMicros = fmt.Sprint(confirmed.Int64)
 		}
 		if usage != nil {
-			// The usage is a flat object of integers here, which Go's sorted,
-			// compact encoding writes as RFC 8785 does.
-			var parsed map[string]int64
-			if err := json.Unmarshal(usage, &parsed); err != nil {
-				return err
-			}
-			compact, err := json.Marshal(parsed)
+			// The reference RFC 8785 implementation over the row as stored.
+			canonical, err := jsoncanonicalizer.Transform(usage)
 			if err != nil {
 				return err
 			}
-			m.UsageDigest = hex.EncodeToString(sha(compact))
+			m.UsageDigest = hex.EncodeToString(sha(canonical))
 		}
 		modelCall = &m
 		return nil
@@ -328,15 +325,17 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	// its own version, both on the one observation of the response.
 	claim, _ := f.claimModel("mi:receipt:confirmed", 3_000)
 	confirmed, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 1_200,
-		Usage: []byte(`{"output_tokens":40, "input_tokens":100}`), EvidenceDigest: sha(body)})
+		Usage: []byte(`{"output_tokens":40, "cost":1.50, "rate":1e-7, "input_tokens":100}`), EvidenceDigest: sha(body)})
 	must(t, err)
 	wantOutcome(t, "confirmed", confirmed, "SETTLED", "SUCCEEDED", "")
 	bs := f.wantReceipted(confirmed, "ADMITTED", "OBSERVED", "SETTLED")
-	usage := hex.EncodeToString(sha([]byte(`{"input_tokens":100,"output_tokens":40}`)))
+	// The RFC 8785 form of the usage, whatever the provider and JSONB wrote:
+	// 1.50 is 1.5 and 1e-7 stays 1e-7, though JSONB renders it 0.0000001.
+	usage := hex.EncodeToString(sha([]byte(`{"cost":1.5,"input_tokens":100,"output_tokens":40,"rate":1e-7}`)))
 	if bs[1].AttemptVersion != confirmed.Version-1 || bs[2].FromState != "OBSERVED" || bs[1].Observation.ID != bs[2].Observation.ID ||
 		bs[2].Observation.Source != modelObservationSource || bs[2].Observation.EvidenceDigest != hex.EncodeToString(sha(body)) ||
 		bs[2].SettledBy != settledByModelCall || bs[2].Reservation != "confirmed" ||
-		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, HeldMicros: "3000", ConfirmedMicros: "1200", BillableMicros: "1200", UsageDigest: usage}) ||
+		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, CurrencyCode: "USD", HeldMicros: "3000", ConfirmedMicros: "1200", BillableMicros: "1200", UsageDigest: usage}) ||
 		*bs[1].ModelCall != *bs[2].ModelCall || len(bs[2].Exposures) != 1 || bs[2].Exposures[0].Amount != "1200" {
 		t.Fatalf("the confirmed call's bindings = %+v %+v", bs[1], bs[2])
 	}
@@ -352,7 +351,7 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	must(t, err)
 	wantOutcome(t, "estimated", estimated, "OBSERVED", "SUCCEEDED", "")
 	if b := f.wantReceipted(estimated, "ADMITTED", "OBSERVED")[1]; b.Reservation != "estimated" ||
-		*b.ModelCall != (bindingModelCall{State: SettlementEstimated, HeldMicros: "2000", EstimatedMicros: "2000", BillableMicros: "0"}) {
+		*b.ModelCall != (bindingModelCall{State: SettlementEstimated, CurrencyCode: "USD", HeldMicros: "2000", EstimatedMicros: "2000", BillableMicros: "0"}) {
 		t.Fatalf("the estimate's binding = %+v %+v", b, b.ModelCall)
 	}
 	late, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 800,
@@ -364,7 +363,7 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	// amounts, the usage and the confirmed reservation, not only a version.
 	if bs[2].FromState != "OBSERVED" || bs[2].Observation.ID == bs[1].Observation.ID || bs[3].Observation.ID != bs[2].Observation.ID ||
 		bs[1].ModelCall.State != SettlementEstimated || bs[1].ModelCall.ConfirmedMicros != "" || bs[1].Reservation != "estimated" ||
-		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, HeldMicros: "2000", ConfirmedMicros: "800",
+		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, CurrencyCode: "USD", HeldMicros: "2000", ConfirmedMicros: "800",
 			BillableMicros: "800", UsageDigest: hex.EncodeToString(sha([]byte(`{"input_tokens":10,"output_tokens":5}`)))}) ||
 		bs[2].Reservation != "confirmed" || bs[2].Exposures[0].Amount != "800" || bs[2].Exposures[0].Kind != "confirmed" {
 		t.Fatalf("the late confirmation's bindings = %+v %+v %+v", bs[1].ModelCall, bs[2].ModelCall, bs[2])
@@ -387,7 +386,12 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	if cut.State != "UNKNOWN" {
 		t.Fatalf("a cut call is %s", cut.State)
 	}
+	// Not an outcome, so not receipted, though the hold is already spent as
+	// an estimate (CTL-059 bypass assumptions).
 	f.wantReceipted(cut, "ADMITTED")
+	if cut.ModelCall == nil || cut.ModelCall.State != SettlementEstimated || len(cut.Exposures) != 1 || cut.Exposures[0].Kind != "estimated" {
+		t.Fatalf("a cut call's money: %+v %+v", cut.ModelCall, cut.Exposures)
+	}
 	reconciled, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 700})
 	must(t, err)
 	wantOutcome(t, "a cut call confirmed", reconciled, "SETTLED", "SUCCEEDED", "")

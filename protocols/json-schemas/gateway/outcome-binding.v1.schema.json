@@ -111,14 +111,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["state", "held_micros", "estimated_micros", "confirmed_micros", "billable_micros", "usage_digest"],
+          "required": ["state", "currency_code", "held_micros", "estimated_micros", "confirmed_micros", "billable_micros", "usage_digest"],
           "properties": {
             "state": {"enum": ["CONFIRMED", "ESTIMATED", "RELEASED"]},
+            "currency_code": {"type": "string", "pattern": "^[A-Z]{3}$", "description": "The ISO 4217 code the row's amounts are micro-units of."},
             "held_micros": {"$ref": "#/$defs/amount"},
             "estimated_micros": {"anyOf": [{"const": ""}, {"$ref": "#/$defs/amount"}], "description": "Empty when the row holds none."},
             "confirmed_micros": {"anyOf": [{"const": ""}, {"$ref": "#/$defs/amount"}], "description": "The provider-reported consumption; empty when the row holds none."},
             "billable_micros": {"$ref": "#/$defs/amount"},
-            "usage_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "SHA-256 of the RFC 8785 form of the usage the row stores; empty when it stores none."}
+            "usage_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "SHA-256 of the RFC 8785 form of the usage the row stores (numbers as IEEE 754 doubles in ECMAScript notation, so 1.50 is 1.5 and 0.0000001 is 1e-7); empty when it stores none."}
           }
         }
       ]

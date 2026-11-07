@@ -55,15 +55,20 @@ END;
 $$;
 
 -- Both fences resolve authority_receipts by name. Pin their search_path to
--- the schema this migration runs in, which is where migration 15 created the
--- table (gateway migrations create every object in the connection's current
--- schema), and put pg_temp last: a look-alike authority_receipts in the
--- writer's own search_path, or a temporary table the writer creates, cannot
--- satisfy either fence. This also pins migration 15's decision fence.
+-- the schema that holds the table migration 15 created (read from pg_class,
+-- not assumed from this connection's search_path), and put pg_temp last: a
+-- look-alike authority_receipts in the writer's own search_path, or a
+-- temporary table the writer creates, cannot satisfy either fence. This also
+-- pins migration 15's decision fence.
 DO $pin$
+DECLARE
+    receipts_schema TEXT;
 BEGIN
-    EXECUTE format('ALTER FUNCTION authority_require_decision_receipt() SET search_path = %I, pg_temp', current_schema());
-    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', current_schema());
+    SELECT n.nspname INTO STRICT receipts_schema
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.oid = 'authority_receipts'::regclass;
+    EXECUTE format('ALTER FUNCTION authority_require_decision_receipt() SET search_path = %I, pg_temp', receipts_schema);
+    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', receipts_schema);
 END
 $pin$;
 

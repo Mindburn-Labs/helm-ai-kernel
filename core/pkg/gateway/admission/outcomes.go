@@ -2,7 +2,8 @@ package admission
 
 // quantum_posture: outcome receipts are signed with classical Ed25519 under
 // receipt.v5 and chained with SHA-256 (receipts.go); the usage digest is
-// SHA-256. No hybrid or post-quantum protection is provided or claimed.
+// SHA-256 over the RFC 8785 form. No hybrid or post-quantum protection is
+// provided or claimed.
 //
 // The outcome of an admitted effect is its external proof of closure
 // (helm-tracker#276): every write that records it appends a signed receipt
@@ -34,7 +35,10 @@ package admission
 // money row and usage digest).
 //
 // Not outcomes, and not receipted: UNKNOWN and ESCALATED_TO_HUMAN (no outcome
-// is known; the reservation stays held), CANCELLED (a refused claim or a
+// is known; an effect's reservation stays held, but a cut model call's hold
+// has moved to estimated, budget spent as an estimate, and that estimate is
+// receipted only when a provider confirmation reconciles the call, RECONCILED
+// then SETTLED, or never if none arrives), CANCELLED (a refused claim or a
 // cancellation: nothing was dispatched), REJECTED and EXPIRED (an escalation
 // that was never admitted), and the lifecycle in between (DISPATCHING,
 // DISPATCHED). COMPENSATED is in the schema but no code writes it.
@@ -49,6 +53,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -107,11 +113,12 @@ type boundObservation struct {
 	ObservedAt            time.Time
 }
 
-// settledModelCall is a model call's money row after its settlement.
-// UsageDigest is the SHA-256 of the RFC 8785 form of the usage the row
-// stores, nil when it stores none.
+// settledModelCall is a model call's money row after its settlement. Its
+// amounts are micro-units of CurrencyCode. UsageDigest is the SHA-256 of the
+// RFC 8785 form of the usage the row stores, nil when it stores none.
 type settledModelCall struct {
 	State           string
+	CurrencyCode    string
 	HeldMicros      int64
 	EstimatedMicros *int64
 	ConfirmedMicros *int64
@@ -181,6 +188,7 @@ type bindingExposure struct {
 
 type bindingModelCall struct {
 	State           string `json:"state"`
+	CurrencyCode    string `json:"currency_code"`
 	HeldMicros      string `json:"held_micros"`
 	EstimatedMicros string `json:"estimated_micros"`
 	ConfirmedMicros string `json:"confirmed_micros"`
@@ -230,6 +238,9 @@ func checkSettlement(o storedOutcome) error {
 		}
 		if n := len(m.UsageDigest); n != 0 && n != sha256.Size {
 			return errors.New("the usage digest is not a SHA-256 digest")
+		}
+		if len(m.CurrencyCode) != 3 {
+			return fmt.Errorf("a model call's amounts are micro-units of a three-letter currency, not %q", m.CurrencyCode)
 		}
 	default:
 		return fmt.Errorf("an outcome is settled by a read-back, a NOT_SENT answer or a model call, not %q", o.SettledBy)
@@ -308,7 +319,7 @@ func buildOutcomeReceipt(o storedOutcome, receiptID string, seq uint64, prevDige
 		if err != nil {
 			return nil, nil, err
 		}
-		model = &bindingModelCall{State: m.State, HeldMicros: strconv.FormatInt(m.HeldMicros, 10), EstimatedMicros: decimal(m.EstimatedMicros),
+		model = &bindingModelCall{State: m.State, CurrencyCode: m.CurrencyCode, HeldMicros: strconv.FormatInt(m.HeldMicros, 10), EstimatedMicros: decimal(m.EstimatedMicros),
 			ConfirmedMicros: decimal(m.ConfirmedMicros), BillableMicros: strconv.FormatInt(m.BillableMicros, 10), UsageDigest: usage}
 	}
 	chain := receiptChainID(o.TenantID, o.WorkspaceID)
@@ -464,9 +475,9 @@ func settledCall(ctx context.Context, tx *sql.Tx, tenantID, attemptID string) (*
 	var m settledModelCall
 	var estimated, confirmed sql.NullInt64
 	var usage []byte
-	if err := tx.QueryRowContext(ctx, `SELECT state, held_micros, estimated_micros, confirmed_micros, billable_micros, usage
+	if err := tx.QueryRowContext(ctx, `SELECT state, currency_code, held_micros, estimated_micros, confirmed_micros, billable_micros, usage
 		FROM authority_model_calls WHERE tenant_id = $1 AND attempt_id = $2`, tenantID, attemptID).
-		Scan(&m.State, &m.HeldMicros, &estimated, &confirmed, &m.BillableMicros, &usage); err != nil {
+		Scan(&m.State, &m.CurrencyCode, &m.HeldMicros, &estimated, &confirmed, &m.BillableMicros, &usage); err != nil {
 		return nil, fmt.Errorf("attempt %s model call: %w", attemptID, err)
 	}
 	if estimated.Valid {
@@ -485,10 +496,14 @@ func settledCall(ctx context.Context, tx *sql.Tx, tenantID, attemptID string) (*
 	return &m, nil
 }
 
-// usageDigest is the SHA-256 of the RFC 8785 form of stored usage JSON: a
-// reader recomputes it from the call row, whatever spacing the row renders.
+// usageDigest is the SHA-256 of the RFC 8785 form of stored usage JSON,
+// computed by the reference implementation (jsoncanonicalizer): numbers are
+// IEEE 754 doubles serialized as ECMAScript does, so the usage a provider
+// sent (1e-7, 1.50) and the JSONB rendering of it the row returns
+// (0.0000001, 1.50) have the same digest, and any RFC 8785 implementation
+// recomputes it from the call row.
 func usageDigest(usage []byte) ([]byte, error) {
-	canonical, err := canonicalize.JCS(json.RawMessage(usage))
+	canonical, err := jsoncanonicalizer.Transform(usage)
 	if err != nil {
 		return nil, err
 	}

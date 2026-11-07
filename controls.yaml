@@ -375,7 +375,7 @@ removal_proofs:
     tests:
       - "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteRefusesWithoutASigner"
   - control: CTL-050
-    file: core/cmd/helm-ai-kernel/receipt_keyring_route.go
+    file: core/pkg/receiptkeyring/keyring.go
     find: "KeyID: s.GetKeyID(), Profile: helmcrypto.ReceiptProfileHybrid,"
     replace: "KeyID: s.GetKeyID(), Profile: helmcrypto.ReceiptProfileClassical,"
     tests:
@@ -1072,6 +1072,67 @@ removal_proofs:
     replace: "DROP TRIGGER IF EXISTS authority_decision_receipt_update ON authority_effect_attempts;\n"
     tests:
       - "core/pkg/gateway/admission.TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite"
+  - control: CTL-060
+    file: core/pkg/receiptverify/gateway.go
+    find: "\t\tif r.OutputHash != hex.EncodeToString(sum[:]) {\n"
+    replace: "\t\tif false && r.OutputHash != hex.EncodeToString(sum[:]) {\n"
+    tests:
+      - "core/pkg/receiptverify.TestTamperedGatewayBindingFails"
+  - control: CTL-060
+    file: core/pkg/receiptverify/gateway.go
+    find: "\t\tif mismatch := gatewayBindingMismatch(r, binding); mismatch != \"\" {\n"
+    replace: "\t\tif mismatch := gatewayBindingMismatch(r, binding); false && mismatch != \"\" {\n"
+    tests:
+      - "core/pkg/receiptverify.TestGatewayBindingMustAgreeWithTheSignedReceipt"
+  - control: CTL-060
+    file: core/pkg/receiptverify/receiptverify.go
+    find: "\tres.Checks = append(res.Checks, checkBindings(receipts, b.GatewayBindings))\n"
+    replace: "\t_ = checkBindings\n"
+    tests:
+      - "core/pkg/receiptverify.TestTamperedGatewayBindingFails"
+      - "core/pkg/receiptverify.TestGatewayBindingMustAgreeWithTheSignedReceipt"
+  - control: CTL-060
+    file: core/cmd/receipt_verify/main.go
+    find: "\t\tb.GatewayBindings[id] = data\n"
+    replace: "\t\t_ = data\n"
+    tests:
+      - "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt"
+  - control: CTL-060
+    file: core/pkg/gateway/admission/receipt_read.go
+    find: "\tif in.WorkspaceID != caller.WorkspaceID {\n"
+    replace: "\tif false && in.WorkspaceID != caller.WorkspaceID {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
+  - control: CTL-060
+    file: core/pkg/gateway/admission/receipt_read.go
+    find: "\tif caller.Episode != nil {\n"
+    replace: "\tif false && caller.Episode != nil {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
+  - control: CTL-060
+    file: core/pkg/gateway/admission/receipt_read.go
+    find: "\t\tif r.Ref.Seq != in.FromSeq+uint64(i) || r.Ref.ChainID != out.ChainID {\n"
+    replace: "\t\tif false && r.Ref.Seq != in.FromSeq+uint64(i) || r.Ref.ChainID != out.ChainID {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing"
+  - control: CTL-060
+    file: core/pkg/gateway/admission/receipt_read.go
+    find: "\t\tif errors.Is(err, sql.ErrNoRows) {\n\t\t\treturn errNotFound\n\t\t}\n"
+    replace: "\t\tif errors.Is(err, sql.ErrNoRows) {\n\t\t\terr = nil\n\t\t}\n"
+    tests:
+      - "core/pkg/gateway/admission.TestAttemptReceiptsAreReadOnlyForAVisibleAttempt"
+  - control: CTL-060
+    file: core/pkg/gateway/runtime/runtime.go
+    find: "\tmux.Handle(keyringPattern, keyring)\n"
+    replace: "\t_, _ = keyringPattern, keyring\n"
+    tests:
+      - "core/pkg/gateway/runtime.TestServePublishesTheReceiptKeyringOnTheMainListener"
+  - control: CTL-060
+    file: core/pkg/gateway/runtime/receiptkey.go
+    find: "\t\tif !limiter.Allow() {\n"
+    replace: "\t\tif false && !limiter.Allow() {\n"
+    tests:
+      - "core/pkg/gateway/runtime.TestReceiptKeyringRouteIsRateLimited"
 
 controls:
 
@@ -3425,8 +3486,10 @@ controls:
     status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.registerReceiptKeyringRoute"
+      - "core/pkg/receiptkeyring.For"
     config:
       - "HELM_RECEIPT_PROFILE (classical or hybrid) and the root key in the data directory select the signer the route describes."
+      - "The document type and builder are core/pkg/receiptkeyring, the one keyring shape; helm-gateway serves it for its own receipt signer (CTL-060)."
     protected_operations:
       - "GET /api/v1/receipt-keyring on the API listener."
     bypass_assumptions:
@@ -4123,3 +4186,90 @@ controls:
       bypass:
         - "core/pkg/gateway/admission.TestPostgresReceiptChainStaysContiguousUnderConcurrentProposals"
         - "core/pkg/gateway/admission.TestPostgresReceiptSchemaUpgradesFrom14"
+
+  - id: CTL-060
+    title: "Gateway receipts verify offline with their bindings"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A reader verifies helm-gateway's signed decision receipts (CTL-059)
+      offline, the gateway's own facts included (helm-tracker#276).
+      receiptverify, receipt_verify and the WASM verifier take a gateway
+      receipt's binding document (bundle member gateway_bindings, receipt id
+      to the base64 of the exact bytes, or receipt_verify --binding
+      <receipt_id>=<file>) and run a binding check: it passes only when every
+      supplied binding's SHA-256 is its receipt's signed output_hash, the
+      binding is the closed helm.gateway.receipt-binding.v1 document in its
+      own JCS form, and its chain id (length-framed from its tenant and
+      workspace), sequence, attempt and version, state, verdict, reason code,
+      policy hash and argument digest equal the signed receipt's session_id,
+      lamport_clock, decision_id, effect_id, status, verdict, reason_code,
+      policy_hash and args_hash. A binding for a receipt the bundle does not
+      hold fails; with no binding the check is not_applicable, never a pass.
+      helm-gateway serves GET /api/v1/receipt-keyring on its API listener,
+      public and read-only, in the Kernel's keyring document (CTL-050) for the
+      key it signs receipts with, and refuses to start with a signer it cannot
+      publish. GetAttemptReceipts returns an attempt's receipts as the exact
+      stored envelope and binding bytes, to a helm.gateway.read token that can
+      read the attempt (its tenant, workspace and episode scope).
+      ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of
+      the chain of the token's tenant and workspace, in order, as the document
+      receipt_verify checks offline; it refuses a workspace_id other than the
+      token's and an episode token, refuses a range past the chain's head
+      instead of clipping it, and never returns a range with a gap. A frozen
+      gateway chain signed by the gateway's builder keeps verifying.
+    status: enforced
+    entry_points:
+      - "core/pkg/receiptverify.VerifyBundle"
+      - "core/pkg/receiptverify.ParseGatewayBinding"
+      - "core/pkg/receiptverify.EncodeGatewayBundle"
+      - "core/cmd/receipt_verify.addBindings"
+      - "core/pkg/gateway/admission.Service.GetReceipts"
+      - "core/pkg/gateway/admission.Service.ExportReceiptChain"
+      - "core/pkg/gateway/server.Server.GetAttemptReceipts"
+      - "core/pkg/gateway/server.Server.ExportReceiptChain"
+      - "core/pkg/gateway/runtime.receiptKeyringHandler"
+    config:
+      - "None beyond CTL-059's receipt key: the keyring describes HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE's public half under its key id. One export holds at most admission.MaxExportReceipts (256) receipts; the keyring route allows the Kernel's public route class rate (120 a second, bursts of 240) per gateway process."
+    protected_operations:
+      - "helm.gateway.v1.EffectGatewayService GetAttemptReceipts and ExportReceiptChain, and GET /api/v1/receipt-keyring, on helm-gateway serve's API listener."
+      - "receipt_verify --receipt with gateway_bindings or --binding, and receiptverify.VerifyJSON in the WASM verifier."
+    bypass_assumptions:
+      - "The binding check proves the key holder signed these gateway facts. It cannot show the facts are true of a ledger the verifier does not see, and it says nothing of a receipt whose binding is not supplied."
+      - "Trust in the key is the reader's: the keyring is public and unauthenticated by design. Over plain HTTP it can be substituted in transit; fetch it over the gateway's TLS listener or pin the key out of band (helm-gateway receipt-key). Behind HELM_TLS_CLIENT_AUTH=require the API listener also asks the reader for a client certificate."
+      - "An export proves its range is contiguous and signed. It does not show that nothing follows to_seq: the database owner can delete the newest receipts and rewind the head (CTL-059); head_seq is what the ledger said when it was read."
+      - "Continuation and reassignment grants do not extend to receipts: such a token reads the receipts of the attempts its own scope covers only. An episode token cannot export the chain, which holds every episode's decisions in its workspace."
+      - "The keyring route's rate bound is per process, shared by all callers, as the Kernel's public class is; a caller exhausting it delays other readers of the public key, never a decision."
+      - "Only helm.gateway.receipt-binding.v1 is recognised; a receipt that commits to another binding version fails the binding check until the verifier learns that version."
+    tests:
+      allowed:
+        - "core/pkg/receiptverify.TestFrozenGatewayChainStillVerifies"
+        - "core/pkg/receiptverify.TestEncodeGatewayBundleRoundTrips"
+        - "core/pkg/gateway/admission.TestFrozenGatewayChainIsWhatTheBuilderSigns"
+        - "core/cmd/receipt_verify.TestGatewayExportVerifiesWithItsBindings"
+        - "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt"
+        - "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing"
+        - "core/pkg/gateway/admission.TestAttemptReceiptsAreReadOnlyForAVisibleAttempt"
+        - "core/pkg/gateway/admission.TestPostgresReceiptExportVerifiesOfflineWithBindings"
+        - "core/pkg/gateway/server.TestPostgresReceiptReadsOnTheWire"
+        - "core/pkg/gateway/runtime.TestServePublishesTheReceiptKeyringOnTheMainListener"
+      forbidden:
+        - "core/pkg/receiptverify.TestTamperedGatewayBindingFails"
+        - "core/pkg/receiptverify.TestGatewayChainGapFails"
+        - "core/pkg/receiptverify.TestGatewayBindingMustAgreeWithTheSignedReceipt"
+        - "core/pkg/receiptverify.TestParseGatewayBindingIsClosedAndCanonical"
+        - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
+        - "core/pkg/gateway/admission.TestPostgresReceiptReadsStayInTheTokensTenantAndWorkspace"
+        - "core/pkg/gateway/runtime.TestReceiptKeyringRouteIsRateLimited"
+        - "core/pkg/gateway/runtime.TestReceiptKeyringRefusesASignerItCannotPublish"
+      removal:
+        - "core/pkg/receiptverify.TestTamperedGatewayBindingFails"
+        - "core/pkg/receiptverify.TestGatewayBindingMustAgreeWithTheSignedReceipt"
+        - "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt"
+        - "core/pkg/gateway/admission.TestReceiptExportRefusesBeforeReadingTheLedger"
+        - "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing"
+        - "core/pkg/gateway/admission.TestAttemptReceiptsAreReadOnlyForAVisibleAttempt"
+        - "core/pkg/gateway/runtime.TestServePublishesTheReceiptKeyringOnTheMainListener"
+        - "core/pkg/gateway/runtime.TestReceiptKeyringRouteIsRateLimited"
+      bypass:
+        - "core/pkg/receiptverify.TestGatewayBindingCheckIsNotApplicableWithoutBindings"
+        - "core/pkg/receiptverify.TestGatewayChainIDFramesTenantAndWorkspace"

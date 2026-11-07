@@ -10,6 +10,8 @@ pkg/gateway/admission TestPostgresSigningFailureCommitsNoDecision 1 race
 pkg/gateway/admission TestPostgresReceiptRowsAreAppendOnlyForTheRuntimeRole 1 race
 pkg/gateway/admission TestPostgresStoredReceiptsVerifyOfflineWithTheGatewayKey 1 race
 pkg/gateway/admission TestPostgresReceiptSchemaUpgradesFrom14 1 race
+pkg/gateway/admission TestPostgresLiftAndModelCallDecisionsCarryReceipts 1 race
+pkg/gateway/admission TestPostgresADecisionWithoutItsReceiptFailsAtCommit 1 race
 pkg/gateway/server TestPostgresAttemptReceiptRefsOnTheWire 1 race
 pkg/gateway/admission TestPostgresRecoveryCoversExactCPLifecycleLineage 1 race
 pkg/gateway/admission TestPostgresRecoveryVersionLineageUpgradesLegacySingleton 1 race

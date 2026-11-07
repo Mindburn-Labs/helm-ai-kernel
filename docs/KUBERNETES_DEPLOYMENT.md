@@ -147,21 +147,38 @@ without its key: a 32-byte Ed25519 seed, hex or standard base64, mounted at
   default `seed`): a Secret you create and back up, for example with
   `head -c 32 /dev/urandom | base64`;
 - `gateway.receipts.autoSeed=true`: the chart creates
-  `<release>-helm-ai-kernel-gateway-receipts` with a random seed on the first
-  install, reads it back with `lookup` on every upgrade, and keeps it on
-  uninstall (`helm.sh/resource-policy: keep`). It needs a real Helm install
+  `<release>-helm-ai-kernel-gateway-receipts` with a random 32-byte seed,
+  stored base64-encoded, on the first install. It reads the Secret back with
+  `lookup` on every upgrade and keeps it on uninstall
+  (`helm.sh/resource-policy: keep`). It needs a real Helm install
   or upgrade (Flux's helm-controller is one); a pipeline that renders with
   `helm template` mints a new key on every render, so use `existingSecret`
   there.
 
 The release chart's `autoSeed` is false; the development chart published from
 `main` to charts-dev sets it true, so a development install that names no key
-keeps starting. `gateway.receipts.keyId` sets the `key_id` receipts carry
-(default `helm-gateway:<namespace>:<gateway name>`). Record the public key
+keeps starting.
+
+`gateway.receipts.keyId` sets the `key_id` receipts carry, verbatim. By default
+the chart sets the prefix `helm-gateway:<namespace>:<gateway name>`, and the
+gateway appends the first 16 hex characters of SHA-256 of the public key, so a
+new seed gets a new key id. Record the public key
 once, out of band, with `helm-gateway receipt-key` in the gateway Pod: it
 prints `<key_id>=<public key hex>`, the form `receipt_verify --key` takes.
 Replacing the seed starts a new key; receipts signed before verify only under
-the old public key. Verification is described in
+the old public key.
+
+Upgrading to the schema with receipts (migration 15) adds a database fence:
+an attempt that becomes a decision without its signed receipt fails at
+commit. The migrate hook runs before the new Pods start. Until the previous
+Pods are replaced, their decisions fail with `decision_receipt_missing`, and
+callers retry.
+
+Without `gateway.database.bootstrap`, grant the runtime role two privileges
+after migrating:
+
+- `SELECT, INSERT` on `authority_receipts`;
+- `SELECT, INSERT, UPDATE` on `authority_receipt_chains`. Verification is described in
 [the gateway effect API note](architecture/gateway-effect-api.md#signed-decision-receipts).
 
 ### Database roles: owner and runtime

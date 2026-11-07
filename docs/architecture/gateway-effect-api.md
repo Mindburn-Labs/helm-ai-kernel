@@ -1259,15 +1259,28 @@ record, and ignores a proof for an effect that needs none.
 
 ## Signed decision receipts
 
-Every decision admission records is signed (CTL-059, helm-tracker#276):
-`ADMITTED`, `DENIED` and `ESCALATED`, including the re-admission of an
-approved escalation, for every effect type the gateway admits (GitHub
-effects, authority plans, lifts, work effects through the MCP tools, and the
-model gateway's admissions). The receipt commits in the decision's own
-transaction; if it cannot be built, signed, verified or appended, the
-decision rolls back with it. Lifecycle transitions after a decision
-(dispatch, observation, settlement, cancellation, expiry) are not receipted
-yet.
+Every decision admission writes through `recordDecision` is signed
+(CTL-059, helm-tracker#276): `ADMITTED`, `DENIED` and `ESCALATED`, including
+the re-admission of an approved escalation, for every effect type the gateway
+admits (GitHub effects, authority plans, lifts, work effects through the MCP
+tools, and the model gateway's admissions). The receipt commits in the
+decision's own transaction; if it cannot be built, signed, verified or
+appended, the decision rolls back with it.
+
+Not receipted yet: `ESCALATED` to `REJECTED`, `CANCELLED` and `EXPIRED`, and
+every lifecycle transition after a decision (dispatch, observation,
+reconciliation, settlement). Those receipts are a later slice.
+
+**Ledger fence.** The database refuses a decision without its receipt.
+Migration 15 adds a deferred constraint trigger on `authority_effect_attempts`.
+Whenever a row is inserted in, or changes state into, `ADMITTED`, `DENIED` or
+`ESCALATED`, a receipt for exactly that (tenant, attempt, version) must exist
+at commit (`decision_receipt_missing`, SQLSTATE 23514 otherwise). This
+matters during `helm upgrade`. The migrate hook runs before the new Pods start,
+while Pods of the previous binary still serve open connections, and those
+Pods write decisions without receipts. After the migration, those decisions
+fail at commit instead of entering the ledger unreceipted. Expect such
+requests to fail until the old Pods are replaced.
 
 **Envelope.** A receipt is a `contracts.Receipt` signed with classical
 Ed25519 under the `receipt.v5` preimage, the kernel's one receipt envelope.
@@ -1285,13 +1298,13 @@ signature is produced or claimed.
 | `status` | the stored state: `ADMITTED`, `DENIED` or `ESCALATED` |
 | `verdict` | `ALLOW`, `DENY` or `ESCALATE` |
 | `reason_code` | the stored reason code |
-| `args_hash` | lowercase hex of the attempt's argument digest |
+| `args_hash` | lowercase hex of the attempt's argument digest: SHA-256 of the exact argument bytes it stored. This is not the hash of JCS-canonical arguments that `contracts.Receipt` describes for other producers. |
 | `output_hash` | lowercase hex SHA-256 of the binding document's exact bytes |
 | `policy_hash` | lowercase hex SHA-256 of the JCS bytes of `{"schema":"helm.gateway.authority-snapshot.v1","versions":[...]}`, the versions of the authority rows the decision locked |
 | `session_id` | the chain id, `helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>` |
 | `lamport_clock` | the receipt's sequence number in its chain, from 1 |
 | `prev_hash` | the predecessor's `contracts.ReceiptChainHash`, empty at genesis |
-| `timestamp` | database time of the decision transaction; not signed (order is the signed sequence) |
+| `timestamp` | database time of the decision transaction. It is outside the receipt.v5 preimage, but the next receipt's `prev_hash` hashes the whole envelope and so covers it. The same time is signed as the binding's `decided_at`. Order is the signed sequence. |
 
 The binding document, `helm.gateway.receipt-binding.v1`
 ([schema](../../protocols/json-schemas/gateway/receipt-binding.v1.schema.json)),
@@ -1300,28 +1313,42 @@ the decision's `UPDATE ... RETURNING` gave it back, not as the caller meant it:
 tenant, workspace, attempt and version, the state moved from and to, effect
 type, requester and actor, mandate, risk class, the request, target and
 argument digests, the quote (amounts as decimal strings), the approval digest
-and expiry, the approver of a re-admission, the permit issued, the locked
-authority versions with their `policy_hash`, the episode, and the decision
-time. Its exact RFC 8785 bytes are stored beside the receipt.
+and expiry, the approver of a re-admission and the workload that carried the
+approval, the issuer and `jti` of a step-up proof the approval used up, the
+permit issued, the locked authority versions with their `policy_hash`, the
+episode, and the decision time. Its exact RFC 8785 bytes are stored beside the
+receipt.
 
 **Chain.** One chain per (tenant, workspace), the read boundary of
 `helm.gateway.read`. `authority_receipt_chains` holds each chain's head;
 `authority_receipts` (migration 15, forced row security) holds the exact
 envelope bytes, the binding bytes, the chain digest and the attempt version.
-Appending locks the chain row `FOR UPDATE` as the last lock of the
-transaction, after every authority, counter and attempt lock, so receipts of
-a workspace append one at a time without a lock-order cycle, then inserts the
-receipt and moves the head by compare-and-set. The table refuses a second
+Appending locks the chain row `FOR UPDATE`. That is the last row lock the
+transaction takes on a pre-existing row, after every authority, counter and
+attempt lock, so there is no lock-order cycle. It then inserts the receipt
+and moves the head by compare-and-set.
+
+The decisions of one workspace therefore serialize on the chain row until each
+commits. Their throughput is bounded by one decision transaction at a time,
+including the sealing cost: build, sign, verify the stored bytes and hash them
+(`BenchmarkSealDecisionReceipt`, a few hundred microseconds on a development
+machine). The table refuses a second
 receipt at a sequence number, a second successor of one receipt, a second
 genesis and a second receipt for one attempt version. The runtime role holds
 only `SELECT` and `INSERT` on `authority_receipts`
 (`deploy/helm-chart/files/gateway-db/002_grants.sql`).
 
-**Key.** `helm-gateway serve` refuses to start without
-`HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE`, a file holding a 32-byte Ed25519
-seed in hex or standard base64 (a passphrase or any other length is
-refused), and `HELM_GATEWAY_RECEIPT_KEY_ID`, the `key_id` every receipt
-carries. Admission refuses a signer whose receipt is not classical Ed25519
+**Key.** `helm-gateway serve` refuses to start without two settings:
+
+- `HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE`: a file holding a 32-byte Ed25519
+  seed in hex or standard base64. A passphrase, any other length and an
+  all-zero seed are refused.
+- The `key_id` every receipt carries, set one of two ways:
+  - `HELM_GATEWAY_RECEIPT_KEY_ID`, used verbatim;
+  - `HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX`, to which serve appends `:` and the
+    first 16 hex characters of SHA-256 of the public key, so a new seed always
+    gets a new key id. This is the chart's default:
+    `helm-gateway:<namespace>:<gateway name>`. Admission refuses a signer whose receipt is not classical Ed25519
 over receipt.v5 that verifies offline under the key it publishes. The chart
 mounts the seed into the gateway Pod only (R8) from
 `gateway.receipts.existingSecret`, or with `gateway.receipts.autoSeed=true`
@@ -1333,7 +1360,7 @@ the key is mounted, prints the public half and nothing else:
 
 ```text
 $ kubectl exec deploy/<release>-helm-ai-kernel-gateway -- helm-gateway receipt-key
-helm-gateway:<namespace>:<release>-helm-ai-kernel-gateway=5c1f...e2a9
+helm-gateway:<namespace>:<release>-helm-ai-kernel-gateway:<fingerprint>=<public key hex>
 ```
 
 **On the wire.** `EffectAttempt.receipts` (field 30) lists the attempt's
@@ -1355,11 +1382,20 @@ receipt_verify --receipt receipts.json --key "<key_id>=<public key hex>" --json
 ```
 
 Exit 0 means every signature verifies under that key and every `prev_hash`
-matches its predecessor; a rewritten field, a reordered or missing receipt or
-another key fails it. An attempt's receipts are not adjacent in its
-workspace's chain, so verify them one by one or as a contiguous segment. To
-check what a receipt binds, hash its stored binding bytes and compare with
-`output_hash`, then read the document against its schema.
+matches its predecessor. The check fails on a rewritten field, a reordered
+receipt, or a key other than the gateway's. A missing receipt fails it only
+when a later receipt follows it: the gap shows as a `prev_hash` that matches
+nothing.
+
+The chain alone cannot reveal truncation. The database owner can delete the
+newest receipts and rewind the head, and the runtime role moves the head on
+every append. Exporting chain segments and anchoring the head outside the
+database is the follow-up that makes truncation visible.
+
+An attempt's receipts are not adjacent in its workspace's chain, so verify
+them one by one or as a contiguous segment. To check what a receipt binds,
+hash its stored binding bytes and compare the result with `output_hash`, then
+read the document against its schema.
 
 ## Conformance table
 

@@ -358,12 +358,16 @@ export_and_verify_evidence() {
 import json, sys
 for path in sys.argv[1:]:
     payload = json.load(open(path))
-    if payload.get("verified") is not True and payload.get("verdict") != "PASS":
-        raise SystemExit(f"{path} expected verified=true or verdict=PASS: {payload}")
-    checks = payload.get("checks") or {}
-    failed = {k: v for k, v in checks.items() if v != "PASS"}
+    if payload.get("outcome") != "VERIFIED":
+        raise SystemExit(f"{path} expected outcome VERIFIED: {payload}")
+    checks = payload.get("checks_run") or []
+    names = {c.get("name") for c in checks}
+    missing = {"bundle_seal", "manifest_hashes", "receipt_signatures", "receipt_chain"} - names
+    if missing:
+        raise SystemExit(f"{path} required checks did not run {sorted(missing)}: {payload}")
+    failed = [c for c in checks if c.get("status") != "VERIFIED"]
     if failed:
-        raise SystemExit(f"{path} expected all checks PASS: {payload}")
+        raise SystemExit(f"{path} expected every check VERIFIED: {payload}")
 PY
 }
 

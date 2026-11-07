@@ -28,9 +28,10 @@ interface Session {
 }
 
 interface VerificationResult {
-  valid: boolean;
-  integrity_check: string;
-  receipt_count: number;
+  outcome: "VERIFIED" | "FAILED" | "UNVERIFIABLE";
+  checks_run: { name: string; status: string; detail: string }[];
+  roots: { entry_count: number };
+  errors: string[];
 }
 
 const BASE_URL = process.env.HELM_URL ?? "http://127.0.0.1:7714";
@@ -104,32 +105,36 @@ async function main(): Promise<void> {
 
   // Export & verify evidence
   console.log("\n📦 Exporting evidence pack...");
-  const evidence = await helmFetch<ArrayBuffer>(
-    "/api/v1/evidence/export",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        session_id: session.session_id,
-        format: "tar.gz",
-      }),
-    }
-  );
+  const authHeader: Record<string, string> = API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {};
+  const exported = await fetch(`${BASE_URL}/api/v1/evidence/export`, {
+    method: "POST",
+    headers: { ...authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: session.session_id, format: "tar.gz" }),
+  });
+  if (!exported.ok) {
+    throw new Error(`HELM API error ${exported.status}: ${await exported.text()}`);
+  }
+  const evidence = await exported.arrayBuffer();
 
-  const result = await helmFetch<VerificationResult>(
-    "/api/v1/evidence/verify",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        bundle_b64: Buffer.from(evidence).toString("base64"),
-      }),
-    }
-  );
+  // The bundle is posted as raw bytes; the kernel checks it against its own
+  // receipt signer and reports each check that ran.
+  const verified = await fetch(`${BASE_URL}/api/v1/evidence/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: evidence,
+  });
+  if (!verified.ok) {
+    throw new Error(`HELM API error ${verified.status}: ${await verified.text()}`);
+  }
+  const result = (await verified.json()) as VerificationResult;
 
   console.log(`\n🔍 Verification result:`);
-  console.log(`  Valid:     ${result.valid}`);
-  console.log(`  Integrity: ${result.integrity_check}`);
-  console.log(`  Receipts:  ${result.receipt_count}`);
-  console.log(result.valid ? "\n✅ VERIFIED" : "\n❌ FAILED");
+  console.log(`  Outcome:   ${result.outcome}`);
+  for (const check of result.checks_run) {
+    console.log(`  ${check.name}: ${check.status} (${check.detail})`);
+  }
+  console.log(`  Receipts:  ${result.roots.entry_count}`);
+  console.log(result.outcome === "VERIFIED" ? "\n✅ VERIFIED" : `\n❌ ${result.outcome}: ${result.errors.join("; ")}`);
 }
 
 main().catch(console.error);

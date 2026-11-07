@@ -208,14 +208,14 @@ describe("HelmClient coverage matrix", () => {
     fetchSpy.mockResolvedValueOnce(helmError(400));
     await expect(client.exportEvidence()).rejects.toThrow(HelmApiError);
 
-    fetchSpy.mockResolvedValueOnce(jsonResponse({ verdict: "PASS" }));
-    await expect(client.verifyEvidence(blob)).resolves.toMatchObject({ verdict: "PASS" });
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ outcome: "VERIFIED", checks_run: [], roots: { entry_count: 1 }, errors: [] }));
+    await expect(client.verifyEvidence(blob)).resolves.toMatchObject({ outcome: "VERIFIED" });
 
     fetchSpy.mockResolvedValueOnce(helmError(422));
     await expect(client.verifyEvidence(blob)).rejects.toThrow(HelmApiError);
 
-    fetchSpy.mockResolvedValueOnce(jsonResponse({ verdict: "PASS" }));
-    await expect(client.replayVerify(blob)).resolves.toMatchObject({ verdict: "PASS" });
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ outcome: "FAILED", checks_run: [], roots: { entry_count: 0 }, errors: ["bad"] }));
+    await expect(client.replayVerify(blob)).resolves.toMatchObject({ outcome: "FAILED" });
 
     fetchSpy.mockResolvedValueOnce(helmError(422));
     await expect(client.replayVerify(blob)).rejects.toThrow(HelmApiError);

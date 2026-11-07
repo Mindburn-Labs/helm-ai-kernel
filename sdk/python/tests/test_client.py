@@ -25,7 +25,7 @@ from helm_sdk import (
     MCPRegistryApprovalRequest,
     MCPRegistryDiscoverRequest,
     Receipt,
-    VerificationChecks,
+    EvidenceVerificationCheck,
     VerificationResult,
 )
 from helm_sdk.types_gen import BoundaryStatus
@@ -311,12 +311,17 @@ class TestGeneratedTypes:
 
     def test_verification_result(self) -> None:
         vr = VerificationResult(
-            verdict="PASS",
-            checks=VerificationChecks(signatures="PASS", causal_chain="PASS"),
-            errors=[],
+            outcome="UNVERIFIABLE",
+            checks_run=[
+                EvidenceVerificationCheck(name="bundle_seal", status="UNVERIFIABLE", detail="signed by another key"),
+            ],
+            roots={"entry_count": 1},
+            errors=["seal signer is not the runtime trust anchor"],
         )
-        assert vr.verdict == "PASS"
-        assert len(vr.errors) == 0
+        assert vr.outcome == "UNVERIFIABLE"
+        assert vr.checks_run[0].status == "UNVERIFIABLE"
+        with pytest.raises(ValueError):
+            EvidenceVerificationCheck(name="bundle_seal", status="PASS", detail="retired vocabulary")
 
 
 # ── Execution Boundary Surfaces ─────────────────────────

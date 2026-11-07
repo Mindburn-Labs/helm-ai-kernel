@@ -31,7 +31,7 @@ async function main() {
     const pack = await helm.exportEvidence();
     console.log('Exported:', pack.size, 'bytes');
     const result = await helm.verifyEvidence(pack);
-    console.log('Verification:', result.verdict);
+    console.log('Verification:', result.outcome);
   } catch (err) {
     if (err instanceof HelmApiError) {
       console.log('Evidence error:', err.reasonCode);

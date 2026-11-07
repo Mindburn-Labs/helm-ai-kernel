@@ -3,7 +3,7 @@ package contracts
 // VPL (Verified Planning Loop) — canonical execution protocol.
 // Per ARCHITECTURE.md §5: propose → validate → verdict → execute → receipt → checkpoint.
 //
-// The VPL is implemented across Guardian (policy evaluation), SafeExecutor
+// The VPL is implemented across Guardian (policy evaluation), the effect gateway
 // (gated execution), and ProofGraph (receipt chain). These constants provide
 // canonical naming for the loop phases.
 
@@ -17,7 +17,7 @@ const (
 	VPLPhaseValidate VPLPhase = "VALIDATE"
 	// VPLPhaseVerdict is the phase where a policy decision is rendered.
 	VPLPhaseVerdict VPLPhase = "VERDICT"
-	// VPLPhaseExecute is the gated execution phase (SafeExecutor).
+	// VPLPhaseExecute is the gated execution phase (the effect gateway).
 	VPLPhaseExecute VPLPhase = "EXECUTE"
 	// VPLPhaseReceipt is the phase where cryptographic proof is generated.
 	VPLPhaseReceipt VPLPhase = "RECEIPT"

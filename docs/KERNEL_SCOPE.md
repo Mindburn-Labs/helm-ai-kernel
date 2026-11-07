@@ -80,10 +80,10 @@ non-TCB supporting infrastructure:
 | `contracts/`       | Canonical data structures (Decision, Effect, Receipt, Intent) | ✅ Active |
 | `crypto/`          | Ed25519 signing, JCS canonicalization                         | ✅ Active |
 | `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
-| `executor/`        | SafeExecutor with receipt generation                          | ✅ Active |
+| `executor/`        | Receipt ID derivation and receipt types; the standalone SafeExecutor was removed (no shipped caller) | Library only |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
 | `runtime/sandbox/` | Sandbox policy, backend profiles and sealed grants (records only; no pack execution) | ✅ Active |
-| `receipts/`        | Receipt policy enforcement (fail-closed); not linked into `core/cmd/helm-ai-kernel` | Library only |
+| `receipts/`        | Receipt tamper-resistance tests; the unlinked receipt policy enforcer was removed | Test-only |
 
 ### Supporting Infrastructure (Non-TCB)
 

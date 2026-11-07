@@ -14,7 +14,7 @@ import (
 // All capabilities must be invoked through this interface.
 type KernelRuntime interface {
 	// SubmitIntent proposes an effect.
-	// It enters the Decision Engine -> ExecutionIntent -> SafeExecutor pipeline.
+	// It enters the Decision Engine -> ExecutionIntent -> effect gateway pipeline.
 	SubmitIntent(ctx context.Context, intent *SignedIntent) (*Receipt, error)
 
 	// Query executes a read against a projection.

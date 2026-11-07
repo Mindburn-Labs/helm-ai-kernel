@@ -7,8 +7,13 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles"
 )
 
+// ScenarioAgentSafetyBaseline names the check that binds every case to the
+// baseline bundle. The behavioural scenario that evaluated the registry
+// through governance.PolicyEngine was removed with that engine, which no
+// shipped binary used (helm-tracker#266); what remains is the static binding
+// of each entry's rule, action and reason code.
 const (
-	ScenarioAgentSafetyBaseline = "pkg/conformance/scenarios:TestAgentSafetyBaselineRegistryScenarios"
+	ScenarioAgentSafetyBaseline = "pkg/conformance/agentsafety:TestRegistryRulesExistInBaselineBundle"
 )
 
 // CaseCoverage is the machine-readable implementation mapping for one matrix case.

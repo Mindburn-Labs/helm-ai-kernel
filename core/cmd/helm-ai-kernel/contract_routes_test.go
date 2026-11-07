@@ -23,12 +23,10 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
-	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -621,92 +619,6 @@ func TestEvaluateReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) 
 		t.Fatalf("exported V5 receipt did not verify: valid=%v err=%v", valid, err)
 	}
 	assertReceiptSessionRetrievalAndExport(t, mux, sessionID, response.ReceiptID)
-}
-
-func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) {
-	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	receiptStore, err := store.NewSQLiteReceiptStore(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signer, err := helmcrypto.NewEd25519Signer("standalone-route-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	clock := time.Unix(1700000000, 0).UTC()
-	effect := &contracts.Effect{
-		EffectID:   "effect-standalone-route",
-		EffectType: "EXECUTE_TOOL",
-		ArgsHash:   "args-standalone-route",
-		Params:     map[string]any{"tool_name": "ls"},
-	}
-	effectDigest, err := contracts.CanonicalEffectDigest(effect)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decision := &contracts.DecisionRecord{
-		ID:                "decision-standalone-route",
-		SubjectID:         "standalone-route",
-		Action:            "EXECUTE_TOOL",
-		Resource:          "tool:ls",
-		Verdict:           string(contracts.VerdictAllow),
-		ReasonCode:        "ALLOW_BY_POLICY",
-		PolicyContentHash: "policy-standalone-route",
-		EffectDigest:      effectDigest,
-		InputContext:      map[string]any{"tenant_id": "untrusted-tenant"},
-	}
-	if err := signer.SignDecision(decision); err != nil {
-		t.Fatal(err)
-	}
-	intent := &contracts.AuthorizedExecutionIntent{
-		DecisionID:       decision.ID,
-		EffectDigestHash: decision.EffectDigest,
-		AllowedTool:      "ls",
-		ExpiresAt:        clock.Add(time.Hour),
-	}
-	if err := signer.SignIntent(intent); err != nil {
-		t.Fatal(err)
-	}
-	safeExecutor := executor.NewSafeExecutor(signer, signer, receiptRouteStaticDriver{}, receiptStore, nil, nil, "", nil, nil, nil, func() time.Time {
-		return clock
-	})
-	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "standalone-route", TenantID: defaultRuntimeTenantID})
-	receipt, _, err := safeExecutor.Execute(ctx, effect, decision, intent)
-	if err != nil {
-		t.Fatalf("execute standalone receipt: %v", err)
-	}
-	wantSessionID := "standalone:decision:" + decision.ID
-	if receipt.SessionID != wantSessionID || receipt.SignatureVersion != contracts.ReceiptSignatureV5 {
-		t.Fatalf("standalone receipt identity=%q version=%q", receipt.SessionID, receipt.SignatureVersion)
-	}
-	expectedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
-	if err != nil {
-		t.Fatalf("derive decision hash: %v", err)
-	}
-	repeatedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
-	if err != nil || repeatedDecisionHash != expectedDecisionHash {
-		t.Fatalf("semantic decision hash must be deterministic: first=%q second=%q err=%v", expectedDecisionHash, repeatedDecisionHash, err)
-	}
-	if receipt.DecisionHash != expectedDecisionHash || receipt.DecisionHash == receipt.OutputHash {
-		t.Fatalf("receipt decision_hash must use the canonical decision preimage, not execution output: receipt=%+v expected=%q", receipt, expectedDecisionHash)
-	}
-	if receipts, err := receiptStore.ListByTenantSession(context.Background(), "other-tenant", wantSessionID, 0, 10); err != nil || len(receipts) != 0 {
-		t.Fatalf("cross-tenant session read receipts=%+v err=%v, want no records", receipts, err)
-	}
-	if _, err := receiptStore.GetByReceiptIDForTenant(context.Background(), "other-tenant", receipt.ReceiptID); err == nil {
-		t.Fatal("cross-tenant receipt lookup unexpectedly succeeded")
-	}
-
-	mux := http.NewServeMux()
-	services := &Services{ReceiptStore: receiptStore, ReceiptSigner: signer}
-	registerReceiptRoutes(mux, services)
-	registerContractRoutes(mux, services)
-	assertReceiptSessionRetrievalAndExport(t, mux, wantSessionID, receipt.ReceiptID)
 }
 
 func assertReceiptSessionRetrievalAndExport(t *testing.T, mux *http.ServeMux, sessionID, receiptID string) {

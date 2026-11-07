@@ -15,14 +15,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from helm_sdk import (
-    ApprovalRequest,
     ChatCompletionRequest,
     ChatMessage,
     ConformanceRequest,
     EvidenceEnvelopeExportRequest,
     HelmApiError,
     HelmClient,
-    MCPRegistryApprovalRequest,
     MCPRegistryDiscoverRequest,
     Receipt,
     EvidenceVerificationCheck,
@@ -128,23 +126,6 @@ class TestChatCompletions:
         call_args = mock_client.post.call_args
         assert call_args[0][0] == "/v1/chat/completions"
         assert result.id == "chatcmpl-1"
-
-
-# ── Approve Intent ───────────────────────────────────────
-
-class TestApproveIntent:
-    @patch("helm_sdk.client.httpx.Client")
-    def test_posts_approval_request(self, mock_client_cls: MagicMock) -> None:
-        mock_client = mock_client_cls.return_value
-        mock_client.post.return_value = mock_response(200, RECEIPT_DATA)
-
-        client = HelmClient(base_url="http://h")
-        req = ApprovalRequest(intent_hash="abc", signature="s", public_key="pk")
-        result = client.approve_intent(req)
-
-        mock_client.post.assert_called_once()
-        assert result.receipt_id == "r1"
-        assert result.status == "APPROVED"
 
 
 # ── ProofGraph ───────────────────────────────────────────
@@ -413,16 +394,6 @@ class TestExecutionBoundarySurfaces:
         client = HelmClient(base_url="http://h")
         discovered = client.discover_mcp_server(MCPRegistryDiscoverRequest(server_id="mcp1", risk="high"))
         assert discovered.state == "quarantined"
-
-        mock_client.post.return_value = mock_response(200, {**record, "state": "approved"})
-        approved = client.approve_mcp_server(
-            MCPRegistryApprovalRequest(
-                server_id="mcp1",
-                approver_id="user1",
-                approval_receipt_id="rcpt1",
-            )
-        )
-        assert approved.state == "approved"
 
     @patch("helm_sdk.client.httpx.Client")
     def test_inspect_sandbox_grants(self, mock_client_cls: MagicMock) -> None:

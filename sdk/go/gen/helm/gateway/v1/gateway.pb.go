@@ -63,7 +63,7 @@
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
 // lowercase hex string its chain links with. An attempt names its signed
-// decision receipts by reference (ReceiptRef); only the receipt reads
+// decision and outcome receipts by reference (ReceiptRef); only the receipt reads
 // (GetAttemptReceipts, ExportReceiptChain) carry signed material: the exact
 // bytes of classical Ed25519 receipt.v5 envelopes as the gateway stored them,
 // which name the signer's public key, and their SHA-256-bound binding
@@ -3181,10 +3181,12 @@ type EffectAttempt struct {
 	// proposed with an episode token, from that token's helm_episode claim alone
 	// and never from a request field; unset for every other attempt.
 	Episode *EpisodeRef `protobuf:"bytes,29,opt,name=episode,proto3" json:"episode,omitempty"`
-	// The signed receipts of the attempt's decisions, oldest first: one for
-	// each ADMITTED, DENIED or ESCALATED version the attempt reached, the
-	// re-admission of an approved escalation included. Output only; set by the
-	// gateway from its ledger, never from a request.
+	// The signed receipts of the attempt, oldest first: one for each decision
+	// version the attempt reached (ADMITTED, DENIED or ESCALATED, the
+	// re-admission of an approved escalation included) and one for each outcome
+	// version (OBSERVED, RECONCILED or SETTLED, a model call's late settlement
+	// included). Output only; set by the gateway from its ledger, never from a
+	// request.
 	Receipts      []*ReceiptRef `protobuf:"bytes,30,rep,name=receipts,proto3" json:"receipts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3457,11 +3459,12 @@ func (*EffectAttempt_CommitmentId) isEffectAttempt_WorkRef() {}
 
 func (*EffectAttempt_CaseId) isEffectAttempt_WorkRef() {}
 
-// ReceiptRef names one signed decision receipt in the gateway's receipt
-// chain of the attempt's tenant and workspace. The receipt itself (a
+// ReceiptRef names one signed decision or outcome receipt in the gateway's
+// receipt chain of the attempt's tenant and workspace. The receipt itself (a
 // receipt.v5 envelope whose output_hash is the SHA-256 of a
-// helm.gateway.receipt-binding.v1 document) stays in the gateway's ledger and
-// verifies offline with receipt_verify --key "<kid>=<public key hex>".
+// helm.gateway.receipt-binding.v1 or helm.gateway.outcome-binding.v1
+// document) stays in the gateway's ledger and verifies offline with
+// receipt_verify --key "<kid>=<public key hex>".
 type ReceiptRef struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The chain: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>,
@@ -3536,7 +3539,8 @@ func (x *ReceiptRef) GetKid() string {
 	return ""
 }
 
-// SignedReceipt is one stored decision receipt with its exact bytes.
+// SignedReceipt is one stored decision or outcome receipt with its exact
+// bytes.
 type SignedReceipt struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Where the receipt sits in its chain and the key that signed it.
@@ -3549,8 +3553,8 @@ type SignedReceipt struct {
 	// receipt.v5 JSON object.
 	Receipt []byte `protobuf:"bytes,4,opt,name=receipt,proto3" json:"receipt,omitempty"`
 	// The exact bytes of the receipt's binding document
-	// (helm.gateway.receipt-binding.v1, RFC 8785 JSON): the SHA-256 of these
-	// bytes is the receipt's output_hash.
+	// (helm.gateway.receipt-binding.v1 or helm.gateway.outcome-binding.v1,
+	// RFC 8785 JSON): the SHA-256 of these bytes is the receipt's output_hash.
 	Binding       []byte `protobuf:"bytes,5,opt,name=binding,proto3" json:"binding,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3672,7 +3676,7 @@ type GetAttemptReceiptsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The attempt.
 	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	// Its receipts, oldest first: one for each ADMITTED, DENIED or ESCALATED
+	// Its receipts, oldest first: one for each decision and each outcome
 	// version it reached.
 	Receipts      []*SignedReceipt `protobuf:"bytes,2,rep,name=receipts,proto3" json:"receipts,omitempty"`
 	unknownFields protoimpl.UnknownFields

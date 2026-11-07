@@ -61,7 +61,7 @@
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
 // lowercase hex string its chain links with. An attempt names its signed
-// decision receipts by reference (ReceiptRef); only the receipt reads
+// decision and outcome receipts by reference (ReceiptRef); only the receipt reads
 // (GetAttemptReceipts, ExportReceiptChain) carry signed material: the exact
 // bytes of classical Ed25519 receipt.v5 envelopes as the gateway stored them,
 // which name the signer's public key, and their SHA-256-bound binding
@@ -393,11 +393,12 @@ type EffectGatewayServiceClient interface {
 	// Get/Observe authorization remains mandatory for each attempt.
 	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
-	// GetAttemptReceipts returns the signed decision receipts of one attempt,
-	// oldest first: for each, the exact bytes of the receipt.v5 envelope the
-	// gateway stored, the exact bytes of the helm.gateway.receipt-binding.v1
-	// document whose SHA-256 it signs as output_hash, and its place in its
-	// chain. Each verifies offline with
+	// GetAttemptReceipts returns the signed decision and outcome receipts of
+	// one attempt, oldest first: for each, the exact bytes of the receipt.v5
+	// envelope the gateway stored, the exact bytes of the binding document
+	// (helm.gateway.receipt-binding.v1 for a decision,
+	// helm.gateway.outcome-binding.v1 for an outcome) whose SHA-256 it signs as
+	// output_hash, and its place in its chain. Each verifies offline with
 	//
 	//	receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
 	//	  --key "<kid>=<public key hex>"
@@ -924,11 +925,12 @@ type EffectGatewayServiceHandler interface {
 	// Get/Observe authorization remains mandatory for each attempt.
 	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
-	// GetAttemptReceipts returns the signed decision receipts of one attempt,
-	// oldest first: for each, the exact bytes of the receipt.v5 envelope the
-	// gateway stored, the exact bytes of the helm.gateway.receipt-binding.v1
-	// document whose SHA-256 it signs as output_hash, and its place in its
-	// chain. Each verifies offline with
+	// GetAttemptReceipts returns the signed decision and outcome receipts of
+	// one attempt, oldest first: for each, the exact bytes of the receipt.v5
+	// envelope the gateway stored, the exact bytes of the binding document
+	// (helm.gateway.receipt-binding.v1 for a decision,
+	// helm.gateway.outcome-binding.v1 for an outcome) whose SHA-256 it signs as
+	// output_hash, and its place in its chain. Each verifies offline with
 	//
 	//	receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
 	//	  --key "<kid>=<public key hex>"

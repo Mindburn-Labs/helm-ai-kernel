@@ -59,7 +59,7 @@ syntax = "proto3";
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
 // lowercase hex string its chain links with. An attempt names its signed
-// decision receipts by reference (ReceiptRef); only the receipt reads
+// decision and outcome receipts by reference (ReceiptRef); only the receipt reads
 // (GetAttemptReceipts, ExportReceiptChain) carry signed material: the exact
 // bytes of classical Ed25519 receipt.v5 envelopes as the gateway stored them,
 // which name the signer's public key, and their SHA-256-bound binding
@@ -351,11 +351,12 @@ service EffectGatewayService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // GetAttemptReceipts returns the signed decision receipts of one attempt,
-  // oldest first: for each, the exact bytes of the receipt.v5 envelope the
-  // gateway stored, the exact bytes of the helm.gateway.receipt-binding.v1
-  // document whose SHA-256 it signs as output_hash, and its place in its
-  // chain. Each verifies offline with
+  // GetAttemptReceipts returns the signed decision and outcome receipts of
+  // one attempt, oldest first: for each, the exact bytes of the receipt.v5
+  // envelope the gateway stored, the exact bytes of the binding document
+  // (helm.gateway.receipt-binding.v1 for a decision,
+  // helm.gateway.outcome-binding.v1 for an outcome) whose SHA-256 it signs as
+  // output_hash, and its place in its chain. Each verifies offline with
   //   receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
   //     --key "<kid>=<public key hex>"
   // using the key the gateway publishes at GET /api/v1/receipt-keyring.
@@ -859,18 +860,21 @@ message EffectAttempt {
   // proposed with an episode token, from that token's helm_episode claim alone
   // and never from a request field; unset for every other attempt.
   EpisodeRef episode = 29;
-  // The signed receipts of the attempt's decisions, oldest first: one for
-  // each ADMITTED, DENIED or ESCALATED version the attempt reached, the
-  // re-admission of an approved escalation included. Output only; set by the
-  // gateway from its ledger, never from a request.
+  // The signed receipts of the attempt, oldest first: one for each decision
+  // version the attempt reached (ADMITTED, DENIED or ESCALATED, the
+  // re-admission of an approved escalation included) and one for each outcome
+  // version (OBSERVED, RECONCILED or SETTLED, a model call's late settlement
+  // included). Output only; set by the gateway from its ledger, never from a
+  // request.
   repeated ReceiptRef receipts = 30;
 }
 
-// ReceiptRef names one signed decision receipt in the gateway's receipt
-// chain of the attempt's tenant and workspace. The receipt itself (a
+// ReceiptRef names one signed decision or outcome receipt in the gateway's
+// receipt chain of the attempt's tenant and workspace. The receipt itself (a
 // receipt.v5 envelope whose output_hash is the SHA-256 of a
-// helm.gateway.receipt-binding.v1 document) stays in the gateway's ledger and
-// verifies offline with receipt_verify --key "<kid>=<public key hex>".
+// helm.gateway.receipt-binding.v1 or helm.gateway.outcome-binding.v1
+// document) stays in the gateway's ledger and verifies offline with
+// receipt_verify --key "<kid>=<public key hex>".
 message ReceiptRef {
   // The chain: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>,
   // the receipt's session_id.
@@ -884,7 +888,8 @@ message ReceiptRef {
   string kid = 4;
 }
 
-// SignedReceipt is one stored decision receipt with its exact bytes.
+// SignedReceipt is one stored decision or outcome receipt with its exact
+// bytes.
 message SignedReceipt {
   // Where the receipt sits in its chain and the key that signed it.
   ReceiptRef ref = 1;
@@ -896,8 +901,8 @@ message SignedReceipt {
   // receipt.v5 JSON object.
   bytes receipt = 4;
   // The exact bytes of the receipt's binding document
-  // (helm.gateway.receipt-binding.v1, RFC 8785 JSON): the SHA-256 of these
-  // bytes is the receipt's output_hash.
+  // (helm.gateway.receipt-binding.v1 or helm.gateway.outcome-binding.v1,
+  // RFC 8785 JSON): the SHA-256 of these bytes is the receipt's output_hash.
   bytes binding = 5;
 }
 
@@ -911,7 +916,7 @@ message GetAttemptReceiptsRequest {
 message GetAttemptReceiptsResponse {
   // The attempt.
   string attempt_id = 1;
-  // Its receipts, oldest first: one for each ADMITTED, DENIED or ESCALATED
+  // Its receipts, oldest first: one for each decision and each outcome
   // version it reached.
   repeated SignedReceipt receipts = 2;
 }

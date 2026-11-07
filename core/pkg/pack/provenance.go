@@ -1,3 +1,4 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
 // provenance.go implements cryptographic provenance verification for HELM packs.
 // Per arXiv 2604.08407, the LiteLLM supply chain attack (March 2026) exploited
 // dependency confusion to inject malicious code into every deployment.

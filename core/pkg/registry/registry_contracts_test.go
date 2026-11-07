@@ -1,3 +1,4 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
 package registry
 
 import (

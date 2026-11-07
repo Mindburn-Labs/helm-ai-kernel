@@ -40,9 +40,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	mux.HandleFunc("/api/v1/mcp/registry", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, MCPQuarantineRecord{ServerID: "mcp1", Risk: "high", State: "quarantined"})
 	})
-	mux.HandleFunc("/api/v1/mcp/registry/approve", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, MCPQuarantineRecord{ServerID: "mcp1", Risk: "high", State: "approved"})
-	})
 	mux.HandleFunc("/api/v1/sandbox/grants/inspect", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("runtime") == "" {
 			writeJSON(t, w, []SandboxBackendProfile{{Name: "wazero-deny-default", Runtime: "wazero"}})

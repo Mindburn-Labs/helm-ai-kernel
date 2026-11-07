@@ -1,3 +1,6 @@
+{{/* quantum_posture: these helpers name the gateway's classical Ed25519
+receipt signing Secret and key id; they generate no key and make no
+post-quantum claim. */}}
 {{/*
 Expand the name of the chart.
 */}}

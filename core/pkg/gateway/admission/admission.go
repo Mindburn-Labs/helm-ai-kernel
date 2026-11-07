@@ -29,6 +29,10 @@
 // executor); boundary_test.go holds that, so it can move to its own repo.
 package admission
 
+// quantum_posture: admission computes SHA-256 request digests and records each
+// decision with a classical Ed25519 receipt.v5 signature (receipts.go); no
+// hybrid or post-quantum protection is provided or claimed.
+
 import (
 	"context"
 	"crypto/sha256"

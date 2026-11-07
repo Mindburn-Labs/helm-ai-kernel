@@ -3,6 +3,10 @@
 #
 # Use the Kubernetes Helm CLI for chart rendering. Set KUBE_HELM_CMD to an
 # explicit binary, or let the script use a pinned containerized Helm runner.
+#
+# quantum_posture: renders and inspects chart wiring for classical Ed25519
+# keys (the kernel command keyring, the gateway receipt seed); it signs and
+# verifies nothing and makes no post-quantum claim.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

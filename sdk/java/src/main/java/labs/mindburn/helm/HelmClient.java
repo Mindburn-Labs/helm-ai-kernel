@@ -175,13 +175,6 @@ public class HelmClient {
         public String reason;
     }
 
-    public static class MCPRegistryApprovalRequest {
-        public String server_id;
-        public String approver_id;
-        public String approval_receipt_id;
-        public String reason;
-    }
-
     public static class MCPQuarantineRecord {
         public String server_id;
         public String name;
@@ -362,14 +355,6 @@ public class HelmClient {
         return send(r, EvaluateResponse.class);
     }
 
-    /** POST /api/v1/kernel/approve */
-    public Receipt approveIntent(ApprovalRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/kernel/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
-                .build();
-        return send(r, Receipt.class);
-    }
-
     /** GET /api/v1/proofgraph/sessions */
     public List<Session> listSessions() {
         HttpRequest r = req("GET", "/api/v1/proofgraph/sessions")
@@ -521,22 +506,8 @@ public class HelmClient {
         return send(r, MCPQuarantineRecord.class);
     }
 
-    /** POST /api/v1/mcp/registry/approve */
-    public MCPQuarantineRecord approveMcpServer(MCPRegistryApprovalRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
-                .build();
-        return send(r, MCPQuarantineRecord.class);
-    }
-
     public MCPQuarantineRecord getMcpRegistryRecord(String serverId) {
         HttpRequest r = req("GET", "/api/v1/mcp/registry/" + encode(serverId)).GET().build();
-        return send(r, MCPQuarantineRecord.class);
-    }
-
-    public MCPQuarantineRecord approveMcpRegistryRecord(String serverId, MCPRegistryApprovalRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return send(r, MCPQuarantineRecord.class);
     }
 

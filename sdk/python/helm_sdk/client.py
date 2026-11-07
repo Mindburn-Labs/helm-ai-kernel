@@ -13,7 +13,6 @@ from urllib.parse import quote
 import httpx
 
 from .types_gen import (
-    ApprovalRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
     DecisionRequest,
@@ -72,14 +71,6 @@ class MCPRegistryDiscoverRequest:
     endpoint: Optional[str] = None
     tool_names: Optional[list[str]] = None
     risk: str = "unknown"
-    reason: Optional[str] = None
-
-
-@dataclass
-class MCPRegistryApprovalRequest:
-    server_id: str
-    approver_id: str
-    approval_receipt_id: str
     reason: Optional[str] = None
 
 
@@ -311,14 +302,6 @@ class HelmClient:
         self._check(resp)
         return resp.json()
 
-    # ── Approval Ceremony ───────────────────────────
-    def approve_intent(self, req: ApprovalRequest) -> Receipt:
-        resp = self._client.post("/api/v1/kernel/approve", json=_json_body(req))
-        self._check(resp)
-        result = Receipt.from_dict(resp.json())
-        assert result is not None
-        return result
-
     # ── ProofGraph ──────────────────────────────────
     def list_sessions(self, limit: int = 50, offset: int = 0) -> list[Session]:
         resp = self._client.get("/api/v1/proofgraph/sessions", params={"limit": limit, "offset": offset})
@@ -470,21 +453,8 @@ class HelmClient:
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 
-    def approve_mcp_server(
-        self,
-        req: MCPRegistryApprovalRequest,
-    ) -> MCPQuarantineRecord:
-        resp = self._client.post("/api/v1/mcp/registry/approve", json=_json_body(req))
-        self._check(resp)
-        return MCPQuarantineRecord(**resp.json())
-
     def get_mcp_registry_record(self, server_id: str) -> MCPQuarantineRecord:
         resp = self._client.get(f"/api/v1/mcp/registry/{_path_segment(server_id, 'server_id')}")
-        self._check(resp)
-        return MCPQuarantineRecord(**resp.json())
-
-    def approve_mcp_registry_record(self, server_id: str, req: dict[str, Any]) -> MCPQuarantineRecord:
-        resp = self._client.post(f"/api/v1/mcp/registry/{_path_segment(server_id, 'server_id')}/approve", json=req)
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 

@@ -307,8 +307,8 @@ public class HelmClientTest {
     @DisplayName("Missing API reason code defaults to ERROR_INTERNAL")
     void testMissingApiReasonCode() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/api/v1/kernel/approve", exchange -> {
-            byte[] response = "{\"error\":{\"message\":\"approval failed\"}}".getBytes(StandardCharsets.UTF_8);
+        server.createContext("/api/v1/mcp/registry", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"discovery failed\"}}".getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(500, response.length);
             exchange.getResponseBody().write(response);
@@ -318,8 +318,8 @@ public class HelmClientTest {
         try {
             HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
             HelmClient.HelmApiException exception = assertThrows(HelmClient.HelmApiException.class,
-                    () -> client.approveIntent(new TypesGen.ApprovalRequest().intentHash("sha256:intent")));
-            assertEquals("approval failed", exception.getMessage());
+                    () -> client.discoverMcpServer(new HelmClient.MCPRegistryDiscoverRequest()));
+            assertEquals("discovery failed", exception.getMessage());
             // A HELM error without a registered reason code reports it as empty, not as a made-up code.
             assertEquals("", exception.reasonCode);
         } finally {

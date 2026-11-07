@@ -5,7 +5,6 @@ import {
   type ServerResponse,
 } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { fromOpenAIAgentsToolCall } from "./agent-frameworks.js";
 import {
   NATIVE_GATEWAY_PROTOCOL_VERSION,
   NativeGatewayClient,
@@ -135,17 +134,16 @@ describe("native gateway framework client", () => {
   }
 
   it("sends exact normalized framework arguments to the native effect interface", async () => {
-    const normalized = fromOpenAIAgentsToolCall({
-      id: "vendor-call",
-      name: toolName,
-      arguments: JSON.stringify({
+    const normalized = {
+      toolName,
+      arguments: {
         title: "Review me",
         head: "work",
         base: "main",
         nested: { flag: true, items: [1, null] },
-      }),
+      },
       metadata: { tenant_id: "untrusted-metadata" },
-    });
+    };
     const result = await client().callEffect({ ...normalized, target });
     expect(result.structuredContent).toMatchObject({
       attempt_id: attemptId,

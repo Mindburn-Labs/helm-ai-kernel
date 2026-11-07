@@ -3073,6 +3073,12 @@ paths:
       operationId: approveMcpServer
       tags: [mcp]
       summary: Approve a quarantined MCP server using an approval receipt
+      deprecated: true
+      description: |
+        Deprecated and always answers 503: no credential-verified approval
+        ceremony backs MCP registry approval, so the request body is never
+        evaluated. The SDK clients no longer expose this operation; it will be
+        removed in a future release.
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -3098,6 +3104,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+        '503':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/mcp/registry/{server_id}:
@@ -3129,6 +3137,11 @@ paths:
       operationId: approveMcpRegistryRecord
       tags: [mcp]
       summary: Approve an MCP server by path id
+      deprecated: true
+      description: |
+        Deprecated and always answers 503, like approveMcpServer. The SDK
+        clients no longer expose this operation; it will be removed in a future
+        release.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3151,6 +3164,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+        '503':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/mcp/registry/{server_id}/revoke:

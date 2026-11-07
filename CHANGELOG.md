@@ -120,6 +120,26 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `sdk/go` and every other module now declare `go 1.26.9`, so consumers need
   Go 1.26.9 or newer.
 
+### Removed
+
+- SDK clients (Go, TypeScript, Python, Java, Rust) no longer expose
+  `approveIntent` (`POST /api/v1/kernel/approve`, which always answers 501),
+  `approveMcpServer` or `approveMcpRegistryRecord` (both always answer 503).
+  The two MCP registry approve operations are now `deprecated: true` in the
+  OpenAPI contract and will be removed in a later release. The Go
+  `MCPRegistryApprovalRequest`, Python `MCPRegistryApprovalRequest` dataclass,
+  Java `HelmClient.MCPRegistryApprovalRequest` and Rust
+  `McpRegistryApprovalRequest` types go with them. Migration: approvals use the
+  approval ceremony operations under `/api/v1/approvals`.
+- The TypeScript framework helpers in `adapters/agent-frameworks.ts`
+  (`createAgentFrameworkAdapter`, `buildGovernedToolRequest`,
+  `submitGovernedToolIntent`, `toOpenAIFunctionTool` and the fifteen
+  `from*ToolCall` normalizers) are removed. They sent the tool call as chat
+  text, so nothing evaluated the named tool. Migration: send tool calls to the
+  effect gateway with `NativeGatewayClient`.
+- `helm-ai-kernel setup --json` no longer reports `framework_adapters`, and the
+  compatibility registry lists no framework adapters.
+
 ## [0.11.3]
 
 ### Fixed

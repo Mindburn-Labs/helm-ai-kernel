@@ -62,6 +62,19 @@ ReasonPolicyDeniedHostObservedEgress         ERR_POLICY_DENIED_BUT_HOST_OBSERVED
 ReasonPolicyHashMismatch                     POLICY_HASH_MISMATCH
 ReasonPolicySigInvalid                       POLICY_SIGNATURE_INVALID
 
+# ── Removed Guardian gates (6) — helm-tracker#266 ───────────────────────────
+# Their only emitters were the per-agent kill switch and the capability
+# registry, task-token and rollback-plan gates, deleted because no shipped
+# binary installed them. The codes stay declared because the versioned protocol
+# registry (protocols/json-schemas/reason-codes/reason-codes-v1.json) and
+# DecisionRecords written while the gates existed still carry them.
+ReasonAgentKilled                            AGENT_KILLED
+ReasonCapabilityIrreversible                 CAPABILITY_IRREVERSIBLE
+ReasonCapabilityManifestDrift                CAPABILITY_MANIFEST_DRIFT
+ReasonCapabilityRollbackPlanInvalid          CAPABILITY_ROLLBACK_PLAN_INVALID
+ReasonCapabilityTokenInvalid                 CAPABILITY_TOKEN_INVALID
+ReasonCapabilityUnknown                      CAPABILITY_UNKNOWN
+
 # ── Remaining (8) ───────────────────────────────────────────────────────────
 ReasonComputeGasExhausted                    ERR_COMPUTE_GAS_EXHAUSTED
 ReasonComputeTimeExhausted                   ERR_COMPUTE_TIME_EXHAUSTED

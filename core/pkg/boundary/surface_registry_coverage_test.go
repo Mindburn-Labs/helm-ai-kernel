@@ -347,18 +347,6 @@ func TestSurfaceRegistryRecordFiltersAndCheckpointVerification(t *testing.T) {
 	if checkpoint.PreviousHash == "" {
 		t.Fatal("second checkpoint should link to previous checkpoint hash")
 	}
-	verify := registry.VerifyCheckpoint(checkpoint.CheckpointID)
-	if verify["verified"] != true {
-		t.Fatalf("checkpoint should verify: %+v", verify)
-	}
-	if missing := registry.VerifyCheckpoint("missing-checkpoint"); missing["verified"] != false {
-		t.Fatalf("missing checkpoint should fail: %+v", missing)
-	}
-	checkpoint.RecordCount++
-	registry.checkpoints[checkpoint.CheckpointID] = checkpoint
-	if tampered := registry.VerifyCheckpoint(checkpoint.CheckpointID); tampered["verified"] != false {
-		t.Fatalf("tampered checkpoint should fail: %+v", tampered)
-	}
 
 	matchingQueries := []contracts.BoundarySearchRequest{
 		{Verdict: string(contracts.VerdictDeny)},

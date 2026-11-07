@@ -2,8 +2,6 @@ package registry
 
 import (
 	"errors"
-	"hash/crc32"
-	"strings"
 	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
@@ -35,107 +33,4 @@ type moduleState struct {
 type InMemoryRegistry struct {
 	mu      sync.RWMutex
 	modules map[string]*moduleState
-}
-
-func NewInMemoryRegistry() *InMemoryRegistry {
-	return &InMemoryRegistry{
-		modules: make(map[string]*moduleState),
-	}
-}
-
-func (r *InMemoryRegistry) Register(bundle *manifest.Bundle) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if bundle == nil {
-		return errors.New("nil bundle")
-	}
-
-	// Default behavior: Overwrite stable, clear canary
-	r.modules[bundle.Manifest.Name] = &moduleState{
-		stable: bundle,
-	}
-	return nil
-}
-
-func (r *InMemoryRegistry) Unregister(name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, ok := r.modules[name]; !ok {
-		return ErrModuleNotFound
-	}
-	delete(r.modules, name)
-	return nil
-}
-
-// SetRollout configures a canary deployment.
-func (r *InMemoryRegistry) SetRollout(name string, canaryBundle *manifest.Bundle, percentage int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	state, ok := r.modules[name]
-	if !ok {
-		return ErrModuleNotFound
-	}
-
-	if percentage < 0 || percentage > 100 {
-		return errors.New("percentage must be 0-100")
-	}
-
-	state.canary = canaryBundle
-	state.canaryMillis = percentage * 100 // precision 0.01%
-	return nil
-}
-
-func (r *InMemoryRegistry) Get(name string) (*manifest.Bundle, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if state, ok := r.modules[name]; ok {
-		return state.stable, nil
-	}
-	return nil, ErrModuleNotFound
-}
-
-func (r *InMemoryRegistry) GetForUser(name, userID string) (*manifest.Bundle, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	state, ok := r.modules[name]
-	if !ok {
-		return nil, ErrModuleNotFound
-	}
-
-	// Canary Logic
-	if state.canary != nil && state.canaryMillis > 0 {
-		hash := crc32.ChecksumIEEE([]byte(strings.ToLower(userID)))
-		// Map hash to 0-10000
-		userSlot := int(hash % 10000)
-		if userSlot < state.canaryMillis {
-			return state.canary, nil
-		}
-	}
-
-	return state.stable, nil
-}
-
-func (r *InMemoryRegistry) List() []*manifest.Bundle {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	list := make([]*manifest.Bundle, 0, len(r.modules))
-	for _, s := range r.modules {
-		list = append(list, s.stable)
-	}
-	return list
-}
-
-func (r *InMemoryRegistry) Install(tenantID, packID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.modules[packID]; !ok {
-		return ErrModuleNotFound
-	}
-	return nil
 }

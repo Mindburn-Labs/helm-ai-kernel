@@ -412,21 +412,9 @@ public class HelmClient {
 
     /** POST /api/v1/evidence/verify */
     public VerificationResult verifyEvidence(byte[] bundle) {
-        // Send as JSON with base64-encoded bundle for simplicity
-        String body = toJson(Map.of("bundle_b64",
-                java.util.Base64.getEncoder().encodeToString(bundle)));
         HttpRequest r = req("POST", "/api/v1/evidence/verify")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return send(r, VerificationResult.class);
-    }
-
-    /** POST /api/v1/replay/verify */
-    public VerificationResult replayVerify(byte[] bundle) {
-        String body = toJson(Map.of("bundle_b64",
-                java.util.Base64.getEncoder().encodeToString(bundle)));
-        HttpRequest r = req("POST", "/api/v1/replay/verify")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .setHeader("Content-Type", "application/octet-stream")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(bundle))
                 .build();
         return send(r, VerificationResult.class);
     }
@@ -445,11 +433,6 @@ public class HelmClient {
 
     public JsonElement getEvidenceEnvelopeManifest(String manifestId) {
         return sendJson(req("GET", "/api/v1/evidence/envelopes/" + encode(manifestId)).GET().build());
-    }
-
-    public JsonElement verifyEvidenceEnvelopeManifest(String manifestId) {
-        return sendJson(req("POST", "/api/v1/evidence/envelopes/" + encode(manifestId) + "/verify")
-                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
     }
 
     public EvidenceEnvelopePayload getEvidenceEnvelopePayload(String manifestId) {
@@ -474,22 +457,12 @@ public class HelmClient {
         return sendJson(req("GET", "/api/v1/boundary/records/" + encode(recordId)).GET().build());
     }
 
-    public JsonElement verifyBoundaryRecord(String recordId) {
-        return sendJson(req("POST", "/api/v1/boundary/records/" + encode(recordId) + "/verify")
-                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
-    }
-
     public JsonElement listBoundaryCheckpoints() {
         return sendJson(req("GET", "/api/v1/boundary/checkpoints").GET().build());
     }
 
     public JsonElement createBoundaryCheckpoint() {
         return sendJson(req("POST", "/api/v1/boundary/checkpoints")
-                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
-    }
-
-    public JsonElement verifyBoundaryCheckpoint(String checkpointId) {
-        return sendJson(req("POST", "/api/v1/boundary/checkpoints/" + encode(checkpointId) + "/verify")
                 .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
     }
 
@@ -608,11 +581,6 @@ public class HelmClient {
     public SandboxGrant getSandboxGrant(String grantId) {
         HttpRequest r = req("GET", "/api/v1/sandbox/grants/" + encode(grantId)).GET().build();
         return send(r, SandboxGrant.class);
-    }
-
-    public JsonElement verifySandboxGrant(String grantId) {
-        return sendJson(req("POST", "/api/v1/sandbox/grants/" + encode(grantId) + "/verify")
-                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
     }
 
     public JsonElement preflightSandboxGrant(Object req) {

@@ -1,3 +1,4 @@
+// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
 package pack
 
 import (
@@ -66,74 +67,6 @@ func TestFinal_GradingReportJSONRoundTrip(t *testing.T) {
 	json.Unmarshal(data, &got)
 	if got.Grade != GradeGold || len(got.Evidence) != 1 {
 		t.Fatal("grading round-trip")
-	}
-}
-
-func TestFinal_NewPackBuilder(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Name: "test", Version: "1.0"})
-	if b == nil {
-		t.Fatal("nil builder")
-	}
-}
-
-func TestFinal_BuildSuccess(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Name: "test", Version: "1.0"})
-	p, err := b.Build()
-	if err != nil || p == nil {
-		t.Fatal("build failed")
-	}
-}
-
-func TestFinal_BuildMissingName(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Version: "1.0"})
-	_, err := b.Build()
-	if err == nil {
-		t.Fatal("should error on missing name")
-	}
-}
-
-func TestFinal_BuildMissingVersion(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Name: "test"})
-	_, err := b.Build()
-	if err == nil {
-		t.Fatal("should error on missing version")
-	}
-}
-
-func TestFinal_BuildSetsContentHash(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Name: "test", Version: "1.0"})
-	p, _ := b.Build()
-	if p.ContentHash == "" {
-		t.Fatal("content hash should be set")
-	}
-}
-
-func TestFinal_BuildSetsPackID(t *testing.T) {
-	b := NewPackBuilder(PackManifest{Name: "test", Version: "1.0"})
-	p, _ := b.Build()
-	if p.PackID == "" {
-		t.Fatal("pack ID should be set")
-	}
-}
-
-func TestFinal_ValidateManifestValid(t *testing.T) {
-	err := ValidateManifest(PackManifest{Capabilities: []string{"read", "write"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestFinal_ValidateManifestEmptyCap(t *testing.T) {
-	err := ValidateManifest(PackManifest{Capabilities: []string{"read", ""}})
-	if err == nil {
-		t.Fatal("should error on empty capability")
-	}
-}
-
-func TestFinal_ValidateManifestNoCaps(t *testing.T) {
-	err := ValidateManifest(PackManifest{})
-	if err != nil {
-		t.Fatal("no caps should be valid")
 	}
 }
 

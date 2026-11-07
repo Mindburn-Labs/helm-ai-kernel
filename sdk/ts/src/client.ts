@@ -117,7 +117,6 @@ export type EvaluateDecisionResponse = EvaluateResponse;
 export type BoundaryStatus = SurfaceRecord;
 export type BoundaryCapabilitySummary = SurfaceRecord;
 export type ExecutionBoundaryRecord = SurfaceRecord;
-export type BoundaryRecordVerification = SurfaceRecord;
 export type BoundaryCheckpoint = SurfaceRecord;
 export type MCPAuthorizationProfile = SurfaceRecord;
 export type MCPScanRequest = SurfaceRecord;
@@ -134,7 +133,6 @@ export type ApprovalWebAuthnAssertion = SurfaceRecord;
 export type BudgetCeiling = SurfaceRecord;
 export type AgentIdentityProfile = SurfaceRecord;
 export type AuthzHealth = SurfaceRecord;
-export type EvidenceEnvelopeVerification = SurfaceRecord;
 export type EvidenceEnvelopePayload = SurfaceRecord;
 export type TelemetryOTelConfig = SurfaceRecord;
 export type TelemetryExportRequest = SurfaceRecord;
@@ -379,24 +377,6 @@ export class HelmClient {
     }
   }
 
-  async replayVerify(bundle: Blob): Promise<VerificationResult> {
-    const form = new FormData();
-    form.append('bundle', bundle);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-    try {
-      const res = await fetch(`${this.baseUrl}/api/v1/replay/verify`, {
-        method: 'POST',
-        body: form,
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new HelmApiError(res.status, (await res.json()) as HelmError);
-      return (await res.json()) as VerificationResult;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
   async createEvidenceEnvelopeManifest(req: EvidenceEnvelopeExportRequest): Promise<EvidenceEnvelopeManifest> {
     return this.request<EvidenceEnvelopeManifest>('POST', '/api/v1/evidence/envelopes', req);
   }
@@ -407,10 +387,6 @@ export class HelmClient {
 
   async getEvidenceEnvelopeManifest(manifestId: string): Promise<EvidenceEnvelopeManifest> {
     return this.request<EvidenceEnvelopeManifest>('GET', `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}`);
-  }
-
-  async verifyEvidenceEnvelopeManifest(manifestId: string): Promise<EvidenceEnvelopeVerification> {
-    return this.request<EvidenceEnvelopeVerification>('POST', `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}/verify`);
   }
 
   async getEvidenceEnvelopePayload(manifestId: string): Promise<EvidenceEnvelopePayload> {
@@ -439,20 +415,12 @@ export class HelmClient {
     return this.request<ExecutionBoundaryRecord>('GET', `/api/v1/boundary/records/${encodeURIComponent(recordId)}`);
   }
 
-  async verifyBoundaryRecord(recordId: string): Promise<BoundaryRecordVerification> {
-    return this.request<BoundaryRecordVerification>('POST', `/api/v1/boundary/records/${encodeURIComponent(recordId)}/verify`);
-  }
-
   async listBoundaryCheckpoints(): Promise<BoundaryCheckpoint[]> {
     return this.request<BoundaryCheckpoint[]>('GET', '/api/v1/boundary/checkpoints');
   }
 
   async createBoundaryCheckpoint(): Promise<BoundaryCheckpoint> {
     return this.request<BoundaryCheckpoint>('POST', '/api/v1/boundary/checkpoints');
-  }
-
-  async verifyBoundaryCheckpoint(checkpointId: string): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', `/api/v1/boundary/checkpoints/${encodeURIComponent(checkpointId)}/verify`);
   }
 
   // ── Conformance ──────────────────────────────────
@@ -534,10 +502,6 @@ export class HelmClient {
 
   async getSandboxGrant(grantId: string): Promise<SandboxGrant> {
     return this.request<SandboxGrant>('GET', `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}`);
-  }
-
-  async verifySandboxGrant(grantId: string): Promise<SandboxPreflightResult> {
-    return this.request<SandboxPreflightResult>('POST', `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}/verify`);
   }
 
   async preflightSandboxGrant(req: SandboxPreflightRequest): Promise<SandboxPreflightResult> {

@@ -25,7 +25,7 @@ from helm_sdk import (
     MCPRegistryApprovalRequest,
     MCPRegistryDiscoverRequest,
     Receipt,
-    VerificationChecks,
+    EvidenceVerificationCheck,
     VerificationResult,
 )
 from helm_sdk.types_gen import BoundaryStatus
@@ -311,12 +311,17 @@ class TestGeneratedTypes:
 
     def test_verification_result(self) -> None:
         vr = VerificationResult(
-            verdict="PASS",
-            checks=VerificationChecks(signatures="PASS", causal_chain="PASS"),
-            errors=[],
+            outcome="UNVERIFIABLE",
+            checks_run=[
+                EvidenceVerificationCheck(name="bundle_seal", status="UNVERIFIABLE", detail="signed by another key"),
+            ],
+            roots={"entry_count": 1},
+            errors=["seal signer is not the runtime trust anchor"],
         )
-        assert vr.verdict == "PASS"
-        assert len(vr.errors) == 0
+        assert vr.outcome == "UNVERIFIABLE"
+        assert vr.checks_run[0].status == "UNVERIFIABLE"
+        with pytest.raises(ValueError):
+            EvidenceVerificationCheck(name="bundle_seal", status="PASS", detail="retired vocabulary")
 
 
 # ── Execution Boundary Surfaces ─────────────────────────
@@ -355,14 +360,12 @@ class TestExecutionBoundarySurfaces:
             "payload": {"payloadType": "application/vnd.dsse+json"},
         })
         mock_client.post.side_effect = [
-            mock_response(200, {"checkpoint_id": "cp1", "verdict": "PASS"}),
             mock_response(200, {"challenge_id": "ch1", "approval_id": "ap1"}),
             mock_response(200, {"approval_id": "ap1", "state": "approved"}),
         ]
 
         client = HelmClient(base_url="http://h")
         payload = client.get_evidence_envelope_payload("env1")
-        checkpoint = client.verify_boundary_checkpoint("cp1")
         challenge = client.create_approval_webauthn_challenge("ap1", {"actor": "user:alice"})
         asserted = client.assert_approval_webauthn_challenge("ap1", {
             "challenge_id": "ch1",
@@ -371,11 +374,9 @@ class TestExecutionBoundarySurfaces:
         })
 
         mock_client.get.assert_called_once_with("/api/v1/evidence/envelopes/env1/payload")
-        assert mock_client.post.call_args_list[0][0][0] == "/api/v1/boundary/checkpoints/cp1/verify"
-        assert mock_client.post.call_args_list[1][0][0] == "/api/v1/approvals/ap1/webauthn/challenge"
-        assert mock_client.post.call_args_list[2][0][0] == "/api/v1/approvals/ap1/webauthn/assert"
+        assert mock_client.post.call_args_list[0][0][0] == "/api/v1/approvals/ap1/webauthn/challenge"
+        assert mock_client.post.call_args_list[1][0][0] == "/api/v1/approvals/ap1/webauthn/assert"
         assert payload["payload_hash"] == "sha256:payload"
-        assert checkpoint["verdict"] == "PASS"
         assert challenge["challenge_id"] == "ch1"
         assert asserted["state"] == "approved"
 

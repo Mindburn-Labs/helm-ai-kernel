@@ -14,7 +14,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
@@ -63,9 +62,8 @@ type EvaluationContext struct {
 	Decisions      []*contracts.DecisionRecord
 
 	// Transient state populated by interceptors
-	Intervention        *contracts.InterventionMetadata
-	ThreatScanResult    *contracts.ThreatScanResult
-	SessionRiskSnapshot *SessionRiskSnapshot
+	Intervention     *contracts.InterventionMetadata
+	ThreatScanResult *contracts.ThreatScanResult
 
 	// PDP metadata
 	PDPBackend      string
@@ -230,11 +228,6 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 			if err := t.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign temporal-deny decision: %w", err)
 			}
-
-			if t.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = t.g.auditLog.Append("guardian", "DECISION_MADE", decision.ID, string(decisionBytes))
-			}
 			return decision, nil
 		} else if resp.Level == ResponseThrottle {
 			evalCtx.Intervention = &contracts.InterventionMetadata{
@@ -299,22 +292,6 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 				&state,
 			)
 		}
-	}
-
-	// Gate 0.5: Per-agent kill switch — if agent is killed, deny immediately
-	if f.g.agentKillSwitch != nil && f.g.agentKillSwitch.IsKilled(evalCtx.Request.Principal) {
-		now := f.g.clock.Now()
-		decision := &contracts.DecisionRecord{
-			ID:         newDecisionID(),
-			Timestamp:  now,
-			Verdict:    string(contracts.VerdictDeny),
-			Reason:     string(contracts.ReasonAgentKilled),
-			ReasonCode: string(contracts.ReasonAgentKilled),
-		}
-		if err := f.g.signDecisionWithContext(decision, evalCtx); err != nil {
-			return nil, fmt.Errorf("failed to sign agent-killed decision: %w", err)
-		}
-		return decision, nil
 	}
 
 	// Gate 1: Context mismatch guard — deny if environment fingerprint changed
@@ -516,10 +493,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign threat-deny decision: %w", err)
 				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
-				}
 				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", selectedScan.FindingCount))
 				return decision, nil
 			}
@@ -556,10 +529,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			}
 			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign semantic-escalation decision: %w", err)
-			}
-			if p.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = p.g.auditLog.Append("guardian", "SEMANTIC_THREAT_ESCALATE", decision.ID, string(decisionBytes))
 			}
 			return decision, nil
 		}
@@ -628,10 +597,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign delegation-principal-mismatch decision: %w", err)
 				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "DELEGATION_PRINCIPAL_MISMATCH", decision.ID, string(decisionBytes))
-				}
 				return decision, nil
 			}
 
@@ -645,10 +610,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				}
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", err)
-				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
 				}
 				return decision, nil
 			}
@@ -664,10 +625,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 					}
 					if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 						return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", err)
-					}
-					if p.g.auditLog != nil {
-						decisionBytes, _ := canonicalize.JCS(decision)
-						_, _ = p.g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
 					}
 					return decision, nil
 				}
@@ -727,11 +684,9 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				reasonCode = string(contracts.ReasonPDPDeny)
 			}
 			verdict := contracts.VerdictDeny
-			auditEvent := "PDP_DENY"
 			decisionKind := "deny"
 			if reasonCode == string(contracts.ReasonApprovalRequired) {
 				verdict = contracts.VerdictEscalate
-				auditEvent = "PDP_ESCALATE"
 				decisionKind = "escalation"
 			}
 			decision := &contracts.DecisionRecord{
@@ -748,10 +703,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			}
 			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign PDP-%s decision: %w", decisionKind, err)
-			}
-			if p.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = p.g.auditLog.Append("guardian", auditEvent, decision.ID, string(decisionBytes))
 			}
 			return decision, nil
 		}
@@ -973,54 +924,6 @@ func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *Evaluati
 		}
 		t.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventEgressBlocked, "tainted egress blocked")
 		return decision, nil
-	}
-
-	return next(ctx, evalCtx)
-}
-
-// ── SandboxAllocationInterceptor ──
-
-type SandboxAllocationInterceptor struct {
-	g *Guardian
-}
-
-func NewSandboxAllocationInterceptor(g *Guardian) *SandboxAllocationInterceptor {
-	return &SandboxAllocationInterceptor{g: g}
-}
-
-func (s *SandboxAllocationInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
-	if s.g.warmLeaseMgr != nil && evalCtx.Request.Action == "EXECUTE_TOOL" {
-		spec := &sandbox.SandboxSpec{
-			Image: "sha256:default-pinned-digest",
-		}
-		if img, ok := evalCtx.Request.Context["image"].(string); ok && img != "" {
-			spec.Image = img
-		}
-
-		runner, err := s.g.warmLeaseMgr.Acquire(ctx, spec)
-		if err != nil {
-			now := s.g.clock.Now()
-			decision := &contracts.DecisionRecord{
-				ID:         newDecisionID(),
-				Timestamp:  now,
-				Verdict:    string(contracts.VerdictDeny),
-				Reason:     fmt.Sprintf("SANDBOX_ACQUISITION_FAILED: %v", err),
-				ReasonCode: "SANDBOX_ACQUISITION_FAILED",
-			}
-			if err := s.g.signDecisionWithContext(decision, evalCtx); err != nil {
-				return nil, fmt.Errorf("failed to sign sandbox-acquisition-failed decision: %w", err)
-			}
-			return decision, nil
-		}
-
-		if evalCtx.Request.Context == nil {
-			evalCtx.Request.Context = make(map[string]interface{})
-		}
-		leaseID := randomID("lease-")
-		evalCtx.Request.Context["sandbox_lease_id"] = leaseID
-
-		// Release the warm sandbox back to pool
-		s.g.warmLeaseMgr.Release(runner)
 	}
 
 	return next(ctx, evalCtx)

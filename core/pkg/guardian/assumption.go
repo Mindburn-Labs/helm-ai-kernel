@@ -13,17 +13,6 @@ import (
 // action depends on.
 const ContextAssumptions = "assumptions"
 
-// AssumptionObserver re-reads the current state of an assumption's subject.
-//
-// Implementations must be side-effect free: this runs during authorization,
-// before any effect is permitted, and a failure here denies.
-type AssumptionObserver interface {
-	// Observe returns the current content hash for the assumption's subject.
-	// An error means the state could not be confirmed, which is treated as
-	// stale — a gate that cannot check cannot vouch.
-	Observe(ctx context.Context, assumption contracts.ObservedAssumption) (string, error)
-}
-
 // AssumptionFreshnessInterceptor refuses an action whose declared assumptions
 // no longer hold.
 //
@@ -58,25 +47,13 @@ func (a *AssumptionFreshnessInterceptor) Evaluate(ctx context.Context, evalCtx *
 		if err := assumption.Validate(); err != nil {
 			return a.deny(evalCtx, assumption, err.Error())
 		}
+		// The validity window is the whole check: the kernel holds no
+		// re-reader for the live state an assumption names, so within its
+		// window an observation is taken on trust and past it the action is
+		// refused.
 		if assumption.Expired(now) {
 			return a.deny(evalCtx, assumption, fmt.Sprintf(
 				"observation of %q expired at %s", assumption.Subject, assumption.ExpiresAt().UTC().Format("2006-01-02T15:04:05Z")))
-		}
-
-		// Within its window an observation is taken on trust unless an
-		// observer can say otherwise. With one injected, the window is a
-		// ceiling rather than the whole check.
-		if a.g.assumptionObserver == nil {
-			continue
-		}
-		observed, obsErr := a.g.assumptionObserver.Observe(ctx, assumption)
-		if obsErr != nil {
-			return a.deny(evalCtx, assumption, fmt.Sprintf(
-				"state of %q could not be confirmed: %v", assumption.Subject, obsErr))
-		}
-		if observed != assumption.ContentHash {
-			return a.deny(evalCtx, assumption, fmt.Sprintf(
-				"state of %q changed since it was observed", assumption.Subject))
 		}
 	}
 

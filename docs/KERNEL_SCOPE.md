@@ -82,7 +82,7 @@ non-TCB supporting infrastructure:
 | `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
 | `executor/`        | Receipt ID derivation and receipt types; the standalone SafeExecutor was removed (no shipped caller) | Library only |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
-| `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |
+| `runtime/sandbox/` | Sandbox policy, backend profiles and sealed grants (records only; no pack execution) | ✅ Active |
 | `receipts/`        | Receipt tamper-resistance tests; the unlinked receipt policy enforcer was removed | Test-only |
 
 ### Supporting Infrastructure (Non-TCB)
@@ -189,7 +189,7 @@ The OSS kernel includes configurable surface containment primitives
 OSS includes:
 
 - **Surface containment** — capability manifests, tool bundles, sandbox profiles
-- **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate has no tracker in a shipped binary (CTL-011)
+- **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate had no shipped installer and was removed (CTL-011, retired)
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs

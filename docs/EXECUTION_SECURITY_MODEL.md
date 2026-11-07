@@ -154,7 +154,7 @@ an agent can reach.
 | **Side-effect class profiles** | Read-only, write-limited, or full profiles per tool class |
 | **Connector allowlists** | Per-tenant/app/profile restrictions on which connectors are reachable |
 | **Destination scoping** | Explicit target domain/URL/resource allowlists |
-| **Filesystem/network deny-by-default** | WASI sandbox denies all I/O unless explicitly granted. Not wired: the shipped server runs no pack, so this is library code (`controls.yaml` CTL-044) |
+| **Filesystem/network deny-by-default** | Sandbox grants declare deny-by-default I/O. Records only: the kernel runs no pack and has no sandbox runtime (`controls.yaml` CTL-044, retired) |
 | **Sandbox profile requirement** | Each tool class requires a declared sandbox profile before execution |
 
 ### Architectural Property
@@ -193,7 +193,7 @@ never cross HELM are not governed (INV-024).
 | :--- | :--- |
 | **Schema PEP** | JCS canonicalization + SHA-256, fail-closed on input schema mismatch for MCP tool calls (CTL-010, CTL-025); the OpenAI-compatible proxy only requires parseable tool arguments |
 | **PDP/CPI evaluation** | Canonical Policy Index resolves P0 → P1 → P2 → verdict |
-| **Budget enforcement** | The Guardian draw-down gate denies a breached ceiling (`BUDGET_EXCEEDED`) and an unavailable tracker (`BUDGET_ERROR`). Not wired: no shipped binary installs a budget tracker (CTL-011) |
+| **Budget enforcement** | Not a Guardian gate: the draw-down gate had no shipped installer and was removed (CTL-011, retired). The kernel bridge denies a breached ceiling (`BUDGET_EXCEEDED`) or an unavailable enforcer (`BUDGET_ERROR`) only when constructed with a budget enforcer, which the shipped proxy is not |
 | **Contract pinning** | Connector response schemas are pinned and drift produces `ERR_CONNECTOR_CONTRACT_DRIFT`. Not wired: only the preview TON Acton connector, which no shipped binary links, reports it (CTL-045) |
 | **PRG evaluation** | Proof Requirement Graph checks cryptographic prerequisites |
 | **Deny-by-default** | An action with no policy → `NO_POLICY_DEFINED`. A policy that cannot be evaluated → `PRG_EVALUATION_ERROR` (CTL-001, INV-005) |
@@ -319,10 +319,8 @@ Each layer protects against failures in the other two.
 | :--- | :--- |
 | JCS Canonicalization | B |
 | PEP Boundary | B |
-| WASI Sandbox | A |
 | Approval Ceremony | B |
 | ProofGraph DAG | C |
-| Trust Registry | C |
 | EvidencePack | C |
 | Offline Replay | C |
 | Output Drift | B |

@@ -422,7 +422,7 @@ func TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite(t *testing.T) {
 	for _, want := range []string{
 		"CREATE CONSTRAINT TRIGGER authority_decision_receipt_insert AFTER INSERT ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('ADMITTED', 'DENIED', 'ESCALATED')) EXECUTE FUNCTION authority_require_decision_receipt();",
 		"CREATE CONSTRAINT TRIGGER authority_decision_receipt_update AFTER UPDATE OF state ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('ADMITTED', 'DENIED', 'ESCALATED') AND OLD.state IS DISTINCT FROM NEW.state) EXECUTE FUNCTION authority_require_decision_receipt();",
-		"WHERE tenant_id = NEW.tenant_id AND attempt_id = NEW.attempt_id AND attempt_version = NEW.version ) THEN RAISE EXCEPTION 'decision_receipt_missing'",
+		"WHERE tenant_id = NEW.tenant_id AND attempt_id = NEW.attempt_id AND attempt_version = NEW.version AND state = NEW.state ) THEN RAISE EXCEPTION 'decision_receipt_missing'",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Errorf("migration 15 lacks the ledger fence clause %q", want)

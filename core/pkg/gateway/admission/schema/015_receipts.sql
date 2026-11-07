@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS authority_receipts (
 
 -- The ledger fence: a decision commits only with its receipt. Whenever an
 -- attempt row enters ADMITTED, DENIED or ESCALATED, a receipt for exactly
--- that (tenant, attempt, version) must exist when the transaction commits.
+-- that (tenant, attempt, version, state) must exist when the transaction
+-- commits.
 -- During an upgrade this migration runs while pods of the previous binary
 -- still serve; their decisions carry no receipt and now fail at commit,
 -- instead of leaving a decision the chain does not hold. Creating the
@@ -74,6 +75,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM authority_receipts
         WHERE tenant_id = NEW.tenant_id AND attempt_id = NEW.attempt_id AND attempt_version = NEW.version
+          AND state = NEW.state
     ) THEN
         RAISE EXCEPTION 'decision_receipt_missing'
             USING ERRCODE = '23514',

@@ -34,7 +34,7 @@ func frozenGatewayChain(t *testing.T) ([]byte, Bundle, TrustRoot) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(b.Receipts) != 3 || len(b.GatewayBindings) != 3 || b.PublicKeyHex == "" || b.KeyID == "" {
+	if len(b.Receipts) != 4 || len(b.GatewayBindings) != 4 || b.PublicKeyHex == "" || b.KeyID == "" {
 		t.Fatalf("frozen gateway chain: %d receipts, %d bindings, key %q", len(b.Receipts), len(b.GatewayBindings), b.KeyID)
 	}
 	return raw, b, TrustRoot{Keys: map[string]string{b.KeyID: b.PublicKeyHex}}
@@ -58,7 +58,7 @@ func checkNamed(t *testing.T, res Result, name CheckName) Check {
 func TestFrozenGatewayChainStillVerifies(t *testing.T) {
 	_, b, trust := frozenGatewayChain(t)
 	res := VerifyBundle(b, trust)
-	if !res.Valid || res.PreimageVersion != contracts.ReceiptSignatureV5 || res.BindingsChecked != 3 || res.GatewayReceipts != 3 {
+	if !res.Valid || res.PreimageVersion != contracts.ReceiptSignatureV5 || res.BindingsChecked != 4 || res.GatewayReceipts != 4 {
 		t.Fatalf("the frozen gateway chain no longer verifies: %+v", res)
 	}
 	for _, name := range []CheckName{CheckIdentity, CheckIntegrity, CheckPolicy, CheckExecution, CheckClosure, CheckBinding} {
@@ -82,7 +82,7 @@ func TestGatewayBindingCheckIsNotApplicableWithoutBindings(t *testing.T) {
 	if c := checkNamed(t, res, CheckBinding); c.Status != StatusNotApplicable {
 		t.Fatalf("binding check without bindings = %+v", c)
 	}
-	if !res.Valid || res.BindingsChecked != 0 || res.GatewayReceipts != 3 {
+	if !res.Valid || res.BindingsChecked != 0 || res.GatewayReceipts != 4 {
 		t.Fatalf("result = %+v", res)
 	}
 
@@ -139,7 +139,7 @@ func TestTamperedGatewayBindingFails(t *testing.T) {
 func TestGatewayChainGapFails(t *testing.T) {
 	_, b, trust := frozenGatewayChain(t)
 	missing := b.Receipts[1].ReceiptID
-	b.Receipts = []*contracts.Receipt{b.Receipts[0], b.Receipts[2]}
+	b.Receipts = []*contracts.Receipt{b.Receipts[0], b.Receipts[2], b.Receipts[3]}
 	res := VerifyBundle(b, trust)
 	if checkNamed(t, res, CheckClosure).Status != StatusFail || checkNamed(t, res, CheckBinding).Status != StatusFail || res.Valid {
 		t.Fatalf("a chain with a gap verified: %+v", res)
@@ -345,11 +345,11 @@ func TestDuplicateReceiptIDCannotPlaceABinding(t *testing.T) {
 func TestRequireGatewayBindings(t *testing.T) {
 	require := Options{RequireGatewayBindings: true}
 	_, b, trust := frozenGatewayChain(t)
-	if res := VerifyBundleWith(b, trust, require); !res.Valid || res.GatewayReceipts != 3 || res.BindingsChecked != 3 {
+	if res := VerifyBundleWith(b, trust, require); !res.Valid || res.GatewayReceipts != 4 || res.BindingsChecked != 4 {
 		t.Fatalf("every binding supplied: %+v", res)
 	}
 	delete(b.GatewayBindings, b.Receipts[1].ReceiptID)
-	if res := VerifyBundle(b, trust); !res.Valid || res.GatewayReceipts != 3 || res.BindingsChecked != 2 {
+	if res := VerifyBundle(b, trust); !res.Valid || res.GatewayReceipts != 4 || res.BindingsChecked != 3 {
 		t.Fatalf("one binding missing, not required: %+v", res)
 	}
 	res := VerifyBundleWith(b, trust, require)
@@ -415,5 +415,130 @@ func TestGatewayChainIDFramesTenantAndWorkspace(t *testing.T) {
 	}
 	if GatewayChainID("a:1:b", "c") == GatewayChainID("a", "b:1:c") {
 		t.Fatal("two (tenant, workspace) pairs share a chain id")
+	}
+}
+
+// outcomeResigner re-signs the frozen chain's outcome receipt (seq 4) with a
+// planted outcome binding, under a test key.
+func outcomeResigner(t *testing.T) (gatewayResigner, GatewayOutcomeBinding) {
+	t.Helper()
+	g := newGatewayResigner(t)
+	_, frozen, _ := frozenGatewayChain(t)
+	g.base = frozen.Receipts[3]
+	parsed, err := ParseGatewayOutcomeBinding(frozen.GatewayBindings[g.base.ReceiptID])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g, parsed
+}
+
+// An outcome receipt is checked under helm.gateway.outcome-binding.v1's own
+// table: an outcome state as status, no verdict, the attempt, version and
+// session framing as for decisions, and the settlement time as timestamp.
+func TestGatewayOutcomeBindingMustAgreeWithTheSignedReceipt(t *testing.T) {
+	g, parsed := outcomeResigner(t)
+	planted := func(mutate func(r *contracts.Receipt, b *GatewayOutcomeBinding)) Bundle {
+		t.Helper()
+		b, r := parsed, *g.base
+		mutate(&r, &b)
+		raw, err := canonicalize.InteroperableJCS(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g.raw(raw, func(p *contracts.Receipt) { *p = r })
+	}
+	if res := VerifyBundle(planted(func(*contracts.Receipt, *GatewayOutcomeBinding) {}), g.trust()); !res.Valid || res.BindingsChecked != 1 {
+		t.Fatalf("re-signed frozen outcome receipt does not verify: %+v", res)
+	}
+	for name, test := range map[string]struct {
+		mutate func(r *contracts.Receipt, b *GatewayOutcomeBinding)
+		want   string
+	}{
+		"a verdict":        {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.Verdict = "ALLOW" }, "verdict"},
+		"status":           {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.Status = "RECONCILED" }, "status"},
+		"a decision state": {func(r *contracts.Receipt, b *GatewayOutcomeBinding) { r.Status, b.State = "ADMITTED", "ADMITTED" }, "not an outcome state"},
+		"version":          {func(_ *contracts.Receipt, b *GatewayOutcomeBinding) { b.AttemptVersion = 8 }, "decision_id"},
+		"attempt":          {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.EffectID = "other" }, "effect_id"},
+		"workspace":        {func(_ *contracts.Receipt, b *GatewayOutcomeBinding) { b.WorkspaceID = "ws-b" }, "chain_id framing"},
+		"session":          {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.SessionID = GatewayChainID("tenant-a", "ws-b") }, "session_id"},
+		"sequence":         {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.LamportClock = 9 }, "lamport_clock"},
+		"reason code":      {func(_ *contracts.Receipt, b *GatewayOutcomeBinding) { b.ReasonCode = "PERMIT_EXPIRED" }, "reason_code"},
+		"policy hash":      {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.PolicyHash = strings.Repeat("0", 64) }, "policy_hash"},
+		"args hash":        {func(_ *contracts.Receipt, b *GatewayOutcomeBinding) { b.ArgumentDigest = strings.Repeat("0", 64) }, "args_hash"},
+		"settlement time":  {func(r *contracts.Receipt, _ *GatewayOutcomeBinding) { r.Timestamp = r.Timestamp.Add(time.Microsecond) }, "timestamp"},
+		"no permit":        {func(_ *contracts.Receipt, b *GatewayOutcomeBinding) { b.PermitID = "" }, "names no tenant"},
+		"no sequence":      {func(r *contracts.Receipt, b *GatewayOutcomeBinding) { b.Seq, r.LamportClock = 0, 0 }, "names no tenant"},
+		"no attempt version": {func(r *contracts.Receipt, b *GatewayOutcomeBinding) {
+			b.AttemptVersion, r.DecisionID = 0, b.AttemptID+":0"
+		}, "names no tenant"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := VerifyBundle(planted(test.mutate), g.trust())
+			c := checkNamed(t, res, CheckBinding)
+			if c.Status != StatusFail || res.Valid || !strings.Contains(c.Detail, test.want) {
+				t.Fatalf("binding check = %+v, want a failure naming %q", c, test.want)
+			}
+			if checkNamed(t, res, CheckIdentity).Status != StatusPass {
+				t.Fatal("the planted receipt is not validly signed; the case proves nothing")
+			}
+		})
+	}
+	// A decision binding is not an outcome's: the frozen decision binding on
+	// the outcome receipt fails, whichever table reads it.
+	_, frozen, _ := frozenGatewayChain(t)
+	swapped := g.raw(frozen.GatewayBindings[frozen.Receipts[2].ReceiptID], func(*contracts.Receipt) {})
+	if res := VerifyBundle(swapped, g.trust()); checkNamed(t, res, CheckBinding).Status != StatusFail || res.Valid {
+		t.Fatalf("a decision binding passed for an outcome receipt: %+v", res)
+	}
+}
+
+func TestParseGatewayOutcomeBindingIsClosedAndCanonical(t *testing.T) {
+	_, parsed := outcomeResigner(t)
+	good, err := canonicalize.InteroperableJCS(parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseGatewayOutcomeBinding(good); err != nil {
+		t.Fatalf("frozen outcome binding refused: %v", err)
+	}
+	// A model call's money row is an object in the same closed shape.
+	model := parsed
+	model.SettledBy = "model_call"
+	model.ModelCall = &GatewayOutcomeModelCall{State: "CONFIRMED", HeldMicros: "900", EstimatedMicros: "", ConfirmedMicros: "640",
+		BillableMicros: "640", UsageDigest: strings.Repeat("ab", 32)}
+	withModel, err := canonicalize.InteroperableJCS(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ParseGatewayOutcomeBinding(withModel); err != nil || got.ModelCall == nil || got.ModelCall.ConfirmedMicros != "640" {
+		t.Fatalf("model call binding = %+v, %v", got.ModelCall, err)
+	}
+	encode := func(mutate func(map[string]any)) []byte {
+		var clone map[string]any // a fresh copy each time: mutations nest
+		if err := json.Unmarshal(good, &clone); err != nil {
+			t.Fatal(err)
+		}
+		mutate(clone)
+		raw, err := canonicalize.JCS(clone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	for name, raw := range map[string][]byte{
+		"extra member":       encode(func(m map[string]any) { m["verdict"] = "ALLOW" }),
+		"missing member":     encode(func(m map[string]any) { delete(m, "settled_at") }),
+		"missing model_call": encode(func(m map[string]any) { delete(m, "model_call") }),
+		"null exposures":     encode(func(m map[string]any) { m["exposures"] = nil }),
+		"null versions":      encode(func(m map[string]any) { m["authority_versions"] = nil }),
+		"extra observation":  encode(func(m map[string]any) { m["observation"].(map[string]any)["grant"] = "all" }),
+		"decision version":   encode(func(m map[string]any) { m["binding_version"] = GatewayBindingVersion }),
+		"model call member":  bytes.Replace(withModel, []byte(`"held_micros":"900"`), []byte(`"grant":"all","held_micros":"900"`), 1),
+		"not canonical":      append([]byte(" "), good...),
+		"numeric readback":   bytes.Replace(good, []byte(`"readback_absent":false`), []byte(`"readback_absent":0`), 1),
+	} {
+		if _, err := ParseGatewayOutcomeBinding(raw); err == nil {
+			t.Errorf("%s: accepted %s", name, raw)
+		}
 	}
 }

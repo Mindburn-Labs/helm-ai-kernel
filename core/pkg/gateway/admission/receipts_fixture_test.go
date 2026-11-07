@@ -6,12 +6,16 @@ package admission
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
@@ -65,16 +69,58 @@ func frozenGatewayDecisions() []storedDecision {
 	return []storedDecision{escalated, denied, admitted}
 }
 
+// frozenGatewayOutcome is the outcome receipt of the admitted attempt: its
+// read-back OBSERVED it SUCCEEDED and confirmed its reservation. It is built
+// the way the gateway's outcome builder (helm-tracker#276, PR #1217) builds
+// one: a helm.gateway.outcome-binding.v1 document, and a receipt.v5 receipt
+// with the attempt's version, the outcome state as status, no verdict, the
+// stored reason code, the permit's policy hash, the argument digest and the
+// settlement time.
+func frozenGatewayOutcome(t *testing.T, admitted storedDecision, receiptID string, seq uint64, prev string) (*contracts.Receipt, []byte) {
+	t.Helper()
+	policyHash, err := authoritySnapshotHash(admitted.AuthorityVersions)
+	must(t, err)
+	settledAt := admitted.DecidedAt.Add(time.Second + 250*time.Millisecond)
+	chain := receiptChainID(admitted.TenantID, admitted.WorkspaceID)
+	argument := hex.EncodeToString(admitted.ArgumentDigest)
+	const version = 7 // ADMITTED 4, DISPATCHING 5, DISPATCHED 6, OBSERVED 7
+	binding, err := canonicalize.InteroperableJCS(receiptverify.GatewayOutcomeBinding{
+		BindingVersion: receiptverify.GatewayOutcomeBindingVersion, ChainID: chain, Seq: seq,
+		TenantID: admitted.TenantID, WorkspaceID: admitted.WorkspaceID, AttemptID: admitted.AttemptID, AttemptVersion: version,
+		FromState: "DISPATCHED", State: "OBSERVED", ReasonCode: "", EffectType: admitted.EffectType,
+		RequestDigest: hex.EncodeToString(admitted.RequestDigest), TargetDigest: hex.EncodeToString(admitted.TargetDigest),
+		ArgumentDigest: argument, PermitID: admitted.PermitID, AuthorityVersions: bindingVersions(admitted.AuthorityVersions),
+		PolicyHash: policyHash, Outcome: "SUCCEEDED", OutcomeBasis: "OBSERVED", SettledBy: "readback",
+		Observation: receiptverify.GatewayOutcomeObservation{ID: 41, Source: "adapter", TrustClass: "provider_readback",
+			Outcome: "SUCCEEDED", EvidenceDigest: hex.EncodeToString(sum256("evidence")),
+			ObservedAt: settledAt.Add(-time.Millisecond).UTC().Format(time.RFC3339Nano)},
+		Reservation: "confirmed", ReadbackAbsent: false,
+		Exposures: []receiptverify.GatewayOutcomeExposure{{LimitID: "0190a5b4-0000-7000-8000-0000000000dd",
+			BucketStart: time.Unix(0, 0).UTC().Format(time.RFC3339Nano), Kind: "confirmed", Amount: "1"}},
+		SettledAt: settledAt.UTC().Format(time.RFC3339Nano),
+	})
+	must(t, err)
+	sum := sha256.Sum256(binding)
+	return &contracts.Receipt{
+		ReceiptID: receiptID, DecisionID: admitted.AttemptID + ":7", EffectID: admitted.AttemptID,
+		Status: "OBSERVED", OutputHash: hex.EncodeToString(sum[:]), Timestamp: settledAt.UTC(),
+		PrevHash: prev, LamportClock: seq, ArgsHash: argument, PolicyHash: policyHash, SessionID: chain,
+	}, binding
+}
+
 // frozenGatewayChain signs the fixture decisions with the gateway's own
-// builder and sealer and encodes them as an export bundle, plus the public
-// key a test passes as its trust root (the bundle's own key is never trusted).
+// builder and sealer, and the admitted attempt's outcome, and encodes them as
+// an export bundle, plus the public key a test passes as its trust root (the
+// bundle's own key is never trusted).
 func frozenGatewayChain(t *testing.T) ([]byte, []SignedReceipt) {
 	t.Helper()
 	signer := frozenGatewaySigner(t)
-	ids := []string{"0190a5b4-0000-7000-8000-0000000000f1", "0190a5b4-0000-7000-8000-0000000000f2", "0190a5b4-0000-7000-8000-0000000000f3"}
+	ids := []string{"0190a5b4-0000-7000-8000-0000000000f1", "0190a5b4-0000-7000-8000-0000000000f2",
+		"0190a5b4-0000-7000-8000-0000000000f3", "0190a5b4-0000-7000-8000-0000000000f4"}
 	var stored []SignedReceipt
 	prev := ""
-	for i, d := range frozenGatewayDecisions() {
+	decisions := frozenGatewayDecisions()
+	for i, d := range decisions {
 		r, binding, err := buildDecisionReceipt(d, ids[i], uint64(i+1), prev)
 		must(t, err)
 		envelope, digest, err := sealReceipt(signer, r)
@@ -82,6 +128,10 @@ func frozenGatewayChain(t *testing.T) ([]byte, []SignedReceipt) {
 		stored = append(stored, SignedReceipt{Ref: ReceiptRef{ReceiptID: ids[i]}, Envelope: envelope, Binding: binding})
 		prev = digest
 	}
+	outcome, binding := frozenGatewayOutcome(t, decisions[2], ids[3], 4, prev)
+	envelope, _, err := sealReceipt(signer, outcome)
+	must(t, err)
+	stored = append(stored, SignedReceipt{Ref: ReceiptRef{ReceiptID: ids[3]}, Envelope: envelope, Binding: binding})
 	bundle, err := encodeReceiptBundle(stored)
 	must(t, err)
 	var document map[string]json.RawMessage

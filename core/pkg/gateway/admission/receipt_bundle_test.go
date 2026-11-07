@@ -28,7 +28,7 @@ func TestEncodeReceiptBundleRoundTrips(t *testing.T) {
 		t.Fatalf("bundle key_id %q, public_key_hex %q", parsed.KeyID, parsed.PublicKeyHex)
 	}
 	trust := receiptverify.TrustRoot{Keys: map[string]string{signer.GetKeyID(): signer.PublicKey()}}
-	if res := receiptverify.VerifyBundleWith(parsed, trust, receiptverify.Options{RequireGatewayBindings: true}); !res.Valid || res.BindingsChecked != 3 {
+	if res := receiptverify.VerifyBundleWith(parsed, trust, receiptverify.Options{RequireGatewayBindings: true}); !res.Valid || res.BindingsChecked != 4 {
 		t.Fatalf("encoded bundle does not verify: %+v", res)
 	}
 

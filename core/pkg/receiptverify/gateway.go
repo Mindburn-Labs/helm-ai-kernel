@@ -86,6 +86,77 @@ type GatewayBindingAuthorityVersion struct {
 	Version int64  `json:"version"`
 }
 
+// GatewayOutcomeBindingVersion names the closed document whose SHA-256 a
+// gateway outcome receipt (status OBSERVED, RECONCILED or SETTLED, empty
+// verdict) signs as output_hash. Its JSON schema is
+// protocols/json-schemas/gateway/outcome-binding.v1.schema.json.
+const GatewayOutcomeBindingVersion = "helm.gateway.outcome-binding.v1"
+
+// GatewayOutcomeBinding is helm.gateway.outcome-binding.v1: the outcome of an
+// admitted effect tied to its attempt, the permit it was dispatched under and
+// the authority versions of that permit, with the observation it rests on and
+// the settlement the ledger holds after the write. Every member is always
+// present; ModelCall is null for an effect that is not a model call.
+type GatewayOutcomeBinding struct {
+	BindingVersion    string                           `json:"binding_version"`
+	ChainID           string                           `json:"chain_id"`
+	Seq               uint64                           `json:"seq"`
+	TenantID          string                           `json:"tenant_id"`
+	WorkspaceID       string                           `json:"workspace_id"`
+	AttemptID         string                           `json:"attempt_id"`
+	AttemptVersion    int64                            `json:"attempt_version"`
+	FromState         string                           `json:"from_state"`
+	State             string                           `json:"state"`
+	ReasonCode        string                           `json:"reason_code"`
+	EffectType        string                           `json:"effect_type"`
+	RequestDigest     string                           `json:"request_digest"`
+	TargetDigest      string                           `json:"target_digest"`
+	ArgumentDigest    string                           `json:"argument_digest"`
+	PermitID          string                           `json:"permit_id"`
+	AuthorityVersions []GatewayBindingAuthorityVersion `json:"authority_versions"`
+	PolicyHash        string                           `json:"policy_hash"`
+	Outcome           string                           `json:"outcome"`
+	OutcomeBasis      string                           `json:"outcome_basis"`
+	SettledBy         string                           `json:"settled_by"`
+	Observation       GatewayOutcomeObservation        `json:"observation"`
+	Reservation       string                           `json:"reservation"`
+	ReadbackAbsent    bool                             `json:"readback_absent"`
+	Exposures         []GatewayOutcomeExposure         `json:"exposures"`
+	ModelCall         *GatewayOutcomeModelCall         `json:"model_call"`
+	SettledAt         string                           `json:"settled_at"`
+}
+
+// GatewayOutcomeObservation is the stored observation an outcome rests on.
+type GatewayOutcomeObservation struct {
+	ID             int64  `json:"id"`
+	Source         string `json:"source"`
+	TrustClass     string `json:"trust_class"`
+	Outcome        string `json:"outcome"`
+	EvidenceDigest string `json:"evidence_digest"`
+	ResultKind     string `json:"result_kind"`
+	ResultRef      string `json:"result_ref"`
+	ObservedAt     string `json:"observed_at"`
+}
+
+// GatewayOutcomeExposure is one exposure of the attempt after the outcome
+// write.
+type GatewayOutcomeExposure struct {
+	LimitID     string `json:"limit_id"`
+	BucketStart string `json:"bucket_start"`
+	Kind        string `json:"kind"`
+	Amount      string `json:"amount"`
+}
+
+// GatewayOutcomeModelCall is a model call's money row after its settlement.
+type GatewayOutcomeModelCall struct {
+	State           string `json:"state"`
+	HeldMicros      string `json:"held_micros"`
+	EstimatedMicros string `json:"estimated_micros"`
+	ConfirmedMicros string `json:"confirmed_micros"`
+	BillableMicros  string `json:"billable_micros"`
+	UsageDigest     string `json:"usage_digest"`
+}
+
 // GatewayChainID names the receipt chain of a (tenant, workspace): each part
 // is prefixed by its byte length, so no two pairs share an id whatever they
 // contain. A gateway receipt carries it as session_id.
@@ -140,6 +211,23 @@ func ParseGatewayBinding(raw []byte) (GatewayBinding, error) {
 	return binding, nil
 }
 
+// ParseGatewayOutcomeBinding parses binding bytes as the closed
+// helm.gateway.outcome-binding.v1 document, under the same rules as
+// ParseGatewayBinding.
+func ParseGatewayOutcomeBinding(raw []byte) (GatewayOutcomeBinding, error) {
+	var binding GatewayOutcomeBinding
+	if err := parseClosedBinding(raw, GatewayOutcomeBindingVersion, &binding); err != nil {
+		return GatewayOutcomeBinding{}, err
+	}
+	if binding.BindingVersion != GatewayOutcomeBindingVersion {
+		return GatewayOutcomeBinding{}, fmt.Errorf("binding_version %q is not %q", binding.BindingVersion, GatewayOutcomeBindingVersion)
+	}
+	if binding.AuthorityVersions == nil || binding.Exposures == nil {
+		return GatewayOutcomeBinding{}, errors.New("authority_versions and exposures must be arrays")
+	}
+	return binding, nil
+}
+
 // bindingRow is one signed receipt field and what its binding says it is.
 type bindingRow struct {
 	name, got, want string
@@ -174,6 +262,33 @@ func decisionRows(r *contracts.Receipt, b GatewayBinding) ([]bindingRow, error) 
 	}, nil
 }
 
+// outcomeRows are the receipt fields a helm.gateway.outcome-binding.v1
+// document must agree with. An outcome receipt carries no verdict: its status
+// is the outcome state the write left.
+func outcomeRows(r *contracts.Receipt, b GatewayOutcomeBinding) ([]bindingRow, error) {
+	if b.TenantID == "" || b.WorkspaceID == "" || b.AttemptID == "" || b.AttemptVersion < 1 || b.Seq < 1 || b.PermitID == "" {
+		return nil, errors.New("the binding names no tenant, workspace, attempt, version, sequence or permit")
+	}
+	switch b.State {
+	case "OBSERVED", "RECONCILED", "SETTLED":
+	default:
+		return nil, fmt.Errorf("state %q is not an outcome state", b.State)
+	}
+	return []bindingRow{
+		{"chain_id framing", b.ChainID, GatewayChainID(b.TenantID, b.WorkspaceID)},
+		{"session_id", r.SessionID, b.ChainID},
+		{"lamport_clock", strconv.FormatUint(r.LamportClock, 10), strconv.FormatUint(b.Seq, 10)},
+		{"decision_id", r.DecisionID, b.AttemptID + ":" + strconv.FormatInt(b.AttemptVersion, 10)},
+		{"effect_id", r.EffectID, b.AttemptID},
+		{"status", r.Status, b.State},
+		{"verdict", r.Verdict, ""},
+		{"reason_code", r.ReasonCode, b.ReasonCode},
+		{"policy_hash", r.PolicyHash, b.PolicyHash},
+		{"args_hash", r.ArgsHash, b.ArgumentDigest},
+		{"timestamp", receiptTime(r), b.SettledAt},
+	}, nil
+}
+
 // gatewayBindingMismatch parses a binding under the closed document its
 // binding_version names and returns the first signed receipt field it does
 // not agree with, or "" when every one agrees. A version this verifier does
@@ -198,8 +313,17 @@ func gatewayBindingMismatch(r *contracts.Receipt, raw []byte) (string, error) {
 		if rows, err = decisionRows(r, binding); err != nil {
 			return "", err
 		}
+	case GatewayOutcomeBindingVersion:
+		binding, err := ParseGatewayOutcomeBinding(raw)
+		if err != nil {
+			return "", err
+		}
+		if rows, err = outcomeRows(r, binding); err != nil {
+			return "", err
+		}
 	default:
-		return "", fmt.Errorf("binding_version %q is not one this verifier knows (%s)", *head.BindingVersion, GatewayBindingVersion)
+		return "", fmt.Errorf("binding_version %q is not one this verifier knows (%s, %s)",
+			*head.BindingVersion, GatewayBindingVersion, GatewayOutcomeBindingVersion)
 	}
 	for _, row := range rows {
 		if row.got != row.want {
@@ -279,7 +403,7 @@ func checkBindings(receipts []*contracts.Receipt, bindings map[string][]byte, re
 	res.BindingsChecked = len(bindings)
 	d := fmt.Sprintf("%d/%d receipt(s) carry a binding document whose SHA-256 is the signed output_hash, closed, canonical "+
 		"and in agreement with the receipt's chain, sequence, attempt, version, state, verdict, reason, policy and argument "+
-		"digests and timestamp; the binding states what the gateway recorded, which this verifier cannot see",
+		"digests and time; the binding states what the gateway recorded, which this verifier cannot see",
 		len(bindings), len(receipts))
 	if len(bindings) < len(receipts) {
 		d += fmt.Sprintf(" (%d receipt(s) carry no binding and their output_hash was not recomputed)", len(receipts)-len(bindings))

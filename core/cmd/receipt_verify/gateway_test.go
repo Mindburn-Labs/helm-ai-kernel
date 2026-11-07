@@ -31,7 +31,7 @@ func loadGatewayFixture(t *testing.T) gatewayFixture {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Receipts) != 3 || len(f.GatewayBindings) != 3 {
+	if len(f.Receipts) != 4 || len(f.GatewayBindings) != 4 {
 		t.Fatalf("gateway fixture: %d receipts, %d bindings", len(f.Receipts), len(f.GatewayBindings))
 	}
 	return f
@@ -81,11 +81,11 @@ func TestGatewayExportVerifiesWithItsBindings(t *testing.T) {
 		t.Fatalf("exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	res, status := bindingStatus(t, stdout)
-	if status != receiptverify.StatusPass || !res.Valid || res.BindingsChecked != 3 || res.GatewayReceipts != 3 {
+	if status != receiptverify.StatusPass || !res.Valid || res.BindingsChecked != 4 || res.GatewayReceipts != 4 {
 		t.Fatalf("result = %+v", res)
 	}
 	code, stdout, _ = execute(t, "--receipt", gatewayChainFixture, "--key", f.KeyID+"="+f.PublicKeyHex, "--require-bindings")
-	if code != 0 || !strings.Contains(stdout, "3 gateway receipt(s) with 3 binding(s) checked") {
+	if code != 0 || !strings.Contains(stdout, "4 gateway receipt(s) with 4 binding(s) checked") {
 		t.Fatalf("human output, exit %d:\n%s", code, stdout)
 	}
 }
@@ -105,7 +105,7 @@ func TestRequireBindingsFailsAGatewayReceiptWithoutOne(t *testing.T) {
 
 	code, stdout, _ := execute(t, "--receipt", path, "--key", key, "--json")
 	res, status := bindingStatus(t, stdout)
-	if code != 0 || status != receiptverify.StatusPass || res.GatewayReceipts != 3 || res.BindingsChecked != 2 {
+	if code != 0 || status != receiptverify.StatusPass || res.GatewayReceipts != 4 || res.BindingsChecked != 3 {
 		t.Fatalf("without --require-bindings: exit %d, %+v", code, res)
 	}
 	code, stdout, _ = execute(t, "--receipt", path, "--key", key, "--require-bindings", "--json")

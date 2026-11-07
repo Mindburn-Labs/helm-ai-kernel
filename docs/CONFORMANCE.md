@@ -13,7 +13,7 @@ result is never read as more than it covers.
 
 | Command | What it checks |
 | --- | --- |
-| `helm-ai-kernel conform --profile SMB` | Gate G0, build identity, the only gate left. Exits 1 when it fails. With `--signed` it writes the report, its digest and its signature; the release pipeline signs it with `make conformance-release-report`. |
+| `helm-ai-kernel conform --profile SMB` | Gate G0, build identity, the only gate left. Exits 1 when it fails. With `--signed` it writes the report, its digest and a `.sig` file: an Ed25519 signature only when `HELM_SIGNING_KEY_HEX` holds a 64-byte private key, otherwise an explicitly unsigned digest. No release workflow sets that key, so `make conformance-release-report` produces the digest form. |
 | `helm-ai-kernel conform --vector <file>` | One external failure vector file against its required assertions: receipt required, no connector dispatch, EvidencePack binding. It does not run the vector against a Kernel. |
 | `helm-ai-kernel conform managed-agents claude-self-hosted` | Redacted live evidence for a self-hosted Claude managed-agents worker, written as an evidence pack and report. |
 | `helm-ai-kernel conform vectors --json`, `helm-ai-kernel conform negative --json` | Nothing. They list the negative execution-boundary vectors (id, expected verdict, reason code, receipt and dispatch expectations). |

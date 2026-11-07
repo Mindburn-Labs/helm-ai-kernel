@@ -387,12 +387,15 @@ service EffectGatewayService {
   //   - A token that carries an episode claim (a worker token) is
   //     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
   //     holds the decisions of every episode in the workspace.
-  //   - from_seq is at least 1, to_seq at least from_seq, and the range holds
-  //     at most 256 receipts, or the call is invalid_argument
-  //     [reason_code: SCHEMA_VIOLATION]. Page with consecutive ranges; the
-  //     last receipt of one range is the predecessor of the next.
-  //   - A to_seq past the chain's head, or a workspace with no chain yet, is
-  //     not_found.
+  //   - from_seq is at least 1, to_seq at least from_seq, and the requested
+  //     range holds at most 256 receipts, or the call is invalid_argument
+  //     [reason_code: SCHEMA_VIOLATION].
+  //   - A to_seq past the chain's head reads up to the head: head_seq and the
+  //     receipts returned say exactly which range the bundle holds, and it
+  //     holds every receipt of that range or the call fails. A from_seq past
+  //     the head, or a workspace with no chain yet, is not_found. Page with
+  //     consecutive ranges; the last receipt of one range is the predecessor
+  //     of the next.
   rpc ExportReceiptChain(ExportReceiptChainRequest) returns (ExportReceiptChainResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -920,7 +923,8 @@ message ExportReceiptChainRequest {
   string workspace_id = 1;
   // The first sequence number to export, from 1.
   uint64 from_seq = 2;
-  // The last sequence number to export; at most 255 past from_seq.
+  // The last sequence number to export; at most 255 past from_seq. A value
+  // past the chain's head reads up to the head.
   uint64 to_seq = 3;
 }
 
@@ -930,7 +934,8 @@ message ExportReceiptChainResponse {
   string chain_id = 1;
   // The chain's newest sequence number when the segment was read.
   uint64 head_seq = 2;
-  // The exported receipts' references, in chain order.
+  // The exported receipts' references, in chain order: from_seq up to
+  // to_seq or head_seq, whichever is lower.
   repeated ReceiptRef receipts = 3;
   // The segment as the JSON document receipt_verify --receipt reads: a
   // receipts array of the stored envelopes, in chain order, gateway_bindings

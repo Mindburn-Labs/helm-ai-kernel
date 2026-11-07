@@ -430,12 +430,15 @@ type EffectGatewayServiceClient interface {
 	//   - A token that carries an episode claim (a worker token) is
 	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
 	//     holds the decisions of every episode in the workspace.
-	//   - from_seq is at least 1, to_seq at least from_seq, and the range holds
-	//     at most 256 receipts, or the call is invalid_argument
-	//     [reason_code: SCHEMA_VIOLATION]. Page with consecutive ranges; the
-	//     last receipt of one range is the predecessor of the next.
-	//   - A to_seq past the chain's head, or a workspace with no chain yet, is
-	//     not_found.
+	//   - from_seq is at least 1, to_seq at least from_seq, and the requested
+	//     range holds at most 256 receipts, or the call is invalid_argument
+	//     [reason_code: SCHEMA_VIOLATION].
+	//   - A to_seq past the chain's head reads up to the head: head_seq and the
+	//     receipts returned say exactly which range the bundle holds, and it
+	//     holds every receipt of that range or the call fails. A from_seq past
+	//     the head, or a workspace with no chain yet, is not_found. Page with
+	//     consecutive ranges; the last receipt of one range is the predecessor
+	//     of the next.
 	ExportReceiptChain(context.Context, *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error)
 }
 
@@ -958,12 +961,15 @@ type EffectGatewayServiceHandler interface {
 	//   - A token that carries an episode claim (a worker token) is
 	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
 	//     holds the decisions of every episode in the workspace.
-	//   - from_seq is at least 1, to_seq at least from_seq, and the range holds
-	//     at most 256 receipts, or the call is invalid_argument
-	//     [reason_code: SCHEMA_VIOLATION]. Page with consecutive ranges; the
-	//     last receipt of one range is the predecessor of the next.
-	//   - A to_seq past the chain's head, or a workspace with no chain yet, is
-	//     not_found.
+	//   - from_seq is at least 1, to_seq at least from_seq, and the requested
+	//     range holds at most 256 receipts, or the call is invalid_argument
+	//     [reason_code: SCHEMA_VIOLATION].
+	//   - A to_seq past the chain's head reads up to the head: head_seq and the
+	//     receipts returned say exactly which range the bundle holds, and it
+	//     holds every receipt of that range or the call fails. A from_seq past
+	//     the head, or a workspace with no chain yet, is not_found. Page with
+	//     consecutive ranges; the last receipt of one range is the predecessor
+	//     of the next.
 	ExportReceiptChain(context.Context, *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error)
 }
 

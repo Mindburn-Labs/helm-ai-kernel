@@ -3731,7 +3731,8 @@ type ExportReceiptChainRequest struct {
 	WorkspaceId string `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
 	// The first sequence number to export, from 1.
 	FromSeq uint64 `protobuf:"varint,2,opt,name=from_seq,json=fromSeq,proto3" json:"from_seq,omitempty"`
-	// The last sequence number to export; at most 255 past from_seq.
+	// The last sequence number to export; at most 255 past from_seq. A value
+	// past the chain's head reads up to the head.
 	ToSeq         uint64 `protobuf:"varint,3,opt,name=to_seq,json=toSeq,proto3" json:"to_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3795,7 +3796,8 @@ type ExportReceiptChainResponse struct {
 	ChainId string `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
 	// The chain's newest sequence number when the segment was read.
 	HeadSeq uint64 `protobuf:"varint,2,opt,name=head_seq,json=headSeq,proto3" json:"head_seq,omitempty"`
-	// The exported receipts' references, in chain order.
+	// The exported receipts' references, in chain order: from_seq up to
+	// to_seq or head_seq, whichever is lower.
 	Receipts []*ReceiptRef `protobuf:"bytes,3,rep,name=receipts,proto3" json:"receipts,omitempty"`
 	// The segment as the JSON document receipt_verify --receipt reads: a
 	// receipts array of the stored envelopes, in chain order, gateway_bindings

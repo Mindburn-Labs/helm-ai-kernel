@@ -9,9 +9,8 @@
 # minus 0.5). Raise it as tests land; never lower it. The gate fails once such a
 # package reaches the default, so its number must then be deleted.
 #
-# Packages: the eight TCB packages in docs/KERNEL_SCOPE.md (receipts/ has its
-# code in receipts/policies), the offline verifiers, and the packages the old
-# unthresholded TCB profile printed.
+# Packages: the TCB packages in docs/KERNEL_SCOPE.md, the offline verifiers,
+# and the packages the old unthresholded TCB profile printed.
 
 default 85
 
@@ -20,7 +19,6 @@ crypto 82.0
 guardian
 proofgraph 81.4
 runtime/sandbox 75.6
-receipts/policies 67.0
 verifier 83.6
 receiptverify
 evidencepack 78.8

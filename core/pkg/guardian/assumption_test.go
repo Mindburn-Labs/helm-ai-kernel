@@ -2,7 +2,6 @@ package guardian
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -111,42 +110,6 @@ func TestNoAssumptionsPassesThrough(t *testing.T) {
 	}
 	if decision.ReasonCode == string(contracts.ReasonAssumptionStale) {
 		t.Error("an action declaring no assumptions was denied as stale")
-	}
-}
-
-type observer struct {
-	hash string
-	err  error
-}
-
-func (o observer) Observe(context.Context, contracts.ObservedAssumption) (string, error) {
-	return o.hash, o.err
-}
-
-func TestObservedDriftWithinTTLDenies(t *testing.T) {
-	guard := assumptionGuardian(t, WithAssumptionObserver(observer{hash: "sha256:" + strings.Repeat("c", 64)}))
-
-	decision, err := guard.EvaluateDecision(context.Background(), requestWith(freshAssumption()))
-	if err != nil {
-		t.Fatalf("evaluating: %v", err)
-	}
-	if decision.ReasonCode != string(contracts.ReasonAssumptionStale) {
-		t.Errorf("reason code = %q, want %q — the world moved inside the validity window",
-			decision.ReasonCode, contracts.ReasonAssumptionStale)
-	}
-}
-
-// A gate that cannot check cannot vouch.
-func TestUnreachableObserverDenies(t *testing.T) {
-	guard := assumptionGuardian(t, WithAssumptionObserver(observer{err: fmt.Errorf("target unreachable")}))
-
-	decision, err := guard.EvaluateDecision(context.Background(), requestWith(freshAssumption()))
-	if err != nil {
-		t.Fatalf("evaluating: %v", err)
-	}
-	if decision.ReasonCode != string(contracts.ReasonAssumptionStale) {
-		t.Errorf("reason code = %q, want %q — an unconfirmable assumption must fail closed",
-			decision.ReasonCode, contracts.ReasonAssumptionStale)
 	}
 }
 

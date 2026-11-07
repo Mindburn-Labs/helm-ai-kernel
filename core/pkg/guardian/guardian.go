@@ -16,8 +16,6 @@ import (
 	"time"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
@@ -34,21 +32,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-// BudgetGate enforces budget constraints on governed execution.
-// This interface replaces the enterprise finance.Tracker with a minimal
-// policy-scoped budget check suitable for the canonical standard.
-type BudgetGate interface {
-	// Check returns true if the cost is within budget.
-	Check(budgetID string, cost BudgetCost) (bool, error)
-	// Consume records consumption against the budget.
-	Consume(budgetID string, cost BudgetCost) error
-}
-
-// BudgetCost represents the cost of a governed operation.
-type BudgetCost struct {
-	Requests int64 `json:"requests"`
-}
 
 // Clock provides authority time for the Guardian.
 // Per KERNEL_TCB §3: the kernel MUST NOT use wall-clock time.Now().
@@ -72,12 +55,6 @@ func (wallClock) Now() time.Time { return time.Now() }
 // GuardianOption configures optional dependencies for the Guardian.
 type GuardianOption func(*Guardian)
 
-// WithBudgetTracker injects a budget enforcement gate.
-func WithBudgetTracker(t BudgetGate) GuardianOption { return func(g *Guardian) { g.tracker = t } }
-
-// WithAuditLog injects an audit logger.
-func WithAuditLog(l *AuditLog) GuardianOption { return func(g *Guardian) { g.auditLog = l } }
-
 // WithTemporalGuardian injects a temporal replay protector.
 func WithTemporalGuardian(tg *TemporalGuardian) GuardianOption {
 	return func(g *Guardian) { g.temporal = tg }
@@ -98,11 +75,6 @@ func WithPolicySnapshots(store policyreconcile.PolicySnapshotStore, scope policy
 	}
 }
 
-// WithComplianceChecker injects a compliance verifier phase.
-func WithComplianceChecker(c ComplianceChecker) GuardianOption {
-	return func(g *Guardian) { g.complianceChecker = c }
-}
-
 // WithFreezeController injects the global freeze kill-switch.
 func WithFreezeController(fc *kernel.FreezeController) GuardianOption {
 	return func(g *Guardian) { g.freezeCtrl = fc }
@@ -113,11 +85,6 @@ func WithFreezeController(fc *kernel.FreezeController) GuardianOption {
 // unscoped request is denied rather than allowed to bypass a scoped fence.
 func WithScopedStopReader(reader kernel.ScopedStopReader) GuardianOption {
 	return func(g *Guardian) { g.scopedStopReader = reader }
-}
-
-// WithAgentKillSwitch injects the per-agent kill switch.
-func WithAgentKillSwitch(ks *kernel.AgentKillSwitch) GuardianOption {
-	return func(g *Guardian) { g.agentKillSwitch = ks }
 }
 
 // WithContextGuard injects the environment mismatch detector.
@@ -164,18 +131,8 @@ func WithBehavioralTrustScorer(s *trust.BehavioralTrustScorer) GuardianOption {
 	return func(g *Guardian) { g.behavioralScorer = s }
 }
 
-// WithPrivilegeResolver injects the privilege tier resolver.
-func WithPrivilegeResolver(r PrivilegeResolver) GuardianOption {
-	return func(g *Guardian) { g.privilegeResolver = r }
-}
-
 // WithClock injects a deterministic or authority clock.
 func WithClock(c Clock) GuardianOption { return func(g *Guardian) { g.clock = c } }
-
-// WithSessionRiskMemory injects the deterministic session trajectory gate.
-func WithSessionRiskMemory(srm *SessionRiskMemory) GuardianOption {
-	return func(g *Guardian) { g.sessionRiskMemory = srm }
-}
 
 // WithZeroIDInterceptor injects a custom ZeroIDInterceptor.
 func WithZeroIDInterceptor(z *ZeroIDInterceptor) GuardianOption {
@@ -186,13 +143,6 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 	return func(g *Guardian) { g.safeDepController = controller }
 }
 
-// WithAssumptionObserver injects the re-reader for declared assumptions.
-// Without it the freshness gate still enforces each observation's validity
-// window; with it, that window becomes a ceiling on a check against live state.
-func WithAssumptionObserver(o AssumptionObserver) GuardianOption {
-	return func(g *Guardian) { g.assumptionObserver = o }
-}
-
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
 	signer                        crypto.Signer
@@ -200,21 +150,14 @@ type Guardian struct {
 	policies                      *authoritySnapshots // Compiled authority snapshots, one per policy content
 	registry                      *pkg_artifact.Registry
 	clock                         Clock
-	tracker                       BudgetGate
-	auditLog                      *AuditLog
 	temporal                      *TemporalGuardian
 	envFprint                     string                  // Boot-sequence fingerprint for DecisionRecords
 	gateRosterHash                string                  // Digest of the injected gate set; constant after construction
 	pdp                           pdp.PolicyDecisionPoint // Optional pluggable policy backend
 	snapshotStore                 policyreconcile.PolicySnapshotStore
 	snapshotScope                 policyreconcile.PolicyScope
-	complianceChecker             ComplianceChecker            // Optional compliance pre-check
-	capabilityRegistry            *capability.Registry         // Hash-pinned capability authority
-	capabilityVerifier            *capability.TokenVerifier    // Task-scoped capability token gate
-	rollbackPlans                 capability.RollbackPlanStore // Verified rollback-plan gate
 	freezeCtrl                    *kernel.FreezeController     // Global kill-switch
 	scopedStopReader              kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch               *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
 	contextGuard                  *kernel.ContextGuard         // Environment mismatch detection
 	isolationChecker              *identity.IsolationChecker   // Agent credential reuse detection
 	egressChecker                 *firewall.EgressChecker      // Network egress enforcement
@@ -222,12 +165,9 @@ type Guardian struct {
 	semanticEscalationThresholdBP int                          // Optional ESCALATE-only semantic policy
 	delegationStore               identity.DelegationStore     // Delegation session store (§Gate 5)
 	behavioralScorer              *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver             PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory             *SessionRiskMemory           // Deterministic trajectory authorization gate
 	otel                          *OTelInstrumentation         // Optional OTel tracing & metrics
 	zeroidInterceptor             *ZeroIDInterceptor           // ZeroID identity validator
 	safeDepController             *safedep.Controller          // Safe Deprecation emergency release plane
-	assumptionObserver            AssumptionObserver           // Re-reads state a declared assumption depends on
 	boundaryChain                 []BoundaryInterceptor        // Cached request interceptors
 }
 
@@ -237,7 +177,7 @@ func (g *Guardian) ZeroID() *ZeroIDInterceptor {
 }
 
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected
-// using GuardianOption functions (e.g., WithBudgetTracker).
+// using GuardianOption functions (e.g., WithFreezeController).
 func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, opts ...GuardianOption) *Guardian {
 	if ruleGraph == nil {
 		ruleGraph = prg.NewGraph()
@@ -322,18 +262,6 @@ func newDecisionID() string {
 	return randomID("dec-")
 }
 
-// SetBudgetTracker configures the budget enforcement gate.
-// Deprecated: Use WithBudgetTracker GuardianOption in NewGuardian instead.
-func (g *Guardian) SetBudgetTracker(t BudgetGate) {
-	g.tracker = t
-}
-
-// SetAuditLog configures the persistent audit sink.
-// Deprecated: Use WithAuditLog GuardianOption in NewGuardian instead.
-func (g *Guardian) SetAuditLog(l *AuditLog) {
-	g.auditLog = l
-}
-
 // SetTemporalGuardian provides non-repudiation replay protection.
 // Deprecated: Use WithTemporalGuardian GuardianOption in NewGuardian instead.
 func (g *Guardian) SetTemporalGuardian(tg *TemporalGuardian) {
@@ -357,12 +285,6 @@ func (g *Guardian) SetPolicyDecisionPoint(p pdp.PolicyDecisionPoint) {
 func (g *Guardian) SetPolicySnapshots(store policyreconcile.PolicySnapshotStore, scope policyreconcile.PolicyScope) {
 	g.snapshotStore = store
 	g.snapshotScope = scope.Normalize()
-}
-
-// SetComplianceChecker sets a compliance verifier.
-// Deprecated: Use WithComplianceChecker GuardianOption in NewGuardian instead.
-func (g *Guardian) SetComplianceChecker(c ComplianceChecker) {
-	g.complianceChecker = c
 }
 
 // SetFreezeController injects the global kill-switch. Required for gate 2.
@@ -400,12 +322,6 @@ func (g *Guardian) SetThreatScanner(ts *threatscan.Scanner) {
 // Deprecated: Use WithDelegationStore GuardianOption in NewGuardian instead.
 func (g *Guardian) SetDelegationStore(ds identity.DelegationStore) {
 	g.delegationStore = ds
-}
-
-// SetSessionRiskMemory injects the deterministic session trajectory gate.
-// Deprecated: Use WithSessionRiskMemory GuardianOption in NewGuardian instead.
-func (g *Guardian) SetSessionRiskMemory(srm *SessionRiskMemory) {
-	g.sessionRiskMemory = srm
 }
 
 func (g *Guardian) SetSafeDepController(controller *safedep.Controller) {
@@ -483,30 +399,6 @@ func (g *Guardian) signDecisionWithPolicy(ctx context.Context, decision *contrac
 		// defaulting to recording it.
 	}
 
-	// 3.5 Budget Check (Finance Gate).
-	// Only a fast pre-policy ceiling check runs here; the actual draw-down
-	// (Consume) is deferred until after PRG passes so a request that policy
-	// later denies never consumes budget.
-	if g.tracker != nil {
-		if budgetID, ok := effect.Params["budget_id"].(string); ok && budgetID != "" {
-			cost := BudgetCost{Requests: 1}
-
-			allowed, err := g.tracker.Check(budgetID, cost)
-			if err != nil {
-				decision.Verdict = string(contracts.VerdictDeny)
-				decision.ReasonCode = string(contracts.ReasonBudgetError)
-				decision.Reason = fmt.Sprintf("Budget Error: %v", err)
-				return g.signer.SignDecision(decision)
-			}
-			if !allowed {
-				decision.Verdict = string(contracts.VerdictDeny)
-				decision.ReasonCode = string(contracts.ReasonBudgetExceeded)
-				decision.Reason = string(contracts.ReasonBudgetExceeded)
-				return g.signer.SignDecision(decision)
-			}
-		}
-	}
-
 	// AC-REG-10: EnvelopeCheck precedes every effect dispatch
 	// Verify that the effect is properly enveloped (e.g. valid structure, allowed type)
 	if err := g.checkEnvelope(effect); err != nil {
@@ -567,22 +459,6 @@ func (g *Guardian) signDecisionWithPolicy(ctx context.Context, decision *contrac
 			decision.ReasonCode = string(contracts.ReasonPRGEvalError)
 			decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
 			return g.signer.SignDecision(decision)
-		}
-	}
-
-	// 4.5 Budget draw-down. The action has passed policy, so consume budget
-	// now. Consume re-validates the ceiling and fails closed: if it cannot
-	// record the draw (e.g. the budget was exhausted between Check and here,
-	// or the backend is unavailable) the effect is denied rather than allowed
-	// on an unrecorded consumption.
-	if g.tracker != nil {
-		if budgetID, ok := effect.Params["budget_id"].(string); ok && budgetID != "" {
-			if consumeErr := g.tracker.Consume(budgetID, BudgetCost{Requests: 1}); consumeErr != nil {
-				decision.Verdict = string(contracts.VerdictDeny)
-				decision.ReasonCode = string(contracts.ReasonBudgetError)
-				decision.Reason = fmt.Sprintf("Budget consume failed: %v", consumeErr)
-				return g.signer.SignDecision(decision)
-			}
 		}
 	}
 
@@ -862,6 +738,11 @@ type SessionAction struct {
 // It constructs a DecisionRecord and returns it.
 // When a PDP is configured, policy evaluation is delegated to it and the result
 // is bound into the DecisionRecord for receipt chain verification.
+// contextKeyCapabilityToken is the request-context key a transport may use to
+// carry a capability token. EvaluateDecision strips it before any decision is
+// built.
+const contextKeyCapabilityToken = "capability_token"
+
 func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (decision *contracts.DecisionRecord, err error) {
 	decisionStarted := time.Time{}
 	if g.clock != nil {
@@ -888,6 +769,11 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 	ctx = decisionCtx
 	ctx, span := otel.Tracer("helm.kernel").Start(ctx, "Guardian.EvaluateDecision")
 	defer span.End()
+	// A capability token is a bearer credential: it never enters a
+	// decision's InputContext, on any path.
+	if req.Context != nil {
+		delete(req.Context, contextKeyCapabilityToken)
+	}
 
 	span.SetAttributes(
 		attribute.String("action", req.Action),
@@ -978,12 +864,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		}
 	}
 
-	if decision, capErr := g.resolveCapabilityGate(span, &req, activeSnapshot, policyVersion); capErr != nil {
-		return nil, capErr
-	} else if decision != nil {
-		return decision, nil
-	}
-
 	// ── Session history enrichment (arXiv 2603.16586: path-aware policies) ──
 	if len(req.SessionHistory) > 0 {
 		if req.Context == nil {
@@ -1001,51 +881,12 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		req.Context["session_deny_count"] = denyCount
 	}
 
-	var sessionRiskSnapshot *SessionRiskSnapshot
-	if g.sessionRiskMemory != nil {
-		snapshot := g.sessionRiskMemory.Evaluate(sessionRiskSessionID(req), req.SessionHistory, req)
-		sessionRiskSnapshot = &snapshot
-		if req.Context == nil {
-			req.Context = make(map[string]interface{})
-		}
-		attachSessionRiskContext(req.Context, snapshot)
-		span.SetAttributes(
-			attribute.Float64("session_risk.score", snapshot.TrajectoryRiskScore),
-			attribute.String("session_risk.centroid_hash", snapshot.SessionCentroidHash),
-			attribute.Int("session_risk.window", snapshot.RiskAccumulationWindow),
-		)
-		if g.sessionRiskMemory.ShouldDeny(snapshot) {
-			now := g.clock.Now()
-			decision := &contracts.DecisionRecord{
-				ID:                     newDecisionID(),
-				Timestamp:              now,
-				Verdict:                string(contracts.VerdictDeny),
-				Reason:                 fmt.Sprintf("%s: trajectory risk %.4f over %d actions", contracts.ReasonSessionRiskDeny, snapshot.TrajectoryRiskScore, snapshot.RiskAccumulationWindow),
-				ReasonCode:             string(contracts.ReasonSessionRiskDeny),
-				InputContext:           req.Context,
-				TrajectoryRiskScore:    snapshot.TrajectoryRiskScore,
-				SessionCentroidHash:    snapshot.SessionCentroidHash,
-				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
-			}
-			if signErr := g.signDecisionForRequest(decision, req, activeSnapshot, policyVersion); signErr != nil {
-				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
-			}
-			if g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = g.auditLog.Append("guardian", "SESSION_RISK_DENY", decision.ID, string(decisionBytes))
-			}
-			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "session risk memory denied")
-			return decision, nil
-		}
-	}
-
 	evalCtx := &EvaluationContext{
-		Request:             req,
-		ActiveSnapshot:      activeSnapshot,
-		PolicyVersion:       policyVersion,
-		ActivePolicy:        activePolicy,
-		ActivePDP:           activePDP,
-		SessionRiskSnapshot: sessionRiskSnapshot,
+		Request:        req,
+		ActiveSnapshot: activeSnapshot,
+		PolicyVersion:  policyVersion,
+		ActivePolicy:   activePolicy,
+		ActivePDP:      activePDP,
 	}
 
 	finalHandler := func(ctx context.Context, eCtx *EvaluationContext) (*contracts.DecisionRecord, error) {
@@ -1063,51 +904,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			span.SetAttributes(
 				attribute.Float64("behavioral_trust.score", trustScore.Normalized()),
 				attribute.String("behavioral_trust.tier", string(trustScore.Tier)),
-			)
-		}
-
-		// ── Privilege tier enforcement ──
-		if g.privilegeResolver != nil {
-			assignedTier, tierErr := g.privilegeResolver.ResolveTier(ctx, req.Principal)
-			if tierErr != nil {
-				slog.Warn("[guardian] privilege tier resolution failed", "principal", req.Principal, "error", tierErr)
-				assignedTier = TierRestricted
-			}
-
-			effectiveTier := assignedTier
-			if g.behavioralScorer != nil {
-				trustScore := g.behavioralScorer.GetScore(req.Principal)
-				effectiveTier = EffectiveTier(assignedTier, trustScore.Tier)
-			}
-
-			requiredTier := RequiredTierForEffect(req.Action)
-			if effectiveTier < requiredTier {
-				now := g.clock.Now()
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					ReasonCode: string(contracts.ReasonInsufficientPrivilege),
-					Reason:     fmt.Sprintf("INSUFFICIENT_PRIVILEGE: agent tier %s < required %s for %s", effectiveTier, requiredTier, req.Action),
-				}
-				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
-					return nil, fmt.Errorf("failed to sign privilege-deny decision: %w", signErr)
-				}
-				span.SetAttributes(
-					attribute.String("privilege.assigned", assignedTier.String()),
-					attribute.String("privilege.effective", effectiveTier.String()),
-					attribute.String("privilege.required", requiredTier.String()),
-				)
-				return decision, nil
-			}
-
-			if req.Context == nil {
-				req.Context = make(map[string]interface{})
-			}
-			req.Context["privilege_tier"] = effectiveTier.String()
-
-			span.SetAttributes(
-				attribute.String("privilege.effective", effectiveTier.String()),
 			)
 		}
 
@@ -1149,11 +945,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			PolicyVersion:  eCtx.PolicyVersion,
 		}
 		bindRuntimePolicyDecision(decision, eCtx.ActiveSnapshot, eCtx.PolicyVersion)
-		if eCtx.SessionRiskSnapshot != nil {
-			decision.TrajectoryRiskScore = eCtx.SessionRiskSnapshot.TrajectoryRiskScore
-			decision.SessionCentroidHash = eCtx.SessionRiskSnapshot.SessionCentroidHash
-			decision.RiskAccumulationWindow = eCtx.SessionRiskSnapshot.RiskAccumulationWindow
-		}
 
 		if eCtx.ThreatScanResult != nil && (eCtx.ThreatScanResult.FindingCount > 0 || eCtx.ThreatScanResult.Semantic != nil) {
 			if decision.InputContext == nil {
@@ -1175,30 +966,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			decision.PolicyDecisionHash = eCtx.PDPDecisionHash
 		}
 
-		// 3.5: Compliance check
-		if g.complianceChecker != nil {
-			compResult, compErr := g.complianceChecker.CheckCompliance(ctx, req.Principal, req.Action, req.Context)
-			if compErr != nil {
-				decision.Verdict = string(contracts.VerdictDeny)
-				decision.ReasonCode = "COMPLIANCE_ERROR"
-				decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
-				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
-					return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
-				}
-				return decision, nil
-			}
-			if !compResult.Compliant {
-				decision.Verdict = string(contracts.VerdictDeny)
-				decision.ReasonCode = "COMPLIANCE_VIOLATION"
-				decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
-				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
-					return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
-				}
-				g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
-				return decision, nil
-			}
-		}
-
 		if err := bindDecisionRequest(decision, req); err != nil {
 			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
 		}
@@ -1211,13 +978,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			g.recordBehavioralEvent(req.Principal, trust.EventPolicyComply, "decision allowed")
 		} else if decision.Verdict == string(contracts.VerdictDeny) {
 			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "decision denied: "+decision.ReasonCode)
-		}
-
-		if g.auditLog != nil {
-			decisionBytes, _ := canonicalize.JCS(decision)
-			if _, logErr := g.auditLog.Append("guardian", "DECISION_MADE", decision.ID, string(decisionBytes)); logErr != nil {
-				return nil, fmt.Errorf("audit failure for decision %s: %w", decision.ID, logErr)
-			}
 		}
 
 		return decision, nil
@@ -1321,24 +1081,6 @@ func taintedEgressDenied(requestCtx context.Context, values map[string]interface
 		return false
 	}
 	return contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)
-}
-
-func sessionRiskSessionID(req DecisionRequest) string {
-	if req.Context != nil {
-		if sid, ok := req.Context["session_id"].(string); ok && strings.TrimSpace(sid) != "" {
-			return sid
-		}
-		if sid, ok := req.Context["delegation_session_id"].(string); ok && strings.TrimSpace(sid) != "" {
-			return sid
-		}
-	}
-	return req.Principal
-}
-
-func attachSessionRiskContext(ctx map[string]interface{}, snapshot SessionRiskSnapshot) {
-	ctx["trajectory_risk_score"] = snapshot.TrajectoryRiskScore
-	ctx["session_centroid_hash"] = snapshot.SessionCentroidHash
-	ctx["risk_accumulation_window"] = snapshot.RiskAccumulationWindow
 }
 
 // maxCompiledSnapshots bounds authoritySnapshots. A kernel holds one policy
@@ -1495,11 +1237,6 @@ func (g *Guardian) EvaluateOutput(ctx context.Context, decisionID string, output
 			attribute.Int("finding_count", scanResult.FindingCount),
 			attribute.String("max_severity", string(scanResult.MaxSeverity)),
 		)
-
-		if g.auditLog != nil {
-			auditData, _ := canonicalize.JCS(result)
-			_, _ = g.auditLog.Append("guardian", "OUTPUT_QUARANTINE", decisionID, string(auditData))
-		}
 	}
 
 	return result, nil

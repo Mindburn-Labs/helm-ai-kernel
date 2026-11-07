@@ -1,12 +1,12 @@
 # Governed Capability Registry (R1)
 
-**Status:** implemented and tested as a Guardian option (`WithCapabilityRegistry`)
-that no shipped binary installs, so nothing resolves capabilities in `serve`,
-`proxy` or `mcp serve` today (`controls.yaml` CTL-042). As an option: strict
-manifest loading, a content-addressed registry, and Guardian resolution bind
-registered capability facts before downstream policy evaluation. A durable registry
-service, certification lifecycle API, import adapters, and protocol-dispatch
-integration remain follow-up work.
+**Status:** retired (helm-tracker#266). The Guardian option
+(`WithCapabilityRegistry`) and the `core/pkg/capability` package behind it (strict
+manifest loading, a content-addressed registry, and Guardian resolution before
+policy evaluation) were deleted: no shipped binary installed them, so nothing
+ever resolved capabilities in `serve`, `proxy` or `mcp serve` (`controls.yaml`
+CTL-042, retired). The schemas in `protocols/json-schemas/capability/` remain as
+the design record; this page describes the design, not running code.
 **Origin:** Step AOS alignment workstream (2026-07-24), research:
 `Mindburn-Labs/docs:research/step-aos-2026-07/STEP-AOS-DEEP-RESEARCH.md`.
 

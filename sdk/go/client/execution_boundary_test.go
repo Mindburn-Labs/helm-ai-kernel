@@ -40,9 +40,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	mux.HandleFunc("/api/v1/mcp/registry", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, MCPQuarantineRecord{ServerID: "mcp1", Risk: "high", State: "quarantined"})
 	})
-	mux.HandleFunc("/api/v1/mcp/registry/approve", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, MCPQuarantineRecord{ServerID: "mcp1", Risk: "high", State: "approved"})
-	})
 	mux.HandleFunc("/api/v1/sandbox/grants/inspect", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("runtime") == "" {
 			writeJSON(t, w, []SandboxBackendProfile{{Name: "wazero-deny-default", Runtime: "wazero"}})
@@ -89,14 +86,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	record, err := client.DiscoverMCPServer(MCPRegistryDiscoverRequest{ServerID: "mcp1", Risk: "high"})
 	if err != nil || record.State != "quarantined" {
 		t.Fatalf("discover = %#v, err = %v", record, err)
-	}
-	approved, err := client.ApproveMCPServer(MCPRegistryApprovalRequest{
-		ServerID:          "mcp1",
-		ApproverID:        "user1",
-		ApprovalReceiptID: "rcpt1",
-	})
-	if err != nil || approved.State != "approved" {
-		t.Fatalf("approve = %#v, err = %v", approved, err)
 	}
 	profiles, err := client.ListSandboxBackendProfiles()
 	if err != nil || profiles[0].Runtime != "wazero" {
@@ -227,7 +216,6 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.VerifyPublicDemoReceipt(SurfaceRecord{"receipt_id": "r1"}, "hash")
 			return err
 		}},
-		{"approve intent", "POST /api/v1/kernel/approve", func() error { _, err := client.ApproveIntent(ApprovalRequest{}); return err }},
 		{"list sessions", "GET /api/v1/proofgraph/sessions?limit=7&offset=3", func() error { _, err := client.ListSessions(7, 3); return err }},
 		{"get receipts", "GET /api/v1/proofgraph/sessions/session%2Fone/receipts", func() error { _, err := client.GetReceipts("session/one"); return err }},
 		{"get receipt", "GET /api/v1/proofgraph/receipts/receipt%23one", func() error { _, err := client.GetReceipt("receipt#one"); return err }},
@@ -272,15 +260,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.DiscoverMCPServer(MCPRegistryDiscoverRequest{ServerID: "srv"})
 			return err
 		}},
-		{"approve mcp", "POST /api/v1/mcp/registry/approve", func() error {
-			_, err := client.ApproveMCPServer(MCPRegistryApprovalRequest{ServerID: "srv", ApproverID: "me", ApprovalReceiptID: "receipt"})
-			return err
-		}},
 		{"get mcp record", "GET /api/v1/mcp/registry/srv%2Fa%20b", func() error { _, err := client.GetMCPRegistryRecord("srv/a b"); return err }},
-		{"approve mcp record", "POST /api/v1/mcp/registry/srv%2Fa%20b/approve", func() error {
-			_, err := client.ApproveMCPRegistryRecord("srv/a b", MCPRegistryApprovalRequest{ServerID: "srv", ApproverID: "me", ApprovalReceiptID: "receipt"})
-			return err
-		}},
 		{"revoke mcp record", "POST /api/v1/mcp/registry/srv%2Fa%20b/revoke", func() error { _, err := client.RevokeMCPRegistryRecord("srv/a b", "stale"); return err }},
 		{"scan mcp", "POST /api/v1/mcp/scan", func() error { _, err := client.ScanMCPServer(MCPScanRequest{"server_id": "srv"}); return err }},
 		{"list mcp auth profiles", "GET /api/v1/mcp/auth-profiles", func() error { _, err := client.ListMCPAuthProfiles(); return err }},

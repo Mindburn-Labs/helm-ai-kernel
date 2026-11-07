@@ -338,12 +338,12 @@
     {
       "id": "framework-agent-adapters",
       "category": "framework",
-      "surface": "LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, and LlamaIndex TypeScript adapter helpers",
+      "surface": "TypeScript NativeGatewayClient for framework tool calls through the effect gateway",
       "status": "supported",
       "public_doc_slug": "compatibility",
       "source_paths": [
-        "sdk/ts/src/adapters/agent-frameworks.ts",
-        "sdk/ts/src/adapters/agent-frameworks.test.ts",
+        "sdk/ts/src/adapters/native-gateway.ts",
+        "sdk/ts/src/adapters/native-gateway.test.ts",
         "docs/COMPATIBILITY.md"
       ],
       "example_paths": [
@@ -353,11 +353,7 @@
         "make test-sdk-ts"
       ],
       "claim_terms": [
-        "LangGraph",
-        "CrewAI",
-        "OpenAI Agents SDK",
-        "PydanticAI",
-        "LlamaIndex"
+        "NativeGatewayClient"
       ]
     },
     {

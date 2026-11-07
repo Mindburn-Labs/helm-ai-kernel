@@ -10,7 +10,6 @@ from helm_sdk.client import (
     EvidenceEnvelopeExportRequest,
     HelmApiError,
     HelmClient,
-    MCPRegistryApprovalRequest,
     MCPRegistryDiscoverRequest,
     _json_body,
 )
@@ -235,15 +234,7 @@ def test_check_handles_non_object_error_body() -> None:
             "POST",
             "/api/v1/mcp/registry",
         ),
-        (
-            "approve_mcp_server",
-            lambda c: c.approve_mcp_server(MCPRegistryApprovalRequest("srv", "operator", "receipt")),
-            MCP_RECORD,
-            "POST",
-            "/api/v1/mcp/registry/approve",
-        ),
         ("get_mcp_registry_record", lambda c: c.get_mcp_registry_record("srv"), MCP_RECORD, "GET", "/api/v1/mcp/registry/srv"),
-        ("approve_mcp_registry_record", lambda c: c.approve_mcp_registry_record("srv", {"ok": True}), MCP_RECORD, "POST", "/api/v1/mcp/registry/srv/approve"),
         ("revoke_mcp_registry_record_none", lambda c: c.revoke_mcp_registry_record("srv"), MCP_RECORD, "POST", "/api/v1/mcp/registry/srv/revoke"),
         ("revoke_mcp_registry_record_reason", lambda c: c.revoke_mcp_registry_record("srv", "expired"), MCP_RECORD, "POST", "/api/v1/mcp/registry/srv/revoke"),
         ("scan_mcp_server", lambda c: c.scan_mcp_server({"server_id": "srv"}), {"ok": True}, "POST", "/api/v1/mcp/scan"),

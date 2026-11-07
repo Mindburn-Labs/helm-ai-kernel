@@ -225,13 +225,6 @@ func (c *HelmClient) VerifyPublicDemoReceipt(receipt SurfaceRecord, expectedRece
 	return &out, err
 }
 
-// ApproveIntent calls POST /api/v1/kernel/approve.
-func (c *HelmClient) ApproveIntent(req ApprovalRequest) (*Receipt, error) {
-	var out Receipt
-	err := c.do("POST", "/api/v1/kernel/approve", req, &out)
-	return &out, err
-}
-
 // ListSessions calls GET /api/v1/proofgraph/sessions.
 func (c *HelmClient) ListSessions(limit, offset int) ([]Session, error) {
 	var out []Session

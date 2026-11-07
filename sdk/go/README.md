@@ -79,7 +79,6 @@ func main() {
 | `EvaluateDecisionV5(EvaluateRequest)` | Typed `POST /api/v1/evaluate`; requires non-blank `tool`, `effect_level`, and `session_id` |
 | `RunPublicDemo(actionID, args)` | `POST /api/demo/run` |
 | `VerifyPublicDemoReceipt(receipt, expectedHash)` | `POST /api/demo/verify` |
-| `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |
 | `ListSessions(limit, offset)` | `GET /api/v1/proofgraph/sessions` |
 | `GetReceipts(sessionID)` | `GET /api/v1/proofgraph/sessions/{id}/receipts` |
 | `GetReceipt(receiptHash)` | `GET /api/v1/proofgraph/receipts/{hash}` |
@@ -91,7 +90,6 @@ func main() {
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |
 | `DiscoverMCPServer(req)` | `POST /api/v1/mcp/registry` |
-| `ApproveMCPServer(req)` | `POST /api/v1/mcp/registry/approve` |
 | `GetBoundaryStatus()` | `GET /api/v1/boundary/status` |
 | `ListBoundaryCapabilities()` | `GET /api/v1/boundary/capabilities` |
 | `ListBoundaryRecords(query)` | `GET /api/v1/boundary/records` |

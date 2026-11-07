@@ -172,15 +172,6 @@ fn default_mcp_risk() -> String {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct McpRegistryApprovalRequest {
-    pub server_id: String,
-    pub approver_id: String,
-    pub approval_receipt_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct McpQuarantineRecord {
     pub server_id: String,
     pub risk: String,
@@ -513,28 +504,6 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/kernel/approve
-    pub fn approve_intent(&self, req: &ApprovalRequest) -> Result<Receipt, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/kernel/approve"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
     /// GET /api/v1/proofgraph/sessions
     pub fn list_sessions(&self) -> Result<Vec<Session>, HelmApiError> {
         let resp = self
@@ -820,31 +789,6 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/mcp/registry/approve
-    pub fn approve_mcp_server(
-        &self,
-        req: &McpRegistryApprovalRequest,
-    ) -> Result<McpQuarantineRecord, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/mcp/registry/approve"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
     pub fn get_mcp_registry_record(
         &self,
         server_id: &str,
@@ -852,34 +796,6 @@ impl HelmClient {
         let resp = self
             .client
             .get(self.url(&format!("/api/v1/mcp/registry/{}", encode_query(server_id))))
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
-    pub fn approve_mcp_registry_record(
-        &self,
-        server_id: &str,
-        req: &McpRegistryApprovalRequest,
-    ) -> Result<McpQuarantineRecord, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url(&format!(
-                "/api/v1/mcp/registry/{}/approve",
-                encode_query(server_id)
-            )))
-            .json(req)
             .send()
             .map_err(|e| HelmApiError {
                 status: 0,

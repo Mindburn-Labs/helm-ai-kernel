@@ -49,13 +49,6 @@ type MCPRegistryDiscoverRequest struct {
 	Reason    string   `json:"reason,omitempty"`
 }
 
-type MCPRegistryApprovalRequest struct {
-	ServerID          string `json:"server_id"`
-	ApproverID        string `json:"approver_id"`
-	ApprovalReceiptID string `json:"approval_receipt_id"`
-	Reason            string `json:"reason,omitempty"`
-}
-
 type MCPQuarantineRecord struct {
 	ServerID          string    `json:"server_id"`
 	Name              string    `json:"name,omitempty"`
@@ -232,21 +225,9 @@ func (c *HelmClient) DiscoverMCPServer(req MCPRegistryDiscoverRequest) (*MCPQuar
 	return &out, err
 }
 
-func (c *HelmClient) ApproveMCPServer(req MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
-	var out MCPQuarantineRecord
-	err := c.do("POST", "/api/v1/mcp/registry/approve", req, &out)
-	return &out, err
-}
-
 func (c *HelmClient) GetMCPRegistryRecord(serverID string) (*MCPQuarantineRecord, error) {
 	var out MCPQuarantineRecord
 	err := c.do("GET", "/api/v1/mcp/registry/"+url.PathEscape(serverID), nil, &out)
-	return &out, err
-}
-
-func (c *HelmClient) ApproveMCPRegistryRecord(serverID string, req MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
-	var out MCPQuarantineRecord
-	err := c.do("POST", "/api/v1/mcp/registry/"+url.PathEscape(serverID)+"/approve", req, &out)
 	return &out, err
 }
 

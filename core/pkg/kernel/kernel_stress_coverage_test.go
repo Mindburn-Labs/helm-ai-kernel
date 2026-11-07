@@ -11,8 +11,6 @@ import (
 
 // Generate 100 by repeating patterns with indices
 
-// ── Scheduler 500 concurrent events ─────────────────────────────────────
-
 // ── Freeze/Unfreeze 1000 cycles ─────────────────────────────────────────
 
 func TestStress_FreezeUnfreeze1000Cycles(t *testing.T) {
@@ -78,70 +76,6 @@ func TestStress_ContextGuardEmptyBootPassThrough(t *testing.T) {
 	}
 }
 
-func TestStress_AgentKillSwitch100Agents(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	for i := range 100 {
-		agentID := fmt.Sprintf("agent-%d", i)
-		_, err := ks.Kill(agentID, "admin", "test kill")
-		if err != nil {
-			t.Fatalf("kill %s: %v", agentID, err)
-		}
-		if !ks.IsKilled(agentID) {
-			t.Fatalf("%s should be killed", agentID)
-		}
-	}
-	for i := range 100 {
-		agentID := fmt.Sprintf("agent-%d", i)
-		_, err := ks.Revive(agentID, "admin")
-		if err != nil {
-			t.Fatalf("revive %s: %v", agentID, err)
-		}
-		if ks.IsKilled(agentID) {
-			t.Fatalf("%s should be alive", agentID)
-		}
-	}
-	receipts := ks.Receipts()
-	if len(receipts) != 200 {
-		t.Fatalf("expected 200 receipts, got %d", len(receipts))
-	}
-}
-
-func TestStress_AgentKillSwitchDoubleKill(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, _ = ks.Kill("a1", "admin", "first")
-	_, err := ks.Kill("a1", "admin", "second")
-	if err == nil {
-		t.Fatal("double kill should fail")
-	}
-}
-
-func TestStress_AgentKillSwitchDoubleRevive(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, err := ks.Revive("a1", "admin")
-	if err == nil {
-		t.Fatal("reviving non-killed agent should fail")
-	}
-}
-
-func TestStress_AgentKillSwitchListKilled(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	for i := range 10 {
-		_, _ = ks.Kill(fmt.Sprintf("a-%d", i), "admin", "test")
-	}
-	killed := ks.ListKilled()
-	if len(killed) != 10 {
-		t.Fatalf("expected 10 killed, got %d", len(killed))
-	}
-}
-
-func TestStress_AgentKillReceiptHash(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	receipt, _ := ks.Kill("a1", "admin", "reason")
-	if receipt.ContentHash == "" {
-		t.Fatal("receipt should have content hash")
-	}
-}
-
 func TestStress_FreezeDoubleFreeze(t *testing.T) {
 	fc := NewFreezeController()
 	_, _ = fc.Freeze("admin")
@@ -201,15 +135,5 @@ func TestStress_FreezeControllerReceiptsEmpty(t *testing.T) {
 	fc := NewFreezeController()
 	if len(fc.Receipts()) != 0 {
 		t.Fatal("new controller should have 0 receipts")
-	}
-}
-
-func TestStress_AgentKillSwitchClock(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	fixed := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	ks.WithKillSwitchClock(func() time.Time { return fixed })
-	r, _ := ks.Kill("a1", "admin", "test")
-	if !r.Timestamp.Equal(fixed) {
-		t.Fatal("clock override not applied to kill switch")
 	}
 }

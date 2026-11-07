@@ -21,63 +21,6 @@ type PackMetrics struct {
 	LastUpdated         time.Time `json:"last_updated"`
 }
 
-// CalculateTrustScore computes a normalized trust score (0.0-1.0) based on metrics and SLOs.
-// Quantify trust so users rely on the aggregated data (switching cost).
-func CalculateTrustScore(metrics PackMetrics, slos *ServiceLevelObjectives) float64 {
-	if slos == nil {
-		return 0.5 // Default neutral score if no SLOs defined
-	}
-
-	score := 1.0
-
-	// 1. Failure Rate Penalty
-	if slos.MaxFailureRate > 0 && metrics.FailureRate > slos.MaxFailureRate {
-		// Penalty proportional to violation
-		violation := (metrics.FailureRate - slos.MaxFailureRate) / slos.MaxFailureRate
-		if violation > 1 {
-			violation = 1
-		}
-		score -= 0.5 * violation
-	}
-
-	// 2. Evidence Success Bonus/Penalty
-	if slos.MinEvidenceRate > 0 {
-		if metrics.EvidenceSuccessRate < slos.MinEvidenceRate {
-			violation := (slos.MinEvidenceRate - metrics.EvidenceSuccessRate) / slos.MinEvidenceRate
-			if violation > 1 {
-				violation = 1
-			}
-			score -= 0.3 * violation
-		}
-	}
-
-	// 3. Incident Rate Penalty (High Impact)
-	if slos.MaxIncidentRate > 0 && metrics.IncidentRate > slos.MaxIncidentRate {
-		violation := (metrics.IncidentRate - slos.MaxIncidentRate) / slos.MaxIncidentRate
-		if violation > 1 {
-			violation = 1
-		}
-		score -= 0.5 * violation
-	}
-
-	if score < 0 {
-		score = 0
-	}
-	return score
-}
-
-// CalculateConfidenceScore returns a score based on the statistical significance of the data.
-func CalculateConfidenceScore(installCount int64) float64 {
-	// Simple logarithmic scale or threshold
-	// 1 install -> low confidence
-	// 100 installs -> medium
-	// 1000+ -> high
-	if installCount >= 1000 {
-		return 1.0
-	}
-	return float64(installCount) / 1000.0
-}
-
 // TelemetryHook defines the interface for reporting pack telemetry.
 type TelemetryHook interface {
 	// RecordExecution records a single execution of a pack capability.

@@ -8,12 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
 
@@ -46,27 +43,6 @@ type OutputSchemaRegistry interface {
 type SafeDepGate interface {
 	Gate(ctx context.Context, req safedep.GateRequest) (safedep.GateResult, error)
 }
-
-// SafeExecutor enforces strict gating and authorized execution.
-// Per Section 1.4: Receipt policy enforcement is fail-closed.
-// Per KERNEL_TCB §3: uses injected authority clock, never wall-clock time.Now().
-type SafeExecutor struct {
-	verifier             crypto.Verifier
-	signer               crypto.Signer
-	driver               ToolDriver
-	receiptStore         ReceiptStore
-	artifactStore        artifacts.Store
-	outboxStore          OutboxStore
-	currentPhenotypeHash string
-	AuditLog             crypto.AuditLog
-	policyEnforcer       *policies.PolicyEnforcer
-	meter                UsageMeter
-	outputSchemaRegistry OutputSchemaRegistry
-	safeDepGate          SafeDepGate
-	clock                func() time.Time // Authority clock (KERNEL_TCB §3)
-}
-
-const standaloneReceiptSessionPrefix = "standalone:decision:"
 
 // ReceiptIDForDecision returns the deterministic receipt identity for a
 // decision. Authenticated tenant executions must not share a globally unique

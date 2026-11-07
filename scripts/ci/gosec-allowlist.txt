@@ -55,7 +55,6 @@ G104 core/pkg/spendproxy/server.go ee260a174c83
 G104 core/pkg/spendproxy/server.go ee260a174c83
 G104 core/pkg/spendproxy/server.go ee260a174c83
 G104 core/pkg/spendproxy/server.go ee260a174c83
-G104 core/pkg/witness/transport.go ecc100cff761
 G110 core/cmd/helm-ai-kernel/local_console.go 7a24097c7292
 G110 core/cmd/helm-ai-kernel/local_console.go ca7276b5d2ee
 G110 core/cmd/helm-ai-kernel/verify_cmd.go 4ddf8fc2ae34
@@ -79,7 +78,6 @@ G115 core/pkg/privacy/privacy.go b9a02391f631
 G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d
-G115 core/pkg/trust/registry/store_pg.go ae337a7575fe
 G117 core/pkg/evidence/seal.go 68fb71c61e81
 G117 core/pkg/launchpad/cmd/connect.go e0521f979223
 G122 core/cmd/helm-ai-kernel/boundary_profile_cmd.go cea0f3d77997
@@ -321,7 +319,6 @@ G304 core/pkg/evidence/seal.go e002b30f196c
 G304 core/pkg/evidence/storage.go 64f674508bdf
 G304 core/pkg/evidence/storage.go dbfffc239169
 G304 core/pkg/evidence/storage.go eab592a5a322
-G304 core/pkg/integrations/manifest/loader.go dbfffc239169
 G304 core/pkg/kms/kms.go a3710b880658
 G304 core/pkg/kms/kms.go d415d308cf18
 G304 core/pkg/launchpad/cmd/connect.go dbfffc239169
@@ -347,8 +344,6 @@ G304 core/pkg/packs/install/manifest.go dbfffc239169
 G304 core/pkg/policy/reconcile/persistent_store.go 9ef7bf203908
 G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322
 G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
-G304 core/pkg/replay/replay.go 378b1b60131a
-G304 core/pkg/replay/tape_bridge.go 70cf39abc284
 G304 core/pkg/skillpacks/github.go 60c09d522cae
 G304 core/pkg/skillpacks/loader.go 8f256b8ef0f4
 G304 core/pkg/skillpacks/loader.go aa9837404799
@@ -362,12 +357,6 @@ G304 core/pkg/spendproxy/savings.go dbfffc239169
 G304 core/pkg/spendproxy/store.go 3717c7c84648
 G304 core/pkg/spendproxy/store.go 378b1b60131a
 G304 core/pkg/tape/manifest.go dbfffc239169
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go 378b1b60131a
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go 51dfde626f08
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go 51dfde626f08
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go 51dfde626f08
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go b0b18536bfe0
-G304 core/pkg/verifier/agentprovenance/agentprovenance.go c883c503c5ec
 G304 core/pkg/verifier/eu_ai_act.go 661d7f65d05f
 G304 core/pkg/verifier/verifier.go 3b3534841bf3
 G304 core/pkg/verifier/verifier.go 661d7f65d05f

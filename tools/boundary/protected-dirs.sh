@@ -29,11 +29,7 @@ PROTECTED_DIRS=(
   core/pkg/conformance
   core/pkg/safedep
   core/pkg/audit
-  core/pkg/integrations/receipts
-  core/pkg/integrations/capgraph
-  core/pkg/integrations/manifest
   core/pkg/api
-  core/pkg/trust/registry
   core/pkg/guardian
   core/pkg/packs
   protocols

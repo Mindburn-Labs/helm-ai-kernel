@@ -1,7 +1,7 @@
 """
 HELM SDK Example — Python
 
-Shows: chat completions, denial handling, conformance.
+Shows: chat completions, denial handling, evidence export and verification, health.
 Run: pip install httpx && python main.py
 """
 

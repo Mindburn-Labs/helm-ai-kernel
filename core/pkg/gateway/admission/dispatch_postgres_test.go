@@ -249,9 +249,11 @@ func TestPostgresPermitIsConsumedOnce(t *testing.T) {
 	a := f.propose(human, note("n1"))
 	_, _, err := svc.Dispatch(ctx, workload, a.ID)
 	must(t, err)
-	// Replay: the attempt is put back to ADMITTED, as if the claim had never
-	// committed. Its permit is consumed, so no second claim can use it.
-	f.exec(tenantA, `UPDATE authority_effect_attempts SET state = 'ADMITTED', outcome = NULL, outcome_basis = NULL WHERE attempt_id = $1`, a.ID)
+	// Replay: the attempt is put back to its ADMITTED version, as if the claim
+	// had never committed (that version's receipt is the ledger fence's
+	// condition). Its permit is consumed, so no second claim can use it.
+	f.exec(tenantA, `UPDATE authority_effect_attempts SET state = 'ADMITTED', outcome = NULL, outcome_basis = NULL, version = $2
+		WHERE attempt_id = $1`, a.ID, a.Version)
 	_, _, err = svc.Dispatch(ctx, workload, a.ID)
 	wantRefusal(t, "a replayed claim", err, CodeFailedPrecondition, "")
 	if n := fake.dispatched.Load(); n != 1 {

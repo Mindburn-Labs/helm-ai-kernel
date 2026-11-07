@@ -16,9 +16,16 @@ package admission
 //   - one chain per (tenant, workspace), named by a length-framed chain id in
 //     session_id; lamport_clock is the sequence number and prev_hash the
 //     predecessor's contracts.ReceiptChainHash, empty at genesis;
-//   - the chain row is locked FOR UPDATE as the last lock of the transaction,
-//     and the exact envelope and binding bytes are stored with the digest the
-//     next receipt links to. Any failure rolls the decision back.
+//   - the chain row is locked FOR UPDATE as the last row lock the transaction
+//     takes on a pre-existing row, so a workspace's decisions serialize on it
+//     until they commit; the exact envelope and binding bytes are stored with
+//     the digest the next receipt links to. Any failure rolls the decision
+//     back, and migration 15's deferred fence refuses at commit any decision
+//     written without its receipt (an older binary's, during an upgrade);
+//   - args_hash is the hex SHA-256 of the exact argument bytes the attempt
+//     stored (its argument_digest), not of a JCS re-encoding of them;
+//   - the receipt's timestamp is outside the receipt.v5 preimage, but the next
+//     receipt's prev_hash covers it; decided_at is signed through the binding.
 
 import (
 	"context"
@@ -128,6 +135,8 @@ type storedDecision struct {
 	Quote                            []Amount
 	EpisodeID, OrganizationVersionID string
 	PermitID, ApproverPrincipalID    string
+	ApproverActorID                  string
+	StepUpIssuer, StepUpJTI          string
 	AuthorityVersions                []AuthorityVersion
 	DecidedAt                        time.Time
 }
@@ -160,6 +169,9 @@ type receiptBinding struct {
 	ApprovalDigest        string                    `json:"approval_digest"`
 	ApprovalExpiresAt     string                    `json:"approval_expires_at"`
 	ApproverPrincipalID   string                    `json:"approver_principal_id"`
+	ApproverActorID       string                    `json:"approver_actor_id"`
+	StepUpIssuer          string                    `json:"step_up_issuer"`
+	StepUpJTI             string                    `json:"step_up_jti"`
 	PermitID              string                    `json:"permit_id"`
 	AuthorityVersions     []bindingAuthorityVersion `json:"authority_versions"`
 	PolicyHash            string                    `json:"policy_hash"`
@@ -290,6 +302,7 @@ func buildDecisionReceipt(d storedDecision, receiptID string, seq uint64, prevDi
 		MandateID: d.MandateID, RiskClass: d.RiskClass,
 		RequestDigest: request, TargetDigest: target, ArgumentDigest: argument, Quote: quote,
 		ApprovalDigest: approval, ApprovalExpiresAt: expires, ApproverPrincipalID: d.ApproverPrincipalID,
+		ApproverActorID: d.ApproverActorID, StepUpIssuer: d.StepUpIssuer, StepUpJTI: d.StepUpJTI,
 		PermitID: d.PermitID, AuthorityVersions: bindingVersions(d.AuthorityVersions), PolicyHash: policyHash,
 		EpisodeID: d.EpisodeID, OrganizationVersionID: d.OrganizationVersionID,
 		DecidedAt: d.DecidedAt.UTC().Format(time.RFC3339Nano),
@@ -358,11 +371,12 @@ func sealReceipt(signer ReceiptSigner, r *contracts.Receipt) ([]byte, string, er
 
 // appendReceipt signs the receipt of a decision tx has just written and
 // appends it to the workspace's chain. The chain row is the last row lock the
-// transaction takes: every authority, counter and attempt lock is already
-// held, and what may follow in the same transaction (an approval record, a
-// lift's token replay row) only inserts rows of its own. So receipts
-// serialize per workspace without a lock-order cycle. The head moves by
-// compare-and-set; any error rolls the decision back with it.
+// transaction takes on a pre-existing row: every authority, counter and
+// attempt lock is already held, and what may follow in the same transaction
+// (an approval record, a lift's token replay row) only inserts rows of its
+// own. So the decisions of one workspace serialize on the chain row until
+// they commit, without a lock-order cycle. The head moves by compare-and-set;
+// any error rolls the decision back with it.
 func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, d storedDecision) (ReceiptRef, error) {
 	if signer == nil {
 		return ReceiptRef{}, errors.New("no receipt signer: a decision is never recorded without its receipt")

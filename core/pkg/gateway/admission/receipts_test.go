@@ -126,6 +126,7 @@ func TestDecisionReceiptBindsTheStoredDecision(t *testing.T) {
 		"tenant_id": tenantA, "workspace_id": workspace, "from_state": "PROPOSED", "state": "ADMITTED", "verdict": "ALLOW",
 		"permit_id": samplePermit, "mandate_id": sampleMandate, "policy_hash": r.PolicyHash, "argument_digest": r.ArgsHash,
 		"decided_at": "2030-01-02T03:04:05.123456Z", "approval_digest": "", "approval_expires_at": "",
+		"approver_actor_id": "", "step_up_issuer": "", "step_up_jti": "",
 	} {
 		if doc[field] != value {
 			t.Errorf("binding %s = %v, want %v", field, doc[field], value)
@@ -155,6 +156,8 @@ func TestDecisionReceiptBindsTheStoredDecision(t *testing.T) {
 		"workspace": func(d *storedDecision) { d.WorkspaceID = "ws-b" },
 		"authority": func(d *storedDecision) { d.AuthorityVersions[0].Version = 4 },
 		"approver":  func(d *storedDecision) { d.ApproverPrincipalID = "human-b" },
+		"actor":     func(d *storedDecision) { d.ApproverActorID = "spiffe://other" },
+		"step-up":   func(d *storedDecision) { d.StepUpIssuer, d.StepUpJTI = "https://issuer.test", "jti-1" },
 		"quote":     func(d *storedDecision) { d.Quote[0].Amount = 2 },
 		"time":      func(d *storedDecision) { d.DecidedAt = d.DecidedAt.Add(time.Microsecond) },
 	} {
@@ -396,6 +399,50 @@ func TestADecisionWhoseReceiptCannotBeSignedFailsTheTransaction(t *testing.T) {
 		must(t, tx.Rollback())
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+// TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite: migration 15 holds
+// the ledger fence, a deferred constraint trigger on every insert into and
+// every state change into ADMITTED, DENIED or ESCALATED, requiring the
+// receipt of that attempt version at commit. This is the shape a run without
+// PostgreSQL can check; TestPostgresADecisionWithoutItsReceiptFailsAtCommit
+// proves the behaviour (CTL-059).
+func TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite(t *testing.T) {
+	var ddl string
+	for _, m := range migrations {
+		if m.version == 15 {
+			var err error
+			ddl, err = m.ddl()
+			must(t, err)
+		}
+	}
+	normalized := strings.Join(strings.Fields(ddl), " ")
+	for _, want := range []string{
+		"CREATE CONSTRAINT TRIGGER authority_decision_receipt_insert AFTER INSERT ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('ADMITTED', 'DENIED', 'ESCALATED')) EXECUTE FUNCTION authority_require_decision_receipt();",
+		"CREATE CONSTRAINT TRIGGER authority_decision_receipt_update AFTER UPDATE OF state ON authority_effect_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.state IN ('ADMITTED', 'DENIED', 'ESCALATED') AND OLD.state IS DISTINCT FROM NEW.state) EXECUTE FUNCTION authority_require_decision_receipt();",
+		"WHERE tenant_id = NEW.tenant_id AND attempt_id = NEW.attempt_id AND attempt_version = NEW.version ) THEN RAISE EXCEPTION 'decision_receipt_missing'",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Errorf("migration 15 lacks the ledger fence clause %q", want)
+		}
+	}
+}
+
+// BenchmarkSealDecisionReceipt is the per-decision signing cost a decision
+// transaction pays while it holds its workspace's chain row: build the
+// receipt and its binding, sign, verify the stored bytes and hash them.
+func BenchmarkSealDecisionReceipt(b *testing.B) {
+	d := sampleDecision()
+	b.ReportAllocs()
+	for b.Loop() {
+		r, _, err := buildDecisionReceipt(d, "0190a5b4-0000-7000-8000-0000000000cc", 7, sampleHead)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, _, err := sealReceipt(testReceiptSigner, r); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

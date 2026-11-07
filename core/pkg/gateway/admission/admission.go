@@ -23,7 +23,8 @@
 //     conditional hold and a permit, DENIED, or ESCALATED with approval digest
 //     v1;
 //  7. the decision's signed receipt is appended to the workspace's receipt
-//     chain (receipts.go), whose row is the last lock the transaction takes.
+//     chain (receipts.go), whose row is the last row lock the transaction
+//     takes on a pre-existing row.
 //
 // The package imports no legacy kernel runtime (guardian, proxy, mcp,
 // executor); boundary_test.go holds that, so it can move to its own repo.
@@ -658,7 +659,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		approvalDigest := ApprovalDigestV1(attemptID, targetDigest, argumentDigest, in.Quote, expires)
 		// The escalation's timer, in the same transaction (TA §6.3). It is
 		// enqueued before the decision so that the receipt chain stays the
-		// last lock the transaction takes.
+		// last row lock the transaction takes on a pre-existing row.
 		if err := s.enqueue(ctx, tx, Job{Kind: JobExpireEscalation, TenantID: caller.TenantID, WorkspaceID: caller.WorkspaceID,
 			AttemptID: attemptID, RunAt: expires}); err != nil {
 			return err
@@ -694,8 +695,13 @@ type decisionWrite struct {
 func (s *Service) recordDecision(ctx context.Context, tx *sql.Tx, w decisionWrite) error {
 	d := storedDecision{TenantID: w.tenantID, AttemptID: w.attemptID, FromState: w.from,
 		PermitID: w.permitID, AuthorityVersions: w.versions}
-	if w.approval != nil && w.approval.Approved {
-		d.ApproverPrincipalID = w.approval.ApproverID
+	if a := w.approval; a != nil && a.Approved {
+		d.ApproverPrincipalID, d.ApproverActorID = a.ApproverID, a.ApproverActorID
+		// The step-up proof this approval used up, named as its
+		// authority_token_replay row names it.
+		if a.StepUpVerified && a.proof != nil {
+			d.StepUpIssuer, d.StepUpJTI = a.proof.Token.Issuer, a.proof.Token.ID
+		}
 	}
 	var mandate, risk, episode, organizationVersion sql.NullString
 	var quote []byte

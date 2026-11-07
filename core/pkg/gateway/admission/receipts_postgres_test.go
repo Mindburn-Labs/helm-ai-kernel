@@ -20,9 +20,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
@@ -475,6 +477,14 @@ func TestPostgresReceiptSchemaUpgradesFrom14(t *testing.T) {
 			t.Fatalf("%s: row security %v, forced %v", table, enabled, forced)
 		}
 	}
+	// The ledger fence arrives with the tables: a schema-14 binary still
+	// serving after this point cannot commit a decision without a receipt.
+	var fences int
+	must(t, f.owner.QueryRow(`SELECT count(*) FROM pg_trigger WHERE tgrelid = to_regclass('authority_effect_attempts')
+		AND tgname IN ('authority_decision_receipt_insert', 'authority_decision_receipt_update') AND tgdeferrable AND tginitdeferred`).Scan(&fences))
+	if fences != 2 {
+		t.Fatalf("%d deferred receipt fences after the upgrade, want 2", fences)
+	}
 	// The chart's grant step runs after every migrate.
 	var schema string
 	must(t, f.owner.QueryRow(`SELECT current_schema()`).Scan(&schema))
@@ -499,5 +509,137 @@ func TestPostgresReceiptSchemaUpgradesFrom14(t *testing.T) {
 	must(t, err)
 	if _, err := tx.Exec(`UPDATE authority_receipts SET state = state`); err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("the runtime role updated a receipt after the upgrade: %v", err)
+	}
+}
+
+// TestPostgresLiftAndModelCallDecisionsCarryReceipts: a stop's lift, its
+// stepped-up approval and a model call's admission are receipted like any
+// other decision, and the re-admission binds the approver's workload and the
+// step-up proof it used up.
+func TestPostgresLiftAndModelCallDecisionsCarryReceipts(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	// A model call, proposed by an agent under its model mandate.
+	f.modelFixture(1_000_000)
+	call, _, err := f.svc.Propose(ctx, worker, modelProposal("receipt-model", modelRoute, 1000))
+	must(t, err)
+	wantState(t, "the model call", call, "ADMITTED", "")
+	if len(call.Receipts) != 1 || call.Receipts[0].State != "ADMITTED" || call.Receipts[0].AttemptVersion != call.Version {
+		t.Fatalf("the model call carries receipts %+v", call.Receipts)
+	}
+
+	// A stop's lift, escalated, and its stepped-up approval.
+	must(t, f.rows.CreateEffectType(ctx, tenantA, effectargs.AuthorityLift, authorityrows.RiskLow))
+	liftMandate := f.rootMandate(tenantA, "human-c", authorityrows.Terms{
+		EffectTypes: []string{effectargs.AuthorityLift}, ValidFrom: f.now.Add(-time.Hour), ValidUntil: f.now.Add(24 * time.Hour),
+	})
+	stop, _, err := f.svc.Stop(ctx, operator, stopToken(), tenantStop("receipt-stop"))
+	must(t, err)
+	lift, _, err := f.svc.Lift(ctx, operator, stopToken(), LiftInput{IdempotencyKey: "receipt-lift", StopID: stop.ID, MandateID: liftMandate.ID.String()})
+	must(t, err)
+	wantState(t, "the lift", lift, "ESCALATED", contracts.ReasonApprovalRequired)
+	proof := stepUpProof()
+	lifted, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), withProof(approval(lift, "lift it"), proof))
+	must(t, err)
+	wantState(t, "the approved lift", lifted, "ADMITTED", "")
+	if len(lifted.Receipts) != 2 || lifted.Receipts[0].State != "ESCALATED" || lifted.Receipts[1].State != "ADMITTED" {
+		t.Fatalf("the lift's receipts = %+v", lifted.Receipts)
+	}
+
+	rows := f.wantContiguousChain(tenantA, workspace, 3)
+	var model receiptBinding
+	must(t, json.Unmarshal(rows[0].binding, &model))
+	if model.EffectType != effectargs.ModelInference || model.RequesterPrincipalID != worker.PrincipalID || model.State != "ADMITTED" ||
+		model.PermitID == "" || model.StepUpJTI != "" {
+		t.Fatalf("the model call's binding = %+v", model)
+	}
+	var readmission receiptBinding
+	must(t, json.Unmarshal(rows[2].binding, &readmission))
+	if readmission.EffectType != effectargs.AuthorityLift || readmission.FromState != "ESCALATED" ||
+		readmission.ApproverPrincipalID != approverB.PrincipalID || readmission.ApproverActorID != approverB.ActorID ||
+		readmission.StepUpIssuer != proof.Token.Issuer || readmission.StepUpJTI != proof.Token.ID {
+		t.Fatalf("the lift's re-admission binding = %+v", readmission)
+	}
+}
+
+// TestPostgresADecisionWithoutItsReceiptFailsAtCommit: the ledger itself
+// refuses a decision that commits without its receipt, whoever writes it:
+// the statement a schema-14 gateway runs during an upgrade, or the owner. A
+// transition that is not a decision needs none.
+func TestPostgresADecisionWithoutItsReceiptFailsAtCommit(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	inTx := func(db *sql.DB, fn func(*sql.Tx) error) error {
+		tx, err := db.BeginTx(ctx, nil)
+		must(t, err)
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.Exec(`SELECT set_config('app.current_tenant', $1, true)`, tenantA); err != nil {
+			return err
+		}
+		if err := fn(tx); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	// A proposed attempt, inserted the way Propose inserts it.
+	propose := func(key string) string {
+		var id string
+		must(t, inTx(f.owner, func(tx *sql.Tx) error {
+			return tx.QueryRow(`INSERT INTO authority_effect_attempts (tenant_id, attempt_id, workspace_id, idempotency_key, request_digest,
+					requester_principal_id, effect_type, target, target_digest, argument_digest, state)
+				VALUES ($1, gen_random_uuid(), $2, $3, $4, 'human-a', $5, 'ops', $4, $4, 'PROPOSED') RETURNING attempt_id`,
+				tenantA, workspace, key, sum256(key), noteType).Scan(&id)
+		}))
+		return id
+	}
+	// The exact statement the schema-14 recordDecision ran.
+	legacyDecision := func(id, state string) func(*sql.Tx) error {
+		return func(tx *sql.Tx) error {
+			_, err := tx.Exec(`UPDATE authority_effect_attempts
+				SET state = $3, reason_code = $4, mandate_id = $5, risk_class = $6,
+				    approval_digest = CASE WHEN $9 = 'PROPOSED' THEN $7 ELSE approval_digest END,
+				    approval_expires_at = CASE WHEN $9 = 'PROPOSED' THEN $8 ELSE approval_expires_at END,
+				    version = version + 1, updated_at = now()
+				WHERE tenant_id = $1 AND attempt_id = $2 AND state = $9`,
+				tenantA, id, state, "", nil, "low", nil, nil, "PROPOSED")
+			return err
+		}
+	}
+	for _, state := range []string{"ADMITTED", "DENIED"} {
+		id := propose("unreceipted-" + state)
+		for name, db := range map[string]*sql.DB{"the runtime role": f.runtime, "the owner": f.owner} {
+			err := inTx(db, legacyDecision(id, state))
+			if err == nil || !strings.Contains(err.Error(), "decision_receipt_missing") {
+				t.Fatalf("%s wrote %s without a receipt: err = %v", name, state, err)
+			}
+		}
+		var stored string
+		f.ownerTx(tenantA, func(tx *sql.Tx) error {
+			return tx.QueryRow(`SELECT state FROM authority_effect_attempts WHERE attempt_id = $1`, id).Scan(&stored)
+		})
+		if stored != "PROPOSED" {
+			t.Fatalf("an unreceipted %s committed: the attempt is %s", state, stored)
+		}
+	}
+	// An attempt inserted already decided is refused the same way.
+	err := inTx(f.owner, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO authority_effect_attempts (tenant_id, attempt_id, workspace_id, idempotency_key, request_digest,
+				requester_principal_id, effect_type, target, target_digest, argument_digest, state)
+			VALUES ($1, gen_random_uuid(), $2, 'born-denied', $3, 'human-a', $4, 'ops', $3, $3, 'DENIED')`,
+			tenantA, workspace, sum256("born-denied"), noteType)
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "decision_receipt_missing") {
+		t.Fatalf("an attempt inserted DENIED without a receipt: err = %v", err)
+	}
+
+	// Known good: the gateway's own decision, and a later transition that is
+	// not a decision (a cancellation), commit.
+	a := f.propose(human, note("receipted"))
+	wantState(t, "a receipted decision", a, "ADMITTED", "")
+	cancelled, _, err := f.svc.Cancel(ctx, human, Token{Scope: scopePropose}, a.ID)
+	must(t, err)
+	if cancelled.State != "CANCELLED" || len(cancelled.Receipts) != 1 {
+		t.Fatalf("a cancellation: %+v", cancelled)
 	}
 }

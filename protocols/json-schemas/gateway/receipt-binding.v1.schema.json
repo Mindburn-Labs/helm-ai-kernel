@@ -29,6 +29,9 @@
     "approval_digest",
     "approval_expires_at",
     "approver_principal_id",
+    "approver_actor_id",
+    "step_up_issuer",
+    "step_up_jti",
     "permit_id",
     "authority_versions",
     "policy_hash",
@@ -59,7 +62,7 @@
     "risk_class": {"enum": ["", "low", "medium", "high", "irreversible"]},
     "request_digest": {"$ref": "#/$defs/digest"},
     "target_digest": {"$ref": "#/$defs/digest"},
-    "argument_digest": {"$ref": "#/$defs/digest", "description": "Also the receipt's args_hash."},
+    "argument_digest": {"$ref": "#/$defs/digest", "description": "SHA-256 of the exact argument bytes the attempt stored (not of a JCS re-encoding of them). The receipt's args_hash carries the same value: in a gateway receipt, args_hash means this digest."},
     "quote": {
       "type": "array",
       "items": {
@@ -75,6 +78,9 @@
     "approval_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "Approval digest v1 of an escalation; empty when the attempt never escalated."},
     "approval_expires_at": {"type": "string", "description": "RFC 3339 UTC, empty when the attempt never escalated."},
     "approver_principal_id": {"type": "string", "description": "The distinct human whose approval a re-admission ran with; empty otherwise."},
+    "approver_actor_id": {"type": "string", "description": "The workload that carried that approval (the decide token's act.sub); empty for a direct call and outside a re-admission."},
+    "step_up_issuer": {"type": "string", "description": "Issuer of the step-up proof the approval used up; empty when it used none."},
+    "step_up_jti": {"type": "string", "description": "jti of that step-up proof, as its authority_token_replay row names it; empty when it used none."},
     "permit_id": {"type": "string", "pattern": "^(|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "description": "The permit an ADMITTED decision issued; empty otherwise."},
     "authority_versions": {
       "type": "array",
@@ -93,7 +99,7 @@
     "policy_hash": {"$ref": "#/$defs/digest", "description": "Also the receipt's policy_hash."},
     "episode_id": {"type": "string"},
     "organization_version_id": {"type": "string"},
-    "decided_at": {"type": "string", "minLength": 1, "description": "Database time of the decision transaction, RFC 3339 UTC."}
+    "decided_at": {"type": "string", "minLength": 1, "description": "Database time of the decision transaction, RFC 3339 UTC. Signed through output_hash; the receipt's own timestamp is not in the receipt.v5 preimage."}
   },
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

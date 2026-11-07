@@ -636,7 +636,7 @@ func TestPostgresListAttemptsPageSizeDefaultsAndCaps(t *testing.T) {
 				(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id, requester_actor_id,
 				 commitment_id, effect_type, target, target_digest, argument_digest, state, updated_at)
 			SELECT tenant_id, gen_random_uuid(), workspace_id, 'bulk-' || n, request_digest, requester_principal_id, requester_actor_id,
-				commitment_id, effect_type, target, target_digest, argument_digest, state, $2::timestamptz + n * interval '1 microsecond'
+				commitment_id, effect_type, target, target_digest, argument_digest, 'CANCELLED', $2::timestamptz + n * interval '1 microsecond'
 			FROM authority_effect_attempts, generate_series(1, 205) n
 			WHERE tenant_id = $1 AND idempotency_key = 'seed'`, tenantA, t0)
 		return err

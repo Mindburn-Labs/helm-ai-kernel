@@ -152,7 +152,7 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		// The risk is judged again in readmit, on the one it recomputes, so a
 		// class raised since the escalation needs it too (and takes the proof
 		// from the approval state there).
-		state := &ApprovalState{ApproverID: caller.PrincipalID, Approved: true, proof: in.StepUp}
+		state := &ApprovalState{ApproverID: caller.PrincipalID, ApproverActorID: caller.ActorID, Approved: true, proof: in.StepUp}
 		if needsStepUp(a.risk, a.effectType) {
 			if err := spendStepUp(ctx, tx, caller.TenantID, in.StepUp); err != nil {
 				return err

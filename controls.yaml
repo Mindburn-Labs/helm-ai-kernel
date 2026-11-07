@@ -3109,11 +3109,15 @@ controls:
       current-state resolved.
     status: observed-only
     reason: >-
-      The writer, PostgresReleaseAuthorityAdminStore.Append, is in
-      scripts/ci/deadcode-allowlist.txt, so no shipped path records a release
-      authority for the reader to enforce.
-    entry_points:
-      - "core/pkg/registry/connectors.PostgresReleaseAuthorityAdminStore.Append"
+      Retired (helm-tracker#266): no shipped path ever appended a release
+      authority, so the writer (PostgresReleaseAuthorityAdminStore.Append) and
+      SignConnectorReleaseAuthority moved into a test fixture and the control
+      has no shipped entry point. The shipped runtime builds
+      PostgresReleaseAuthorityStore only to verify release-authority envelopes
+      carried in effect reservation events; its load methods verify what they
+      read but have no shipped caller. The table's insert trigger enforces
+      append-only succession for any row a deployment inserts.
+    entry_points: []
     config: []
     protected_operations:
       - "Recording and resolving connector release authorities."
@@ -3206,11 +3210,17 @@ controls:
       ERR_CONNECTOR_CONTRACT_DRIFT.
     status: observed-only
     reason: >-
-      ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt,
-      and the preview TON Acton connector that also reports drift is not linked
-      into core/cmd/helm-ai-kernel.
-    entry_points:
-      - "core/pkg/manifest.ValidateAndCanonicalizeToolOutput"
+      Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no
+      caller and was deleted with its tests, so no shipped validator reports
+      ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway
+      instead checks each established observation against the effect type's
+      result contract (admission.typedResult: a fixed typed result, or a
+      declared schema where an adapter declares one) and leaves a violating
+      attempt UNKNOWN. The GitHub adapter linked into helm-gateway is the only
+      shipped adapter that reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own
+      typed response checks; the preview TON Acton connector is not linked into
+      any shipped binary.
+    entry_points: []
     config: []
     protected_operations:
       - "Connector responses."

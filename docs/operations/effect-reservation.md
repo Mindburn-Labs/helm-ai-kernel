@@ -46,8 +46,8 @@ order is fixed:
 9. only after commit may a lifecycle-aware connector run local prechecks and
    approach its network sink.
 
-The source-authority writer takes the exclusive form of the same exact-release
-lock. FENCE uses the same scope lock. `ADMITTED` records remain visible for
+An insert into the source-authority table takes the exclusive form of the same
+exact-release lock through its trigger. FENCE uses the same scope lock. `ADMITTED` records remain visible for
 recovery, but admission alone is not a durable right to cross the network seam:
 `MarkStarted` reacquires the scope lock, rejects the current FENCE, acquires the
 shared exact-release lock, reloads the current certified head using the

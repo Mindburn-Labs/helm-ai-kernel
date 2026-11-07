@@ -102,10 +102,12 @@ func verifyBundle(t *testing.T, raw []byte, trust receiptverify.TrustRoot) recei
 }
 
 // wantContiguousChain checks a chain links from genesis, its head is its last
-// receipt, every receipt is signed by the test key and binds its stored row.
+// receipt, every receipt is signed by the test key and binds its stored row,
+// and every binding matches the closed binding schema.
 func (f *fixture) wantContiguousChain(tenant, ws string, n int) []storedReceipt {
 	f.t.Helper()
 	rows := f.chainRows(tenant, ws)
+	schema := bindingSchema(f.t)
 	if len(rows) != n {
 		f.t.Fatalf("chain %s/%s holds %d receipts, want %d", tenant, ws, len(rows), n)
 	}
@@ -129,6 +131,11 @@ func (f *fixture) wantContiguousChain(tenant, ws string, n int) []storedReceipt 
 		decoder := json.NewDecoder(bytes.NewReader(r.binding))
 		decoder.DisallowUnknownFields()
 		must(f.t, decoder.Decode(&binding))
+		var doc map[string]any
+		must(f.t, json.Unmarshal(r.binding, &doc))
+		if err := schema.Validate(doc); err != nil {
+			f.t.Fatalf("binding %d does not match its closed schema: %v", i, err)
+		}
 		if binding.BindingVersion != ReceiptBindingVersion || binding.AttemptID != r.attemptID || binding.AttemptVersion != r.version ||
 			binding.State != r.state || binding.TenantID != tenant || binding.Seq != uint64(r.seq) || binding.PolicyHash != receipt.PolicyHash {
 			f.t.Fatalf("binding %d does not describe its row: %+v", i, binding)
@@ -183,10 +190,14 @@ func TestPostgresDecisionsCommitWithSignedChainedReceipts(t *testing.T) {
 			t.Fatalf("%s: last receipt describes version %d, the attempt is at %d", got.ID, last.AttemptVersion, got.Version)
 		}
 	}
-	// The branch the draft was over was admitted too: five decisions.
-	rows := f.wantContiguousChain(tenantA, workspace, 5)
+	// The branch the draft was over was admitted too, and its observed
+	// outcome is receipted (migration 16): five decisions and one outcome.
+	rows := f.wantContiguousChain(tenantA, workspace, 6)
+	if rows[3].state != "OBSERVED" || rows[3].attemptID != rows[2].attemptID {
+		t.Fatalf("the branch's outcome receipt = %+v", rows[3])
+	}
 	var readmission receiptBinding
-	must(t, json.Unmarshal(rows[4].binding, &readmission))
+	must(t, json.Unmarshal(rows[5].binding, &readmission))
 	if readmission.FromState != "ESCALATED" || readmission.ApproverPrincipalID != "human-b" || readmission.PermitID == "" ||
 		readmission.ApprovalDigest != hex.EncodeToString(escalated.ApprovalDigest) {
 		t.Fatalf("the re-admission binding = %+v", readmission)
@@ -200,7 +211,7 @@ func TestPostgresDecisionsCommitWithSignedChainedReceipts(t *testing.T) {
 	f.rootMandate(tenantB, "human-a", skeletonTerms(f.now))
 	other := f.propose(Caller{TenantID: tenantB, WorkspaceID: workspace, PrincipalID: "human-a", ActorID: actor}, note("receipt-note"))
 	wantState(t, "tenant b", other, "ADMITTED", "")
-	f.wantContiguousChain(tenantA, workspace, 5)
+	f.wantContiguousChain(tenantA, workspace, 6)
 	f.wantContiguousChain(tenantB, workspace, 1)
 }
 
@@ -291,7 +302,8 @@ func TestPostgresSigningFailureCommitsNoDecision(t *testing.T) {
 		t.Fatal("the decide token was spent by a rolled-back approval")
 	}
 	fail.Store(false)
-	f.wantContiguousChain(tenantA, workspace, 3)
+	// The note, the branch, its observed outcome and the escalation.
+	f.wantContiguousChain(tenantA, workspace, 4)
 }
 
 func TestPostgresReceiptRowsAreAppendOnlyForTheRuntimeRole(t *testing.T) {
@@ -388,7 +400,8 @@ func TestPostgresStoredReceiptsVerifyOfflineWithTheGatewayKey(t *testing.T) {
 	escalated := f.escalated("offline-draft")
 	_, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(escalated, "ok"))
 	must(t, err)
-	rows := f.wantContiguousChain(tenantA, workspace, 5)
+	// Five decisions and the observed outcome of the draft's branch.
+	rows := f.wantContiguousChain(tenantA, workspace, 6)
 	raw := bundleOf(t, rows)
 	trust := trustTestKey()
 
@@ -467,7 +480,7 @@ func TestPostgresReceiptSchemaUpgradesFrom14(t *testing.T) {
 	must(t, Migrate(ctx, f.owner))
 	version, err := SchemaVersion(ctx, f.owner)
 	must(t, err)
-	if version != HeadVersion() || HeadVersion() != 15 {
+	if version != HeadVersion() || HeadVersion() != 16 {
 		t.Fatalf("schema at %d after migrating, head %d", version, HeadVersion())
 	}
 	for _, table := range []string{"authority_receipt_chains", "authority_receipts"} {

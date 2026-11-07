@@ -45,7 +45,7 @@
 | --- | --- | --- | --- |
 | `team_counter_request.v1.schema.json` | L2 | preview | Exact applied TEAM limit binding for a read only counter sample |
 | `team_counter_response.v1.schema.json` | L2 | preview | Native TEAM counter values and PostgreSQL observation point |
-| `receipt-binding.v1.schema.json` | L2 | preview | Closed binding document a gateway decision receipt signs as `output_hash` |
+| `receipt-binding.v1.schema.json` | L2 | preview | Closed binding document a gateway decision or outcome receipt signs as `output_hash` |
 
 ### Boundary (`boundary/`)
 

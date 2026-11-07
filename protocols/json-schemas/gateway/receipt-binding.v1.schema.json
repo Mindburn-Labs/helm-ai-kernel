@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/gateway/receipt-binding.v1.schema.json",
-  "title": "Gateway decision receipt binding",
-  "description": "helm.gateway.receipt-binding.v1: the closed document whose SHA-256 a gateway decision receipt (receipt.v5) signs as output_hash. The gateway stores its exact RFC 8785 (JCS) bytes with the receipt. Every member is present; an empty string is a signed value, not an omitted one. Digests are lowercase hex SHA-256; quote amounts are decimal strings.",
+  "title": "Gateway receipt binding",
+  "description": "helm.gateway.receipt-binding.v1: the closed document whose SHA-256 a gateway receipt (receipt.v5) signs as output_hash, for a decision (ADMITTED, DENIED, ESCALATED) or for the outcome of an admitted effect (OBSERVED, RECONCILED, SETTLED). The gateway stores its exact RFC 8785 (JCS) bytes with the receipt. Every member is present; an empty string (or observation_id 0) is a signed value, not an omitted one. A decision leaves the outcome members empty; an outcome leaves verdict, decided_at and the approver and step-up members empty. Digests are lowercase hex SHA-256; quote amounts are decimal strings.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,7 +37,18 @@
     "policy_hash",
     "episode_id",
     "organization_version_id",
-    "decided_at"
+    "decided_at",
+    "outcome",
+    "outcome_basis",
+    "observation_id",
+    "observation_source",
+    "observation_trust_class",
+    "observation_outcome",
+    "evidence_digest",
+    "result_kind",
+    "result_ref",
+    "observed_at",
+    "settled_at"
   ],
   "properties": {
     "binding_version": {"const": "helm.gateway.receipt-binding.v1"},
@@ -50,10 +61,10 @@
     "tenant_id": {"type": "string", "minLength": 1},
     "workspace_id": {"type": "string", "minLength": 1},
     "attempt_id": {"type": "string", "format": "uuid"},
-    "attempt_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The attempt row's version after the decision; decision_id is <attempt_id>:<attempt_version>."},
-    "from_state": {"enum": ["PROPOSED", "ESCALATED"]},
-    "state": {"enum": ["ADMITTED", "DENIED", "ESCALATED"]},
-    "verdict": {"enum": ["ALLOW", "DENY", "ESCALATE"]},
+    "attempt_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The attempt row's version after the decision or outcome write; decision_id is <attempt_id>:<attempt_version>."},
+    "from_state": {"enum": ["PROPOSED", "ESCALATED", "DISPATCHING", "DISPATCHED", "UNKNOWN", "OBSERVED", "RECONCILED"], "description": "The state the write moved the attempt from. OBSERVED to OBSERVED is a model call's late usage re-settling an estimated call."},
+    "state": {"enum": ["ADMITTED", "DENIED", "ESCALATED", "OBSERVED", "RECONCILED", "SETTLED"], "description": "The receipt's status: the stored state the write left."},
+    "verdict": {"enum": ["", "ALLOW", "DENY", "ESCALATE"], "description": "A decision's verdict; empty on an outcome."},
     "reason_code": {"type": "string"},
     "effect_type": {"type": "string", "minLength": 1},
     "requester_principal_id": {"type": "string", "minLength": 1},
@@ -77,14 +88,14 @@
     },
     "approval_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "Approval digest v1 of an escalation; empty when the attempt never escalated."},
     "approval_expires_at": {"type": "string", "description": "RFC 3339 UTC, empty when the attempt never escalated."},
-    "approver_principal_id": {"type": "string", "description": "The distinct human whose approval a re-admission ran with; empty otherwise."},
+    "approver_principal_id": {"type": "string", "description": "The distinct human whose approval a re-admission ran with; empty otherwise, and on an outcome."},
     "approver_actor_id": {"type": "string", "description": "The workload that carried that approval (the decide token's act.sub); empty for a direct call and outside a re-admission."},
     "step_up_issuer": {"type": "string", "description": "Issuer of the step-up proof the approval used up; empty when it used none."},
     "step_up_jti": {"type": "string", "description": "jti of that step-up proof, as its authority_token_replay row names it; empty when it used none."},
-    "permit_id": {"type": "string", "pattern": "^(|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "description": "The permit an ADMITTED decision issued; empty otherwise."},
+    "permit_id": {"type": "string", "pattern": "^(|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "description": "The permit an ADMITTED decision issued, or the permit the effect of an outcome was dispatched under; empty otherwise."},
     "authority_versions": {
       "type": "array",
-      "description": "The versions of the authority rows the decision locked, in lock order. policy_hash is SHA-256 of the JCS bytes of {\"schema\":\"helm.gateway.authority-snapshot.v1\",\"versions\":<this array>}.",
+      "description": "The versions of the authority rows the decision locked, in lock order; on an outcome, the versions its permit was issued under. policy_hash is SHA-256 of the JCS bytes of {\"schema\":\"helm.gateway.authority-snapshot.v1\",\"versions\":<this array>}.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -99,8 +110,68 @@
     "policy_hash": {"$ref": "#/$defs/digest", "description": "Also the receipt's policy_hash."},
     "episode_id": {"type": "string"},
     "organization_version_id": {"type": "string"},
-    "decided_at": {"type": "string", "minLength": 1, "description": "Database time of the decision transaction, RFC 3339 UTC. Signed through output_hash; the receipt's own timestamp is not in the receipt.v5 preimage."}
+    "decided_at": {"type": "string", "description": "Database time of the decision transaction, RFC 3339 UTC; empty on an outcome. Signed through output_hash; the receipt's own timestamp is not in the receipt.v5 preimage."},
+    "outcome": {"enum": ["", "SUCCEEDED", "FAILED"], "description": "The outcome the attempt row records; empty on a decision."},
+    "outcome_basis": {"enum": ["", "OBSERVED", "RECONCILED"], "description": "How the outcome was established: OBSERVED while the attempt was dispatching or dispatched, RECONCILED while it was UNKNOWN; empty on a decision."},
+    "observation_id": {"type": "integer", "minimum": 0, "maximum": 9007199254740991, "description": "The stored observation (authority_observations) the outcome rests on; 0 on a decision."},
+    "observation_source": {"type": "string", "description": "That observation's source, such as gateway.dispatch for a NOT_SENT answer or gateway.model for a model call; empty on a decision."},
+    "observation_trust_class": {"type": "string", "description": "That observation's trust class; empty on a decision."},
+    "observation_outcome": {"enum": ["", "SUCCEEDED", "FAILED"], "description": "The outcome that observation records; empty on a decision."},
+    "evidence_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "SHA-256 of the provider evidence the observation holds (for a model call, the delivered response bytes); empty when it holds none, and on a decision."},
+    "result_kind": {"type": "string", "description": "The typed result the observation holds (its Observation.result member, such as github_branch); empty when the effect type defines none, and on a decision."},
+    "result_ref": {"type": "string", "description": "Content address of that typed result: sha256:<hex> of its JCS bytes, or an artifact's own digest; empty when there is none."},
+    "observed_at": {"type": "string", "description": "When the observation was made, RFC 3339 UTC; empty on a decision."},
+    "settled_at": {"type": "string", "description": "Database time of the outcome transaction, RFC 3339 UTC; empty on a decision. Signed through output_hash."}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"enum": ["ADMITTED", "DENIED", "ESCALATED"]}}},
+      "then": {
+        "description": "A decision binds its verdict and decision time and no outcome.",
+        "properties": {
+          "from_state": {"enum": ["PROPOSED", "ESCALATED"]},
+          "verdict": {"enum": ["ALLOW", "DENY", "ESCALATE"]},
+          "decided_at": {"minLength": 1},
+          "outcome": {"const": ""},
+          "outcome_basis": {"const": ""},
+          "observation_id": {"const": 0},
+          "observation_source": {"const": ""},
+          "observation_trust_class": {"const": ""},
+          "observation_outcome": {"const": ""},
+          "evidence_digest": {"const": ""},
+          "result_kind": {"const": ""},
+          "result_ref": {"const": ""},
+          "observed_at": {"const": ""},
+          "settled_at": {"const": ""}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["OBSERVED", "RECONCILED", "SETTLED"]}}},
+      "then": {
+        "description": "An outcome binds its outcome, the observation it rests on, its permit and its settlement time, and no verdict or approval.",
+        "properties": {
+          "from_state": {"enum": ["DISPATCHING", "DISPATCHED", "UNKNOWN", "OBSERVED", "RECONCILED"]},
+          "verdict": {"const": ""},
+          "decided_at": {"const": ""},
+          "approver_principal_id": {"const": ""},
+          "approver_actor_id": {"const": ""},
+          "step_up_issuer": {"const": ""},
+          "step_up_jti": {"const": ""},
+          "permit_id": {"minLength": 1},
+          "outcome": {"enum": ["SUCCEEDED", "FAILED"]},
+          "outcome_basis": {"enum": ["OBSERVED", "RECONCILED"]},
+          "observation_id": {"minimum": 1},
+          "observation_source": {"minLength": 1},
+          "observation_trust_class": {"minLength": 1},
+          "observed_at": {"minLength": 1},
+          "settled_at": {"minLength": 1}
+        }
+      }
+    },
+    {"if": {"properties": {"state": {"const": "OBSERVED"}}}, "then": {"properties": {"outcome_basis": {"const": "OBSERVED"}}}},
+    {"if": {"properties": {"state": {"const": "RECONCILED"}}}, "then": {"properties": {"outcome_basis": {"const": "RECONCILED"}}}}
+  ],
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
   }

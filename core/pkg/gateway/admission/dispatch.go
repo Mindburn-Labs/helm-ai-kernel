@@ -1,9 +1,9 @@
 package admission
 
 // quantum_posture: SHA-256 content addresses for observation results; this
-// file signs and verifies nothing. The decisions admission records are signed
-// with classical Ed25519 receipts (receipts.go); no hybrid or post-quantum
-// claim is made.
+// file signs and verifies nothing itself. The decisions and outcomes
+// admission records are signed with classical Ed25519 receipts (receipts.go,
+// outcomes.go); no hybrid or post-quantum claim is made.
 
 import (
 	"context"
@@ -348,7 +348,7 @@ func (s *Service) send(ctx context.Context, c *claimed) {
 	var sent bool
 	err := s.inTenant(ctx, c.tenantID, func(tx *sql.Tx) error {
 		var err error
-		sent, err = recordDispatch(ctx, tx, c, result)
+		sent, err = s.recordDispatch(ctx, tx, c, result)
 		return err
 	})
 	if err != nil {
@@ -365,8 +365,9 @@ func (s *Service) send(ctx context.Context, c *claimed) {
 
 // recordDispatch writes the adapter's answer, fenced: only the claim that
 // consumed the permit records, and only while the attempt is DISPATCHING.
-// It reports whether the attempt became DISPATCHED.
-func recordDispatch(ctx context.Context, tx *sql.Tx, c *claimed, result adapters.DispatchResult) (bool, error) {
+// It reports whether the attempt became DISPATCHED. NOT_SENT is the
+// effect's outcome and is receipted (outcomes.go).
+func (s *Service) recordDispatch(ctx context.Context, tx *sql.Tx, c *claimed, result adapters.DispatchResult) (bool, error) {
 	var state string
 	var claim uuid.NullUUID
 	err := tx.QueryRowContext(ctx, `SELECT a.state, p.claim_id FROM authority_effect_attempts a
@@ -385,14 +386,16 @@ func recordDispatch(ctx context.Context, tx *sql.Tx, c *claimed, result adapters
 		return true, transition(ctx, tx, c.tenantID, c.attemptID, "DISPATCHING", "DISPATCHED", "")
 	case "OBSERVED":
 		// Nothing visible was written: the outcome is a certain FAILED.
-		if _, err := tx.ExecContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome)
-			VALUES ($1, $2, $3, $4, 'FAILED')`, c.tenantID, c.attemptID, dispatchSource, dispatchTrustClass); err != nil {
+		var observationID int64
+		if err := tx.QueryRowContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome)
+			VALUES ($1, $2, $3, $4, 'FAILED') RETURNING observation_id`, c.tenantID, c.attemptID, dispatchSource, dispatchTrustClass).Scan(&observationID); err != nil {
 			return false, err
 		}
 		if err := release(ctx, tx, c.tenantID, c.attemptID, "not-sent"); err != nil {
 			return false, err
 		}
-		return false, settleState(ctx, tx, c.tenantID, c.attemptID, "DISPATCHING", "OBSERVED", adapters.OutcomeFailed, result.Reason)
+		return false, recordOutcome(ctx, tx, s.cfg.ReceiptSigner, outcomeWrite{tenantID: c.tenantID, attemptID: c.attemptID,
+			from: "DISPATCHING", to: "OBSERVED", outcome: adapters.OutcomeFailed, reason: result.Reason, observationID: observationID})
 	default:
 		// The effect may have happened. The reservation stays held.
 		return false, transition(ctx, tx, c.tenantID, c.attemptID, "DISPATCHING", "UNKNOWN", result.Reason)
@@ -533,7 +536,7 @@ func (s *Service) readBack(ctx context.Context, t observeTarget) (existing bool)
 			return nil
 		}
 		insideFence := !a.dispatchDeadline.Valid || a.now.Before(a.dispatchDeadline.Time)
-		return recordObservation(ctx, tx, t, result, insideFence)
+		return s.recordObservation(ctx, tx, t, result, insideFence)
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "recording an observation failed", "attempt_id", t.attemptID, "error", err)
@@ -563,9 +566,10 @@ func readBackVerdict(result adapters.ObserveResult, insideFence bool) (establish
 }
 
 // recordObservation writes one read-back. An established outcome settles the
-// attempt; an inconclusive one leaves (or makes) it UNKNOWN, except that an
-// absence inside the fence leaves a DISPATCHED attempt DISPATCHED.
-func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, insideFence bool) error {
+// attempt, with its receipt (outcomes.go); an inconclusive one leaves (or
+// makes) it UNKNOWN, except that an absence inside the fence leaves a
+// DISPATCHED attempt DISPATCHED.
+func (s *Service) recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, insideFence bool) error {
 	established, consume := readBackVerdict(result, insideFence)
 	var kind string
 	var body []byte
@@ -584,7 +588,8 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 		}
 		return nil
 	}
-	if _, err := insertObservation(ctx, tx, t, result, kind, body); err != nil {
+	observationID, err := insertObservation(ctx, tx, t, result, kind, body)
+	if err != nil {
 		return err
 	}
 	cause := "observed"
@@ -599,16 +604,20 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	} else if err := release(ctx, tx, t.tenantID, t.attemptID, cause); err != nil {
 		return err
 	}
-	if result.Outcome == adapters.OutcomeSucceeded {
-		return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeSucceeded, "")
+	w := outcomeWrite{tenantID: t.tenantID, attemptID: t.attemptID, from: t.from, to: to, outcome: adapters.OutcomeSucceeded,
+		observationID: observationID}
+	if result.Outcome != adapters.OutcomeSucceeded {
+		w.outcome, w.reason = adapters.OutcomeFailed, result.Reason
 	}
-	return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeFailed, result.Reason)
+	return recordOutcome(ctx, tx, s.cfg.ReceiptSigner, w)
 }
 
 // insertObservation writes one provider fact into the canonical observation
-// table. The attempt row is locked by each caller; the unique evidence index
-// is a second guard against concurrent delivery of identical facts.
-func insertObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, kind string, body []byte) (bool, error) {
+// table and returns the row that holds it: the new row, or the one that
+// already held that evidence. The attempt row is locked by each caller; the
+// unique evidence index is a second guard against concurrent delivery of
+// identical facts.
+func insertObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, kind string, body []byte) (int64, error) {
 	o := result.Observation
 	// result_ref is the content address of the typed result, which the row
 	// keeps (§5.6): SHA-256 over its RFC 8785 (JCS) form, so it recomputes
@@ -633,17 +642,17 @@ func insertObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	if observedAt.IsZero() {
 		observedAt = time.Now().UTC()
 	}
-	var observationID int64
+	var observationID sql.NullInt64
 	err := tx.QueryRowContext(ctx, `INSERT INTO authority_observations
 			(tenant_id, attempt_id, source, trust_class, outcome, evidence_digest, observed_at, result_ref, result_kind, result)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (tenant_id, attempt_id, evidence_digest) WHERE evidence_digest IS NOT NULL
 		DO NOTHING RETURNING observation_id`,
 		t.tenantID, t.attemptID, o.Source, o.TrustClass, string(result.Outcome), evidence, observedAt, ref, kind, resultCol).Scan(&observationID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
 	}
-	return err == nil, err
+	return observationOf(ctx, tx, t.tenantID, t.attemptID, observationID, o.EvidenceDigest)
 }
 
 // typedResult checks an established observation against the contract and
@@ -703,24 +712,6 @@ func fixedResultKind(effectType string) string {
 		effectargs.GitHubGitPush:                 "github_branch",
 		effectargs.GitHubRepositoryGet:           "github_repository",
 	}[effectType]
-}
-
-// settleState moves the attempt to OBSERVED or RECONCILED with its outcome.
-func settleState(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, to string, outcome adapters.Outcome, reason contracts.ReasonCode) error {
-	basis := "OBSERVED"
-	if to == "RECONCILED" {
-		basis = "RECONCILED"
-	}
-	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
-		SET state = $4, outcome = $5, outcome_basis = $6, reason_code = $7, version = version + 1, updated_at = now()
-		WHERE tenant_id = $1 AND attempt_id = $2 AND state = $3`, tenantID, attemptID, from, to, string(outcome), basis, string(reason))
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil || n != 1 {
-		return errors.New("admission: the attempt changed state while its outcome was recorded")
-	}
-	return nil
 }
 
 // mayExecute: an attempt is dispatched and observed only by the workload it

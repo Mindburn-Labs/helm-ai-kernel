@@ -3171,7 +3171,8 @@ controls:
       caller and was deleted with its tests, so no shipped validator reports
       ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway
       instead checks each established observation against the effect type's
-      declared result schema (admission.typedResult) and leaves a violating
+      result contract (admission.typedResult: a fixed typed result, or a
+      declared schema where an adapter declares one) and leaves a violating
       attempt UNKNOWN. The GitHub adapter linked into helm-gateway is the only
       shipped adapter that reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own
       typed response checks; the preview TON Acton connector is not linked into

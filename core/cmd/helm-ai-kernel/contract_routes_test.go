@@ -2548,9 +2548,12 @@ func TestEvidenceVerifySealErrorsDoNotLeakWorkspacePath(t *testing.T) {
 // The verify routes that could not fail are gone: none of them may answer a
 // verification again, and none may stay in the route registry.
 func TestTautologicalVerifyRoutesAreNotServed(t *testing.T) {
-	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	// Configured services, so tenant and admin handlers run past their
+	// guards and a still-wired verify branch would answer.
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
 	mux := http.NewServeMux()
-	registerContractRoutes(mux, &Services{})
+	registerContractRoutes(mux, svc)
 	removed := []string{
 		"/api/v1/replay/verify",
 		"/api/v1/boundary/records/rec-1/verify",
@@ -2567,8 +2570,13 @@ func TestTautologicalVerifyRoutesAreNotServed(t *testing.T) {
 		authorizeTestRequest(req)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
-		if rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), `"verified"`) {
-			t.Fatalf("POST %s still answers a verification: status=%d body=%s", path, rec.Code, rec.Body.String())
+		// The id segment now carries "/verify", which the remaining prefix
+		// handlers reject as an invalid id; the checkpoint prefix is gone.
+		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
+			t.Fatalf("POST %s = %d, want 400 or 404: body=%s", path, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), `"verified"`) || strings.Contains(rec.Body.String(), `"checks"`) {
+			t.Fatalf("POST %s still answers a verification: body=%s", path, rec.Body.String())
 		}
 	}
 	for _, spec := range PublicRuntimeRouteSpecs() {

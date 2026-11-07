@@ -104,9 +104,7 @@ type SurfaceRecord map[string]any
 type BoundaryStatus map[string]any
 type BoundaryCapabilitySummary map[string]any
 type ExecutionBoundaryRecord map[string]any
-type BoundaryRecordVerification map[string]any
 type BoundaryCheckpoint map[string]any
-type EvidenceEnvelopeVerification map[string]any
 type EvidenceEnvelopePayload map[string]any
 type MCPAuthorizationProfile map[string]any
 type MCPScanRequest map[string]any

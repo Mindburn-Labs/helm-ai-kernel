@@ -937,6 +937,7 @@ GATEWAY_ARGS=(
     --set gateway.controlPlaneIdentity.audience=helm-gateway:smoke
     --set gateway.controlPlaneIdentity.actor=spiffe://helm/control-plane
     --set gateway.database.existingSecret=gw-db
+    --set gateway.receipts.existingSecret=gw-receipts
     --set gateway.networkPolicy.controlPlane.namespaceSelector.matchLabels.helm-cp=enabled
     --set gateway.networkPolicy.database.to[0].ipBlock.cidr=10.20.30.40/32
 )
@@ -995,7 +996,7 @@ assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"ex
 # the bootstrap password are mounted 0400 (defaultMode 256). The Pod's
 # fsGroup 65534 is what lets the non-root user read them: kubelet adds group
 # read for the fsGroup.
-for secret_volume in github-app gateway-tls bootstrap-password; do
+for secret_volume in github-app gateway-tls bootstrap-password gateway-receipts; do
     volume_mode="$(awk -v name="- name: ${secret_volume}" '
         index($0, name) && $0 ~ ("name: " v "$") { hit = NR }
         hit && NR > hit && NR <= hit + 4 && /defaultMode:/ { print $2; exit }
@@ -1117,6 +1118,62 @@ if [ "$gateway_installations_docs" != "helm-ai-kernel/templates/gateway-configma
     exit 1
 fi
 
+# Signed decision receipts (helm-tracker#276). With existingSecret, the seed
+# reaches the gateway Pod and no other object, and the chart creates no
+# Secret of its own.
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE"
+assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-receipts/seed"'
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_RECEIPT_KEY_ID"
+assert_contains "$gateway_rendered" "value: \"helm-gateway:${NAMESPACE}:${GATEWAY_NAME}\""
+assert_contains "$gateway_rendered" 'secretName: "gw-receipts"'
+assert_not_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml"
+gateway_receipts_docs="$(docs_containing "$gateway_rendered" "gw-receipts")"
+if [ "$gateway_receipts_docs" != "helm-ai-kernel/templates/gateway-deployment.yaml" ]; then
+    echo "::error::the receipt signing Secret is referenced outside the gateway Deployment: ${gateway_receipts_docs}"
+    exit 1
+fi
+gateway_receipts_key_rendered="$RENDER_DIR/rendered-gateway-receipts-key.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.receipts.existingSecretKey=ed25519-seed --set gateway.receipts.keyId=gateway-receipts-2 \
+    --set gateway.receipts.autoSeed=true >"$gateway_receipts_key_rendered"
+assert_contains "$gateway_receipts_key_rendered" 'key: "ed25519-seed"'
+assert_contains "$gateway_receipts_key_rendered" 'value: "gateway-receipts-2"'
+# existingSecret wins over autoSeed: no generated Secret.
+assert_not_contains "$gateway_receipts_key_rendered" "# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml"
+# autoSeed: the chart creates the seed Secret once, kept across upgrades
+# (lookup) and uninstalls, holding base64 of 32 random bytes; only the gateway
+# Deployment mounts it. The release chart's default is false (the
+# missing-existingSecret render below fails), and the charts-dev chart turns
+# it on (scripts/release/prepare_dev_chart.py).
+gateway_args_without gateway.receipts.existingSecret
+gateway_autoseed_rendered="$RENDER_DIR/rendered-gateway-autoseed.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS_WITHOUT[@]}" \
+    --set gateway.receipts.autoSeed=true >"$gateway_autoseed_rendered"
+assert_contains "$gateway_autoseed_rendered" "# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml"
+assert_contains "$gateway_autoseed_rendered" "name: ${GATEWAY_NAME}-receipts"
+assert_contains "$gateway_autoseed_rendered" "helm.sh/resource-policy: keep"
+assert_contains "$gateway_autoseed_rendered" "secretName: \"${GATEWAY_NAME}-receipts\""
+assert_contains "$gateway_autoseed_rendered" 'value: "/var/run/secrets/helm-gateway-receipts/seed"'
+gateway_autoseed_docs="$(docs_containing "$gateway_autoseed_rendered" "${GATEWAY_NAME}-receipts" | sort | tr '\n' ' ')"
+if [ "$gateway_autoseed_docs" != "helm-ai-kernel/templates/gateway-deployment.yaml helm-ai-kernel/templates/gateway-receipts-secret.yaml " ]; then
+    echo "::error::the generated receipt Secret is referenced outside the gateway Deployment: ${gateway_autoseed_docs}"
+    exit 1
+fi
+python3 - "$gateway_autoseed_rendered" <<'PYSEED'
+import base64
+import sys
+
+import yaml
+
+secrets = [d for d in yaml.safe_load_all(open(sys.argv[1], encoding="utf-8"))
+           if d and d.get("kind") == "Secret" and d["metadata"]["name"].endswith("-gateway-receipts")]
+if len(secrets) != 1 or set(secrets[0]["data"]) != {"seed"}:
+    sys.exit(f"::error::want one receipt Secret holding only seed, got {secrets}")
+seed = base64.b64decode(base64.b64decode(secrets[0]["data"]["seed"], validate=True), validate=True)
+if len(seed) != 32:
+    sys.exit(f"::error::the generated receipt seed is {len(seed)} bytes, want 32")
+PYSEED
+
 # Without the bootstrap, migrate runs with the runtime DSN, or the migrate DSN.
 gateway_plain_rendered="$RENDER_DIR/rendered-gateway-plain.yaml"
 helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" >"$gateway_plain_rendered"
@@ -1157,6 +1214,7 @@ for required in \
     "gateway.controlPlaneIdentity.audience|requires gateway.controlPlaneIdentity.audience" \
     "gateway.controlPlaneIdentity.actor|requires gateway.controlPlaneIdentity.actor" \
     "gateway.database.existingSecret|requires gateway.database.existingSecret" \
+    "gateway.receipts.existingSecret|requires gateway.receipts.existingSecret" \
     "gateway.networkPolicy.controlPlane.namespaceSelector|requires gateway.networkPolicy.controlPlane.namespaceSelector or podSelector" \
     "gateway.networkPolicy.database.to|requires gateway.networkPolicy.database.to"; do
     key="${required%%|*}"
@@ -1171,6 +1229,10 @@ expect_gateway_render_failure bootstrap-and-migrate-dsn "are mutually exclusive"
 expect_gateway_render_failure bootstrap-same-roles "ownerRole and runtimeRole must differ" \
     "${GATEWAY_ARGS[@]}" --set gateway.database.bootstrap.enabled=true \
     --set gateway.database.bootstrap.existingSecret=gw-db-admin --set gateway.database.bootstrap.ownerRole=helm_gateway
+expect_gateway_render_failure receipts-without-key "requires gateway.receipts.existingSecretKey" \
+    "${GATEWAY_ARGS[@]}" --set-string gateway.receipts.existingSecretKey=
+expect_gateway_render_failure receipts-bad-key-id "gateway.receipts.keyId" \
+    "${GATEWAY_ARGS[@]}" --set gateway.receipts.keyId=key=1
 expect_gateway_render_failure cnf-without-client-auth "requireCNF requires gateway.tls.clientAuth" \
     "${GATEWAY_ARGS[@]}" --set gateway.tls.clientAuth= --set gateway.controlPlaneIdentity.requireCNF=true
 # The GitHub App files are all or none, and the installations file has the

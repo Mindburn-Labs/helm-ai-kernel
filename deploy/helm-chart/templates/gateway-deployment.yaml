@@ -3,7 +3,7 @@
 {{- $g := .Values.gateway }}
 # The effect gateway (helm-gateway serve, Zone C): same image and tag as the
 # kernel, its own ServiceAccount, and the only Pod that mounts the GitHub App
-# credentials (R8).
+# credentials and the receipt signing seed (R8).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,6 +94,12 @@ spec:
                 secretKeyRef:
                   name: {{ $g.database.existingSecret | quote }}
                   key: {{ $g.database.existingSecretKey | quote }}
+            # Every decision is recorded with a signed receipt; serve does not
+            # start without this key (helm-tracker#276).
+            - name: HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE
+              value: "/var/run/secrets/helm-gateway-receipts/seed"
+            - name: HELM_GATEWAY_RECEIPT_KEY_ID
+              value: {{ include "helm-ai-kernel.gatewayReceiptKeyID" . | quote }}
             {{- with $g.controlPlaneIdentity }}
             - name: HELM_CP_IDENTITY_JWKS_URL
               value: {{ .jwksURL | quote }}
@@ -183,6 +189,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: gateway-receipts
+              mountPath: /var/run/secrets/helm-gateway-receipts
+              readOnly: true
             {{- if $g.tls.existingSecret }}
             # A whole-Secret mount (no subPath) so rotated files appear in place.
             - name: gateway-tls
@@ -236,6 +245,13 @@ spec:
         {{- end }}
         - name: tmp
           emptyDir: {}
+        - name: gateway-receipts
+          secret:
+            secretName: {{ include "helm-ai-kernel.gatewayReceiptsSecretName" . | quote }}
+            defaultMode: 256
+            items:
+              - key: {{ ternary $g.receipts.existingSecretKey "seed" (ne $g.receipts.existingSecret "") | quote }}
+                path: seed
         {{- if $g.tls.existingSecret }}
         - name: gateway-tls
           secret:

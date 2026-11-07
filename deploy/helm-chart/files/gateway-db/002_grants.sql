@@ -12,7 +12,11 @@
 --                                   revocation or cancellation is a state
 --                                   transition
 --   authority_postings,             SELECT, INSERT (append-only records)
---   authority_provision_limits
+--   authority_provision_limits,
+--   authority_receipts              (signed decision receipts: a stored
+--                                   receipt is never updated or deleted;
+--                                   authority_receipt_chains, whose head
+--                                   every append moves, takes the default)
 --   authority_distinct_values       SELECT, INSERT (INSERT ... ON CONFLICT
 --                                   DO NOTHING and an EXISTS read only)
 --   authority_token_replay          SELECT, INSERT, DELETE (expired
@@ -64,7 +68,8 @@ BEGIN
             WHEN t.relname = 'gateway_activity_schema_migrations' THEN 'SELECT'
             WHEN t.relname IN ('gateway_activity_sources', 'gateway_activity_observations', 'gateway_activity_evidence') THEN 'SELECT, INSERT, UPDATE'
             WHEN t.relname IN ('authority_postings', 'authority_distinct_values', 'authority_provision_limits',
-                'authority_recovery_fences','authority_recovery_members','authority_recovery_checkpoints') THEN 'SELECT, INSERT'
+                'authority_recovery_fences','authority_recovery_members','authority_recovery_checkpoints',
+                'authority_receipts') THEN 'SELECT, INSERT'
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
             WHEN t.relname IN ('river_job', 'river_leader', 'river_queue', 'river_notification')

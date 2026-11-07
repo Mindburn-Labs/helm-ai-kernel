@@ -200,6 +200,26 @@ Kernel image. gatewayValidate checks that any override is complete.
 {{- end }}
 
 {{/*
+The Secret the gateway's receipt signing seed is mounted from: the operator's
+existingSecret, else the chart's autoSeed Secret.
+*/}}
+{{- define "helm-ai-kernel.gatewayReceiptsSecretName" -}}
+{{- if .Values.gateway.receipts.existingSecret -}}
+{{- .Values.gateway.receipts.existingSecret -}}
+{{- else -}}
+{{- printf "%s-receipts" (include "helm-ai-kernel.gatewayName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The key id every receipt carries: gateway.receipts.keyId, else
+helm-gateway:<namespace>:<gateway name>.
+*/}}
+{{- define "helm-ai-kernel.gatewayReceiptKeyID" -}}
+{{- default (printf "helm-gateway:%s:%s" .Release.Namespace (include "helm-ai-kernel.gatewayName" .)) .Values.gateway.receipts.keyId | trunc 128 -}}
+{{- end }}
+
+{{/*
 Render-time checks for the gateway block. Every gateway template includes
 this, so a missing value fails `helm template` whichever object renders first.
 */}}
@@ -281,6 +301,15 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- end -}}
 {{- if not $g.database.existingSecret -}}
 {{- fail "gateway.enabled=true requires gateway.database.existingSecret holding HELM_GATEWAY_DATABASE_URL (the helm_gateway runtime role's DSN)" -}}
+{{- end -}}
+{{- if not (or $g.receipts.existingSecret $g.receipts.autoSeed) -}}
+{{- fail "gateway.enabled=true requires gateway.receipts.existingSecret (a Secret holding a 32-byte Ed25519 seed, hex or base64, under gateway.receipts.existingSecretKey) or gateway.receipts.autoSeed=true: helm-gateway signs every decision it records and does not start without its receipt key" -}}
+{{- end -}}
+{{- if and $g.receipts.existingSecret (not $g.receipts.existingSecretKey) -}}
+{{- fail "gateway.receipts.existingSecret requires gateway.receipts.existingSecretKey, the key of the seed in that Secret" -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" (include "helm-ai-kernel.gatewayReceiptKeyID" .)) -}}
+{{- fail "gateway.receipts.keyId must be 1 to 128 characters of letters, digits and . _ : / - starting with a letter or digit" -}}
 {{- end -}}
 {{- if and $g.database.bootstrap.enabled $g.database.migrate.existingSecret -}}
 {{- fail "gateway.database.bootstrap.enabled and gateway.database.migrate.existingSecret are mutually exclusive: the bootstrap migrates as its owner role" -}}

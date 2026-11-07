@@ -84,3 +84,10 @@ ReasonEmergencyCapsuleInvalid                ERR_EMERGENCY_CAPSULE_INVALID
 ReasonHardwareQuorumUnbound                  ERR_HARDWARE_QUORUM_UNBOUND
 ReasonHostProcessUnbound                     ERR_HOST_PROCESS_UNBOUND
 ReasonJurisdiction                           JURISDICTION_VIOLATION
+
+# ── Retired emitter (1) — helm-tracker#266 ─────────────────────────────────
+# Only executor.SafeExecutor emitted this; it was deleted as dead code (no
+# shipped binary constructed it). The code stays in the public registry and
+# SDKs; drop it in a registry revision or emit it from the gateway path.
+# Owner: kernel maintainers (helm-tracker#266).
+ReasonAttestationResultRequired              ERR_ATTESTATION_RESULT_REQUIRED

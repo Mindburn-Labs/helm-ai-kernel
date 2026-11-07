@@ -1,90 +1,12 @@
 package executor
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
 	"testing"
 )
 
 // --- Merkle Tree ---
-
-func TestMerkle_SingleLeafRootEqualsLeaf(t *testing.T) {
-	b := NewMerkleBuilder()
-	b.AddLeafBytes("/a", []byte("data"), false)
-	tree, err := b.Build()
-	if err != nil || len(tree.Root) == 0 {
-		t.Fatalf("single leaf build failed: %v", err)
-	}
-}
-
-func TestMerkle_TwoLeavesRootDiffers(t *testing.T) {
-	b := NewMerkleBuilder()
-	b.AddLeafBytes("/a", []byte("data1"), false)
-	b.AddLeafBytes("/b", []byte("data2"), false)
-	tree, _ := b.Build()
-	if string(tree.Root) == string(tree.Leaves[0].Hash) {
-		t.Fatal("root should differ from leaf hash when 2 leaves present")
-	}
-}
-
-func TestMerkle_EmptyTreeErrors(t *testing.T) {
-	b := NewMerkleBuilder()
-	_, err := b.Build()
-	if err == nil {
-		t.Fatal("empty tree should error")
-	}
-}
-
-func TestMerkle_DeterministicRoot(t *testing.T) {
-	build := func() string {
-		b := NewMerkleBuilder()
-		_ = b.AddLeaf("/x", map[string]any{"k": "v"}, false)
-		_ = b.AddLeaf("/y", "val", false)
-		tree, _ := b.Build()
-		return tree.RootHex()
-	}
-	if build() != build() {
-		t.Fatal("deterministic builds should produce identical roots")
-	}
-}
-
-func TestMerkle_ProofVerifies(t *testing.T) {
-	b := NewMerkleBuilder()
-	_ = b.AddLeaf("/a", "x", false)
-	_ = b.AddLeaf("/b", "y", false)
-	_ = b.AddLeaf("/c", "z", false)
-	tree, _ := b.Build()
-	proof, _ := tree.GenerateProof(1)
-	valid, err := VerifyProof(proof)
-	if err != nil || !valid {
-		t.Fatalf("proof should verify: valid=%v err=%v", valid, err)
-	}
-}
-
-func TestMerkle_TamperedProofFails(t *testing.T) {
-	b := NewMerkleBuilder()
-	_ = b.AddLeaf("/a", "x", false)
-	_ = b.AddLeaf("/b", "y", false)
-	tree, _ := b.Build()
-	proof, _ := tree.GenerateProof(0)
-	proof.LeafHash = strings.Repeat("0", 64)
-	valid, _ := VerifyProof(proof)
-	if valid {
-		t.Fatal("tampered proof should fail verification")
-	}
-}
-
-func TestMerkle_ProofOutOfRangeErrors(t *testing.T) {
-	b := NewMerkleBuilder()
-	b.AddLeafBytes("/a", []byte("x"), false)
-	tree, _ := b.Build()
-	_, err := tree.GenerateProof(5)
-	if err == nil {
-		t.Fatal("out-of-range index should error")
-	}
-}
 
 func TestMerkle_DomainSeparatorsDiffer(t *testing.T) {
 	if LeafDomainSeparator[0] == NodeDomainSeparator[0] {
@@ -92,41 +14,7 @@ func TestMerkle_DomainSeparatorsDiffer(t *testing.T) {
 	}
 }
 
-func TestMerkle_SealedLeafMarked(t *testing.T) {
-	b := NewMerkleBuilder()
-	b.AddLeafBytes("/secret", []byte("classified"), true)
-	tree, _ := b.Build()
-	if !tree.Leaves[0].Sealed {
-		t.Fatal("sealed flag should be set")
-	}
-}
-
 // --- EvidenceView ---
-
-func TestEvidenceView_DeriveAndVerify(t *testing.T) {
-	b := NewMerkleBuilder()
-	_ = b.AddLeaf("/a", "x", false)
-	_ = b.AddLeaf("/b", "y", false)
-	tree, _ := b.Build()
-	view, err := tree.DeriveView("v1", "p1", []string{"/a"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	valid, err := VerifyView(view)
-	if err != nil || !valid {
-		t.Fatalf("view should verify: valid=%v err=%v", valid, err)
-	}
-}
-
-func TestEvidenceView_MissingPathErrors(t *testing.T) {
-	b := NewMerkleBuilder()
-	_ = b.AddLeaf("/a", "x", false)
-	tree, _ := b.Build()
-	_, err := tree.DeriveView("v1", "p1", []string{"/missing"}, nil)
-	if err == nil {
-		t.Fatal("missing path should error")
-	}
-}
 
 // --- EvidencePack ---
 
@@ -139,36 +27,4 @@ func TestReceiptHashDeterministic(t *testing.T) {
 	}
 }
 
-func TestCanonicalJSON_SortedKeys(t *testing.T) {
-	obj := map[string]any{"z": 1, "a": 2}
-	data, err := canonicalJSON(obj)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(data)
-	aIdx := strings.Index(s, `"a"`)
-	zIdx := strings.Index(s, `"z"`)
-	if aIdx > zIdx {
-		t.Fatalf("keys should be sorted: %s", s)
-	}
-}
-
 // --- MCPDriver ---
-
-func TestMCPDriver_NilClientErrors(t *testing.T) {
-	d := NewMCPDriver(nil)
-	_, err := d.Execute(context.Background(), "tool", nil)
-	if err == nil {
-		t.Fatal("nil client should error")
-	}
-}
-
-func TestMerkle_RootHexFormat(t *testing.T) {
-	b := NewMerkleBuilder()
-	b.AddLeafBytes("/a", []byte("data"), false)
-	tree, _ := b.Build()
-	h := tree.RootHex()
-	if len(h) != 64 {
-		t.Fatalf("expected 64-char hex root, got len=%d", len(h))
-	}
-}

@@ -45,9 +45,10 @@ func service(t *testing.T) protoreflect.ServiceDescriptor {
 }
 
 // The six operations of rev 3.4 §4.2 as eight unary RPCs, plus Cancel and
-// GetAttemptContent from WS-B's review.
+// GetAttemptContent from WS-B's review, and the receipt reads
+// GetAttemptReceipts and ExportReceiptChain (helm-tracker#276).
 func TestServiceHasTheSixOperations(t *testing.T) {
-	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "GetStopOutcome", "Lift", "FenceRecovery", "GetRecoveryFence", "BindRecoveryCheckpoint", "ListRecoveryAttempts"}
+	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "GetStopOutcome", "Lift", "FenceRecovery", "GetRecoveryFence", "BindRecoveryCheckpoint", "ListRecoveryAttempts", "GetAttemptReceipts", "ExportReceiptChain"}
 	methods := service(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -65,7 +66,8 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		}
 		level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel()
 		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
-		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" || name == "GetStopOutcome" || name == "GetRecoveryFence" || name == "ListRecoveryAttempts" {
+		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" || name == "GetStopOutcome" || name == "GetRecoveryFence" || name == "ListRecoveryAttempts" ||
+			name == "GetAttemptReceipts" || name == "ExportReceiptChain" {
 			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
 		}
 		if level != wantLevel {
@@ -94,6 +96,8 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		EffectGatewayServiceGetRecoveryFenceProcedure:       "GetRecoveryFence",
 		EffectGatewayServiceBindRecoveryCheckpointProcedure: "BindRecoveryCheckpoint",
 		EffectGatewayServiceListRecoveryAttemptsProcedure:   "ListRecoveryAttempts",
+		EffectGatewayServiceGetAttemptReceiptsProcedure:     "GetAttemptReceipts",
+		EffectGatewayServiceExportReceiptChainProcedure:     "ExportReceiptChain",
 	}
 	if len(procedures) != len(want) {
 		t.Errorf("%d procedure constants checked, want %d", len(procedures), len(want))
@@ -240,6 +244,7 @@ func TestNoRequestCarriesCallerIdentity(t *testing.T) {
 // the caller is, which comes only from the token.
 var identityFilters = map[string]string{
 	"helm.gateway.v1.ListAttemptsRequest.requester_principal_id": "a filter on the attempts of another principal",
+	"helm.gateway.v1.ExportReceiptChainRequest.workspace_id":     "the caller's statement of the token's own workspace, refused when it names any other",
 }
 
 // floatFields lists float and double fields in a message and the messages it
@@ -459,6 +464,8 @@ func TestRPCTokenScopes(t *testing.T) {
 		"GetRecoveryFence":       {"helm.gateway.read"},
 		"BindRecoveryCheckpoint": {"helm.gateway.stop"},
 		"ListRecoveryAttempts":   {"helm.gateway.read"},
+		"GetAttemptReceipts":     {"helm.gateway.read"},
+		"ExportReceiptChain":     {"helm.gateway.read"},
 	}
 
 	planted := "  // Token scope: helm.gateway.read.\n  // Token scope: helm.gateway.stop.\n  rpc Planted(PlantedRequest) returns (PlantedResponse);\n" +
@@ -599,6 +606,60 @@ func TestReceiptRefsAreOutputOnlyAndFrozen(t *testing.T) {
 		if in := methods.Get(i).Input(); refersToReceipts(in, map[protoreflect.FullName]bool{}) {
 			t.Errorf("%s carries a receipt reference; receipts come only from the gateway's ledger", in.FullName())
 		}
+	}
+}
+
+// The receipt reads return exact bytes (helm-tracker#276): a reader verifies
+// what the gateway stored, not a re-encoding of it. Their requests name an
+// attempt or a sequence range; ExportReceiptChain's workspace_id is checked
+// against the token and nothing else in them names a tenant or a key.
+func TestReceiptReadShapesAreFrozen(t *testing.T) {
+	type field struct {
+		number protoreflect.FieldNumber
+		kind   protoreflect.Kind
+		list   bool
+	}
+	for msg, want := range map[protoreflect.MessageDescriptor]map[protoreflect.Name]field{
+		(&SignedReceipt{}).ProtoReflect().Descriptor(): {
+			"ref": {1, protoreflect.MessageKind, false}, "receipt_id": {2, protoreflect.StringKind, false},
+			"format": {3, protoreflect.StringKind, false}, "receipt": {4, protoreflect.BytesKind, false},
+			"binding": {5, protoreflect.BytesKind, false},
+		},
+		(&GetAttemptReceiptsRequest{}).ProtoReflect().Descriptor(): {"attempt_id": {1, protoreflect.StringKind, false}},
+		(&GetAttemptReceiptsResponse{}).ProtoReflect().Descriptor(): {
+			"attempt_id": {1, protoreflect.StringKind, false}, "receipts": {2, protoreflect.MessageKind, true},
+		},
+		(&ExportReceiptChainRequest{}).ProtoReflect().Descriptor(): {
+			"workspace_id": {1, protoreflect.StringKind, false}, "from_seq": {2, protoreflect.Uint64Kind, false},
+			"to_seq": {3, protoreflect.Uint64Kind, false},
+		},
+		(&ExportReceiptChainResponse{}).ProtoReflect().Descriptor(): {
+			"chain_id": {1, protoreflect.StringKind, false}, "head_seq": {2, protoreflect.Uint64Kind, false},
+			"receipts": {3, protoreflect.MessageKind, true}, "bundle": {4, protoreflect.StringKind, false},
+		},
+	} {
+		if msg.Fields().Len() != len(want) {
+			t.Errorf("%s has %d fields, want %d", msg.FullName(), msg.Fields().Len(), len(want))
+		}
+		for name, w := range want {
+			f := msg.Fields().ByName(name)
+			if f == nil || f.Number() != w.number || f.Kind() != w.kind || f.IsList() != w.list {
+				t.Errorf("%s.%s = %v, want %v field %d (list %v)", msg.FullName(), name, f, w.kind, w.number, w.list)
+			}
+		}
+	}
+	if m := (&SignedReceipt{}).ProtoReflect().Descriptor().Fields().ByName("ref").Message(); m == nil || m.FullName() != "helm.gateway.v1.ReceiptRef" {
+		t.Errorf("SignedReceipt.ref = %v, want helm.gateway.v1.ReceiptRef", m)
+	}
+	for _, msg := range []protoreflect.MessageDescriptor{
+		(&GetAttemptReceiptsResponse{}).ProtoReflect().Descriptor(),
+	} {
+		if m := msg.Fields().ByName("receipts").Message(); m == nil || m.FullName() != "helm.gateway.v1.SignedReceipt" {
+			t.Errorf("%s.receipts = %v, want repeated helm.gateway.v1.SignedReceipt", msg.FullName(), m)
+		}
+	}
+	if m := (&ExportReceiptChainResponse{}).ProtoReflect().Descriptor().Fields().ByName("receipts").Message(); m == nil || m.FullName() != "helm.gateway.v1.ReceiptRef" {
+		t.Errorf("ExportReceiptChainResponse.receipts = %v, want repeated helm.gateway.v1.ReceiptRef", m)
 	}
 }
 

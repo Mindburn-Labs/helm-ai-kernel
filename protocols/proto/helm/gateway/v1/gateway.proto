@@ -18,7 +18,8 @@ syntax = "proto3";
 //     Identifiers that appear in requests (mandate_id, stop scope keys) are
 //     selectors the gateway checks against the authenticated principal; they
 //     never grant authority (R3). Attempts belong to the workspace of the
-//     token that proposed them.
+//     token that proposed them. ExportReceiptChain's workspace_id restates
+//     the token's workspace and is refused when it names any other.
 //   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
 //     allows one scope per token. Scopes are one per authority class (WS-B
 //     proposal, resolved by the coordinator on 2026-09-26):
@@ -57,12 +58,14 @@ syntax = "proto3";
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
-// lowercase hex string its chain links with, and no signatures or keys. An
-// attempt names its signed decision receipts by reference only (ReceiptRef):
-// each is a classical Ed25519 receipt.v5 signature the gateway keeps in its
-// ledger, verified offline against the gateway's published key. Token
-// verification is ADR-0005's and adds no cryptographic control here; no
-// post-quantum claim is made.
+// lowercase hex string its chain links with. An attempt names its signed
+// decision receipts by reference (ReceiptRef); only the receipt reads
+// (GetAttemptReceipts, ExportReceiptChain) carry signed material: the exact
+// bytes of classical Ed25519 receipt.v5 envelopes as the gateway stored them,
+// which name the signer's public key, and their SHA-256-bound binding
+// documents, verified offline against the key the gateway publishes. No other
+// message carries a signature or a key. Token verification is ADR-0005's and
+// adds no cryptographic control here; no post-quantum claim is made.
 package helm.gateway.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -345,6 +348,52 @@ service EffectGatewayService {
   // Get/Observe authorization remains mandatory for each attempt.
   // Token scope: helm.gateway.read.
   rpc ListRecoveryAttempts(ListRecoveryAttemptsRequest) returns (ListRecoveryAttemptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetAttemptReceipts returns the signed decision receipts of one attempt,
+  // oldest first: for each, the exact bytes of the receipt.v5 envelope the
+  // gateway stored, the exact bytes of the helm.gateway.receipt-binding.v1
+  // document whose SHA-256 it signs as output_hash, and its place in its
+  // chain. Each verifies offline with
+  //   receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
+  //     --key "<kid>=<public key hex>"
+  // using the key the gateway publishes at GET /api/v1/receipt-keyring.
+  // Receipts of one attempt are not adjacent in their chain; to check the
+  // linkage around them, export the range with ExportReceiptChain.
+  //
+  // It reads what GetAttempt reads: an attempt of the token's tenant and
+  // workspace, and for a token that carries an episode claim (a worker token)
+  // only an attempt of its own episode; any other attempt is not_found.
+  // Continuation and reassignment grants do not extend to receipts.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetAttemptReceipts(GetAttemptReceiptsRequest) returns (GetAttemptReceiptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ExportReceiptChain exports a contiguous segment of the receipt chain of
+  // the token's tenant and workspace: the receipts with sequence numbers
+  // from_seq to to_seq, in chain order, as one document receipt_verify checks
+  // offline, signatures, chain linkage and bindings included:
+  //   receipt_verify --receipt export.json --key "<kid>=<public key hex>" --json
+  // One call exports one chain and never another tenant's or workspace's.
+  //
+  // Token scope: helm.gateway.read.
+  //
+  //   - workspace_id must be the token's workspace; any other is
+  //     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]. It names
+  //     the chain the caller expects and never selects another.
+  //   - A token that carries an episode claim (a worker token) is
+  //     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
+  //     holds the decisions of every episode in the workspace.
+  //   - from_seq is at least 1, to_seq at least from_seq, and the range holds
+  //     at most 256 receipts, or the call is invalid_argument
+  //     [reason_code: SCHEMA_VIOLATION]. Page with consecutive ranges; the
+  //     last receipt of one range is the predecessor of the next.
+  //   - A to_seq past the chain's head, or a workspace with no chain yet, is
+  //     not_found.
+  rpc ExportReceiptChain(ExportReceiptChainRequest) returns (ExportReceiptChainResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -830,6 +879,65 @@ message ReceiptRef {
   string receipt_hash = 3;
   // The id of the key that signed the receipt, its key_id.
   string kid = 4;
+}
+
+// SignedReceipt is one stored decision receipt with its exact bytes.
+message SignedReceipt {
+  // Where the receipt sits in its chain and the key that signed it.
+  ReceiptRef ref = 1;
+  // The receipt's receipt_id.
+  string receipt_id = 2;
+  // The signed envelope's format: receipt.v5.
+  string format = 3;
+  // The exact bytes of the signed receipt as the gateway stored them: one
+  // receipt.v5 JSON object.
+  bytes receipt = 4;
+  // The exact bytes of the receipt's binding document
+  // (helm.gateway.receipt-binding.v1, RFC 8785 JSON): the SHA-256 of these
+  // bytes is the receipt's output_hash.
+  bytes binding = 5;
+}
+
+// GetAttemptReceiptsRequest names the attempt whose receipts to read.
+message GetAttemptReceiptsRequest {
+  // The attempt.
+  string attempt_id = 1;
+}
+
+// GetAttemptReceiptsResponse holds an attempt's signed receipts.
+message GetAttemptReceiptsResponse {
+  // The attempt.
+  string attempt_id = 1;
+  // Its receipts, oldest first: one for each ADMITTED, DENIED or ESCALATED
+  // version it reached.
+  repeated SignedReceipt receipts = 2;
+}
+
+// ExportReceiptChainRequest names a range of the token's workspace chain.
+message ExportReceiptChainRequest {
+  // The token's workspace, stated by the caller and checked against the
+  // token; it never selects another workspace.
+  string workspace_id = 1;
+  // The first sequence number to export, from 1.
+  uint64 from_seq = 2;
+  // The last sequence number to export; at most 255 past from_seq.
+  uint64 to_seq = 3;
+}
+
+// ExportReceiptChainResponse is one contiguous segment of a receipt chain.
+message ExportReceiptChainResponse {
+  // The chain: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>.
+  string chain_id = 1;
+  // The chain's newest sequence number when the segment was read.
+  uint64 head_seq = 2;
+  // The exported receipts' references, in chain order.
+  repeated ReceiptRef receipts = 3;
+  // The segment as the JSON document receipt_verify --receipt reads: a
+  // receipts array of the stored envelopes, in chain order, gateway_bindings
+  // mapping each receipt_id to the base64 of its binding bytes, and key_id
+  // when every receipt names one key. Save it unchanged. It carries no key:
+  // the verifier supplies the published one.
+  string bundle = 4;
 }
 
 // EpisodeRef names the bounded worker run an attempt belongs to: the

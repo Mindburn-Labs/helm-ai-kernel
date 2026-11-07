@@ -110,8 +110,9 @@ func (s *Service) GetReceipts(ctx context.Context, caller Caller, attemptID stri
 // the caller's tenant and workspace, in chain order, with the document
 // receipt_verify checks offline. It refuses a workspace other than the
 // caller's own and a caller with an episode claim, whose view is its own
-// episode while the chain holds the whole workspace's decisions. A range past
-// the chain's head is not found. A segment the ledger cannot return whole and
+// episode while the chain holds the whole workspace's decisions. A ToSeq past
+// the chain's head reads up to the head, which the export names; a FromSeq
+// past it is not found. A segment the ledger cannot return whole and
 // contiguous is an error, never a partial export.
 func (s *Service) ExportReceiptChain(ctx context.Context, caller Caller, in ExportInput) (ChainExport, error) {
 	if err := checkCaller(caller); err != nil {
@@ -143,10 +144,11 @@ func (s *Service) ExportReceiptChain(ctx context.Context, caller Caller, in Expo
 		if err != nil {
 			return err
 		}
-		if head < 0 || in.ToSeq > uint64(head) {
+		if head < 0 || in.FromSeq > uint64(head) {
 			return refuse(CodeNotFound, "", "the workspace's receipt chain ends at sequence %d", head)
 		}
 		out.HeadSeq = uint64(head)
+		in.ToSeq = min(in.ToSeq, out.HeadSeq)
 		rows, err := tx.QueryContext(ctx, `SELECT `+signedReceiptColumns+` FROM authority_receipts
 			WHERE tenant_id = $1 AND chain_id = $2 AND workspace_id = $3 AND seq BETWEEN $4 AND $5 ORDER BY seq`,
 			caller.TenantID, out.ChainID, caller.WorkspaceID, in.FromSeq, in.ToSeq)

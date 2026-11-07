@@ -105,7 +105,7 @@ func TestPostgresReceiptReadsOnTheWire(t *testing.T) {
 
 	// ExportReceiptChain: the token's chain as one document receipt_verify
 	// checks offline.
-	export, err := client.ExportReceiptChain(ctx, withToken(&gatewayv1.ExportReceiptChainRequest{WorkspaceId: "ws-a", FromSeq: 1, ToSeq: 2}, read))
+	export, err := client.ExportReceiptChain(ctx, withToken(&gatewayv1.ExportReceiptChainRequest{WorkspaceId: "ws-a", FromSeq: 1, ToSeq: 256}, read))
 	must(t, err)
 	if export.Msg.GetChainId() != "helm-gateway:8:tenant-a:4:ws-a" || export.Msg.GetHeadSeq() != 2 || len(export.Msg.GetReceipts()) != 2 ||
 		!bytes.Contains([]byte(export.Msg.GetBundle()), receipts[0].GetReceipt()) {

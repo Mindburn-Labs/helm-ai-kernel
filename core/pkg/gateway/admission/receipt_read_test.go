@@ -25,7 +25,7 @@ func mockedService(t *testing.T) (*Service, sqlmock.Sqlmock) {
 
 // The refusals of ExportReceiptChain come from the token and the request
 // alone: a workspace other than the token's, an episode token and a range
-// out of bounds are refused before the ledger is read (CTL-059).
+// out of bounds are refused before the ledger is read (CTL-060).
 func TestReceiptExportRefusesBeforeReadingTheLedger(t *testing.T) {
 	svc, mock := mockedService(t)
 	worker := Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agent-a", Episode: &Episode{EpisodeID: "ep-1", WorkItemID: "work-1"}}
@@ -87,8 +87,9 @@ func expectExport(mock sqlmock.Sqlmock, head int64, from, to int64, rows *sqlmoc
 }
 
 // An export is the ledger's rows in chain order as one verifiable document,
-// read in the caller's tenant and workspace only; a range the ledger cannot
-// return whole is an error, never a partial export (CTL-059).
+// read in the caller's tenant and workspace only, up to the chain's head; a
+// range the ledger cannot return whole is an error, never a partial export
+// (CTL-060).
 func TestReceiptExportIsTheWholeRangeOrNothing(t *testing.T) {
 	svc, mock := mockedService(t)
 	rows, stored := signedRows(t, 1, 2, 3)
@@ -119,16 +120,27 @@ func TestReceiptExportIsTheWholeRangeOrNothing(t *testing.T) {
 	if export, err := svc.ExportReceiptChain(context.Background(), human, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 3}); err == nil || export.Bundle != nil {
 		t.Fatalf("a short range exported: %v", err)
 	}
-	// A range past the head is not found, and nothing is read beyond the head.
-	expectExport(mock, 2, 1, 3, nil)
+	// A range that runs past the head reads up to the head and says so, and
+	// nothing beyond the head is asked for.
+	upToHead, _ := signedRows(t, 2, 3)
+	expectExport(mock, 3, 2, 3, upToHead)
+	mock.ExpectCommit()
+	export, err = svc.ExportReceiptChain(context.Background(), human, ExportInput{WorkspaceID: workspace, FromSeq: 2, ToSeq: 2 + MaxExportReceipts - 1})
+	must(t, err)
+	if export.HeadSeq != 3 || len(export.Receipts) != 2 || export.Receipts[0].Ref.Seq != 2 || export.Receipts[1].Ref.Seq != 3 {
+		t.Fatalf("export past the head = head %d, receipts %+v", export.HeadSeq, export.Receipts)
+	}
+	// A range that starts past the head is not found, and no receipt is read.
+	expectExport(mock, 2, 3, 4, nil)
 	mock.ExpectRollback()
-	_, err = svc.ExportReceiptChain(context.Background(), human, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 3})
+	_, err = svc.ExportReceiptChain(context.Background(), human, ExportInput{WorkspaceID: workspace, FromSeq: 3, ToSeq: 4})
 	wantReadRefusal(t, "past the head", err, CodeNotFound)
 	must(t, mock.ExpectationsWereMet())
 }
 
 // GetReceipts is held to what Get reads: the attempt must be visible in the
-// caller's tenant, workspace and episode scope before any receipt is read.
+// caller's tenant, workspace and episode scope before any receipt is read
+// (CTL-060).
 func TestAttemptReceiptsAreReadOnlyForAVisibleAttempt(t *testing.T) {
 	svc, mock := mockedService(t)
 	worker := Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agent-a", Episode: &Episode{EpisodeID: "ep-1", WorkItemID: "work-1"}}

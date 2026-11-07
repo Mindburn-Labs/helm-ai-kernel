@@ -4214,9 +4214,10 @@ controls:
       ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of
       the chain of the token's tenant and workspace, in order, as the document
       receipt_verify checks offline; it refuses a workspace_id other than the
-      token's and an episode token, refuses a range past the chain's head
-      instead of clipping it, and never returns a range with a gap. A frozen
-      gateway chain signed by the gateway's builder keeps verifying.
+      token's and an episode token, reads a range that runs past the chain's
+      head up to the head and names it (one that starts past it is not
+      found), and never returns a range with a gap. A frozen gateway chain
+      signed by the gateway's builder keeps verifying.
     status: enforced
     entry_points:
       - "core/pkg/receiptverify.VerifyBundle"

@@ -1439,9 +1439,11 @@ effects.
   `gateway_bindings` mapping each `receipt_id` to the base64 of its binding
   bytes, and `key_id` when every receipt names one key. It carries no key.
   `workspace_id` must be the token's workspace (`permission_denied`
-  otherwise), an episode token is refused (the chain holds every episode's
-  decisions), and a range past the head is `not_found`, never clipped. Page
-  with consecutive ranges up to `head_seq`.
+  otherwise), and an episode token is refused (the chain holds every
+  episode's decisions). A `to_seq` past the head reads up to the head;
+  `head_seq` and the references returned say which range the bundle holds,
+  and it holds all of it or the call fails. A `from_seq` past the head is
+  `not_found`. Page with consecutive ranges until `head_seq`.
 
 **The check.** Save the bundle unchanged and verify it against the published
 key:

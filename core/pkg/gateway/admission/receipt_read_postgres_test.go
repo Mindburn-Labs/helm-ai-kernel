@@ -137,23 +137,30 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 		t.Fatalf("a range with a gap verified: %+v", got)
 	}
 
-	// Ranges outside the chain or past the cap are refused, not clipped.
+	// A range that runs past the head reads up to it, whole, and says so.
+	tail, err := f.svc.ExportReceiptChain(ctx, human, ExportInput{WorkspaceID: workspace, FromSeq: 4, ToSeq: 4 + MaxExportReceipts - 1})
+	must(t, err)
+	if tail.HeadSeq != 5 || len(tail.Receipts) != 2 || tail.Receipts[0].Ref.Seq != 4 || tail.Receipts[1].Ref.Seq != 5 {
+		t.Fatalf("export 4.. = head %d, %d receipts", tail.HeadSeq, len(tail.Receipts))
+	}
+	if got := receiptverify.VerifyJSON(tail.Bundle, trustRootJSON(t)); got.Verdict != receiptverify.VerdictVerified {
+		t.Fatalf("export 4..: %+v", got)
+	}
+
+	// Ranges that start outside the chain or exceed the cap are refused.
 	for name, test := range map[string]struct {
 		in   ExportInput
 		code Code
 	}{
-		"from zero":       {ExportInput{WorkspaceID: workspace, FromSeq: 0, ToSeq: 1}, CodeInvalidArgument},
-		"reversed":        {ExportInput{WorkspaceID: workspace, FromSeq: 3, ToSeq: 2}, CodeInvalidArgument},
-		"over the cap":    {ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: MaxExportReceipts + 1}, CodeInvalidArgument},
-		"past the head":   {ExportInput{WorkspaceID: workspace, FromSeq: 5, ToSeq: 6}, CodeNotFound},
-		"no workspace":    {ExportInput{FromSeq: 1, ToSeq: 1}, CodeInvalidArgument},
-		"other workspace": {ExportInput{WorkspaceID: "ws-b", FromSeq: 1, ToSeq: 1}, CodePermissionDenied},
+		"from zero":              {ExportInput{WorkspaceID: workspace, FromSeq: 0, ToSeq: 1}, CodeInvalidArgument},
+		"reversed":               {ExportInput{WorkspaceID: workspace, FromSeq: 3, ToSeq: 2}, CodeInvalidArgument},
+		"over the cap":           {ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: MaxExportReceipts + 1}, CodeInvalidArgument},
+		"starting past the head": {ExportInput{WorkspaceID: workspace, FromSeq: 6, ToSeq: 6}, CodeNotFound},
+		"no workspace":           {ExportInput{FromSeq: 1, ToSeq: 1}, CodeInvalidArgument},
+		"other workspace":        {ExportInput{WorkspaceID: "ws-b", FromSeq: 1, ToSeq: 1}, CodePermissionDenied},
 	} {
 		_, err := f.svc.ExportReceiptChain(ctx, human, test.in)
 		wantReadRefusal(t, name, err, test.code)
-	}
-	if _, err := f.svc.ExportReceiptChain(ctx, human, ExportInput{WorkspaceID: workspace, FromSeq: 5, ToSeq: 5 + MaxExportReceipts - 1}); err == nil {
-		t.Fatal("a full-size range past the head was exported")
 	}
 }
 
@@ -172,11 +179,11 @@ func TestPostgresReceiptReadsStayInTheTokensTenantAndWorkspace(t *testing.T) {
 	worker := f.propose(episodeWorker("ep-1", ""), workerNote("scope-worker"))
 
 	// Each caller exports its own chain, whatever workspace name it shares.
-	own, err := f.svc.ExportReceiptChain(ctx, tenantBCaller, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 1})
+	own, err := f.svc.ExportReceiptChain(ctx, tenantBCaller, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: MaxExportReceipts})
 	must(t, err)
 	parsed, err := receiptverify.ParseBundle(own.Bundle)
 	must(t, err)
-	if own.ChainID != receiptChainID(tenantB, workspace) || own.HeadSeq != 1 || parsed.Receipts[0].SessionID != own.ChainID {
+	if own.ChainID != receiptChainID(tenantB, workspace) || own.HeadSeq != 1 || len(parsed.Receipts) != 1 || parsed.Receipts[0].SessionID != own.ChainID {
 		t.Fatalf("tenant B exported %q head %d: %+v", own.ChainID, own.HeadSeq, parsed.Receipts[0])
 	}
 	binding, err := receiptverify.ParseGatewayBinding(own.Receipts[0].Binding)
@@ -189,8 +196,8 @@ func TestPostgresReceiptReadsStayInTheTokensTenantAndWorkspace(t *testing.T) {
 		in     ExportInput
 		code   Code
 	}{
-		"tenant B past its own head":          {tenantBCaller, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 3}, CodeNotFound},
-		"workspace B past its own head":       {wsB, ExportInput{WorkspaceID: "ws-b", FromSeq: 1, ToSeq: 3}, CodeNotFound},
+		"tenant B past its own head":          {tenantBCaller, ExportInput{WorkspaceID: workspace, FromSeq: 2, ToSeq: 3}, CodeNotFound},
+		"workspace B past its own head":       {wsB, ExportInput{WorkspaceID: "ws-b", FromSeq: 2, ToSeq: 3}, CodeNotFound},
 		"workspace B naming workspace A":      {wsB, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 1}, CodePermissionDenied},
 		"workspace A naming workspace B":      {human, ExportInput{WorkspaceID: "ws-b", FromSeq: 1, ToSeq: 1}, CodePermissionDenied},
 		"an episode token":                    {episodeWorker("ep-1", ""), ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 1}, CodePermissionDenied},

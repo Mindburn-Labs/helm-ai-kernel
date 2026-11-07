@@ -137,7 +137,8 @@ source** ([gateway effect API](../architecture/gateway-effect-api.md),
 Read the gateway's public key from `GET /api/v1/receipt-keyring` on its API
 listener (the same document the kernel publishes), export a range of a
 workspace's chain with the `ExportReceiptChain` RPC (a `helm.gateway.read`
-token of that workspace; at most 256 receipts per call), and verify the
+token of that workspace; at most 256 receipts per call, read up to the
+chain's head, which the response names as `head_seq`), and verify the
 `bundle` it returns:
 
 ```bash

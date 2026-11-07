@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/governance"
-	"github.com/google/uuid"
 )
 
 // Version is the current schema version.
@@ -122,20 +121,6 @@ type FirewallPolicy struct {
 	DefaultAction string         `json:"default_action"`
 }
 
-// NewBuilder creates a new provenance envelope builder.
-func NewBuilder() *Builder {
-	return &Builder{
-		envelope: &Envelope{
-			EnvelopeID: "env-" + strings.ReplaceAll(uuid.New().String(), "-", ""),
-			Version:    Version,
-			CreatedAt:  time.Now().UTC(),
-			Segments:   make([]*Segment, 0),
-		},
-		patterns:   make(map[string]*regexp.Regexp),
-		classifier: governance.NewClassifier(),
-	}
-}
-
 // Builder constructs provenance envelopes.
 type Builder struct {
 	mu         sync.Mutex
@@ -153,40 +138,6 @@ func (b *Builder) SetFirewallPolicy(policy *FirewallPolicy) {
 	b.envelope.FirewallPolicyID = policy.PolicyID
 }
 
-// AddSegment adds a content segment with provenance metadata.
-func (b *Builder) AddSegment(sourceType SourceType, trustLevel TrustLevel, content string, metadata SegmentMetadata) *Segment {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	segment := &Segment{
-		SegmentID:        "seg-" + uuid.New().String()[:8],
-		SourceType:       sourceType,
-		TrustLevel:       trustLevel,
-		Content:          content,
-		Metadata:         metadata,
-		TransformApplied: TransformNone,
-	}
-
-	// Detect injection indicators
-	segment.InjectionIndicators = b.detectInjection(content)
-
-	// Update Data Classification (Max of existing vs new)
-	// We cheat a bit and just re-classify based on everything so far, or just this segment?
-	// Real implementation should be: logic to escalate classification if confidential data found.
-	class := b.classifier.Classify(content)
-	if isHigherSensitivity(class, b.envelope.DataClassification) {
-		b.envelope.DataClassification = class
-	}
-
-	// Apply firewall rules
-	if b.policy != nil {
-		segment = b.applyFirewall(segment)
-	}
-
-	b.envelope.Segments = append(b.envelope.Segments, segment)
-	return segment
-}
-
 func isHigherSensitivity(newClass, oldClass governance.DataClass) bool {
 	rank := map[governance.DataClass]int{
 		governance.DataClassPublic:       0,
@@ -195,35 +146,6 @@ func isHigherSensitivity(newClass, oldClass governance.DataClass) bool {
 		governance.DataClassRestricted:   3,
 	}
 	return rank[newClass] > rank[oldClass]
-}
-
-// AddSystemPrompt adds a trusted system prompt.
-func (b *Builder) AddSystemPrompt(content string) *Segment {
-	return b.AddSegment(SourceSystem, TrustLevelTrusted, content, SegmentMetadata{})
-}
-
-// AddUserInput adds user-provided content (semi-trusted).
-func (b *Builder) AddUserInput(content string, userID string) *Segment {
-	return b.AddSegment(SourceUser, TrustLevelSemiTrusted, content, SegmentMetadata{
-		UserID:    userID,
-		Timestamp: time.Now().UTC(),
-	})
-}
-
-// AddToolOutput adds tool output (untrusted by default).
-func (b *Builder) AddToolOutput(content string, toolID string) *Segment {
-	return b.AddSegment(SourceToolOutput, TrustLevelUntrusted, content, SegmentMetadata{
-		ToolID:    toolID,
-		Timestamp: time.Now().UTC(),
-	})
-}
-
-// AddWebContent adds web-sourced content (untrusted).
-func (b *Builder) AddWebContent(content string, sourceURI string) *Segment {
-	return b.AddSegment(SourceWeb, TrustLevelUntrusted, content, SegmentMetadata{
-		SourceURI: sourceURI,
-		Timestamp: time.Now().UTC(),
-	})
 }
 
 // Build finalizes the envelope and computes content hash.

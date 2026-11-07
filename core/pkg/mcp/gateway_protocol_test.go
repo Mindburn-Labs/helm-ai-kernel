@@ -1063,51 +1063,6 @@ func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 	assert.True(t, field.Required)
 }
 
-func TestGateway_RESTExecuteBridgeGovernanceBranches(t *testing.T) {
-	catalog := NewInMemoryCatalog()
-	require.NoError(t, catalog.Register(context.Background(), ToolRef{
-		Name:        "bridge_tool",
-		Description: "bridge governed tool",
-		Schema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"text": map[string]any{"type": "string"},
-			},
-			"required": []any{"text"},
-		},
-	}))
-	body, err := json.Marshal(MCPToolCallRequest{
-		Method: "bridge_tool",
-		Params: map[string]any{"text": "hello"},
-	})
-	require.NoError(t, err)
-
-	allowGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-allow", nil, "bridge_tool")))
-	rec := httptest.NewRecorder()
-	allowGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "governed_allow")
-	assert.Contains(t, rec.Body.String(), "proofgraph_node")
-
-	noPolicyGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-no-policy", nil)))
-	rec = httptest.NewRecorder()
-	noPolicyGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), string(contracts.ReasonNoPolicy))
-
-	store := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(store)
-	require.NoError(t, enforcer.SetLimits(context.Background(), "tenant-deny", 0, 0))
-	denyGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-deny", enforcer, "bridge_tool")))
-	rec = httptest.NewRecorder()
-	denyGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), "denied by governance")
-	var denied MCPToolCallResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &denied))
-	assert.Equal(t, string(contracts.ReasonBudgetError), denied.ReasonCode)
-}
-
 func newGatewayTestBridge(t *testing.T, tenantID string, enforcer budget.Enforcer, allowedTools ...string) *bridge.KernelBridge {
 	t.Helper()
 

@@ -1,8 +1,6 @@
 package governance
 
-import (
-	"context"
-)
+import ()
 
 // ChangeClass defines the risk level of a self-modification.
 type ChangeClass string
@@ -15,33 +13,3 @@ const (
 )
 
 type EvolutionGovernance struct{}
-
-func NewEvolutionGovernance() *EvolutionGovernance {
-	return &EvolutionGovernance{}
-}
-
-// EvaluateChange determines if a self-modification is allowed.
-func (g *EvolutionGovernance) EvaluateChange(ctx context.Context, changeClass ChangeClass, regressionPassed bool) (bool, string) {
-	switch changeClass {
-	case ChangeClassC0, ChangeClassC1:
-		// Auto-approve if regression passes
-		if regressionPassed {
-			return true, "APPROVED_AUTO"
-		}
-		return false, "REJECTED_TEST_FAILURE"
-
-	case ChangeClassC2:
-		// Requires strict Golden Trace regression
-		if regressionPassed {
-			return true, "APPROVED_VERIFIED"
-		}
-		return false, "REJECTED_VERIFICATION_FAILURE"
-
-	case ChangeClassC3:
-		// ALWAYS Block for Human Review
-		return false, "BLOCKED_REQUIRES_HUMAN_APPROVAL"
-
-	default:
-		return false, "UNKNOWN_CLASS"
-	}
-}

@@ -366,16 +366,6 @@ class HelmClient:
         assert result is not None
         return result
 
-    def replay_verify(self, bundle: bytes) -> VerificationResult:
-        resp = self._client.post(
-            "/api/v1/replay/verify",
-            files={"bundle": ("pack.tar.gz", bundle, "application/octet-stream")},
-        )
-        self._check(resp)
-        result = VerificationResult.from_dict(resp.json())
-        assert result is not None
-        return result
-
     def create_evidence_envelope_manifest(
         self,
         req: EvidenceEnvelopeExportRequest,
@@ -391,11 +381,6 @@ class HelmClient:
 
     def get_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
         resp = self._client.get(f"/api/v1/evidence/envelopes/{_path_segment(manifest_id, 'manifest_id')}")
-        self._check(resp)
-        return resp.json()
-
-    def verify_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/evidence/envelopes/{_path_segment(manifest_id, 'manifest_id')}/verify")
         self._check(resp)
         return resp.json()
 
@@ -425,11 +410,6 @@ class HelmClient:
         self._check(resp)
         return resp.json()
 
-    def verify_boundary_record(self, record_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/boundary/records/{_path_segment(record_id, 'record_id')}/verify")
-        self._check(resp)
-        return resp.json()
-
     def list_boundary_checkpoints(self) -> list[dict[str, Any]]:
         resp = self._client.get("/api/v1/boundary/checkpoints")
         self._check(resp)
@@ -437,11 +417,6 @@ class HelmClient:
 
     def create_boundary_checkpoint(self) -> dict[str, Any]:
         resp = self._client.post("/api/v1/boundary/checkpoints")
-        self._check(resp)
-        return resp.json()
-
-    def verify_boundary_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/boundary/checkpoints/{_path_segment(checkpoint_id, 'checkpoint_id')}/verify")
         self._check(resp)
         return resp.json()
 
@@ -555,11 +530,6 @@ class HelmClient:
         resp = self._client.get(f"/api/v1/sandbox/grants/{_path_segment(grant_id, 'grant_id')}")
         self._check(resp)
         return SandboxGrant(**resp.json())
-
-    def verify_sandbox_grant(self, grant_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/sandbox/grants/{_path_segment(grant_id, 'grant_id')}/verify")
-        self._check(resp)
-        return resp.json()
 
     def preflight_sandbox_grant(self, req: dict[str, Any]) -> dict[str, Any]:
         resp = self._client.post("/api/v1/sandbox/preflight", json=req)

@@ -19,7 +19,6 @@ helm-ai-kernel verify evidence-pack.tar
 ```text
 POST /api/v1/evidence/export
 POST /api/v1/evidence/verify
-POST /api/v1/replay/verify
 ```
 
 The HTTP contract is generated from `api/openapi/helm.openapi.yaml`.
@@ -37,7 +36,7 @@ intact and never `VERIFIED`. The route evaluates no policy.
 
 - Share a governed run with a reviewer.
 - Prove a denial or escalation without trusting the original process.
-- Replay verification in CI or a release gate.
+- Check an exported bundle in CI or a release gate.
 
 ## Source Truth
 

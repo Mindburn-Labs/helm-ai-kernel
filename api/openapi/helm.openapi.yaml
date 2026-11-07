@@ -2084,38 +2084,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/boundary/records/{record_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes the hash the
-        kernel stored itself and reports a hard-coded jcs PASS, so it shows
-        storage consistency, not authenticity. Boundary records are not exported
-        into evidence bundles, so no verify route replaces it.
-      operationId: verifyBoundaryRecord
-      tags: [boundary]
-      summary: Verify a boundary record hash and receipt linkage
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-        - name: record_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Boundary record verification
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BoundaryRecordVerification'
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/checkpoints:
     get:
       operationId: listBoundaryCheckpoints
@@ -2148,36 +2116,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/BoundaryCheckpoint'
         '401':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/boundary/checkpoints/{checkpoint_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes the checkpoint,
-        record root and count from the kernel's own stored copy, so it shows
-        storage consistency, not authenticity. Checkpoints are not exported into
-        evidence bundles, so no verify route replaces it.
-      operationId: verifyBoundaryCheckpoint
-      tags: [boundary]
-      summary: Verify a boundary checkpoint and inclusion proof
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - name: checkpoint_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Boundary checkpoint verification
-          content:
-            application/json:
-              schema:
-                type: object
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '404':
           $ref: '#/components/responses/HelmError'
 
   # ── ProofGraph ──────────────────────────────────────
@@ -2448,40 +2386,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/evidence/verification-scopes/{scope_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes a hash the kernel
-        stored itself and reports a hard-coded jcs PASS, so it shows storage
-        consistency, not authenticity. Exported bundles carry these artifacts;
-        verify them with POST /api/v1/evidence/verify or the offline
-        receipt_verify binary.
-      operationId: verifyVerificationScope
-      tags: [evidence]
-      summary: Verify a verification scope hash
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-        - name: scope_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces:
     get:
       operationId: listHarnessTraces
@@ -2558,40 +2462,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/telemetry/harness-traces/{trace_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes a hash the kernel
-        stored itself and reports a hard-coded jcs PASS, so it shows storage
-        consistency, not authenticity. Exported bundles carry these artifacts;
-        verify them with POST /api/v1/evidence/verify or the offline
-        receipt_verify binary.
-      operationId: verifyHarnessTrace
-      tags: [telemetry]
-      summary: Verify a harness trace hash
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-        - name: trace_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions:
     get:
       operationId: listPlanTransactions
@@ -2663,40 +2533,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanTransaction'
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
-  /api/v1/plans/transactions/{transaction_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes a hash the kernel
-        stored itself and reports a hard-coded jcs PASS, so it shows storage
-        consistency, not authenticity. Exported bundles carry these artifacts;
-        verify them with POST /api/v1/evidence/verify or the offline
-        receipt_verify binary.
-      operationId: verifyPlanTransaction
-      tags: [plans]
-      summary: Verify a plan transaction hash
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-        - name: transaction_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
         '401':
           $ref: '#/components/responses/HelmError'
 
@@ -2811,40 +2647,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/harness/change-contracts/{change_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Recomputes a hash the kernel
-        stored itself and reports a hard-coded jcs PASS, so it shows storage
-        consistency, not authenticity. Exported bundles carry these artifacts;
-        verify them with POST /api/v1/evidence/verify or the offline
-        receipt_verify binary.
-      operationId: verifyHarnessChangeContract
-      tags: [harness]
-      summary: Verify a harness change contract hash
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-        - name: change_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/envelopes:
     get:
       operationId: listEvidenceEnvelopeManifests
@@ -2944,66 +2746,6 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '404':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/evidence/envelopes/{manifest_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. When no payload is stored the
-        route rebuilds it from the manifest and checks it against itself, and
-        envelopes are unsigned wrappers. Use POST /api/v1/evidence/verify on the
-        exported bundle.
-      operationId: verifyEvidenceEnvelopeManifest
-      tags: [evidence]
-      summary: Verify an evidence envelope manifest against its HELM root
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - name: manifest_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Evidence envelope verification
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EvidenceEnvelopeVerification'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '404':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/replay/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. No replay runs: the route
-        returns the evidence bundle verification. Use POST
-        /api/v1/evidence/verify.
-      operationId: replayVerify
-      tags: [evidence]
-      summary: Verify an evidence bundle (no replay runs)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                bundle:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: Evidence bundle verification result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerificationResult'
-        '400':
           $ref: '#/components/responses/HelmError'
 
   # ── Conformance ─────────────────────────────────────
@@ -3454,33 +3196,6 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '404':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/sandbox/grants/{grant_id}/verify:
-    post:
-      deprecated: true
-      description: |
-        Deprecated; removed in a following change. Checks the grant's fields
-        (digest, epoch, env mode, network deny-all) but never recomputes or
-        binds the grant hash, so it is a preflight, not a verification.
-      operationId: verifySandboxGrant
-      tags: [sandbox]
-      summary: Verify a sealed sandbox grant before execution
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - name: grant_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Sandbox preflight result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SandboxPreflightResult'
-        '401':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/sandbox/preflight:
@@ -6276,18 +5991,6 @@ components:
         record_hash: { type: string }
         created_at: { type: string, format: date-time }
 
-    BoundaryRecordVerification:
-      type: object
-      properties:
-        record_id: { type: string }
-        record_hash: { type: string }
-        receipt_id: { type: string }
-        verified: { type: boolean }
-        errors:
-          type: array
-          items: { type: string }
-        checked_at: { type: string, format: date-time }
-
     BoundaryCheckpoint:
       type: object
       properties:
@@ -6299,19 +6002,6 @@ components:
         root_hash: { type: string }
         checkpoint_hash: { type: string }
         created_at: { type: string, format: date-time }
-
-    EvidenceEnvelopeVerification:
-      type: object
-      properties:
-        manifest_id: { type: string }
-        manifest_hash: { type: string }
-        native_evidence_hash: { type: string }
-        verified: { type: boolean }
-        authoritative: { type: boolean }
-        errors:
-          type: array
-          items: { type: string }
-        checked_at: { type: string, format: date-time }
 
     MCPScanRequest:
       type: object

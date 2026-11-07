@@ -149,18 +149,9 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 	}))
 
 	mux.HandleFunc("/api/v1/boundary/records/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
-		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/records/")
-		recordID, verify := strings.CutSuffix(suffix, "/verify")
+		recordID := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/records/")
 		if recordID == "" || strings.Contains(recordID, "/") {
 			api.WriteBadRequest(w, "Invalid boundary record id")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, surfaces.VerifyRecord(recordID))
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -206,20 +197,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		default:
 			api.WriteMethodNotAllowed(w)
 		}
-	}))
-
-	mux.HandleFunc("/api/v1/boundary/checkpoints/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/checkpoints/")
-		checkpointID, verify := strings.CutSuffix(suffix, "/verify")
-		if checkpointID == "" || strings.Contains(checkpointID, "/") || !verify {
-			api.WriteBadRequest(w, "Invalid boundary checkpoint route")
-			return
-		}
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeContractJSON(w, http.StatusOK, surfaces.VerifyCheckpoint(checkpointID))
 	}))
 
 	mux.HandleFunc("/api/v1/proofgraph/sessions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
@@ -387,17 +364,9 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		}
 	}))
 	mux.HandleFunc("/api/v1/evidence/verification-scopes/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
-		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/verification-scopes/"), "/verify")
+		id := strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/verification-scopes/")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid verification scope id")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, surfaces.VerifyVerificationScope(id))
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -442,17 +411,9 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		}
 	}))
 	mux.HandleFunc("/api/v1/telemetry/harness-traces/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
-		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/telemetry/harness-traces/"), "/verify")
+		id := strings.TrimPrefix(r.URL.Path, "/api/v1/telemetry/harness-traces/")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid harness trace id")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, surfaces.VerifyHarnessTrace(id))
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -497,17 +458,9 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		}
 	}))
 	mux.HandleFunc("/api/v1/plans/transactions/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
-		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/plans/transactions/"), "/verify")
+		id := strings.TrimPrefix(r.URL.Path, "/api/v1/plans/transactions/")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid plan transaction id")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, surfaces.VerifyPlanTransaction(id))
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -555,15 +508,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 	}))
 	mux.HandleFunc("/api/v1/harness/change-contracts/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/harness/change-contracts/")
-		id, verify := strings.CutSuffix(suffix, "/verify")
-		if verify {
-			if id == "" || strings.Contains(id, "/") || r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, surfaces.VerifyHarnessChange(id))
-			return
-		}
 		id, approve := strings.CutSuffix(suffix, "/approve")
 		if approve {
 			if id == "" || strings.Contains(id, "/") || r.Method != http.MethodPost {
@@ -657,11 +601,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 
 	mux.HandleFunc("/api/v1/evidence/envelopes/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/envelopes/")
-		manifestID, verify := strings.CutSuffix(suffix, "/verify")
-		payloadRoute := false
-		if !verify {
-			manifestID, payloadRoute = strings.CutSuffix(suffix, "/payload")
-		}
+		manifestID, payloadRoute := strings.CutSuffix(suffix, "/payload")
 		if manifestID == "" || strings.Contains(manifestID, "/") {
 			api.WriteBadRequest(w, "Invalid evidence envelope manifest id")
 			return
@@ -669,24 +609,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		manifest, ok := surfaces.GetEnvelope(manifestID)
 		if !ok {
 			api.WriteNotFound(w, "evidence envelope manifest not found")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			payload, ok := surfaces.GetEnvelopePayload(manifest.ManifestID)
-			if !ok {
-				var err error
-				payload, err = evidencepkg.BuildEnvelopePayload(manifest)
-				if err != nil {
-					api.WriteBadRequest(w, err.Error())
-					return
-				}
-			}
-			result := evidencepkg.VerifyEnvelopePayload(manifest, payload)
-			writeContractJSON(w, http.StatusOK, result)
 			return
 		}
 		if payloadRoute {
@@ -712,16 +634,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		}
 		writeContractJSON(w, http.StatusOK, manifest)
 	}))
-
-	mux.HandleFunc("/api/v1/replay/verify", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		// No replay runs here; the response is the evidence bundle verification
-		// and says so by its check names.
-		writeContractJSON(w, http.StatusOK, verifyEvidenceRequest(r, svc))
-	})
 
 	mux.HandleFunc("/api/v1/conformance/vectors", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -1012,8 +924,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 	}))
 
 	mux.HandleFunc("/api/v1/sandbox/grants/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/sandbox/grants/")
-		grantID, verify := strings.CutSuffix(suffix, "/verify")
+		grantID := strings.TrimPrefix(r.URL.Path, "/api/v1/sandbox/grants/")
 		if grantID == "" || strings.Contains(grantID, "/") {
 			api.WriteBadRequest(w, "Invalid sandbox grant id")
 			return
@@ -1021,15 +932,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		grant, ok := surfaces.GetSandboxGrant(grantID)
 		if !ok {
 			api.WriteNotFound(w, "sandbox grant not found")
-			return
-		}
-		if verify {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			result := verifySandboxGrantForDispatch(grant, "")
-			writeContractJSON(w, http.StatusOK, result)
 			return
 		}
 		if r.Method != http.MethodGet {

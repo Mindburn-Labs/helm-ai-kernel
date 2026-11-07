@@ -36,7 +36,6 @@ Start with:
 ```text
 POST /api/v1/evidence/export
 POST /api/v1/evidence/verify
-POST /api/v1/replay/verify
 ```
 
 Download the current contract from `/openapi.yaml`.

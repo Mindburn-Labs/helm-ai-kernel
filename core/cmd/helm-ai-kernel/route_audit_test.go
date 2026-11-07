@@ -41,7 +41,6 @@ var publicRoutes = map[string]string{
 	"/api/demo/verify":                          "public demo sandbox; verifies a caller-supplied demo receipt",
 	"/api/demo/tamper":                          "public demo sandbox; mutates a caller-supplied demo receipt",
 	"/api/v1/evidence/verify":                   "offline verification of a caller-supplied bundle; reads no stored data",
-	"/api/v1/replay/verify":                     "offline replay of a caller-supplied bundle; reads no stored data",
 	"/api/v1/conformance/vectors":               "static conformance vectors",
 	"/api/v1/conformance/negative":              "static negative conformance vectors",
 	"/.well-known/agent-card.json":              "A2A agent card",

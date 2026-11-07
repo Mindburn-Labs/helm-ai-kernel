@@ -57,17 +57,14 @@ describe("HelmClient coverage matrix", () => {
       ["createEvidenceEnvelopeManifest", [{ manifest_id: "m1", envelope: "dsse", native_evidence_hash: "h" }]],
       ["listEvidenceEnvelopeManifests", []],
       ["getEvidenceEnvelopeManifest", ["manifest/a b"]],
-      ["verifyEvidenceEnvelopeManifest", ["manifest/a b"]],
       ["getEvidenceEnvelopePayload", ["manifest/a b"]],
       ["getBoundaryStatus", []],
       ["listBoundaryCapabilities", []],
       ["listBoundaryRecords", []],
       ["listBoundaryRecords", [{ limit: 10, offset: 0, empty: "", omitted: undefined }]],
       ["getBoundaryRecord", ["record/a b"]],
-      ["verifyBoundaryRecord", ["record/a b"]],
       ["listBoundaryCheckpoints", []],
       ["createBoundaryCheckpoint", []],
-      ["verifyBoundaryCheckpoint", ["checkpoint/a b"]],
       ["listConformanceVectors", []],
       ["listNegativeConformanceVectors", []],
       ["listMcpRegistry", []],
@@ -87,7 +84,6 @@ describe("HelmClient coverage matrix", () => {
       ["listSandboxGrants", []],
       ["createSandboxGrant", [{ runtime: "wasi" }]],
       ["getSandboxGrant", ["grant/a b"]],
-      ["verifySandboxGrant", ["grant/a b"]],
       ["preflightSandboxGrant", [{ runtime: "wasi" }]],
       ["listAgentIdentities", []],
       ["getAuthzHealth", []],
@@ -213,12 +209,6 @@ describe("HelmClient coverage matrix", () => {
 
     fetchSpy.mockResolvedValueOnce(helmError(422));
     await expect(client.verifyEvidence(blob)).rejects.toThrow(HelmApiError);
-
-    fetchSpy.mockResolvedValueOnce(jsonResponse({ outcome: "FAILED", checks_run: [], roots: { entry_count: 0 }, errors: ["bad"] }));
-    await expect(client.replayVerify(blob)).resolves.toMatchObject({ outcome: "FAILED" });
-
-    fetchSpy.mockResolvedValueOnce(helmError(422));
-    await expect(client.replayVerify(blob)).rejects.toThrow(HelmApiError);
   });
 
   it("throws for JSON request and receipt failures", async () => {

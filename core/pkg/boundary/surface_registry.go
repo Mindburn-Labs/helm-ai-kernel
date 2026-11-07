@@ -462,54 +462,6 @@ func (r *SurfaceRegistry) VerifyRecord(id string) contracts.BoundaryRecordVerifi
 	}
 }
 
-func (r *SurfaceRegistry) VerifyCheckpoint(id string) map[string]any {
-	r.mu.RLock()
-	checkpoint, ok := r.checkpoints[id]
-	r.mu.RUnlock()
-	if !ok {
-		return map[string]any{
-			"checkpoint_id": id,
-			"verdict":       "FAIL",
-			"verified":      false,
-			"errors":        []string{"checkpoint not found"},
-			"checks":        map[string]string{"checkpoint": "FAIL"},
-			"verified_at":   r.now().UTC(),
-		}
-	}
-	expected := checkpoint
-	expected.CheckpointHash = ""
-	hash, err := canonicalize.CanonicalHash(expected)
-	checks := map[string]string{
-		"checkpoint_hash": "PASS",
-		"record_root":     "PASS",
-		"inclusion_order": "PASS",
-	}
-	var errs []string
-	if err != nil || "sha256:"+hash != checkpoint.CheckpointHash {
-		checks["checkpoint_hash"] = "FAIL"
-		errs = append(errs, "checkpoint hash mismatch")
-	}
-	root, err := canonicalize.CanonicalHash(checkpoint.RecordHashes)
-	if err != nil || "sha256:"+root != checkpoint.RecordRootHash {
-		checks["record_root"] = "FAIL"
-		errs = append(errs, "record root mismatch")
-	}
-	if len(checkpoint.RecordHashes) != checkpoint.RecordCount {
-		checks["inclusion_order"] = "FAIL"
-		errs = append(errs, "record count does not match inclusion proof")
-	}
-	return map[string]any{
-		"checkpoint_id":   checkpoint.CheckpointID,
-		"checkpoint_hash": checkpoint.CheckpointHash,
-		"verdict":         passFail(len(errs) == 0),
-		"verified":        len(errs) == 0,
-		"checks":          checks,
-		"errors":          errs,
-		"record_hashes":   checkpoint.RecordHashes,
-		"verified_at":     r.now().UTC(),
-	}
-}
-
 func (r *SurfaceRegistry) CreateCheckpoint(receiptCount int) (contracts.BoundaryCheckpoint, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

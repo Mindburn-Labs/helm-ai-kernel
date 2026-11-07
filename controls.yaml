@@ -3068,9 +3068,11 @@ controls:
     reason: >-
       Retired (helm-tracker#266): no shipped path ever appended a release
       authority, so the writer (PostgresReleaseAuthorityAdminStore.Append) and
-      SignConnectorReleaseAuthority moved into a test fixture. The runtime
-      reader, PostgresReleaseAuthorityStore, and the table's append-only
-      trigger remain; the integration test seeds revisions through the fixture.
+      SignConnectorReleaseAuthority moved into a test fixture and the control
+      has no shipped entry point. Only the read side ships: the runtime reader,
+      PostgresReleaseAuthorityStore, verifies each stored envelope, and the
+      table's insert trigger enforces append-only succession for any row a
+      deployment inserts.
     entry_points: []
     config: []
     protected_operations:

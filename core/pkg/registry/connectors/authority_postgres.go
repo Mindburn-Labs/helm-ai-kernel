@@ -19,8 +19,9 @@ var (
 	ErrReleaseAuthorityStore    = errors.New("connector release authority store rejected request")
 )
 
-// ReleaseAuthorityEnvelopeVerifier is the cryptographic boundary required by
-// both the source-authority writer and the read-only runtime projection.
+// ReleaseAuthorityEnvelopeVerifier is the cryptographic boundary of the
+// read-only runtime projection. No shipped binary appends an authority; the
+// append path is a test fixture (authority_admin_fixture_test.go).
 type ReleaseAuthorityEnvelopeVerifier interface {
 	VerifyEnvelope(contracts.ConnectorReleaseAuthorityEnvelope) error
 	VerifyStoredEnvelope(contracts.ConnectorReleaseAuthorityEnvelope) error

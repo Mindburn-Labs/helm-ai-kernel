@@ -86,8 +86,9 @@ func ConnectorReleaseAuthoritySigningPayload(authority contracts.ConnectorReleas
 	return payload, nil
 }
 
-// VerifyEnvelope proves an envelope is signed by a currently trusted key. It is
-// used when importing/appending a new statement, so it rejects a disabled key.
+// VerifyEnvelope proves an envelope is signed by a currently trusted key, so it
+// rejects a disabled key. A new statement must pass it; stored history is read
+// with VerifyStoredEnvelope.
 func (v *Ed25519ReleaseAuthorityVerifier) VerifyEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope) error {
 	return v.verifyEnvelope(envelope, true)
 }

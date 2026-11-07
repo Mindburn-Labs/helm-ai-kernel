@@ -64,16 +64,20 @@ from `PUBLIC` but does not create roles or provision those deployment-specific
 grants. A database trigger independently rejects mutation of existing history.
 
 Every row is keyed by exact scope, connector ID, connector version, and
-monotonic revision. The writer verifies the detached Ed25519 signature before
-opening a transaction, obtains an exclusive advisory lock for that exact
+monotonic revision. No shipped binary appends an authority (helm-tracker#266);
+the append path lives as a test fixture in
+`core/pkg/registry/connectors/authority_admin_fixture_test.go`, and an operator
+inserts rows directly. That append path verifies the detached Ed25519 signature
+before opening a transaction, obtains an exclusive advisory lock for that exact
 release, verifies the stored head again, and accepts only revision 1, the exact
 idempotent replay, or `head + 1` with the exact predecessor hash. Connector
 binary, signature, certification, executor, sandbox, and drift-policy material
 cannot change under the same version. A database `BEFORE INSERT` trigger uses
 the same lock and independently enforces shadow-envelope parity, current-head
 succession, immutable material, and terminal revocation even for direct SQL.
-The Go writer remains the required cryptographic verifier. Revocation is
-terminal. Trigger functions pin `search_path` to `pg_catalog` and dynamically
+The trigger does not check signatures: the runtime reader verifies every
+stored envelope it loads, so a row inserted with a bad signature is refused at
+effect admission. Revocation is terminal. Trigger functions pin `search_path` to `pg_catalog` and dynamically
 schema-qualify their trigger relation, preventing temporary-table namespace
 shadowing.
 

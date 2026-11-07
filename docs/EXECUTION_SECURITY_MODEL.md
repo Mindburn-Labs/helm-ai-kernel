@@ -154,7 +154,7 @@ an agent can reach.
 | **Side-effect class profiles** | Read-only, write-limited, or full profiles per tool class |
 | **Connector allowlists** | Per-tenant/app/profile restrictions on which connectors are reachable |
 | **Destination scoping** | Explicit target domain/URL/resource allowlists |
-| **Filesystem/network deny-by-default** | WASI sandbox denies all I/O unless explicitly granted. Not wired: the shipped server runs no pack, so this is library code (`controls.yaml` CTL-044) |
+| **Filesystem/network deny-by-default** | Sandbox grants declare deny-by-default I/O. Records only: the kernel runs no pack and has no sandbox runtime (`controls.yaml` CTL-044, retired) |
 | **Sandbox profile requirement** | Each tool class requires a declared sandbox profile before execution |
 
 ### Architectural Property
@@ -320,10 +320,8 @@ Each layer protects against failures in the other two.
 | :--- | :--- |
 | JCS Canonicalization | B |
 | PEP Boundary | B |
-| WASI Sandbox | A |
 | Approval Ceremony | B |
 | ProofGraph DAG | C |
-| Trust Registry | C |
 | EvidencePack | C |
 | Offline Replay | C |
 | Output Drift | B |

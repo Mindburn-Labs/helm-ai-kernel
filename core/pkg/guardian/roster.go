@@ -44,7 +44,6 @@ const (
 	GateSessionRisk        GateID = "session_risk"
 	GateTemporal           GateID = "temporal"
 	GateThreat             GateID = "threat"
-	GateWarmLease          GateID = "warm_lease"
 )
 
 // GateRoster records which gates a Guardian will run and which it will skip.
@@ -92,7 +91,6 @@ func (g *Guardian) GateRoster() GateRoster {
 		GateSessionRisk:        g.sessionRiskMemory != nil,
 		GateTemporal:           g.temporal != nil,
 		GateThreat:             g.threatScanner != nil || g.semanticEscalationThresholdBP > 0,
-		GateWarmLease:          g.warmLeaseMgr != nil,
 	}
 
 	roster := GateRoster{Active: []GateID{}, Inactive: []GateID{}}
@@ -116,7 +114,7 @@ func AllGateIDs() []GateID {
 		GateCompliance, GateContext, GateDelegation, GateEgress, GateFreeze,
 		GateIsolation, GatePDP, GatePolicySnapshots, GatePrivilege,
 		GateSafeDeprecation, GateScopedStop, GateSessionRisk, GateTemporal,
-		GateThreat, GateWarmLease,
+		GateThreat,
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids

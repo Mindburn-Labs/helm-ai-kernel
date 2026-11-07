@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-83 controls: 44 enforced (1 of them by CI gates), 26 observed-only, 13 unmanaged (12 of them retired invariants).
+83 controls: 44 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -141,7 +141,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-041 | Connector release authority | observed-only | The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce. |
 | CTL-042 | Guardian governance options not installed | observed-only | The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt. |
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266). |
-| CTL-044 | WASI sandbox containment | observed-only | The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only. |
+| CTL-044 | WASI sandbox containment | retired | Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential broker and policy enforcer were deleted; the shipped server never ran a pack. Only sandbox grant and backend-profile records remain in core/pkg/runtime/sandbox. |
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
 | CTL-046 | Mandates only narrow on delegation | enforced | — |
 | CTL-047 | Production egress is deny-all | enforced | — |

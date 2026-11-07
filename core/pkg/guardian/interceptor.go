@@ -14,7 +14,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
@@ -973,54 +972,6 @@ func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *Evaluati
 		}
 		t.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventEgressBlocked, "tainted egress blocked")
 		return decision, nil
-	}
-
-	return next(ctx, evalCtx)
-}
-
-// ── SandboxAllocationInterceptor ──
-
-type SandboxAllocationInterceptor struct {
-	g *Guardian
-}
-
-func NewSandboxAllocationInterceptor(g *Guardian) *SandboxAllocationInterceptor {
-	return &SandboxAllocationInterceptor{g: g}
-}
-
-func (s *SandboxAllocationInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
-	if s.g.warmLeaseMgr != nil && evalCtx.Request.Action == "EXECUTE_TOOL" {
-		spec := &sandbox.SandboxSpec{
-			Image: "sha256:default-pinned-digest",
-		}
-		if img, ok := evalCtx.Request.Context["image"].(string); ok && img != "" {
-			spec.Image = img
-		}
-
-		runner, err := s.g.warmLeaseMgr.Acquire(ctx, spec)
-		if err != nil {
-			now := s.g.clock.Now()
-			decision := &contracts.DecisionRecord{
-				ID:         newDecisionID(),
-				Timestamp:  now,
-				Verdict:    string(contracts.VerdictDeny),
-				Reason:     fmt.Sprintf("SANDBOX_ACQUISITION_FAILED: %v", err),
-				ReasonCode: "SANDBOX_ACQUISITION_FAILED",
-			}
-			if err := s.g.signDecisionWithContext(decision, evalCtx); err != nil {
-				return nil, fmt.Errorf("failed to sign sandbox-acquisition-failed decision: %w", err)
-			}
-			return decision, nil
-		}
-
-		if evalCtx.Request.Context == nil {
-			evalCtx.Request.Context = make(map[string]interface{})
-		}
-		leaseID := randomID("lease-")
-		evalCtx.Request.Context["sandbox_lease_id"] = leaseID
-
-		// Release the warm sandbox back to pool
-		s.g.warmLeaseMgr.Release(runner)
 	}
 
 	return next(ctx, evalCtx)

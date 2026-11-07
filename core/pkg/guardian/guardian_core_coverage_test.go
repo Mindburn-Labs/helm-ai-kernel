@@ -15,7 +15,6 @@ import (
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 )
 
@@ -175,7 +174,6 @@ func TestCoverageGuardianOptionsAndSetters(t *testing.T) {
 		WithClock(clock),
 		WithPDP(policyBackend),
 		WithPolicySnapshots(snapshotStore, scope),
-		WithWarmLeaseManager(nil),
 		WithZeroIDInterceptor(zeroID),
 		WithSafeDepController(safeDep),
 	)
@@ -559,22 +557,6 @@ func TestCoverageTemporalAndSandboxInterceptors(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected temporal signing error")
 	}
-
-	sandboxGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithWarmLeaseManager(sandbox.NewWarmLeaseManager(1, "sha256:default", true)))
-	sandboxCtx := &EvaluationContext{
-		Request: DecisionRequest{
-			Principal: "agent",
-			Action:    "EXECUTE_TOOL",
-			Context:   map[string]interface{}{"image": "sha256:custom"},
-		},
-	}
-	decision, err = NewSandboxAllocationInterceptor(sandboxGuardian).Evaluate(ctx, sandboxCtx, func(context.Context, *EvaluationContext) (*contracts.DecisionRecord, error) {
-		return &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}, nil
-	})
-	leaseID, hasLeaseID := sandboxCtx.Request.Context["sandbox_lease_id"].(string)
-	if err != nil || decision.Verdict != string(contracts.VerdictAllow) || !hasLeaseID || leaseID == "" {
-		t.Fatalf("expected sandbox lease pass-through decision=%+v ctx=%+v err=%v", decision, sandboxCtx.Request.Context, err)
-	}
 }
 
 func TestCoverageInterceptorBranchEdges(t *testing.T) {
@@ -851,44 +833,6 @@ func TestCoverageInterceptorBranchEdges(t *testing.T) {
 		decision, err := NewTaintEgressInterceptor(NewGuardian(&testSigner{}, nil, nil, WithClock(clock))).Evaluate(ctx, passCtx, allowNext)
 		if err != nil || decision.Verdict != string(contracts.VerdictAllow) || !passCtx.Tainted {
 			t.Fatalf("expected taint annotation pass-through, decision=%+v ctx=%+v err=%v", decision, passCtx, err)
-		}
-
-		failingMgr := sandbox.NewWarmLeaseManager(1, "sha256:default", true)
-		drainedRunner, err := failingMgr.Acquire(context.Background(), &sandbox.SandboxSpec{Image: "sha256:default"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer failingMgr.Release(drainedRunner)
-		cancelledCtx, cancel := context.WithCancel(ctx)
-		cancel()
-		failingGuardian := NewGuardian(&testSigner{fail: true}, nil, nil, WithClock(clock), WithWarmLeaseManager(failingMgr))
-		if _, err := NewSandboxAllocationInterceptor(failingGuardian).Evaluate(cancelledCtx, &EvaluationContext{
-			Request: DecisionRequest{Principal: "agent", Action: "EXECUTE_TOOL", Resource: "sandbox", Context: map[string]interface{}{}},
-		}, denyNext(t)); err == nil || !strings.Contains(err.Error(), "sandbox-acquisition-failed") {
-			t.Fatalf("expected sandbox signing error, got %v", err)
-		}
-
-		plainFailMgr := sandbox.NewWarmLeaseManager(1, "sha256:default", true)
-		plainDrainedRunner, err := plainFailMgr.Acquire(context.Background(), &sandbox.SandboxSpec{Image: "sha256:default"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer plainFailMgr.Release(plainDrainedRunner)
-		plainCancelledCtx, plainCancel := context.WithCancel(ctx)
-		plainCancel()
-		plainFailGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithWarmLeaseManager(plainFailMgr))
-		decision, err = NewSandboxAllocationInterceptor(plainFailGuardian).Evaluate(plainCancelledCtx, &EvaluationContext{
-			Request: DecisionRequest{Principal: "agent", Action: "EXECUTE_TOOL", Resource: "sandbox", Context: map[string]interface{}{}},
-		}, denyNext(t))
-		if err != nil || decision.ReasonCode != "SANDBOX_ACQUISITION_FAILED" {
-			t.Fatalf("expected signed sandbox acquisition failure, decision=%+v err=%v", decision, err)
-		}
-
-		successGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithWarmLeaseManager(sandbox.NewWarmLeaseManager(1, "sha256:default", true)))
-		successCtx := &EvaluationContext{Request: DecisionRequest{Principal: "agent", Action: "EXECUTE_TOOL", Resource: "sandbox"}}
-		decision, err = NewSandboxAllocationInterceptor(successGuardian).Evaluate(ctx, successCtx, allowNext)
-		if err != nil || decision.Verdict != string(contracts.VerdictAllow) || successCtx.Request.Context["sandbox_lease_id"] == "" {
-			t.Fatalf("expected sandbox nil-context lease success, decision=%+v ctx=%+v err=%v", decision, successCtx.Request.Context, err)
 		}
 	})
 }

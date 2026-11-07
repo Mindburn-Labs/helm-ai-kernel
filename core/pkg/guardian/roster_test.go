@@ -32,7 +32,6 @@ var gateFieldByID = map[GateID]string{
 	GateSessionRisk:        "sessionRiskMemory",
 	GateTemporal:           "temporal",
 	GateThreat:             "threatScanner",
-	GateWarmLease:          "warmLeaseMgr",
 }
 
 // nonGateFields are Guardian fields that are not injectable gates: core

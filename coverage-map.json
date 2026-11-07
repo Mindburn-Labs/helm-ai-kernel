@@ -7,9 +7,9 @@
   "summary": {
     "total": 83,
     "enforced": 44,
-    "observed_only": 26,
-    "unmanaged": 13,
-    "retired_invariants": 12,
+    "observed_only": 25,
+    "unmanaged": 14,
+    "retired_invariants": 13,
     "build_plane": 1
   },
   "controls": [
@@ -2774,27 +2774,15 @@
       "title": "WASI sandbox containment",
       "owner": "Mindburn Labs core team (kernel)",
       "claim": "The WASI sandbox denies all filesystem and network I/O unless explicitly granted.",
-      "status": "observed-only",
+      "status": "unmanaged",
       "plane": "runtime",
-      "reason": "The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/runtime/sandbox.WASISandbox.Run",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/runtime/sandbox.SandboxBroker.Execute",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential broker and policy enforcer were deleted; the shipped server never ran a pack. Only sandbox grant and backend-profile records remain in core/pkg/runtime/sandbox.",
+      "retired": true,
+      "entry_points": [],
       "gates": [],
       "config": [],
-      "protected_operations": [
-        "Running a pack in the WASI sandbox."
-      ],
-      "bypass_assumptions": [
-        "No shipped path runs a pack."
-      ],
+      "protected_operations": [],
+      "bypass_assumptions": [],
       "tests": {
         "allowed": [],
         "forbidden": [],

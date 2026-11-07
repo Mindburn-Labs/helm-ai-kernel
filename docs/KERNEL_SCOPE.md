@@ -82,7 +82,7 @@ non-TCB supporting infrastructure:
 | `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
 | `executor/`        | SafeExecutor with receipt generation                          | ✅ Active |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
-| `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |
+| `runtime/sandbox/` | Sandbox policy, backend profiles and sealed grants (records only; no pack execution) | ✅ Active |
 | `receipts/`        | Receipt policy enforcement (fail-closed); not linked into `core/cmd/helm-ai-kernel` | Library only |
 
 ### Supporting Infrastructure (Non-TCB)

@@ -177,11 +177,6 @@ func WithSessionRiskMemory(srm *SessionRiskMemory) GuardianOption {
 	return func(g *Guardian) { g.sessionRiskMemory = srm }
 }
 
-// WithWarmLeaseManager injects the warm sandbox leasing manager.
-func WithWarmLeaseManager(mgr *sandbox.WarmLeaseManager) GuardianOption {
-	return func(g *Guardian) { g.warmLeaseMgr = mgr }
-}
-
 // WithZeroIDInterceptor injects a custom ZeroIDInterceptor.
 func WithZeroIDInterceptor(z *ZeroIDInterceptor) GuardianOption {
 	return func(g *Guardian) { g.zeroidInterceptor = z }
@@ -230,7 +225,6 @@ type Guardian struct {
 	privilegeResolver             PrivilegeResolver            // Privilege tier resolver
 	sessionRiskMemory             *SessionRiskMemory           // Deterministic trajectory authorization gate
 	otel                          *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr                  *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
 	zeroidInterceptor             *ZeroIDInterceptor           // ZeroID identity validator
 	safeDepController             *safedep.Controller          // Safe Deprecation emergency release plane
 	assumptionObserver            AssumptionObserver           // Re-reads state a declared assumption depends on
@@ -306,7 +300,6 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		NewPDPInterceptor(g),
 		NewTaintEgressInterceptor(g),
 		NewAssumptionFreshnessInterceptor(g),
-		NewSandboxAllocationInterceptor(g),
 	}
 
 	return g

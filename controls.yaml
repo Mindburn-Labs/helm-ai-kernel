@@ -3149,20 +3149,17 @@ controls:
     claim: >-
       The WASI sandbox denies all filesystem and network I/O unless explicitly
       granted.
-    status: observed-only
+    status: unmanaged
     reason: >-
-      The shipped server refuses every WASI pack run because it has no
-      PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in
-      scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are
-      records only.
-    entry_points:
-      - "core/pkg/runtime/sandbox.WASISandbox.Run"
-      - "core/pkg/runtime/sandbox.SandboxBroker.Execute"
+      Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential
+      broker and policy enforcer were deleted; the shipped server never ran a
+      pack. Only sandbox grant and backend-profile records remain in
+      core/pkg/runtime/sandbox.
+    retired: true
+    entry_points: []
     config: []
-    protected_operations:
-      - "Running a pack in the WASI sandbox."
-    bypass_assumptions:
-      - "No shipped path runs a pack."
+    protected_operations: []
+    bypass_assumptions: []
     tests:
       allowed: []
       forbidden: []

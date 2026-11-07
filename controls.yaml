@@ -1118,7 +1118,7 @@ removal_proofs:
       - "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
   - control: CTL-059
     file: core/pkg/gateway/admission/schema/016_outcome_receipts.sql
-    find: "    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', current_schema());\n"
+    find: "    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', receipts_schema);\n"
     replace: "\n"
     tests:
       - "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite"
@@ -4131,8 +4131,8 @@ controls:
       established it (read-back, NOT_SENT or model call), whether a read-back
       found the object absent, what it did to the reservation, every
       exposure as the ledger holds it after the write, and for a model call
-      its money row (held, estimated, confirmed and billable micros) and the
-      SHA-256 of its stored usage, so a late usage report re-settles with a
+      its money row (currency, held, estimated, confirmed and billable
+      micros) and the SHA-256 of the RFC 8785 form of its stored usage, so a late usage report re-settles with a
       receipt of the new amounts. The builder refuses a (from, to) pair no
       outcome write makes, an observation of another outcome, and settlement
       facts that do not fit how the outcome was established. Receipts form one
@@ -4182,7 +4182,7 @@ controls:
       - "Every OBSERVED, RECONCILED and SETTLED write of helm.gateway.v1.EffectGatewayService Dispatch and Observe, the reconcile job, the MCP tools' dispatch and read-back, and the model gateway's settlement on helm-gateway serve."
     bypass_assumptions:
       - "The receipt format is receipt.v5, an interim: the gateway's own facts are signed only through output_hash, and the binding bytes are retained beside the receipt. The gateway is one of the producers Mindburn-Labs/helm-tracker#53 moves to the DSSE v6 envelope; receipt.v5 stays verify-only after that. A gateway receipt's args_hash is the exact-argument-bytes digest, not the JCS-arguments hash contracts.Receipt documents for other producers."
-      - "Receipts cover decisions and outcomes. Not receipted, and not fenced: ESCALATED to REJECTED and EXPIRED (no effect was admitted), CANCELLED (a refused claim or a cancellation: nothing was dispatched, and the decision receipt stays the attempt's last), the lifecycle in between (DISPATCHING, DISPATCHED, UNKNOWN), and ESCALATED_TO_HUMAN (no outcome is known; the reservation stays held, and an outcome a human later establishes has no gateway write path today). There are no start or heartbeat lifecycle receipts; delivery gate 2 needs the decision and the outcome only. COMPENSATED is in the schema but nothing writes it."
+      - "Receipts cover decisions and outcomes. Not receipted, and not fenced: ESCALATED to REJECTED and EXPIRED (no effect was admitted), CANCELLED (a refused claim or a cancellation: nothing was dispatched, and the decision receipt stays the attempt's last), the lifecycle in between (DISPATCHING, DISPATCHED, UNKNOWN), and ESCALATED_TO_HUMAN (no outcome is known, and an outcome a human later establishes has no gateway write path today). An effect API attempt's reservation stays held there, but a cut model call (UNKNOWN) has already moved its hold to estimated, spending budget as an estimate; that spend is receipted only when a provider confirmation reconciles the call (RECONCILED, then SETTLED), and never if none arrives. There are no start or heartbeat lifecycle receipts; delivery gate 2 needs the decision and the outcome only. COMPENSATED is in the schema but nothing writes it."
       - "The outcome fence checks that a receipt exists for the row's (tenant, attempt, version, state) when the state or the version changes. The runtime role holds UPDATE on authority_effect_attempts, so it can rewrite the outcome, its basis or its reason in place at the same version without the fence noticing; the signed receipt still records what was settled, and a reader compares the row with it."
       - "An outcome receipt binds the one observation its outcome rests on. Distinct provider facts a later read-back records after the attempt settled are kept as observations, not receipted; a model call's late usage is receipted because it re-settles the attempt at a new version."
       - "During an upgrade to schema 16, an older gateway's outcome fails at commit: an effect API attempt stays DISPATCHING, DISPATCHED or UNKNOWN for the reconciliation job the claim enqueued, and a model call's settlement is not written, so the attempt keeps its hold and is reconciled as the model gateway documents for any settlement that cannot be written. Outcomes an older gateway committed before the migration keep no receipt."
@@ -4194,7 +4194,8 @@ controls:
       - "Outcome receipts sign helm.gateway.outcome-binding.v1, a second closed document beside receipt-binding.v1. receiptverify checks their signature, chain links and output_hash like any receipt.v5; reading what an outcome binding says needs its schema, which the verifier lane adds."
       - "An outcome binding's settlement facts are the exposure and model-call rows its own transaction read just before signing. The runtime role holds UPDATE on authority_exposures and authority_model_calls, so a later in-place rewrite is not fenced; the signed receipt keeps what was settled, and a reader compares the rows with it."
       - "Migration 16 takes authority_effect_attempts before authority_receipts, so an older gateway's decision cannot deadlock it. A transaction that reads authority_receipts and then writes an attempt (Propose's work-effect replay check) can still form a cycle with it; PostgreSQL's deadlock detector aborts one side, and a failed migration records nothing and runs again."
-      - "The fences' search_path is pinned to the schema migration 16 runs in, which is the schema every gateway migration creates its tables in; a deployment that moved the tables to another schema afterwards would have to pin the functions again."
+      - "The fences' search_path is pinned to the schema that holds authority_receipts when migration 16 runs (read from pg_class); a deployment that moved the tables to another schema afterwards would have to pin the functions again."
+      - "A model call's settlement clears expired replay bodies tenant-wide and keeps those rows locked until it commits, through the signing of its receipts; concurrent settlements skip rows another is clearing (SKIP LOCKED) rather than wait for them."
     tests:
       allowed:
         - "core/pkg/gateway/admission.TestPostgresDecisionsCommitWithSignedChainedReceipts"

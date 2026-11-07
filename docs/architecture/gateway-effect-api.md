@@ -1293,7 +1293,8 @@ outcome whose receipt cannot be signed rolls back the same way. Migration 16
 locks `authority_effect_attempts` before it alters `authority_receipts`: an
 older gateway's decision writes its attempt row before its receipt, so the
 other order could deadlock against it during the upgrade. It also pins both
-fence functions' `search_path` to the gateway schema (with `pg_temp` last),
+fence functions' `search_path` to the schema that holds `authority_receipts`,
+read from `pg_class` (with `pg_temp` last),
 so a look-alike `authority_receipts` on a writer's search path, or a
 temporary table, satisfies neither fence. The fence
 checks that the receipt exists when the state or version changes. It does not
@@ -1357,6 +1358,12 @@ These transitions are not receipted:
 - `DISPATCHING`, `DISPATCHED` and `UNKNOWN`: no outcome is known yet.
 - `ESCALATED_TO_HUMAN`: reconciliation gave up, and the reservation stays held.
 
+A cut model call is the exception to "no outcome, no money moved": the call
+becomes `UNKNOWN`, but its hold has already moved to `estimated`, so the
+budget is spent as an estimate. That spend is receipted only when a provider
+confirmation reconciles the call (`RECONCILED`, then `SETTLED`), and never if
+none arrives.
+
 There are no start or heartbeat receipts. `COMPENSATED` is in the schema, but
 nothing writes it.
 
@@ -1388,9 +1395,12 @@ stored as exact RFC 8785 bytes beside the receipt. Decision receipts keep
   exposure kind the held reservation moved to: `confirmed`, `released` or
   `estimated`), `readback_absent` (a read-back found the object absent after
   the fence), every exposure with its kind and amount, and for a model call
-  its money row (`held_micros`, `estimated_micros`, `confirmed_micros`,
+  its money row (`currency_code`, the currency its amounts are micro-units
+  of; `held_micros`, `estimated_micros`, `confirmed_micros` and
   `billable_micros` as decimal strings) and `usage_digest`, the SHA-256 of
-  the RFC 8785 form of the usage the row stores. A late usage report that
+  the RFC 8785 form of the usage the row stores. Numbers in that form are
+  IEEE 754 doubles in ECMAScript notation, so the usage a provider sent and
+  its JSONB rendering (`1e-7` and `0.0000001`) have one digest. A late usage report that
   re-settles an estimated call therefore signs the new amounts and usage,
   not only a new version;
 - `settled_at`.

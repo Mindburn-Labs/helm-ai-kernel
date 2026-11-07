@@ -4701,6 +4701,7 @@
           "core/pkg/receiptverify.TestFrozenGatewayChainStillVerifies",
           "core/pkg/gateway/admission.TestEncodeReceiptBundleRoundTrips",
           "core/pkg/gateway/admission.TestFrozenGatewayChainIsWhatTheBuilderSigns",
+          "core/pkg/gateway/admission.TestOutcomeBindingMatchesItsSchema",
           "core/cmd/receipt_verify.TestGatewayExportVerifiesWithItsBindings",
           "core/cmd/receipt_verify.TestBindingFlagChecksOneReceipt",
           "core/pkg/gateway/admission.TestReceiptExportIsTheWholeRangeOrNothing",

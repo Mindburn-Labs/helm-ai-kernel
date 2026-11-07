@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/gateway/outcome-binding.v1.schema.json",
+  "title": "Gateway outcome receipt binding",
+  "description": "helm.gateway.outcome-binding.v1: the closed document whose SHA-256 a gateway outcome receipt (receipt.v5, status OBSERVED, RECONCILED or SETTLED, empty verdict) signs as output_hash. It ties the outcome to the attempt and the permit its decision receipt (helm.gateway.receipt-binding.v1) issued, and signs the outcome, the stored observation it rests on and the settlement as the ledger holds it after the write. The gateway stores its exact RFC 8785 (JCS) bytes with the receipt. Every member is present; an empty string is a signed value, not an omitted one, and model_call is null for an effect that is not a model call. Digests are lowercase hex SHA-256; amounts are decimal strings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "binding_version",
+    "chain_id",
+    "seq",
+    "tenant_id",
+    "workspace_id",
+    "attempt_id",
+    "attempt_version",
+    "from_state",
+    "state",
+    "reason_code",
+    "effect_type",
+    "request_digest",
+    "target_digest",
+    "argument_digest",
+    "permit_id",
+    "authority_versions",
+    "policy_hash",
+    "outcome",
+    "outcome_basis",
+    "settled_by",
+    "observation",
+    "reservation",
+    "readback_absent",
+    "exposures",
+    "model_call",
+    "settled_at"
+  ],
+  "properties": {
+    "binding_version": {"const": "helm.gateway.outcome-binding.v1"},
+    "chain_id": {
+      "type": "string",
+      "pattern": "^helm-gateway:[1-9][0-9]*:.+:[1-9][0-9]*:.+$",
+      "description": "The receipt's session_id: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>, the same chain as the attempt's decision receipt."
+    },
+    "seq": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The receipt's lamport_clock: its position in the chain, after the decision receipt's."},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "workspace_id": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "format": "uuid"},
+    "attempt_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The attempt row's version after the outcome write; decision_id is <attempt_id>:<attempt_version>."},
+    "from_state": {"enum": ["DISPATCHING", "DISPATCHED", "UNKNOWN", "OBSERVED", "RECONCILED"], "description": "The state the write moved the attempt from."},
+    "state": {"enum": ["OBSERVED", "RECONCILED", "SETTLED"], "description": "The receipt's status: the stored state the write left."},
+    "reason_code": {"type": "string", "description": "The stored reason code, such as the reason of a FAILED outcome."},
+    "effect_type": {"type": "string", "minLength": 1},
+    "request_digest": {"$ref": "#/$defs/digest"},
+    "target_digest": {"$ref": "#/$defs/digest"},
+    "argument_digest": {"$ref": "#/$defs/digest", "description": "SHA-256 of the exact argument bytes the attempt stored; also the receipt's args_hash."},
+    "permit_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The permit the effect was dispatched under: the one its ADMITTED decision receipt binds."},
+    "authority_versions": {
+      "type": "array",
+      "description": "The authority versions the permit was issued under. policy_hash is SHA-256 of the JCS bytes of {\"schema\":\"helm.gateway.authority-snapshot.v1\",\"versions\":<this array>}, equal to the admitting decision receipt's.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "key", "version"],
+        "properties": {
+          "kind": {"enum": ["tenant", "principal", "mandate", "effect_type", "limit"]},
+          "key": {"type": "string"},
+          "version": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
+        }
+      }
+    },
+    "policy_hash": {"$ref": "#/$defs/digest", "description": "Also the receipt's policy_hash."},
+    "outcome": {"enum": ["SUCCEEDED", "FAILED"]},
+    "outcome_basis": {"enum": ["OBSERVED", "RECONCILED"], "description": "OBSERVED while the attempt was dispatching or dispatched, RECONCILED while it was UNKNOWN."},
+    "settled_by": {"enum": ["readback", "not_sent", "model_call"], "description": "What established the outcome: an adapter read-back, an adapter's NOT_SENT answer, or a model call's settlement."},
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The stored observation (authority_observations) the outcome rests on.",
+      "required": ["id", "source", "trust_class", "outcome", "evidence_digest", "result_kind", "result_ref", "observed_at"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "source": {"type": "string", "minLength": 1},
+        "trust_class": {"type": "string", "minLength": 1},
+        "outcome": {"enum": ["SUCCEEDED", "FAILED"], "description": "Always the outcome the receipt records."},
+        "evidence_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "SHA-256 of the provider evidence (for a model call, the delivered response bytes); empty when there is none."},
+        "result_kind": {"type": "string", "description": "The typed result the observation holds, such as github_branch; empty when the effect type defines none."},
+        "result_ref": {"type": "string", "description": "Content address of that typed result: sha256:<hex> of its JCS bytes, or an artifact's own digest; empty when there is none."},
+        "observed_at": {"type": "string", "minLength": 1, "description": "RFC 3339 UTC."}
+      }
+    },
+    "reservation": {"enum": ["confirmed", "released", "estimated"], "description": "The exposure kind the write moved the attempt's held reservation to: confirmed (consumed), released, or estimated (a model call that completed without usage)."},
+    "readback_absent": {"type": "boolean", "description": "True when a read-back established FAILED by the object's absence after the dispatch fence, which releases the reservation; false otherwise."},
+    "exposures": {
+      "type": "array",
+      "description": "Every exposure of the attempt after the write, in limit and bucket order; each one's kind is reservation.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["limit_id", "bucket_start", "kind", "amount"],
+        "properties": {
+          "limit_id": {"type": "string", "format": "uuid"},
+          "bucket_start": {"type": "string", "minLength": 1, "description": "The stored bucket start, RFC 3339 UTC (the Unix epoch for a limit without a window)."},
+          "kind": {"enum": ["confirmed", "released", "estimated"]},
+          "amount": {"$ref": "#/$defs/amount"}
+        }
+      }
+    },
+    "model_call": {
+      "description": "A model call's money row after the settlement; null for any other effect.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "held_micros", "estimated_micros", "confirmed_micros", "billable_micros", "usage_digest"],
+          "properties": {
+            "state": {"enum": ["CONFIRMED", "ESTIMATED", "RELEASED"]},
+            "held_micros": {"$ref": "#/$defs/amount"},
+            "estimated_micros": {"anyOf": [{"const": ""}, {"$ref": "#/$defs/amount"}], "description": "Empty when the row holds none."},
+            "confirmed_micros": {"anyOf": [{"const": ""}, {"$ref": "#/$defs/amount"}], "description": "The provider-reported consumption; empty when the row holds none."},
+            "billable_micros": {"$ref": "#/$defs/amount"},
+            "usage_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "SHA-256 of the RFC 8785 form of the usage the row stores; empty when it stores none."}
+          }
+        }
+      ]
+    },
+    "settled_at": {"type": "string", "minLength": 1, "description": "Database time of the outcome transaction, RFC 3339 UTC; also the receipt's timestamp, which is outside the receipt.v5 preimage."}
+  },
+  "allOf": [
+    {"if": {"properties": {"state": {"const": "OBSERVED"}}}, "then": {"properties": {"outcome_basis": {"const": "OBSERVED"}, "from_state": {"enum": ["DISPATCHING", "DISPATCHED", "OBSERVED"]}}}},
+    {"if": {"properties": {"state": {"const": "RECONCILED"}}}, "then": {"properties": {"outcome_basis": {"const": "RECONCILED"}, "from_state": {"const": "UNKNOWN"}}}},
+    {"if": {"properties": {"state": {"const": "SETTLED"}}}, "then": {"properties": {"from_state": {"enum": ["OBSERVED", "RECONCILED"]}, "settled_by": {"const": "model_call"}, "reservation": {"const": "confirmed"}}}},
+    {"if": {"properties": {"settled_by": {"const": "not_sent"}}}, "then": {"properties": {"from_state": {"const": "DISPATCHING"}, "outcome": {"const": "FAILED"}, "reservation": {"const": "released"}, "model_call": {"type": "null"}}}},
+    {"if": {"properties": {"settled_by": {"const": "readback"}}}, "then": {"properties": {"from_state": {"enum": ["DISPATCHED", "UNKNOWN"]}, "reservation": {"enum": ["confirmed", "released"]}, "model_call": {"type": "null"}}}},
+    {"if": {"properties": {"settled_by": {"const": "model_call"}}}, "then": {"properties": {"model_call": {"type": "object"}, "readback_absent": {"const": false}}}},
+    {"if": {"properties": {"readback_absent": {"const": true}}}, "then": {"properties": {"settled_by": {"const": "readback"}, "outcome": {"const": "FAILED"}, "reservation": {"const": "released"}}}}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "amount": {"type": "string", "pattern": "^(0|-?[1-9][0-9]*)$"}
+  }
+}

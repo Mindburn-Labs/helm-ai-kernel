@@ -320,10 +320,8 @@ Each layer protects against failures in the other two.
 | :--- | :--- |
 | JCS Canonicalization | B |
 | PEP Boundary | B |
-| WASI Sandbox | A |
 | Approval Ceremony | B |
 | ProofGraph DAG | C |
-| Trust Registry | C |
 | EvidencePack | C |
 | Offline Replay | C |
 | Output Drift | B |

@@ -82,13 +82,10 @@ run_uc "UC-002" "PEP Fail-Closed" \
 # typed records under core/pkg/gateway/admission.
 
 # UC-004 (WASM Transform) and UC-005 (WASM Exhaustion) are retired (T-02).
-# Their tests never ran a WASM module: TestWASI_* is arithmetic over
-# pkg/runtime/budget, and TestWASISandbox accepted "not yet implemented" as a
-# pass. No module can run: WASISandbox.Run always fails in resolvePackToWasm,
-# and NewWASISandbox has no caller in a shipped binary (it is on
-# scripts/ci/deadcode-allowlist.txt). A use case can return when the sandbox
-# executes a module on a shipped path, proven by a looping and an allocating
-# .wasm fixture.
+# Their tests never ran a WASM module, and the WASI sandbox itself was removed
+# (helm-tracker#266): it could not run a module on any shipped path. A use case
+# can return with a sandbox that executes a module on a shipped path, proven by
+# a looping and an allocating .wasm fixture.
 
 # UC-006: Idempotency (receipt-based dedup)
 run_uc "UC-006" "Idempotency" \

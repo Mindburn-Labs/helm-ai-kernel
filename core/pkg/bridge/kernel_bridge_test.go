@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -93,8 +94,7 @@ func TestGovern_BudgetExhausted(t *testing.T) {
 	pg := proofgraph.NewGraph()
 
 	// Create budget enforcer with very low limit
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
+	enforcer := newFakeBudget()
 	ctx := context.Background()
 
 	// Set limits to 2 cents daily, 10 monthly
@@ -143,8 +143,7 @@ func TestGovern_BudgetMeteredByEffectCost(t *testing.T) {
 	addAllowedToolRule(t, prgG, "expensive_tool")
 	pg := proofgraph.NewGraph()
 
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
+	enforcer := newFakeBudget()
 	ctx := context.Background()
 
 	const tenant = "tenant-metered"
@@ -189,8 +188,7 @@ func TestGovern_BudgetRejectsTokenCountsAsMoney(t *testing.T) {
 	g, prgG := newTestGuardian(t)
 	addAllowedToolRule(t, prgG, "priced_tool")
 
-	memStore := budget.NewMemoryStorage()
-	enforcer := budget.NewSimpleEnforcer(memStore)
+	enforcer := newFakeBudget()
 	ctx := context.Background()
 	const tenant = "tenant-unpriced"
 	require.NoError(t, enforcer.SetLimits(ctx, tenant, 10_000, 100_000))
@@ -317,4 +315,51 @@ func TestGovernBound_SuppliesTrustedTransportEvidence(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, denied.Allowed, "binding evidence must not bypass policy")
 	assert.Equal(t, string(contracts.ReasonNoPolicy), denied.ReasonCode)
+}
+
+// fakeBudget is a minimal fail-closed budget.Enforcer: a tenant without
+// limits is denied, and a cost that would exceed either limit is denied
+// without being recorded.
+type fakeBudget struct {
+	mu      sync.Mutex
+	budgets map[string]*budget.Budget
+}
+
+func newFakeBudget() *fakeBudget {
+	return &fakeBudget{budgets: map[string]*budget.Budget{}}
+}
+
+func (f *fakeBudget) SetLimits(_ context.Context, tenantID string, daily, monthly int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.budgets[tenantID] = &budget.Budget{TenantID: tenantID, DailyLimit: daily, MonthlyLimit: monthly}
+	return nil
+}
+
+func (f *fakeBudget) GetBudget(_ context.Context, tenantID string) (*budget.Budget, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.budgets[tenantID]
+	if !ok {
+		return nil, nil
+	}
+	snapshot := *b
+	return &snapshot, nil
+}
+
+func (f *fakeBudget) RecordSpend(context.Context, string, budget.Cost) error { return nil }
+
+func (f *fakeBudget) Check(_ context.Context, tenantID string, cost budget.Cost) (*budget.Decision, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.budgets[tenantID]
+	if !ok || cost.Amount < 0 {
+		return &budget.Decision{Allowed: false, Reason: "no budget"}, nil
+	}
+	if b.DailyUsed+cost.Amount > b.DailyLimit || b.MonthlyUsed+cost.Amount > b.MonthlyLimit {
+		return &budget.Decision{Allowed: false, Reason: "budget exceeded"}, nil
+	}
+	b.DailyUsed += cost.Amount
+	b.MonthlyUsed += cost.Amount
+	return &budget.Decision{Allowed: true}, nil
 }

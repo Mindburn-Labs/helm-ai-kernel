@@ -32,10 +32,11 @@ func TestEvidenceExporter(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Export SOC2
-	// Build a dummy envelope
-	b := provenance.NewBuilder()
-	b.AddSystemPrompt("sys")
-	env := b.Build()
+	env := &provenance.Envelope{
+		EnvelopeID: "env-1",
+		Version:    "1.0",
+		Segments:   []*provenance.Segment{{SegmentID: "seg-1", SourceType: provenance.SourceSystem, Content: "sys"}},
+	}
 
 	bundle, err := exporter.ExportSOC2(ctx, "trace-1", []*provenance.Envelope{env})
 	assert.NoError(t, err)

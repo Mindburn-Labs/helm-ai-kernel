@@ -135,24 +135,3 @@ func TestBudget_FailClosed(t *testing.T) {
 	assert.NotNil(t, decision.Receipt)
 	assert.Equal(t, "denied", decision.Receipt.Action)
 }
-
-func TestBudget_Remaining(t *testing.T) {
-	b := &budget.Budget{
-		DailyLimit:   10000,
-		MonthlyLimit: 100000,
-		DailyUsed:    7500,
-		MonthlyUsed:  25000,
-	}
-
-	assert.Equal(t, int64(2500), b.DailyRemaining())
-	assert.Equal(t, int64(75000), b.MonthlyRemaining())
-}
-
-func TestBudget_RemainingNegative(t *testing.T) {
-	b := &budget.Budget{
-		DailyLimit: 10000,
-		DailyUsed:  15000, // Overdrawn
-	}
-
-	assert.Equal(t, int64(0), b.DailyRemaining())
-}

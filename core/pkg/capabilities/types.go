@@ -32,19 +32,3 @@ type SchemaDefinition struct {
 type ToolCatalog struct {
 	tools map[string]Capability
 }
-
-func NewToolCatalog() *ToolCatalog {
-	return &ToolCatalog{
-		tools: make(map[string]Capability),
-	}
-}
-
-// Add registers a fully functional Capability (with Handler).
-func (c *ToolCatalog) Add(cap Capability) {
-	c.tools[cap.ID] = cap
-}
-
-func (c *ToolCatalog) Get(id string) (Capability, bool) {
-	cap, ok := c.tools[id]
-	return cap, ok
-}

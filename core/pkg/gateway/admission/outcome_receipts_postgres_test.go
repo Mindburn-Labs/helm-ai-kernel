@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
@@ -42,10 +43,11 @@ func (f *fixture) receiptsOf(ws, attemptID string) []storedReceipt {
 // order: the decision first, then each outcome at a later sequence, each
 // verifying offline on its own under the gateway key. Every outcome receipt
 // signs the decision's policy_hash (its permit's authority), binds the
-// permit, the attempt's outcome and an observation the ledger holds, and the
-// last receipt describes the attempt's current version. It returns the
-// bindings, in the same order.
-func (f *fixture) wantReceipted(a Attempt, states ...string) []receiptBinding {
+// permit, the attempt's outcome and the stored observation it rests on, and
+// the last one describes the attempt's current version and its settlement as
+// the ledger holds it (wantSettlement). It returns the outcome bindings in
+// chain order, a zero value in each decision's place.
+func (f *fixture) wantReceipted(a Attempt, states ...string) []outcomeBinding {
 	f.t.Helper()
 	rows := f.receiptsOf(a.WorkspaceID, a.ID)
 	got := make([]string, 0, len(rows))
@@ -58,50 +60,139 @@ func (f *fixture) wantReceipted(a Attempt, states ...string) []receiptBinding {
 	if len(a.Receipts) != len(rows) {
 		f.t.Fatalf("attempt %s carries %d receipt refs, the chain holds %d", a.ID, len(a.Receipts), len(rows))
 	}
-	bindings := make([]receiptBinding, len(rows))
+	bindings := make([]outcomeBinding, len(rows))
 	var decision *contracts.Receipt
 	for i, r := range rows {
 		receipt := mustReceipt(f.t, r.envelope)
 		if result := verifyBundle(f.t, r.envelope, trustTestKey()); !result.Valid {
 			f.t.Fatalf("receipt %d of %s does not verify alone: %+v", r.seq, a.ID, result)
 		}
-		must(f.t, json.Unmarshal(r.binding, &bindings[i]))
-		b := bindings[i]
 		if ref := a.Receipts[i]; ref.ReceiptID != r.receiptID || ref.Seq != uint64(r.seq) || ref.State != r.state || ref.Digest != r.digest {
 			f.t.Fatalf("receipt ref %d of %s = %+v, the chain holds %+v", i, a.ID, ref, r)
 		}
 		if i > 0 && r.seq <= rows[i-1].seq {
 			f.t.Fatalf("receipt %d of %s does not follow its predecessor in the chain", i, a.ID)
 		}
-		switch r.state {
-		case "ADMITTED", "DENIED", "ESCALATED":
+		if _, err := receiptVerdict(r.state); err == nil {
 			decision = receipt
-			if b.Outcome != "" || b.ObservationID != 0 || b.SettledAt != "" || receipt.Verdict == "" {
-				f.t.Fatalf("decision receipt of %s binds an outcome: %+v", a.ID, b)
+			var d receiptBinding
+			must(f.t, json.Unmarshal(r.binding, &d))
+			if d.BindingVersion != ReceiptBindingVersion || receipt.Verdict == "" {
+				f.t.Fatalf("decision receipt of %s = %+v", a.ID, d)
 			}
 			continue
 		}
-		var source, trust string
+		must(f.t, json.Unmarshal(r.binding, &bindings[i]))
+		b := bindings[i]
+		var source, trust, kind, ref string
 		var observed sql.NullString
+		var evidence []byte
+		var observedAt time.Time
 		f.ownerTx(tenantA, func(tx *sql.Tx) error {
-			return tx.QueryRow(`SELECT source, trust_class, outcome FROM authority_observations WHERE attempt_id = $1 AND observation_id = $2`,
-				a.ID, b.ObservationID).Scan(&source, &trust, &observed)
+			return tx.QueryRow(`SELECT source, trust_class, outcome, evidence_digest, result_kind, result_ref, observed_at
+				FROM authority_observations WHERE attempt_id = $1 AND observation_id = $2`,
+				a.ID, b.Observation.ID).Scan(&source, &trust, &observed, &evidence, &kind, &ref, &observedAt)
 		})
+		o := b.Observation
 		if decision == nil || receipt.PolicyHash != decision.PolicyHash || receipt.Verdict != "" || receipt.ArgsHash != decision.ArgsHash ||
-			a.Permit == nil || b.PermitID != a.Permit.ID || b.Outcome != a.Outcome || b.OutcomeBasis != a.OutcomeBasis ||
-			b.ObservationSource != source || b.ObservationTrustClass != trust || b.ObservationOutcome != observed.String ||
-			b.SettledAt == "" || b.DecidedAt != "" {
+			b.BindingVersion != OutcomeBindingVersion || a.Permit == nil || b.PermitID != a.Permit.ID ||
+			b.Outcome != a.Outcome || b.OutcomeBasis != a.OutcomeBasis || b.ArgumentDigest != receipt.ArgsHash ||
+			o.Source != source || o.TrustClass != trust || o.Outcome != observed.String || o.Outcome != b.Outcome ||
+			o.EvidenceDigest != hex.EncodeToString(evidence) || o.ResultKind != kind || o.ResultRef != ref ||
+			o.ObservedAt != observedAt.UTC().Format(time.RFC3339Nano) || b.SettledAt == "" {
 			f.t.Fatalf("outcome receipt %d of %s binds %+v (receipt %+v), not the stored outcome %+v", r.seq, a.ID, b, receipt, a)
 		}
 	}
 	// An attempt in a receipted state was last written with its receipt;
 	// UNKNOWN, ESCALATED_TO_HUMAN and the lifecycle in between carry none.
-	if _, _, err := receiptVerdict(a.State); err == nil {
-		if last := rows[len(rows)-1]; last.version != a.Version || last.state != a.State {
+	if _, ok := outcomeFrom[a.State]; ok {
+		last := rows[len(rows)-1]
+		if last.version != a.Version || last.state != a.State {
 			f.t.Fatalf("the last receipt of %s describes %s at %d, the attempt is %s at %d", a.ID, last.state, last.version, a.State, a.Version)
 		}
+		f.wantSettlement(a.ID, bindings[len(bindings)-1])
 	}
 	return bindings
+}
+
+// wantSettlement checks an outcome binding's settlement facts against the
+// ledger rows: every exposure, its kind the reservation the outcome moved,
+// and for a model call its money row, with the usage digest recomputed from
+// the stored usage.
+func (f *fixture) wantSettlement(attemptID string, b outcomeBinding) {
+	f.t.Helper()
+	var exposures []bindingExposure
+	var modelCall *bindingModelCall
+	f.ownerTx(tenantA, func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT limit_id::text, bucket_start, kind, amount FROM authority_exposures WHERE attempt_id = $1
+			ORDER BY limit_id, bucket_start`, attemptID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var x bindingExposure
+			var start time.Time
+			var amount int64
+			if err := rows.Scan(&x.LimitID, &start, &x.Kind, &amount); err != nil {
+				return err
+			}
+			x.BucketStart, x.Amount = start.UTC().Format(time.RFC3339Nano), fmt.Sprint(amount)
+			exposures = append(exposures, x)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		var m bindingModelCall
+		var held, billable int64
+		var estimated, confirmed sql.NullInt64
+		var usage []byte
+		err = tx.QueryRow(`SELECT state, held_micros, estimated_micros, confirmed_micros, billable_micros, usage
+			FROM authority_model_calls WHERE attempt_id = $1`, attemptID).Scan(&m.State, &held, &estimated, &confirmed, &billable, &usage)
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		m.HeldMicros, m.BillableMicros = fmt.Sprint(held), fmt.Sprint(billable)
+		if estimated.Valid {
+			m.EstimatedMicros = fmt.Sprint(estimated.Int64)
+		}
+		if confirmed.Valid {
+			m.ConfirmedMicros = fmt.Sprint(confirmed.Int64)
+		}
+		if usage != nil {
+			// The usage is a flat object of integers here, which Go's sorted,
+			// compact encoding writes as RFC 8785 does.
+			var parsed map[string]int64
+			if err := json.Unmarshal(usage, &parsed); err != nil {
+				return err
+			}
+			compact, err := json.Marshal(parsed)
+			if err != nil {
+				return err
+			}
+			m.UsageDigest = hex.EncodeToString(sha(compact))
+		}
+		modelCall = &m
+		return nil
+	})
+	if len(b.Exposures) != len(exposures) {
+		f.t.Fatalf("attempt %s binds exposures %+v, the ledger holds %+v", attemptID, b.Exposures, exposures)
+	}
+	for i, x := range exposures {
+		if b.Exposures[i] != x || x.Kind != b.Reservation {
+			f.t.Fatalf("attempt %s binds exposure %+v and reservation %s, the ledger holds %+v", attemptID, b.Exposures[i], b.Reservation, x)
+		}
+	}
+	switch {
+	case (b.SettledBy == settledByModelCall) != (modelCall != nil):
+		f.t.Fatalf("attempt %s settled by %s binds model call %+v, the ledger holds %+v", attemptID, b.SettledBy, b.ModelCall, modelCall)
+	case modelCall != nil && (b.ModelCall == nil || *b.ModelCall != *modelCall):
+		f.t.Fatalf("attempt %s binds model call %+v, the ledger holds %+v", attemptID, b.ModelCall, modelCall)
+	case modelCall == nil && b.ModelCall != nil:
+		f.t.Fatalf("attempt %s binds a model call it does not have: %+v", attemptID, b.ModelCall)
+	}
 }
 
 func TestPostgresEveryEffectOutcomeCommitsWithItsSignedReceipt(t *testing.T) {
@@ -131,7 +222,7 @@ func TestPostgresEveryEffectOutcomeCommitsWithItsSignedReceipt(t *testing.T) {
 	must(t, err)
 	wantOutcome(t, "success", ok, "OBSERVED", "SUCCEEDED", "")
 	b := f.wantReceipted(ok, "ADMITTED", "OBSERVED")[1]
-	if b.FromState != "DISPATCHED" || b.ObservationSource != "fake.readback" || b.EvidenceDigest != hex.EncodeToString(sha([]byte("provider bytes"))) {
+	if b.FromState != "DISPATCHED" || b.Observation.Source != "fake.readback" || b.Observation.EvidenceDigest != hex.EncodeToString(sha([]byte("provider bytes"))) {
 		t.Fatalf("the success binding = %+v", b)
 	}
 
@@ -140,7 +231,7 @@ func TestPostgresEveryEffectOutcomeCommitsWithItsSignedReceipt(t *testing.T) {
 	failed, _, err := svc.Dispatch(ctx, workload, f.propose(human, quotaNote("outcome-contradicted")).ID)
 	must(t, err)
 	wantOutcome(t, "a contradicted read-back", failed, "OBSERVED", "FAILED", contracts.ReasonReadbackMismatch)
-	if b := f.wantReceipted(failed, "ADMITTED", "OBSERVED")[1]; b.ReasonCode != string(contracts.ReasonReadbackMismatch) || b.ObservationOutcome != "FAILED" {
+	if b := f.wantReceipted(failed, "ADMITTED", "OBSERVED")[1]; b.ReasonCode != string(contracts.ReasonReadbackMismatch) || b.Observation.Outcome != "FAILED" {
 		t.Fatalf("the failure binding = %+v", b)
 	}
 
@@ -149,8 +240,8 @@ func TestPostgresEveryEffectOutcomeCommitsWithItsSignedReceipt(t *testing.T) {
 	refused, _, err := svc.Dispatch(ctx, workload, f.propose(human, quotaNote("outcome-not-sent")).ID)
 	must(t, err)
 	wantOutcome(t, "NOT_SENT", refused, "OBSERVED", "FAILED", contracts.ReasonPreconditionFailed)
-	if b := f.wantReceipted(refused, "ADMITTED", "OBSERVED")[1]; b.FromState != "DISPATCHING" || b.ObservationSource != dispatchSource ||
-		b.ObservationTrustClass != dispatchTrustClass || b.EvidenceDigest != "" {
+	if b := f.wantReceipted(refused, "ADMITTED", "OBSERVED")[1]; b.FromState != "DISPATCHING" || b.Observation.Source != dispatchSource ||
+		b.Observation.TrustClass != dispatchTrustClass || b.Observation.EvidenceDigest != "" {
 		t.Fatalf("the NOT_SENT binding = %+v", b)
 	}
 
@@ -236,13 +327,18 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	// Confirmed: OBSERVED and SETTLED in one transaction, each receipted at
 	// its own version, both on the one observation of the response.
 	claim, _ := f.claimModel("mi:receipt:confirmed", 3_000)
-	confirmed, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 1_200, EvidenceDigest: sha(body)})
+	confirmed, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 1_200,
+		Usage: []byte(`{"output_tokens":40, "input_tokens":100}`), EvidenceDigest: sha(body)})
 	must(t, err)
 	wantOutcome(t, "confirmed", confirmed, "SETTLED", "SUCCEEDED", "")
 	bs := f.wantReceipted(confirmed, "ADMITTED", "OBSERVED", "SETTLED")
-	if bs[1].AttemptVersion != confirmed.Version-1 || bs[2].FromState != "OBSERVED" || bs[1].ObservationID != bs[2].ObservationID ||
-		bs[2].ObservationSource != modelObservationSource || bs[2].EvidenceDigest != hex.EncodeToString(sha(body)) {
-		t.Fatalf("the confirmed call's bindings = %+v", bs)
+	usage := hex.EncodeToString(sha([]byte(`{"input_tokens":100,"output_tokens":40}`)))
+	if bs[1].AttemptVersion != confirmed.Version-1 || bs[2].FromState != "OBSERVED" || bs[1].Observation.ID != bs[2].Observation.ID ||
+		bs[2].Observation.Source != modelObservationSource || bs[2].Observation.EvidenceDigest != hex.EncodeToString(sha(body)) ||
+		bs[2].SettledBy != settledByModelCall || bs[2].Reservation != "confirmed" ||
+		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, HeldMicros: "3000", ConfirmedMicros: "1200", BillableMicros: "1200", UsageDigest: usage}) ||
+		*bs[1].ModelCall != *bs[2].ModelCall || len(bs[2].Exposures) != 1 || bs[2].Exposures[0].Amount != "1200" {
+		t.Fatalf("the confirmed call's bindings = %+v %+v", bs[1], bs[2])
 	}
 	// Settling it again changes nothing and appends nothing.
 	again, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 9_999})
@@ -255,13 +351,23 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	estimated, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallEstimated, EvidenceDigest: sha(body)})
 	must(t, err)
 	wantOutcome(t, "estimated", estimated, "OBSERVED", "SUCCEEDED", "")
-	f.wantReceipted(estimated, "ADMITTED", "OBSERVED")
-	late, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 800, EvidenceDigest: sha([]byte("usage"))})
+	if b := f.wantReceipted(estimated, "ADMITTED", "OBSERVED")[1]; b.Reservation != "estimated" ||
+		*b.ModelCall != (bindingModelCall{State: SettlementEstimated, HeldMicros: "2000", EstimatedMicros: "2000", BillableMicros: "0"}) {
+		t.Fatalf("the estimate's binding = %+v %+v", b, b.ModelCall)
+	}
+	late, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 800,
+		Usage: []byte(`{"input_tokens":10,"output_tokens":5}`), EvidenceDigest: sha([]byte("usage"))})
 	must(t, err)
 	wantOutcome(t, "confirmed late", late, "SETTLED", "SUCCEEDED", "")
 	bs = f.wantReceipted(late, "ADMITTED", "OBSERVED", "OBSERVED", "SETTLED")
-	if bs[2].FromState != "OBSERVED" || bs[2].ObservationID == bs[1].ObservationID || bs[3].ObservationID != bs[2].ObservationID {
-		t.Fatalf("the late confirmation's bindings = %+v", bs)
+	// The re-settlement signs what changed: the confirmed and billable
+	// amounts, the usage and the confirmed reservation, not only a version.
+	if bs[2].FromState != "OBSERVED" || bs[2].Observation.ID == bs[1].Observation.ID || bs[3].Observation.ID != bs[2].Observation.ID ||
+		bs[1].ModelCall.State != SettlementEstimated || bs[1].ModelCall.ConfirmedMicros != "" || bs[1].Reservation != "estimated" ||
+		*bs[2].ModelCall != (bindingModelCall{State: SettlementConfirmed, HeldMicros: "2000", ConfirmedMicros: "800",
+			BillableMicros: "800", UsageDigest: hex.EncodeToString(sha([]byte(`{"input_tokens":10,"output_tokens":5}`)))}) ||
+		bs[2].Reservation != "confirmed" || bs[2].Exposures[0].Amount != "800" || bs[2].Exposures[0].Kind != "confirmed" {
+		t.Fatalf("the late confirmation's bindings = %+v %+v %+v", bs[1].ModelCall, bs[2].ModelCall, bs[2])
 	}
 
 	// Refused by the provider: OBSERVED(FAILED) on the adapter's refusal.
@@ -269,7 +375,7 @@ func TestPostgresModelCallOutcomesCarryReceipts(t *testing.T) {
 	refused, err := f.svc.SettleModelCall(ctx, claim, ModelCallOutcome{Result: ModelCallNotSent, Reason: contracts.ReasonProviderError})
 	must(t, err)
 	wantOutcome(t, "not sent", refused, "OBSERVED", "FAILED", contracts.ReasonProviderError)
-	if b := f.wantReceipted(refused, "ADMITTED", "OBSERVED")[1]; b.ObservationTrustClass != "adapter_refusal" || b.EvidenceDigest != "" {
+	if b := f.wantReceipted(refused, "ADMITTED", "OBSERVED")[1]; b.Observation.TrustClass != "adapter_refusal" || b.Observation.EvidenceDigest != "" {
 		t.Fatalf("the refused call's binding = %+v", b)
 	}
 
@@ -507,6 +613,16 @@ func TestPostgresOutcomeReceiptSchemaUpgradesFrom15(t *testing.T) {
 	var schema string
 	must(t, f.owner.QueryRow(`SELECT current_schema()`).Scan(&schema))
 	grantRuntime(t, f.owner, schema, f.role)
+	// Both fences resolve authority_receipts in the gateway schema only,
+	// migration 15's decision fence included.
+	for _, fn := range []string{"authority_require_decision_receipt", "authority_require_outcome_receipt"} {
+		var config []byte
+		must(t, f.owner.QueryRow(`SELECT array_to_string(proconfig, ';') FROM pg_proc WHERE proname = $1 AND pronamespace = to_regnamespace($2)`,
+			fn, schema).Scan(&config))
+		if string(config) != "search_path="+schema+", pg_temp" {
+			t.Fatalf("%s runs with %q, want its search_path pinned to %s, pg_temp", fn, config, schema)
+		}
+	}
 
 	// The legacy outcome stays as it was, without a receipt; the next outcome
 	// is receipted and chains after every decision before it.
@@ -573,10 +689,104 @@ func TestPostgresOutcomeReceiptsVerifyOfflineAsAChain(t *testing.T) {
 	}
 	// The binding an outcome commits to is the one stored beside it.
 	for _, r := range rows[1:2] {
-		var b receiptBinding
+		var b outcomeBinding
 		must(t, json.Unmarshal(r.binding, &b))
 		if b.Outcome != "SUCCEEDED" || mustReceipt(t, r.envelope).OutputHash != hex.EncodeToString(sha(r.binding)) {
 			t.Fatalf("outcome binding %+v", b)
+		}
+	}
+}
+
+// TestPostgresFencesIgnoreALookAlikeReceiptTable: both fences find receipts
+// only in the gateway schema. A temporary authority_receipts the runtime role
+// creates, or one in a schema the writer puts first on its search_path,
+// holding the row a fence looks for, satisfies neither the decision fence nor
+// the outcome fence (CTL-059, migration 16).
+func TestPostgresFencesIgnoreALookAlikeReceiptTable(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fake := &scripted{}
+	svc := f.withAdapter(fake)
+	var schema string
+	must(t, f.owner.QueryRow(`SELECT current_schema()`).Scan(&schema))
+	lookalike := schema + "_lookalike"
+	_, err := f.owner.Exec(`CREATE SCHEMA ` + lookalike)
+	must(t, err)
+	t.Cleanup(func() { _, _ = f.owner.Exec(`DROP SCHEMA ` + lookalike + ` CASCADE`) })
+	const table = ` (tenant_id TEXT, attempt_id UUID, attempt_version BIGINT, state TEXT)`
+	// The chart's bootstrap revokes TEMPORARY from PUBLIC; a deployment that
+	// does not is the case to prove, so the runtime role gets it here.
+	var database string
+	must(t, f.owner.QueryRow(`SELECT current_database()`).Scan(&database))
+	t.Cleanup(func() { _, _ = f.owner.Exec(`REVOKE TEMPORARY ON DATABASE ` + database + ` FROM ` + f.role) })
+	for _, statement := range []string{
+		`GRANT TEMPORARY ON DATABASE ` + database + ` TO ` + f.role,
+		`CREATE TABLE ` + lookalike + `.authority_receipts` + table,
+		`GRANT USAGE ON SCHEMA ` + lookalike + ` TO ` + f.role,
+		`GRANT SELECT, INSERT ON ` + lookalike + `.authority_receipts TO ` + f.role,
+	} {
+		_, err := f.owner.Exec(statement)
+		must(t, err)
+	}
+
+	// A claimed attempt for the outcome fence, a proposed one for the
+	// decision fence.
+	claimed := f.propose(human, note("lookalike-outcome"))
+	f.claimOnly(svc, claimed.ID)
+	var proposed string
+	f.ownerTx(tenantA, func(tx *sql.Tx) error {
+		return tx.QueryRow(`INSERT INTO authority_effect_attempts (tenant_id, attempt_id, workspace_id, idempotency_key, request_digest,
+				requester_principal_id, effect_type, target, target_digest, argument_digest, state)
+			VALUES ($1, gen_random_uuid(), $2, 'lookalike-decision', $3, 'human-a', $4, 'ops', $3, $3, 'PROPOSED') RETURNING attempt_id`,
+			tenantA, workspace, sum256("lookalike-decision"), noteType).Scan(&proposed)
+	})
+	writes := []struct {
+		name, attempt, state, statement, refusal string
+		version                                  int64
+		args                                     []any
+	}{
+		{"an outcome", claimed.ID, "OBSERVED", `UPDATE authority_effect_attempts
+			SET state = 'OBSERVED', outcome = 'SUCCEEDED', outcome_basis = 'OBSERVED', version = version + 1 WHERE attempt_id = $1`,
+			"outcome_receipt_missing", claimed.Version + 2, nil},
+		{"a decision", proposed, "DENIED", `UPDATE authority_effect_attempts SET state = 'DENIED', version = version + 1 WHERE attempt_id = $1`,
+			"decision_receipt_missing", 2, nil},
+	}
+	for _, w := range writes {
+		for name, setup := range map[string][]string{
+			"a temporary table":                 {`CREATE TEMP TABLE authority_receipts` + table},
+			"a schema first on the search_path": {`SET LOCAL search_path = ` + lookalike + `, ` + schema},
+		} {
+			conn, err := f.runtime.Conn(ctx)
+			must(t, err)
+			tx, err := conn.BeginTx(ctx, nil)
+			must(t, err)
+			_, err = tx.Exec(`SELECT set_config('app.current_tenant', $1, true)`, tenantA)
+			must(t, err)
+			for _, statement := range setup {
+				_, err := tx.Exec(statement)
+				must(t, err)
+			}
+			// The look-alike holds exactly the row the fence asks for.
+			_, err = tx.Exec(`INSERT INTO authority_receipts (tenant_id, attempt_id, attempt_version, state) VALUES ($1, $2, $3, $4)`,
+				tenantA, w.attempt, w.version, w.state)
+			must(t, err)
+			_, err = tx.Exec(w.statement, w.attempt)
+			must(t, err)
+			err = tx.Commit()
+			_ = conn.Close()
+			if err == nil || !strings.Contains(err.Error(), w.refusal) {
+				t.Fatalf("%s with %s holding its receipt: err = %v, want %s", w.name, name, err, w.refusal)
+			}
+		}
+	}
+	// Nothing committed: the attempts are where they were.
+	for id, want := range map[string]string{claimed.ID: "DISPATCHING", proposed: "PROPOSED"} {
+		var state string
+		f.ownerTx(tenantA, func(tx *sql.Tx) error {
+			return tx.QueryRow(`SELECT state FROM authority_effect_attempts WHERE attempt_id = $1`, id).Scan(&state)
+		})
+		if state != want {
+			t.Fatalf("attempt %s is %s after the refused writes, want %s", id, state, want)
 		}
 	}
 }

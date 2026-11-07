@@ -103,11 +103,12 @@ func verifyBundle(t *testing.T, raw []byte, trust receiptverify.TrustRoot) recei
 
 // wantContiguousChain checks a chain links from genesis, its head is its last
 // receipt, every receipt is signed by the test key and binds its stored row,
-// and every binding matches the closed binding schema.
+// and every binding matches its closed schema: receipt-binding.v1 for a
+// decision, outcome-binding.v1 for an outcome.
 func (f *fixture) wantContiguousChain(tenant, ws string, n int) []storedReceipt {
 	f.t.Helper()
 	rows := f.chainRows(tenant, ws)
-	schema := bindingSchema(f.t)
+	decisionSchema, outcomeSchema := bindingSchema(f.t), outcomeSchema(f.t)
 	if len(rows) != n {
 		f.t.Fatalf("chain %s/%s holds %d receipts, want %d", tenant, ws, len(rows), n)
 	}
@@ -127,18 +128,31 @@ func (f *fixture) wantContiguousChain(tenant, ws string, n int) []storedReceipt 
 			receipt.DecisionID != fmt.Sprintf("%s:%d", r.attemptID, r.version) || receipt.SessionID != receiptChainID(tenant, ws) {
 			f.t.Fatalf("receipt %d does not describe its row: %+v", i, receipt)
 		}
-		var binding receiptBinding
-		decoder := json.NewDecoder(bytes.NewReader(r.binding))
-		decoder.DisallowUnknownFields()
-		must(f.t, decoder.Decode(&binding))
 		var doc map[string]any
 		must(f.t, json.Unmarshal(r.binding, &doc))
-		if err := schema.Validate(doc); err != nil {
-			f.t.Fatalf("binding %d does not match its closed schema: %v", i, err)
-		}
-		if binding.BindingVersion != ReceiptBindingVersion || binding.AttemptID != r.attemptID || binding.AttemptVersion != r.version ||
-			binding.State != r.state || binding.TenantID != tenant || binding.Seq != uint64(r.seq) || binding.PolicyHash != receipt.PolicyHash {
-			f.t.Fatalf("binding %d does not describe its row: %+v", i, binding)
+		decoder := json.NewDecoder(bytes.NewReader(r.binding))
+		decoder.DisallowUnknownFields()
+		if _, err := receiptVerdict(r.state); err == nil {
+			var binding receiptBinding
+			must(f.t, decoder.Decode(&binding))
+			if err := decisionSchema.Validate(doc); err != nil {
+				f.t.Fatalf("decision binding %d does not match its closed schema: %v", i, err)
+			}
+			if binding.BindingVersion != ReceiptBindingVersion || binding.AttemptID != r.attemptID || binding.AttemptVersion != r.version ||
+				binding.State != r.state || binding.TenantID != tenant || binding.Seq != uint64(r.seq) || binding.PolicyHash != receipt.PolicyHash {
+				f.t.Fatalf("binding %d does not describe its row: %+v", i, binding)
+			}
+		} else {
+			var binding outcomeBinding
+			must(f.t, decoder.Decode(&binding))
+			if err := outcomeSchema.Validate(doc); err != nil {
+				f.t.Fatalf("outcome binding %d does not match its closed schema: %v", i, err)
+			}
+			if binding.BindingVersion != OutcomeBindingVersion || binding.AttemptID != r.attemptID || binding.AttemptVersion != r.version ||
+				binding.State != r.state || binding.TenantID != tenant || binding.Seq != uint64(r.seq) || binding.PolicyHash != receipt.PolicyHash ||
+				receipt.Verdict != "" {
+				f.t.Fatalf("outcome binding %d does not describe its row: %+v", i, binding)
+			}
 		}
 		prev = r.digest
 	}

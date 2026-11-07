@@ -395,7 +395,8 @@ func (s *Service) recordDispatch(ctx context.Context, tx *sql.Tx, c *claimed, re
 			return false, err
 		}
 		return false, recordOutcome(ctx, tx, s.cfg.ReceiptSigner, outcomeWrite{tenantID: c.tenantID, attemptID: c.attemptID,
-			from: "DISPATCHING", to: "OBSERVED", outcome: adapters.OutcomeFailed, reason: result.Reason, observationID: observationID})
+			from: "DISPATCHING", to: "OBSERVED", outcome: adapters.OutcomeFailed, reason: result.Reason, observationID: observationID,
+			settledBy: settledByNotSent, reservation: "released"})
 	default:
 		// The effect may have happened. The reservation stays held.
 		return false, transition(ctx, tx, c.tenantID, c.attemptID, "DISPATCHING", "UNKNOWN", result.Reason)
@@ -605,9 +606,12 @@ func (s *Service) recordObservation(ctx context.Context, tx *sql.Tx, t observeTa
 		return err
 	}
 	w := outcomeWrite{tenantID: t.tenantID, attemptID: t.attemptID, from: t.from, to: to, outcome: adapters.OutcomeSucceeded,
-		observationID: observationID}
+		observationID: observationID, settledBy: settledByReadback, reservation: "released"}
+	if consume {
+		w.reservation = "confirmed"
+	}
 	if result.Outcome != adapters.OutcomeSucceeded {
-		w.outcome, w.reason = adapters.OutcomeFailed, result.Reason
+		w.outcome, w.reason, w.readbackAbsent = adapters.OutcomeFailed, result.Reason, result.Absent
 	}
 	return recordOutcome(ctx, tx, s.cfg.ReceiptSigner, w)
 }

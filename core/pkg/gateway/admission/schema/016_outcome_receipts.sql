@@ -5,6 +5,21 @@
 -- the fence below refuses an outcome that commits without one. Additive: the
 -- tables, the decision fence and their row security are migration 15's.
 
+-- Lock order. During a rolling upgrade this migration runs while pods of the
+-- previous binary still serve. Each of their decisions writes its attempt row
+-- and then inserts its receipt, in that order and in one transaction. The
+-- ALTER below takes ACCESS EXCLUSIVE on authority_receipts and the trigger DDL
+-- takes SHARE ROW EXCLUSIVE on authority_effect_attempts; taking them the
+-- other way round (receipts first) can deadlock against such a decision,
+-- which holds the attempt row and waits for the receipt table. So the
+-- attempts lock comes first: it waits for in-flight attempt writers to commit
+-- (with their receipts) and queues new ones before they reach
+-- authority_receipts. Readers of authority_receipts still finish first; a
+-- transaction that reads receipts and then writes an attempt can still meet
+-- this migration in a cycle, which PostgreSQL's deadlock detector breaks by
+-- aborting one side (a failed migration records nothing and runs again).
+LOCK TABLE authority_effect_attempts IN SHARE ROW EXCLUSIVE MODE;
+
 -- A receipt now records a decision or an outcome. One receipt per attempt
 -- version still holds: an outcome write bumps the version it describes.
 ALTER TABLE authority_receipts DROP CONSTRAINT IF EXISTS authority_receipts_state_check;
@@ -16,11 +31,10 @@ ALTER TABLE authority_receipts ADD CONSTRAINT authority_receipts_state_check
 -- a new version in one of them (a model call's late usage re-settles an
 -- OBSERVED attempt), a receipt for exactly that (tenant, attempt, version,
 -- state) must exist when the transaction commits.
--- During an upgrade this migration runs while pods of the previous binary
--- still serve; their outcomes carry no receipt and now fail at commit. The
--- attempt stays where it was (DISPATCHING, DISPATCHED or UNKNOWN) for the
--- reconciliation job a claim enqueues to settle with a receipt, or to hand to
--- a human. Creating the triggers waits for in-flight writes to commit.
+-- An older gateway's outcomes carry no receipt and fail at commit after this
+-- migration. The attempt stays where it was (DISPATCHING, DISPATCHED or
+-- UNKNOWN) for the reconciliation job a claim enqueues to settle with a
+-- receipt, or to hand to a human.
 -- The check is deferred so that an outcome write can update the row first and
 -- append its receipt in the same transaction.
 CREATE OR REPLACE FUNCTION authority_require_outcome_receipt()
@@ -39,6 +53,19 @@ BEGIN
     RETURN NULL;
 END;
 $$;
+
+-- Both fences resolve authority_receipts by name. Pin their search_path to
+-- the schema this migration runs in, which is where migration 15 created the
+-- table (gateway migrations create every object in the connection's current
+-- schema), and put pg_temp last: a look-alike authority_receipts in the
+-- writer's own search_path, or a temporary table the writer creates, cannot
+-- satisfy either fence. This also pins migration 15's decision fence.
+DO $pin$
+BEGIN
+    EXECUTE format('ALTER FUNCTION authority_require_decision_receipt() SET search_path = %I, pg_temp', current_schema());
+    EXECUTE format('ALTER FUNCTION authority_require_outcome_receipt() SET search_path = %I, pg_temp', current_schema());
+END
+$pin$;
 
 DROP TRIGGER IF EXISTS authority_outcome_receipt_insert ON authority_effect_attempts;
 CREATE CONSTRAINT TRIGGER authority_outcome_receipt_insert

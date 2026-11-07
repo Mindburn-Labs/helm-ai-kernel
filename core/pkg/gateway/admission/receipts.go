@@ -8,9 +8,10 @@ package admission
 //
 // Every decision admission records (ADMITTED, DENIED, ESCALATED, including the
 // re-admission of an approved escalation) appends one signed receipt to its
-// workspace's chain in the decision's own transaction (helm-tracker#276), and
-// so does every outcome of an admitted effect (OBSERVED, RECONCILED, SETTLED;
-// outcomes.go), in the transaction that records it:
+// workspace's chain in the decision's own transaction (helm-tracker#276). Every
+// outcome of an admitted effect (OBSERVED, RECONCILED, SETTLED) appends one to
+// the same chain in the transaction that records it, over its own binding
+// document (outcomes.go). For a decision receipt:
 //
 //   - the receipt is a contracts.Receipt signed under receipt.v5 (one signing
 //     envelope, R4); the gateway's own facts are committed through its
@@ -22,15 +23,14 @@ package admission
 //   - the chain row is locked FOR UPDATE as the last row lock the transaction
 //     takes on a pre-existing row, so a workspace's decisions serialize on it
 //     until they commit; the exact envelope and binding bytes are stored with
-//     the digest the next receipt links to. Any failure rolls the decision or
-//     the outcome back, and the deferred fences of migrations 15 and 16
-//     refuse at commit any decision or outcome written without its receipt
-//     (an older binary's, during an upgrade);
+//     the digest the next receipt links to. Any failure rolls the decision
+//     back, and migration 15's deferred fence refuses at commit any decision
+//     written without its receipt (an older binary's, during an upgrade;
+//     migration 16 adds the same fence for outcomes);
 //   - args_hash is the hex SHA-256 of the exact argument bytes the attempt
 //     stored (its argument_digest), not of a JCS re-encoding of them;
 //   - the receipt's timestamp is outside the receipt.v5 preimage, but the next
-//     receipt's prev_hash covers it; decided_at (a decision) or settled_at (an
-//     outcome) is signed through the binding.
+//     receipt's prev_hash covers it; decided_at is signed through the binding.
 
 import (
 	"context"
@@ -48,7 +48,6 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
@@ -147,54 +146,27 @@ type storedDecision struct {
 	DecidedAt                        time.Time
 }
 
-// storedOutcome is the attempt row an outcome write left, as UPDATE ...
-// RETURNING gave it back. The row facts it shares with a decision are in the
-// embedded storedDecision, whose decision-only members stay empty (no
-// approver, no step-up proof, no decision time); PermitID and
-// AuthorityVersions are the permit the effect was dispatched under. The
-// observation is the one the outcome rests on, as stored.
-type storedOutcome struct {
-	storedDecision
-	Outcome, OutcomeBasis string
-	Observation           boundObservation
-	SettledAt             time.Time
-}
-
-// boundObservation is the stored observation an outcome receipt binds.
-type boundObservation struct {
-	ID                    int64
-	Source, TrustClass    string
-	Outcome               string
-	EvidenceDigest        []byte
-	ResultKind, ResultRef string
-	ObservedAt            time.Time
-}
-
 // receiptSubject is a stored attempt version a receipt describes: a decision
-// (storedDecision) or an outcome (storedOutcome).
+// (storedDecision, receipt-binding.v1) or an outcome (storedOutcome,
+// outcome-binding.v1). row names the attempt version; build is the pure
+// builder of its unsigned receipt and exact binding bytes.
 type receiptSubject interface {
-	row() *storedDecision
+	row() (tenantID, workspaceID, attemptID string, version int64, state string)
 	build(receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error)
 }
 
-func (d storedDecision) row() *storedDecision { return &d }
+func (d storedDecision) row() (string, string, string, int64, string) {
+	return d.TenantID, d.WorkspaceID, d.AttemptID, d.Version, d.State
+}
 
 func (d storedDecision) build(receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
 	return buildDecisionReceipt(d, receiptID, seq, prevDigest)
 }
 
-func (o storedOutcome) row() *storedDecision { return &o.storedDecision }
-
-func (o storedOutcome) build(receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
-	return buildOutcomeReceipt(o, receiptID, seq, prevDigest)
-}
-
 // receiptBinding is helm.gateway.receipt-binding.v1. Every member is always
-// present: an empty string (or observation_id 0) is a signed value, never an
-// omitted field. A decision receipt leaves the outcome members empty; an
-// outcome receipt leaves verdict, decided_at and the approval's approver and
-// step-up members empty. Amounts are decimal strings so the document stays
-// inside the number range every RFC 8785 implementation reproduces.
+// present: an empty string is a signed value, never an omitted field. Amounts
+// are decimal strings so the document stays inside the number range every
+// RFC 8785 implementation reproduces.
 type receiptBinding struct {
 	BindingVersion        string                    `json:"binding_version"`
 	ChainID               string                    `json:"chain_id"`
@@ -228,17 +200,6 @@ type receiptBinding struct {
 	EpisodeID             string                    `json:"episode_id"`
 	OrganizationVersionID string                    `json:"organization_version_id"`
 	DecidedAt             string                    `json:"decided_at"`
-	Outcome               string                    `json:"outcome"`
-	OutcomeBasis          string                    `json:"outcome_basis"`
-	ObservationID         int64                     `json:"observation_id"`
-	ObservationSource     string                    `json:"observation_source"`
-	ObservationTrustClass string                    `json:"observation_trust_class"`
-	ObservationOutcome    string                    `json:"observation_outcome"`
-	EvidenceDigest        string                    `json:"evidence_digest"`
-	ResultKind            string                    `json:"result_kind"`
-	ResultRef             string                    `json:"result_ref"`
-	ObservedAt            string                    `json:"observed_at"`
-	SettledAt             string                    `json:"settled_at"`
 }
 
 type bindingAmount struct {
@@ -278,20 +239,16 @@ func authoritySnapshotHash(versions []AuthorityVersion) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// receiptVerdict is a decision state's verdict. An outcome state (outcome
-// true) has none: its receipt's verdict is empty.
-func receiptVerdict(state string) (verdict contracts.Verdict, outcome bool, err error) {
+func receiptVerdict(state string) (contracts.Verdict, error) {
 	switch state {
 	case "ADMITTED":
-		return contracts.VerdictAllow, false, nil
+		return contracts.VerdictAllow, nil
 	case "DENIED":
-		return contracts.VerdictDeny, false, nil
+		return contracts.VerdictDeny, nil
 	case "ESCALATED":
-		return contracts.VerdictEscalate, false, nil
-	case "OBSERVED", "RECONCILED", "SETTLED":
-		return "", true, nil
+		return contracts.VerdictEscalate, nil
 	}
-	return "", false, fmt.Errorf("state %q is neither a decision nor an outcome a receipt records", state)
+	return "", fmt.Errorf("state %q is not a decision a receipt records", state)
 }
 
 func digestHex(name string, digest []byte, optional bool) (string, error) {
@@ -320,68 +277,15 @@ func isChainDigest(s string) bool {
 // exact binding bytes the receipt commits to. It is pure: the receipt id, the
 // sequence number and the predecessor digest come from the caller.
 func buildDecisionReceipt(d storedDecision, receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
-	verdict, outcome, err := receiptVerdict(d.State)
+	verdict, err := receiptVerdict(d.State)
 	if err != nil {
 		return nil, nil, err
 	}
-	if outcome {
-		return nil, nil, fmt.Errorf("state %q is an outcome, not a decision", d.State)
-	}
-	if d.DecidedAt.IsZero() {
-		return nil, nil, errors.New("a decision receipt needs the decision time")
-	}
-	doc := receiptBinding{Verdict: string(verdict), ApproverPrincipalID: d.ApproverPrincipalID, ApproverActorID: d.ApproverActorID,
-		StepUpIssuer: d.StepUpIssuer, StepUpJTI: d.StepUpJTI, DecidedAt: d.DecidedAt.UTC().Format(time.RFC3339Nano)}
-	return buildReceipt(d, doc, d.DecidedAt, receiptID, seq, prevDigest)
-}
-
-// buildOutcomeReceipt maps a stored outcome to its unsigned receipt and the
-// exact binding bytes the receipt commits to: the row the outcome write
-// returned, the permit the effect was dispatched under and the observation
-// the outcome rests on. Its verdict is empty and its status the outcome
-// state. It is pure, like buildDecisionReceipt.
-func buildOutcomeReceipt(o storedOutcome, receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
-	_, outcome, err := receiptVerdict(o.State)
-	if err != nil {
-		return nil, nil, err
-	}
-	switch {
-	case !outcome:
-		return nil, nil, fmt.Errorf("state %q is a decision, not an outcome", o.State)
-	case o.Outcome != string(adapters.OutcomeSucceeded) && o.Outcome != string(adapters.OutcomeFailed):
-		return nil, nil, fmt.Errorf("an outcome receipt records SUCCEEDED or FAILED, not %q", o.Outcome)
-	case o.OutcomeBasis != "OBSERVED" && o.OutcomeBasis != "RECONCILED",
-		o.State != "SETTLED" && o.State != o.OutcomeBasis:
-		return nil, nil, fmt.Errorf("state %s cannot rest on outcome basis %q", o.State, o.OutcomeBasis)
-	case o.SettledAt.IsZero() || o.PermitID == "":
-		return nil, nil, errors.New("an outcome receipt needs the settlement time and the permit the effect was dispatched under")
-	case o.ApproverPrincipalID != "" || o.ApproverActorID != "" || o.StepUpIssuer != "" || o.StepUpJTI != "" || !o.DecidedAt.IsZero():
-		return nil, nil, errors.New("an outcome receipt carries no approver, step-up proof or decision time")
-	case o.Observation.ID <= 0 || o.Observation.Source == "" || o.Observation.TrustClass == "" || o.Observation.ObservedAt.IsZero():
-		return nil, nil, errors.New("an outcome receipt needs the stored observation it rests on")
-	}
-	evidence, err := digestHex("evidence_digest", o.Observation.EvidenceDigest, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	doc := receiptBinding{Outcome: o.Outcome, OutcomeBasis: o.OutcomeBasis,
-		ObservationID: o.Observation.ID, ObservationSource: o.Observation.Source, ObservationTrustClass: o.Observation.TrustClass,
-		ObservationOutcome: o.Observation.Outcome, EvidenceDigest: evidence,
-		ResultKind: o.Observation.ResultKind, ResultRef: o.Observation.ResultRef,
-		ObservedAt: o.Observation.ObservedAt.UTC().Format(time.RFC3339Nano), SettledAt: o.SettledAt.UTC().Format(time.RFC3339Nano)}
-	return buildReceipt(o.storedDecision, doc, o.SettledAt, receiptID, seq, prevDigest)
-}
-
-// buildReceipt completes doc, the members only a decision or only an outcome
-// sets, with the members every gateway receipt binds from the stored row, and
-// returns the unsigned receipt.v5 over it with the binding's exact bytes. The
-// receipt's timestamp is at, the database time of the transaction.
-func buildReceipt(d storedDecision, doc receiptBinding, at time.Time, receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
 	if seq == 0 || (seq == 1) != (prevDigest == "") || (prevDigest != "" && !isChainDigest(prevDigest)) {
 		return nil, nil, fmt.Errorf("receipt %d of a chain cannot link to %q", seq, prevDigest)
 	}
-	if d.TenantID == "" || d.WorkspaceID == "" || d.AttemptID == "" || d.Version <= 0 {
-		return nil, nil, errors.New("a receipt needs the stored tenant, workspace, attempt and version")
+	if d.TenantID == "" || d.WorkspaceID == "" || d.AttemptID == "" || d.Version <= 0 || d.DecidedAt.IsZero() {
+		return nil, nil, errors.New("a decision receipt needs the stored tenant, workspace, attempt, version and decision time")
 	}
 	request, err := digestHex("request_digest", d.RequestDigest, false)
 	if err != nil {
@@ -412,16 +316,19 @@ func buildReceipt(d storedDecision, doc receiptBinding, at time.Time, receiptID 
 	if d.ApprovalExpiresAt != nil {
 		expires = d.ApprovalExpiresAt.UTC().Format(time.RFC3339Nano)
 	}
-	doc.BindingVersion, doc.ChainID, doc.Seq = ReceiptBindingVersion, chain, seq
-	doc.TenantID, doc.WorkspaceID, doc.AttemptID, doc.AttemptVersion = d.TenantID, d.WorkspaceID, d.AttemptID, d.Version
-	doc.FromState, doc.State, doc.ReasonCode = d.FromState, d.State, d.ReasonCode
-	doc.EffectType, doc.RequesterPrincipalID, doc.RequesterActorID = d.EffectType, d.RequesterPrincipalID, d.RequesterActorID
-	doc.MandateID, doc.RiskClass = d.MandateID, d.RiskClass
-	doc.RequestDigest, doc.TargetDigest, doc.ArgumentDigest, doc.Quote = request, target, argument, quote
-	doc.ApprovalDigest, doc.ApprovalExpiresAt = approval, expires
-	doc.PermitID, doc.AuthorityVersions, doc.PolicyHash = d.PermitID, bindingVersions(d.AuthorityVersions), policyHash
-	doc.EpisodeID, doc.OrganizationVersionID = d.EpisodeID, d.OrganizationVersionID
-	binding, err := canonicalize.InteroperableJCS(doc)
+	binding, err := canonicalize.InteroperableJCS(receiptBinding{
+		BindingVersion: ReceiptBindingVersion, ChainID: chain, Seq: seq,
+		TenantID: d.TenantID, WorkspaceID: d.WorkspaceID, AttemptID: d.AttemptID, AttemptVersion: d.Version,
+		FromState: d.FromState, State: d.State, Verdict: string(verdict), ReasonCode: d.ReasonCode,
+		EffectType: d.EffectType, RequesterPrincipalID: d.RequesterPrincipalID, RequesterActorID: d.RequesterActorID,
+		MandateID: d.MandateID, RiskClass: d.RiskClass,
+		RequestDigest: request, TargetDigest: target, ArgumentDigest: argument, Quote: quote,
+		ApprovalDigest: approval, ApprovalExpiresAt: expires, ApproverPrincipalID: d.ApproverPrincipalID,
+		ApproverActorID: d.ApproverActorID, StepUpIssuer: d.StepUpIssuer, StepUpJTI: d.StepUpJTI,
+		PermitID: d.PermitID, AuthorityVersions: bindingVersions(d.AuthorityVersions), PolicyHash: policyHash,
+		EpisodeID: d.EpisodeID, OrganizationVersionID: d.OrganizationVersionID,
+		DecidedAt: d.DecidedAt.UTC().Format(time.RFC3339Nano),
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("receipt binding: %w", err)
 	}
@@ -432,11 +339,11 @@ func buildReceipt(d storedDecision, doc receiptBinding, at time.Time, receiptID 
 		EffectID:     d.AttemptID,
 		Status:       d.State,
 		OutputHash:   hex.EncodeToString(output[:]),
-		Timestamp:    at.UTC(),
+		Timestamp:    d.DecidedAt.UTC(),
 		PrevHash:     prevDigest,
 		LamportClock: seq,
 		ArgsHash:     argument,
-		Verdict:      doc.Verdict,
+		Verdict:      string(verdict),
 		ReasonCode:   d.ReasonCode,
 		PolicyHash:   policyHash,
 		SessionID:    chain,
@@ -498,16 +405,16 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, subjec
 	if signer == nil {
 		return ReceiptRef{}, errors.New("no receipt signer: a decision or an outcome is never recorded without its receipt")
 	}
-	d := subject.row()
-	chain := receiptChainID(d.TenantID, d.WorkspaceID)
+	tenantID, workspaceID, attemptID, version, state := subject.row()
+	chain := receiptChainID(tenantID, workspaceID)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO authority_receipt_chains (tenant_id, chain_id, format)
-		VALUES ($1, $2, $3) ON CONFLICT (tenant_id, chain_id) DO NOTHING`, d.TenantID, chain, ReceiptFormat); err != nil {
+		VALUES ($1, $2, $3) ON CONFLICT (tenant_id, chain_id) DO NOTHING`, tenantID, chain, ReceiptFormat); err != nil {
 		return ReceiptRef{}, fmt.Errorf("receipt chain: %w", err)
 	}
 	var seq int64
 	var head, format string
 	if err := tx.QueryRowContext(ctx, `SELECT seq, head_digest, format FROM authority_receipt_chains
-		WHERE tenant_id = $1 AND chain_id = $2 FOR UPDATE`, d.TenantID, chain).Scan(&seq, &head, &format); err != nil {
+		WHERE tenant_id = $1 AND chain_id = $2 FOR UPDATE`, tenantID, chain).Scan(&seq, &head, &format); err != nil {
 		return ReceiptRef{}, fmt.Errorf("receipt chain head: %w", err)
 	}
 	if format != ReceiptFormat {
@@ -533,13 +440,13 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, subjec
 			(tenant_id, chain_id, seq, receipt_id, format, prev_digest, digest, attempt_id, attempt_version,
 			 workspace_id, state, key_id, envelope, binding)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		d.TenantID, chain, seq+1, receipt.ReceiptID, ReceiptFormat, head, digest, d.AttemptID, d.Version,
-		d.WorkspaceID, d.State, receipt.KeyID, envelope, binding); err != nil {
+		tenantID, chain, seq+1, receipt.ReceiptID, ReceiptFormat, head, digest, attemptID, version,
+		workspaceID, state, receipt.KeyID, envelope, binding); err != nil {
 		return ReceiptRef{}, fmt.Errorf("append receipt: %w", err)
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE authority_receipt_chains SET seq = $3, head_digest = $4, updated_at = now()
 		WHERE tenant_id = $1 AND chain_id = $2 AND seq = $5 AND head_digest = $6`,
-		d.TenantID, chain, seq+1, digest, seq, head)
+		tenantID, chain, seq+1, digest, seq, head)
 	if err != nil {
 		return ReceiptRef{}, fmt.Errorf("advance receipt chain: %w", err)
 	}
@@ -547,7 +454,7 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, subjec
 		return ReceiptRef{}, fmt.Errorf("receipt chain %q moved while it was locked (%d rows, %v)", chain, n, err)
 	}
 	return ReceiptRef{ReceiptID: receipt.ReceiptID, ChainID: chain, Seq: next, Digest: digest, KeyID: receipt.KeyID,
-		Format: ReceiptFormat, State: d.State, AttemptVersion: d.Version}, nil
+		Format: ReceiptFormat, State: state, AttemptVersion: version}, nil
 }
 
 // loadReceiptRefs reads the receipts of an attempt, oldest first.

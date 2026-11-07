@@ -305,15 +305,14 @@ func wantState(t *testing.T, what string, a Attempt, state string, reason contra
 }
 
 // observeBranch makes a branch attempt OBSERVED(SUCCEEDED) with commit as its
-// read-back commit: the fixture row slice 3's Observe will write, with the
-// outcome receipt migration 16 requires of it.
+// read-back commit: the fixture row slice 3's Observe will write, through the
+// same outcome write and receipt (migration 16 requires one).
 func (f *fixture) observeBranch(attemptID, commit string) {
 	f.t.Helper()
 	f.ownerTx(tenantA, func(tx *sql.Tx) error {
-		// The claim's DISPATCHING version, as Dispatch writes it before the
-		// read-back.
-		from := "DISPATCHING"
-		if _, err := tx.Exec(`UPDATE authority_effect_attempts SET state = 'DISPATCHING', version = version + 1, updated_at = now()
+		ctx := context.Background()
+		// The dispatched version a claim and the adapter's SENT answer leave.
+		if _, err := tx.Exec(`UPDATE authority_effect_attempts SET state = 'DISPATCHED', version = version + 1, updated_at = now()
 			WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'ADMITTED'`, tenantA, attemptID); err != nil {
 			return err
 		}
@@ -323,33 +322,44 @@ func (f *fixture) observeBranch(attemptID, commit string) {
 			RETURNING observation_id`, tenantA, attemptID, commit).Scan(&observationID); err != nil {
 			return err
 		}
-		return recordOutcome(context.Background(), tx, testReceiptSigner, outcomeWrite{tenantID: tenantA, attemptID: attemptID,
-			from: from, to: "OBSERVED", outcome: adapters.OutcomeSucceeded, observationID: observationID})
+		if err := settleHeld(ctx, tx, tenantA, attemptID, "confirmed", "observed"); err != nil {
+			return err
+		}
+		return recordOutcome(ctx, tx, testReceiptSigner, outcomeWrite{tenantID: tenantA, attemptID: attemptID,
+			from: "DISPATCHED", to: "OBSERVED", outcome: adapters.OutcomeSucceeded, observationID: observationID,
+			settledBy: settledByReadback, reservation: "confirmed"})
 	})
 }
 
-// moveOutcome rewrites an observed attempt's outcome state and basis the way
-// a fixture needs it, at a new version with its outcome receipt (migration
-// 16 refuses it without one).
-func (f *fixture) moveOutcome(attemptID, state, basis string) {
+// moveOutcome puts an observed attempt in another outcome state the way a
+// fixture needs it. OBSERVED and RECONCILED are written as a read-back writes
+// them, from DISPATCHED and UNKNOWN, at a new version with their receipt.
+// SETTLED is a model call's state only, which no read-back writes; the fixture
+// forces it past the fence as only a superuser in replica mode can (a CTL-059
+// bypass assumption), and signs nothing.
+func (f *fixture) moveOutcome(attemptID, state string) {
 	f.t.Helper()
 	f.ownerTx(tenantA, func(tx *sql.Tx) error {
-		var from string
-		var observationID int64
-		if err := tx.QueryRow(`SELECT state FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2`, tenantA, attemptID).Scan(&from); err != nil {
+		if state == "SETTLED" {
+			if _, err := tx.Exec(`SET LOCAL session_replication_role = replica`); err != nil {
+				return err
+			}
+			_, err := tx.Exec(`UPDATE authority_effect_attempts SET state = 'SETTLED', version = version + 1
+				WHERE tenant_id = $1 AND attempt_id = $2`, tenantA, attemptID)
 			return err
 		}
+		from := map[string]string{"OBSERVED": "DISPATCHED", "RECONCILED": "UNKNOWN"}[state]
+		var observationID int64
 		if err := tx.QueryRow(`SELECT max(observation_id) FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2`, tenantA, attemptID).Scan(&observationID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE authority_effect_attempts SET outcome_basis = $3 WHERE tenant_id = $1 AND attempt_id = $2`, tenantA, attemptID, basis); err != nil {
+		if _, err := tx.Exec(`UPDATE authority_effect_attempts SET state = $3, version = version + 1 WHERE tenant_id = $1 AND attempt_id = $2`,
+			tenantA, attemptID, from); err != nil {
 			return err
 		}
-		w := outcomeWrite{tenantID: tenantA, attemptID: attemptID, from: from, to: state, observationID: observationID}
-		if state != "SETTLED" {
-			w.outcome = adapters.OutcomeSucceeded
-		}
-		return recordOutcome(context.Background(), tx, testReceiptSigner, w)
+		return recordOutcome(context.Background(), tx, testReceiptSigner, outcomeWrite{tenantID: tenantA, attemptID: attemptID,
+			from: from, to: state, outcome: adapters.OutcomeSucceeded, observationID: observationID,
+			settledBy: settledByReadback, reservation: "confirmed"})
 	})
 }
 
@@ -449,13 +459,13 @@ func TestPostgresDraftPullRequestNeedsItsObservedBranch(t *testing.T) {
 	refused("an unknown branch attempt", "d1", repo, draftArgs(uuid.NewString(), "helm/skeleton", commitSHA))
 	refused("a branch attempt not observed yet", "d2", repo, draftArgs(branch.ID, "helm/skeleton", commitSHA))
 	f.observeBranch(branch.ID, commitSHA)
-	setBranchState := func(state, basis string) { f.moveOutcome(branch.ID, state, basis) }
-	setBranchState("SETTLED", "OBSERVED")
+	setBranchState := func(state string) { f.moveOutcome(branch.ID, state) }
+	setBranchState("SETTLED")
 	refused("a settled branch attempt", "d2b", repo, draftArgs(branch.ID, "helm/skeleton", commitSHA))
-	setBranchState("RECONCILED", "RECONCILED")
+	setBranchState("RECONCILED")
 	wantState(t, "a reconciled branch", f.propose(human, proposal("d2c", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(branch.ID, "helm/skeleton", commitSHA))),
 		"ESCALATED", contracts.ReasonApprovalRequired)
-	setBranchState("OBSERVED", "OBSERVED")
+	setBranchState("OBSERVED")
 	refused("another head", "d3", repo, draftArgs(branch.ID, "helm/other", commitSHA))
 	refused("another commit", "d4", repo, draftArgs(branch.ID, "helm/skeleton", strings.Repeat("0", 40)))
 	refused("another repository", "d5", "github.com/Mindburn-Labs/other", draftArgs(branch.ID, "helm/skeleton", commitSHA))

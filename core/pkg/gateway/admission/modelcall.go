@@ -651,9 +651,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 	// They run last, after the replay below, so that the receipt chain stays
 	// the last row lock the transaction takes on a pre-existing row.
 	var outcomes []outcomeWrite
-	settle := func(outcome adapters.Outcome, reason contracts.ReasonCode) {
+	settle := func(outcome adapters.Outcome, reason contracts.ReasonCode, reservation string) {
 		outcomes = append(outcomes, outcomeWrite{tenantID: tenantID, attemptID: attemptID, from: a.state, to: observedState,
-			outcome: outcome, reason: reason})
+			outcome: outcome, reason: reason, settledBy: settledByModelCall, reservation: reservation})
 	}
 
 	switch out.Result {
@@ -670,8 +670,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeSucceeded, modelProviderTrust); err != nil {
 			return err
 		}
-		settle(adapters.OutcomeSucceeded, "")
-		outcomes = append(outcomes, outcomeWrite{tenantID: tenantID, attemptID: attemptID, from: observedState, to: "SETTLED"})
+		settle(adapters.OutcomeSucceeded, "", "confirmed")
+		outcomes = append(outcomes, outcomeWrite{tenantID: tenantID, attemptID: attemptID, from: observedState, to: "SETTLED",
+			settledBy: settledByModelCall, reservation: "confirmed"})
 	case ModelCallEstimated:
 		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-estimated"); err != nil {
 			return err
@@ -682,7 +683,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeSucceeded, modelProviderTrust); err != nil {
 			return err
 		}
-		settle(adapters.OutcomeSucceeded, "")
+		settle(adapters.OutcomeSucceeded, "", "estimated")
 	case ModelCallCut:
 		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-cut"); err != nil {
 			return err
@@ -705,7 +706,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeFailed, "adapter_refusal"); err != nil {
 			return err
 		}
-		settle(adapters.OutcomeFailed, out.Reason)
+		settle(adapters.OutcomeFailed, out.Reason, "released")
 	}
 	// A late usage report corrects accounting only. It cannot fabricate the
 	// response a cut caller never received or replace an expired replay.

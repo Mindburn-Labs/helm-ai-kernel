@@ -116,9 +116,11 @@ type Result struct {
 	PreimageVersion string `json:"preimage_version,omitempty"`
 	// KeyID echoes the receipt's declared key id purely so a caller can see
 	// which key the receipt *claims*. It is never used to select a key.
-	KeyID    string   `json:"key_id,omitempty"`
-	Receipts int      `json:"receipts"`
-	Permits  int      `json:"permits,omitempty"`
+	KeyID    string `json:"key_id,omitempty"`
+	Receipts int    `json:"receipts"`
+	Permits  int    `json:"permits,omitempty"`
+	// Bindings counts the gateway binding documents the bundle supplied.
+	Bindings int      `json:"bindings,omitempty"`
 	Errors   []string `json:"errors,omitempty"`
 }
 
@@ -129,11 +131,16 @@ type Result struct {
 // PublicKeyHex and KeyID are what the bundle *claims* its verification key is.
 // They are used only under TrustRoot.AllowSelfAttested, because a key that
 // travels with the thing it verifies is not a trust root.
+//
+// GatewayBindings maps a gateway receipt's receipt_id to the exact bytes of
+// the binding document its output_hash covers (base64 in JSON). They are data
+// to check against the signed receipts, never a source of trust.
 type Bundle struct {
-	Receipts     []*contracts.Receipt `json:"receipts"`
-	Permits      []*PermitRecord      `json:"permits,omitempty"`
-	PublicKeyHex string               `json:"public_key_hex,omitempty"`
-	KeyID        string               `json:"key_id,omitempty"`
+	Receipts        []*contracts.Receipt `json:"receipts"`
+	Permits         []*PermitRecord      `json:"permits,omitempty"`
+	PublicKeyHex    string               `json:"public_key_hex,omitempty"`
+	KeyID           string               `json:"key_id,omitempty"`
+	GatewayBindings map[string][]byte    `json:"gateway_bindings,omitempty"`
 }
 
 // embeddedKeys returns the bundle-level self-declared key material, keyed by
@@ -486,7 +493,7 @@ func Verify(receipts []*contracts.Receipt, trust TrustRoot) Result {
 // addition to — never instead of — the receipt chain.
 func VerifyBundle(b Bundle, trust TrustRoot) Result {
 	receipts := b.Receipts
-	res := Result{Receipts: len(receipts), Permits: len(b.Permits)}
+	res := Result{Receipts: len(receipts), Permits: len(b.Permits), Bindings: len(b.GatewayBindings)}
 
 	if len(receipts) == 0 {
 		res.Errors = append(res.Errors, "no receipts supplied")
@@ -519,6 +526,7 @@ func VerifyBundle(b Bundle, trust TrustRoot) Result {
 	res.Checks = append(res.Checks, checkExecution(receipts))
 	res.Checks = append(res.Checks, checkClosure(receipts))
 	res.Checks = append(res.Checks, checkPermits(b.Permits, trust, embedded))
+	res.Checks = append(res.Checks, checkBindings(receipts, b.GatewayBindings))
 
 	res.Valid = len(res.Errors) == 0
 	for _, c := range res.Checks {

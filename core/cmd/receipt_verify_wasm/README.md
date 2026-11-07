@@ -33,8 +33,12 @@ instantiation can be retried. If a runtime starts without the required exports,
 discard the realm. Use a separate Worker for another instance.
 
 `receiptJSON` is JSON text containing one receipt, an array in causal order,
-or a bundle with `receipts` and optional `permits`, `key_id` and
-`public_key_hex`. The shared `receiptverify.ParseBundle` parser retains raw
+or a bundle with `receipts` and optional `permits`, `key_id`,
+`public_key_hex` and `gateway_bindings`. `gateway_bindings` maps a gateway
+receipt's `receipt_id` to the base64 of the exact binding document its
+`output_hash` covers, as the gateway's `ExportReceiptChain` writes it; the
+`binding` check recomputes each hash and checks the binding against the
+signed receipt, and is `not_applicable` when no binding is supplied. The shared `receiptverify.ParseBundle` parser retains raw
 receipt objects until signed-member validation finishes. Do not parse and
 re-serialize untrusted JSON before handing it to the verifier: that can erase
 duplicate members or invalid number spellings.
@@ -62,8 +66,8 @@ string or number token before recursive parsing. The native
 `receiptverify.VerifyJSON` API has the same contract.
 The existing native CLI retains its flags and explicit inspection behavior.
 
-The shared corpus reuses frozen public receipt/permit fixtures without private
-keys. It tests native/WASM result parity, artifact-only trust refusal, wrong
+The shared corpus reuses frozen public receipt/permit fixtures, including a
+frozen gateway receipt chain with its bindings, without private keys. It tests native/WASM result parity, artifact-only trust refusal, wrong
 roots, signed-field and permit tampering, strict wire parsing and argument/size
 refusals. It also covers initialization races and parsing-work refusals followed
 by successful reuse. The JavaScript harness runs the actual WASM module in Node

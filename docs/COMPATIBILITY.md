@@ -50,8 +50,8 @@ flowchart TD
 This page is backed by:
 
 - `docs/developer-coverage.manifest.json`
-- `sdk/ts/src/adapters/agent-frameworks.ts`
-- `sdk/ts/src/adapters/agent-frameworks.test.ts`
+- `sdk/ts/src/adapters/native-gateway.ts`
+- `sdk/ts/src/adapters/native-gateway.test.ts`
 - `sdk/ts/README.md`
 - `examples/starters/anthropic/`
 - `examples/starters/google/`
@@ -79,17 +79,18 @@ This page is backed by:
 | Docker and Docker Compose | Supported | `Dockerfile`, `docker-compose.yml` |
 | Kubernetes Helm chart | Staging/self-hosted guidance | `deploy/helm-chart/` |
 
-## Framework Adapter Helpers
+## Framework Tool Calls
 
-The TypeScript SDK ships compatibility helpers for normalizing tool-call events from common agent frameworks into HELM governance requests. These helpers are source-backed adapter helpers, not full framework runtimes and not vendor certification.
+The TypeScript SDK routes a framework's tool call to the effect gateway with
+`NativeGatewayClient` (`sdk/ts/src/adapters/native-gateway.ts`): pass the exact
+discovered tool name, its arguments and an explicit target to `callEffect`, and
+the gateway decides, dispatches and records the attempt. The client owns no
+authority; a framework's metadata is never treated as authority.
 
-| Framework | Status | Test Surface |
-| --- | --- | --- |
-| LangGraph | Compatible helper | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
-| CrewAI | Compatible helper | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
-| OpenAI Agents SDK | Compatible helper | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
-| PydanticAI | Compatible helper | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
-| LlamaIndex | Compatible helper | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+The earlier chat-completion helpers for LangGraph, CrewAI, OpenAI Agents SDK,
+PydanticAI, LlamaIndex and ten other frameworks were removed: they sent the tool
+call as chat-message text, so nothing evaluated the named tool or its
+arguments.
 
 Validation:
 

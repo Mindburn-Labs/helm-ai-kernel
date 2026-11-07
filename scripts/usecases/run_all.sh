@@ -87,9 +87,12 @@ run_uc "UC-002" "PEP Fail-Closed" \
 # can return with a sandbox that executes a module on a shipped path, proven by
 # a looping and an allocating .wasm fixture.
 
-# UC-006: Idempotency (receipt-based dedup)
-run_uc "UC-006" "Idempotency" \
-    "cd $CORE_DIR && go test ./pkg/executor -v"
+# UC-006 (Idempotency, receipt-based dedup) is retired: its tests exercised
+# executor.SafeExecutor, which no shipped binary constructed and which was
+# deleted (helm-tracker#266). Effect idempotency is the gateway admission's
+# idempotency-first insert, proven against Postgres by
+# TestPostgresProposeIsIdempotent (core/pkg/gateway/admission, make
+# postgres-proofs).
 
 # UC-007: EvidencePack Export (pack create/verify: round trip, determinism,
 # unmanifested entries and unsigned packs refused)

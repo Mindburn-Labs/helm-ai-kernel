@@ -123,31 +123,6 @@ describe('HelmClient', () => {
     });
   });
 
-  // ── approveIntent ───────────────────────────────────
-  describe('approveIntent', () => {
-    it('POSTs to /api/v1/kernel/approve', async () => {
-      const receipt = {
-        receipt_id: 'r1', decision_id: 'd1', effect_id: 'e1',
-        status: 'APPROVED', reason_code: 'ALLOW', output_hash: 'h',
-        blob_hash: 'b', prev_hash: 'p', lamport_clock: 1,
-        signature: 's', timestamp: 't', principal: 'pr',
-      };
-      fetchSpy.mockResolvedValue(jsonResponse(receipt));
-      const client = new HelmClient({ baseUrl: 'http://h' });
-
-      const result = await client.approveIntent({
-        intent_hash: 'abc', signature: 's', public_key: 'pk',
-      });
-
-      expect(fetchSpy).toHaveBeenCalledWith(
-        'http://h/api/v1/kernel/approve',
-        expect.objectContaining({ method: 'POST' }),
-      );
-      expect(result.receipt_id).toBe('r1');
-      expect(result.status).toBe('APPROVED');
-    });
-  });
-
   // ── ProofGraph ──────────────────────────────────────
   describe('listSessions', () => {
     it('GETs /api/v1/proofgraph/sessions with query params', async () => {

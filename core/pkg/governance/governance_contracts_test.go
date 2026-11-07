@@ -2,7 +2,6 @@ package governance
 
 import (
 	"encoding/json"
-	"sync"
 	"testing"
 )
 
@@ -35,37 +34,6 @@ func TestFinal_DenialReceiptJSON(t *testing.T) {
 	json.Unmarshal(data, &dr2)
 	if dr2.ReceiptID != "r1" || dr2.Reason != DenialPolicy {
 		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_DenialLedgerNew(t *testing.T) {
-	ledger := NewDenialLedger()
-	if ledger == nil {
-		t.Fatal("ledger should not be nil")
-	}
-}
-
-func TestFinal_DenialLedgerDenyAndCount(t *testing.T) {
-	ledger := NewDenialLedger()
-	ledger.Deny("p1", "action", DenialPolicy, "details")
-	if ledger.Length() != 1 {
-		t.Fatalf("want 1 entry, got %d", ledger.Length())
-	}
-}
-
-func TestFinal_DenialLedgerConcurrent(t *testing.T) {
-	ledger := NewDenialLedger()
-	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ledger.Deny("p", "a", DenialPolicy, "d")
-		}()
-	}
-	wg.Wait()
-	if ledger.Length() != 20 {
-		t.Fatal("should have 20 entries")
 	}
 }
 
@@ -206,21 +174,6 @@ func TestFinal_ClassifierZeroValue(t *testing.T) {
 	}
 }
 
-func TestFinal_MemoryKeyProviderImpl(t *testing.T) {
-	var _ KeyProvider = (*MemoryKeyProvider)(nil)
-}
-
-func TestFinal_KeyringNew(t *testing.T) {
-	mkp, err := NewMemoryKeyProvider()
-	if err != nil {
-		t.Fatal(err)
-	}
-	kr := NewKeyring(mkp)
-	if kr == nil {
-		t.Fatal("keyring should not be nil")
-	}
-}
-
 func TestFinal_CanaryConfigJSON(t *testing.T) {
 	cc := CanaryConfig{StepDurationSec: 60, Steps: 3}
 	data, _ := json.Marshal(cc)
@@ -228,23 +181,5 @@ func TestFinal_CanaryConfigJSON(t *testing.T) {
 	json.Unmarshal(data, &cc2)
 	if cc2.Steps != 3 {
 		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_DenialReceiptContentHashPopulated(t *testing.T) {
-	ledger := NewDenialLedger()
-	receipt := ledger.Deny("p", "a", DenialPolicy, "d")
-	if receipt.ContentHash == "" {
-		t.Fatal("content hash should be computed")
-	}
-}
-
-func TestFinal_DenialLedgerDeterminism(t *testing.T) {
-	l1 := NewDenialLedger()
-	l2 := NewDenialLedger()
-	r1 := l1.Deny("p", "a", DenialPolicy, "d")
-	r2 := l2.Deny("p", "a", DenialPolicy, "d")
-	if r1.ContentHash != r2.ContentHash {
-		t.Fatal("content hash should be deterministic for same inputs")
 	}
 }

@@ -25,8 +25,8 @@ npm run build
 
 - `src/client.ts` is the hand-maintained HTTP wrapper.
 - `src/types.gen.ts` contains OpenAPI-derived model types.
-- `src/adapters/agent-frameworks.ts` contains the source-backed framework
-  adapter helpers.
+- `src/adapters/native-gateway.ts` contains `NativeGatewayClient`, which sends
+  framework tool calls to the effect gateway.
 - Protobuf bindings under `src/generated/` are generated from
   `protocols/proto/` with `ts-proto` when codegen has been run.
 

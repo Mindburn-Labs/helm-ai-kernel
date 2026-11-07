@@ -111,7 +111,7 @@ const encoder = new TextEncoder();
  * const gateway = new NativeGatewayClient({ mcpUrl, episodeToken: getEpisodeToken });
  * const tools = await gateway.listTools();
  * // Pick an exact discovered name; a framework action's metadata is not authority.
- * const result = await gateway.callEffect({ ...frameworkAction, target });
+ * const result = await gateway.callEffect({ toolName, arguments: args, target });
  * if (result.structuredContent.status === "reconciling") {
  *   await gateway.getAttempt(result.structuredContent.attempt_id!);
  * }

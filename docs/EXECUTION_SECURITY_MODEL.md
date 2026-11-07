@@ -236,7 +236,7 @@ signed `DENY` verdict with a deterministic reason code.
 | :--- | :--- |
 | Guardian (PEP) | `core/pkg/guardian/` |
 | Policy contracts | `core/pkg/contracts/` |
-| Gated execution | `core/pkg/executor/` |
+| Gated execution | `core/pkg/guardian/` (the standalone SafeExecutor in `core/pkg/executor/` was removed: no shipped caller) |
 | Canonicalization | `core/pkg/canonicalize/` |
 
 ---
@@ -274,7 +274,6 @@ visible in the receipt chain.
 
 | Component | Package |
 | :--- | :--- |
-| Receipt enforcement (library; not linked into the shipped binary) | `core/pkg/receipts/` |
 | ProofGraph DAG | `core/pkg/proofgraph/` |
 | Cryptographic signing | `core/pkg/crypto/` |
 | Evidence export/verify | `core/pkg/evidence/` |

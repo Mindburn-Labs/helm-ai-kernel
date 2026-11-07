@@ -24,24 +24,6 @@ type Budget struct {
 	LastUpdated  time.Time `json:"last_updated"`
 }
 
-// Remaining returns how much budget is remaining for the day.
-func (b *Budget) DailyRemaining() int64 {
-	remaining := b.DailyLimit - b.DailyUsed
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
-
-// MonthlyRemaining returns how much budget is remaining for the month.
-func (b *Budget) MonthlyRemaining() int64 {
-	remaining := b.MonthlyLimit - b.MonthlyUsed
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
-
 // Decision represents the result of a budget check.
 type Decision struct {
 	Allowed   bool                `json:"allowed"`

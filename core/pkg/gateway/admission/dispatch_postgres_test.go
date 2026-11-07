@@ -130,7 +130,7 @@ func (fakeCredentials) Token(_ context.Context, tenantID string, effect adapters
 // dispatches through a.
 func (f *fixture) withAdapter(a adapters.Adapter) *Service {
 	f.t.Helper()
-	svc, err := New(f.runtime, Config{Adapters: []adapters.Adapter{a}, Credentials: fakeCredentials{}})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{a}, Credentials: fakeCredentials{}})
 	must(f.t, err)
 	return svc
 }
@@ -402,7 +402,7 @@ func TestPostgresNotSentIsObservedFailedAndReleased(t *testing.T) {
 	f.ledgerBalances()
 	wantState(t, "the released limit admits again", f.propose(human, quotaNote("n3")), "ADMITTED", "")
 	// No credential is NOT_SENT too, never UNKNOWN.
-	bare, err := New(f.runtime, Config{Adapters: []adapters.Adapter{&scripted{}}})
+	bare, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{&scripted{}}})
 	must(t, err)
 	free := note("no-credential")
 	free.Quote = []Amount{{Unit: "notes", Amount: 0}}

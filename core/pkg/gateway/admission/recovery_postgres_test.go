@@ -179,8 +179,8 @@ func TestPostgresRecoveryVersionLineageUpgradesLegacySingleton(t *testing.T) {
 	must(t, Migrate(ctx, f.owner))
 	version, err := SchemaVersion(ctx, f.runtime)
 	must(t, err)
-	if version != 14 {
-		t.Fatalf("upgraded schema=%d", version)
+	if version != HeadVersion() {
+		t.Fatalf("upgraded schema=%d, want %d", version, HeadVersion())
 	}
 	read, err := f.svc.GetRecoveryFence(ctx, operator, legacy)
 	must(t, err)

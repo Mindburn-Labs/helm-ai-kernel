@@ -80,7 +80,7 @@ func realGitHubEnv(t *testing.T) (*env, *testkit.FakeGitHub) {
 	must(t, err)
 
 	adapter := github.New(github.WithBaseURL(fake.URL()))
-	svc, err := admission.New(e.runtime, admission.Config{
+	svc, err := admission.New(e.runtime, admission.Config{ReceiptSigner: testReceiptSigner,
 		Adapters: []adapters.Adapter{adapter}, Credentials: githubCredentials(fake.Token()),
 	})
 	must(t, err)
@@ -130,7 +130,7 @@ func installRealGitHubJobs(t *testing.T, e *env, fake *testkit.FakeGitHub) func(
 	})
 	must(t, err)
 	adapter := github.New(github.WithBaseURL(fake.URL()))
-	svc, err := admission.New(e.runtime, admission.Config{
+	svc, err := admission.New(e.runtime, admission.Config{ReceiptSigner: testReceiptSigner,
 		Adapters: []adapters.Adapter{adapter}, Credentials: githubCredentials(fake.Token()), Jobs: runner,
 	})
 	must(t, err)

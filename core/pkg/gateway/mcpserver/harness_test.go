@@ -247,7 +247,7 @@ func newEnv(t *testing.T) *env {
 	runtime.SetMaxOpenConns(20)
 	t.Cleanup(func() { _ = runtime.Close() })
 	adapter := &scriptedAdapter{}
-	svc, err := admission.New(runtime, admission.Config{Adapters: []adapters.Adapter{adapter}, Credentials: fakeCredentials{}})
+	svc, err := admission.New(runtime, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter}, Credentials: fakeCredentials{}})
 	must(t, err)
 	rows, err := authorityrows.New(owner)
 	must(t, err)

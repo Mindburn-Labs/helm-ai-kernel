@@ -109,7 +109,7 @@ func newAdminWire(t *testing.T) *adminWire {
 	must(t, err)
 	catalog, err := BuildCatalog([]adapters.Adapter{github.New(), adapter})
 	must(t, err)
-	svc, err := admission.New(db, admission.Config{Adapters: []adapters.Adapter{adapter}})
+	svc, err := admission.New(db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter}})
 	must(t, err)
 	iss := newIssuer(t)
 	auth := &Authenticator{Validator: iss.validator(), Actor: testActor}

@@ -49,7 +49,10 @@ type Attempt struct {
 	// Episode is the worker run the attempt was proposed in, recorded from the
 	// proposing token's verified helm_episode claim; nil for any other attempt.
 	// Its WorkItemID is the attempt's CaseID.
-	Episode   *Episode
+	Episode *Episode
+	// Receipts are the signed receipts of the attempt's decisions, oldest
+	// first: one for each ADMITTED, DENIED or ESCALATED version it reached.
+	Receipts  []ReceiptRef
 	Version   int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -300,6 +303,9 @@ func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID
 		if a.ModelCall, err = loadModelCall(ctx, tx, caller.TenantID, attemptID); err != nil {
 			return Attempt{}, err
 		}
+	}
+	if a.Receipts, err = loadReceiptRefs(ctx, tx, caller.TenantID, attemptID); err != nil {
+		return Attempt{}, err
 	}
 	return a, nil
 }

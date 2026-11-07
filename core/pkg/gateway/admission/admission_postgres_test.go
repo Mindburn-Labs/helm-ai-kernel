@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +53,7 @@ type fixture struct {
 	rows    *authorityrows.Store
 	mandate authorityrows.Mandate
 	now     time.Time
+	role    string
 }
 
 // human is the skeleton's requester: human-a, carried by the Control Plane.
@@ -63,7 +65,23 @@ func newFixture(t *testing.T) *fixture {
 
 // newFixtureAtVersion models an installed older gateway schema using the same
 // source-owned migrations and restricted runtime role as the normal fixture.
+//
+// This binary records every decision with a signed receipt and an older one
+// did not, so below migration 15 the receipt tables are created outside the
+// journal for the current binary to stand in for the older one. Migration 15
+// is idempotent over them; TestPostgresReceiptSchemaUpgradesFrom14 proves the
+// journaled upgrade without them (newFixtureAtVersionWithoutReceipts).
 func newFixtureAtVersion(t *testing.T, version int) *fixture {
+	return newFixtureAt(t, version, true)
+}
+
+// newFixtureAtVersionWithoutReceipts is an installed older schema exactly as
+// its migrations left it. The current binary cannot record decisions on it.
+func newFixtureAtVersionWithoutReceipts(t *testing.T, version int) *fixture {
+	return newFixtureAt(t, version, false)
+}
+
+func newFixtureAt(t *testing.T, version int, receiptTables bool) *fixture {
 	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
@@ -98,35 +116,26 @@ func newFixtureAtVersion(t *testing.T, version int) *fixture {
 			}
 			must(t, apply(ctx, owner, migration))
 		}
+		if receiptTables && version < 15 {
+			ddl, err := withRowSecurity("", "schema/015_receipts.sql", []string{"authority_receipt_chains", "authority_receipts"})
+			must(t, err)
+			_, err = owner.ExecContext(ctx, ddl)
+			must(t, err)
+		}
 	}
 
-	tables := append(append([]string{}, authorityrows.Tables...), Tables...)
-	for _, statement := range []string{
-		`CREATE ROLE ` + role + ` LOGIN PASSWORD 'gateway-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
-		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
-		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(tables, ", ") + ` TO ` + role,
-		`REVOKE UPDATE ON authority_postings, authority_provision_limits FROM ` + role,
-		`REVOKE UPDATE ON authority_recovery_fences,authority_recovery_members,authority_recovery_checkpoints FROM ` + role,
-		// Admission writes distinct values with INSERT ... ON CONFLICT DO
-		// NOTHING and reads them with EXISTS, and never updates a token replay
-		// row: the grants ADR-0004 (as amended 2026-09-26) and the chart's
-		// 002_grants.sql give helm_gateway.
-		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + role,
-		`GRANT DELETE ON authority_token_replay TO ` + role,
-		`GRANT SELECT ON gateway_schema_migrations TO ` + role,
-	} {
-		_, err := owner.Exec(statement)
-		must(t, err)
-	}
+	_, err = owner.Exec(`CREATE ROLE ` + role + ` LOGIN PASSWORD 'gateway-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`)
+	must(t, err)
+	grantRuntime(t, owner, schema, role)
 	runtime, err := sql.Open("postgres", withSearchPath(t, base, schema, role))
 	must(t, err)
 	t.Cleanup(func() { _ = runtime.Close() })
-	svc, err := New(runtime, Config{})
+	svc, err := New(runtime, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	rows, err := authorityrows.New(owner)
 	must(t, err)
 
-	f := &fixture{t: t, owner: owner, runtime: runtime, svc: svc, rows: rows}
+	f := &fixture{t: t, owner: owner, runtime: runtime, svc: svc, rows: rows, role: role}
 	must(t, owner.QueryRow(`SELECT now()`).Scan(&f.now))
 	for _, tenant := range []string{tenantA, tenantB} {
 		must(t, rows.CreateTenant(ctx, tenant))
@@ -145,6 +154,42 @@ func newFixtureAtVersion(t *testing.T, version int) *fixture {
 	}
 	f.mandate = f.rootMandate(tenantA, "human-a", skeletonTerms(f.now))
 	return f
+}
+
+// grantRuntime gives role the grants of the chart's 002_grants.sql on the
+// gateway tables that exist, as `helm-gateway serve` runs as helm_gateway
+// (ADR-0004). It can run again after a migration adds tables.
+func grantRuntime(t *testing.T, owner *sql.DB, schema, role string) {
+	t.Helper()
+	var tables []string
+	for _, table := range append(append([]string{}, authorityrows.Tables...), Tables...) {
+		var exists bool
+		must(t, owner.QueryRow(`SELECT to_regclass($1) IS NOT NULL`, schema+"."+table).Scan(&exists))
+		if exists {
+			tables = append(tables, table)
+		}
+	}
+	statements := []string{
+		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
+		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(tables, ", ") + ` TO ` + role,
+		`REVOKE UPDATE ON authority_postings, authority_provision_limits FROM ` + role,
+		`REVOKE UPDATE ON authority_recovery_fences,authority_recovery_members,authority_recovery_checkpoints FROM ` + role,
+		// Admission writes distinct values with INSERT ... ON CONFLICT DO
+		// NOTHING and reads them with EXISTS, and never updates a token replay
+		// row: the grants ADR-0004 (as amended 2026-09-26) and the chart's
+		// 002_grants.sql give helm_gateway.
+		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + role,
+		`GRANT DELETE ON authority_token_replay TO ` + role,
+		`GRANT SELECT ON gateway_schema_migrations TO ` + role,
+	}
+	if slices.Contains(tables, "authority_receipts") {
+		// Receipts are append-only for the runtime role.
+		statements = append(statements, `REVOKE UPDATE ON authority_receipts FROM `+role)
+	}
+	for _, statement := range statements {
+		_, err := owner.Exec(statement)
+		must(t, err)
+	}
 }
 
 func skeletonTerms(now time.Time) authorityrows.Terms {

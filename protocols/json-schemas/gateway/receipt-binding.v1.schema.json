@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/gateway/receipt-binding.v1.schema.json",
+  "title": "Gateway decision receipt binding",
+  "description": "helm.gateway.receipt-binding.v1: the closed document whose SHA-256 a gateway decision receipt (receipt.v5) signs as output_hash. The gateway stores its exact RFC 8785 (JCS) bytes with the receipt. Every member is present; an empty string is a signed value, not an omitted one. Digests are lowercase hex SHA-256; quote amounts are decimal strings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "binding_version",
+    "chain_id",
+    "seq",
+    "tenant_id",
+    "workspace_id",
+    "attempt_id",
+    "attempt_version",
+    "from_state",
+    "state",
+    "verdict",
+    "reason_code",
+    "effect_type",
+    "requester_principal_id",
+    "requester_actor_id",
+    "mandate_id",
+    "risk_class",
+    "request_digest",
+    "target_digest",
+    "argument_digest",
+    "quote",
+    "approval_digest",
+    "approval_expires_at",
+    "approver_principal_id",
+    "permit_id",
+    "authority_versions",
+    "policy_hash",
+    "episode_id",
+    "organization_version_id",
+    "decided_at"
+  ],
+  "properties": {
+    "binding_version": {"const": "helm.gateway.receipt-binding.v1"},
+    "chain_id": {
+      "type": "string",
+      "pattern": "^helm-gateway:[1-9][0-9]*:.+:[1-9][0-9]*:.+$",
+      "description": "The receipt's session_id: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>."
+    },
+    "seq": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The receipt's lamport_clock: its position in the chain."},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "workspace_id": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "format": "uuid"},
+    "attempt_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "The attempt row's version after the decision; decision_id is <attempt_id>:<attempt_version>."},
+    "from_state": {"enum": ["PROPOSED", "ESCALATED"]},
+    "state": {"enum": ["ADMITTED", "DENIED", "ESCALATED"]},
+    "verdict": {"enum": ["ALLOW", "DENY", "ESCALATE"]},
+    "reason_code": {"type": "string"},
+    "effect_type": {"type": "string", "minLength": 1},
+    "requester_principal_id": {"type": "string", "minLength": 1},
+    "requester_actor_id": {"type": "string"},
+    "mandate_id": {"type": "string", "pattern": "^(|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},
+    "risk_class": {"enum": ["", "low", "medium", "high", "irreversible"]},
+    "request_digest": {"$ref": "#/$defs/digest"},
+    "target_digest": {"$ref": "#/$defs/digest"},
+    "argument_digest": {"$ref": "#/$defs/digest", "description": "Also the receipt's args_hash."},
+    "quote": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit", "amount"],
+        "properties": {
+          "unit": {"type": "string", "minLength": 1},
+          "amount": {"type": "string", "pattern": "^(0|-?[1-9][0-9]*)$"}
+        }
+      }
+    },
+    "approval_digest": {"type": "string", "pattern": "^(|[0-9a-f]{64})$", "description": "Approval digest v1 of an escalation; empty when the attempt never escalated."},
+    "approval_expires_at": {"type": "string", "description": "RFC 3339 UTC, empty when the attempt never escalated."},
+    "approver_principal_id": {"type": "string", "description": "The distinct human whose approval a re-admission ran with; empty otherwise."},
+    "permit_id": {"type": "string", "pattern": "^(|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "description": "The permit an ADMITTED decision issued; empty otherwise."},
+    "authority_versions": {
+      "type": "array",
+      "description": "The versions of the authority rows the decision locked, in lock order. policy_hash is SHA-256 of the JCS bytes of {\"schema\":\"helm.gateway.authority-snapshot.v1\",\"versions\":<this array>}.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "key", "version"],
+        "properties": {
+          "kind": {"enum": ["tenant", "principal", "mandate", "effect_type", "limit"]},
+          "key": {"type": "string"},
+          "version": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
+        }
+      }
+    },
+    "policy_hash": {"$ref": "#/$defs/digest", "description": "Also the receipt's policy_hash."},
+    "episode_id": {"type": "string"},
+    "organization_version_id": {"type": "string"},
+    "decided_at": {"type": "string", "minLength": 1, "description": "Database time of the decision transaction, RFC 3339 UTC."}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

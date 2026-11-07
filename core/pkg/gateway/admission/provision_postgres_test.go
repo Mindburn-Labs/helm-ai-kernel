@@ -59,7 +59,7 @@ func newPlanFixtureWithFixture(t *testing.T, f *fixture) *planFixture {
 	}
 	adapter, err := provision.New(f.runtime)
 	must(t, err)
-	svc, err := New(f.runtime, Config{Adapters: []adapters.Adapter{adapter}})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter}})
 	must(t, err)
 	return &planFixture{fixture: f, svc: svc, adapter: adapter}
 }

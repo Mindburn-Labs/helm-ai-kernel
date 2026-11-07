@@ -21,7 +21,9 @@
 //     (limit_id, bucket_start) order;
 //  6. Decide runs (pure), and the transaction records ADMITTED with a
 //     conditional hold and a permit, DENIED, or ESCALATED with approval digest
-//     v1.
+//     v1;
+//  7. the decision's signed receipt is appended to the workspace's receipt
+//     chain (receipts.go), whose row is the last lock the transaction takes.
 //
 // The package imports no legacy kernel runtime (guardian, proxy, mcp,
 // executor); boundary_test.go holds that, so it can move to its own repo.
@@ -167,6 +169,10 @@ type Config struct {
 	// provider call is never inside one). Default the package's MaxTransaction,
 	// 2m; a test may set a shorter one.
 	MaxTransaction time.Duration
+	// ReceiptSigner signs the receipt every decision is recorded with. It is
+	// required: New refuses a nil signer and one that does not produce
+	// classical Ed25519 receipt.v5 signatures (CheckReceiptSigner).
+	ReceiptSigner ReceiptSigner
 }
 
 // Service runs admission over one database. It holds no tenant data: the
@@ -187,6 +193,12 @@ type Service struct {
 func New(db *sql.DB, cfg Config) (*Service, error) {
 	if db == nil {
 		return nil, errors.New("admission requires a database")
+	}
+	if cfg.ReceiptSigner == nil {
+		return nil, errors.New("admission requires a receipt signer: every decision is recorded with a signed receipt")
+	}
+	if err := CheckReceiptSigner(cfg.ReceiptSigner); err != nil {
+		return nil, fmt.Errorf("admission receipt signer: %w", err)
 	}
 	if cfg.PermitTTL <= 0 {
 		cfg.PermitTTL = 10 * time.Minute
@@ -547,7 +559,8 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 				}
 				return refuse(code, refusal.Reason, "%s", refusal.Detail)
 			}
-			return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "DENIED", refusal.Reason, nil, string(auth.riskClass), nil, nil)
+			return s.recordDecision(ctx, tx, decisionWrite{tenantID: caller.TenantID, attemptID: attemptID, from: from, state: "DENIED",
+				reason: refusal.Reason, risk: string(auth.riskClass), versions: auth.versions, approval: approval})
 		}
 	}
 
@@ -630,7 +643,8 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 			caller.TenantID, permitID, attemptID, argumentDigest, versions, now.Add(s.cfg.PermitTTL)); err != nil {
 			return err
 		}
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ADMITTED", "", mandate, risk, nil, nil)
+		return s.recordDecision(ctx, tx, decisionWrite{tenantID: caller.TenantID, attemptID: attemptID, from: from, state: "ADMITTED",
+			mandate: mandate, risk: risk, versions: auth.versions, permitID: permitID.String(), approval: approval})
 	case Escalate:
 		expires := now.Add(s.cfg.ApprovalWindow)
 		if in.ApprovalExpiresAt != nil && in.ApprovalExpiresAt.Before(expires) {
@@ -638,37 +652,80 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		}
 		expires = expires.UTC().Truncate(time.Second)
 		approvalDigest := ApprovalDigestV1(attemptID, targetDigest, argumentDigest, in.Quote, expires)
-		if err := recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ESCALATED", decision.Reason, mandate, risk, approvalDigest, expires); err != nil {
+		// The escalation's timer, in the same transaction (TA §6.3). It is
+		// enqueued before the decision so that the receipt chain stays the
+		// last lock the transaction takes.
+		if err := s.enqueue(ctx, tx, Job{Kind: JobExpireEscalation, TenantID: caller.TenantID, WorkspaceID: caller.WorkspaceID,
+			AttemptID: attemptID, RunAt: expires}); err != nil {
 			return err
 		}
-		// The escalation's timer, in the same transaction (TA §6.3).
-		return s.enqueue(ctx, tx, Job{Kind: JobExpireEscalation, TenantID: caller.TenantID, WorkspaceID: caller.WorkspaceID,
-			AttemptID: attemptID, RunAt: expires})
+		return s.recordDecision(ctx, tx, decisionWrite{tenantID: caller.TenantID, attemptID: attemptID, from: from, state: "ESCALATED",
+			reason: decision.Reason, mandate: mandate, risk: risk, approvalDigest: approvalDigest, expires: expires,
+			versions: auth.versions, approval: approval})
 	default:
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "DENIED", decision.Reason, mandate, risk, nil, nil)
+		return s.recordDecision(ctx, tx, decisionWrite{tenantID: caller.TenantID, attemptID: attemptID, from: from, state: "DENIED",
+			reason: decision.Reason, mandate: mandate, risk: risk, versions: auth.versions, approval: approval})
 	}
 }
 
-// recordDecision moves an attempt from state from to the decided state and
-// bumps its version. A decision on a new attempt sets approvalDigest and
-// expires only for ESCALATED; a re-admission keeps the escalation's, which the
-// Approval record refers to.
-func recordDecision(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, state string, reason contracts.ReasonCode,
-	mandate, risk, approvalDigest, expires any) error {
-	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
+// decisionWrite is one decision admission records. mandate, risk,
+// approvalDigest and expires are the attempt columns it sets (nil for NULL);
+// versions, permitID and approval are what it was decided under, which its
+// receipt binds.
+type decisionWrite struct {
+	tenantID, attemptID, from, state string
+	reason                           contracts.ReasonCode
+	mandate, risk                    any
+	approvalDigest, expires          any
+	versions                         []AuthorityVersion
+	permitID                         string
+	approval                         *ApprovalState
+}
+
+// recordDecision moves an attempt from state from to the decided state, bumps
+// its version and appends the decision's signed receipt. A decision on a new
+// attempt sets approvalDigest and expires only for ESCALATED; a re-admission
+// keeps the escalation's, which the Approval record refers to. The receipt
+// describes the row as the UPDATE returned it, not as the caller meant it.
+func (s *Service) recordDecision(ctx context.Context, tx *sql.Tx, w decisionWrite) error {
+	d := storedDecision{TenantID: w.tenantID, AttemptID: w.attemptID, FromState: w.from,
+		PermitID: w.permitID, AuthorityVersions: w.versions}
+	if w.approval != nil && w.approval.Approved {
+		d.ApproverPrincipalID = w.approval.ApproverID
+	}
+	var mandate, risk, episode, organizationVersion sql.NullString
+	var quote []byte
+	var expires sql.NullTime
+	err := tx.QueryRowContext(ctx, `UPDATE authority_effect_attempts
 		SET state = $3, reason_code = $4, mandate_id = $5, risk_class = $6,
 		    approval_digest = CASE WHEN $9 = 'PROPOSED' THEN $7 ELSE approval_digest END,
 		    approval_expires_at = CASE WHEN $9 = 'PROPOSED' THEN $8 ELSE approval_expires_at END,
 		    version = version + 1, updated_at = now()
-		WHERE tenant_id = $1 AND attempt_id = $2 AND state = $9`,
-		tenantID, attemptID, state, string(reason), mandate, risk, approvalDigest, expires, from)
+		WHERE tenant_id = $1 AND attempt_id = $2 AND state = $9
+		RETURNING workspace_id, version, updated_at, state, reason_code, effect_type, requester_principal_id,
+			requester_actor_id, mandate_id::text, risk_class, request_digest, target_digest, argument_digest,
+			approval_digest, approval_expires_at, quote, episode_id, organization_version_id`,
+		w.tenantID, w.attemptID, w.state, string(w.reason), w.mandate, w.risk, w.approvalDigest, w.expires, w.from).Scan(
+		&d.WorkspaceID, &d.Version, &d.DecidedAt, &d.State, &d.ReasonCode, &d.EffectType, &d.RequesterPrincipalID,
+		&d.RequesterActorID, &mandate, &risk, &d.RequestDigest, &d.TargetDigest, &d.ArgumentDigest,
+		&d.ApprovalDigest, &expires, &quote, &episode, &organizationVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("attempt %s: decision update touched no %s row", w.attemptID, w.from)
+	}
 	if err != nil {
 		return err
 	}
-	if n, err := res.RowsAffected(); err != nil || n != 1 {
-		return fmt.Errorf("attempt %s: decision update touched %d rows (%v)", attemptID, n, err)
+	d.MandateID, d.RiskClass = mandate.String, risk.String
+	d.EpisodeID, d.OrganizationVersionID = episode.String, organizationVersion.String
+	if expires.Valid {
+		t := expires.Time.UTC()
+		d.ApprovalExpiresAt = &t
 	}
-	return nil
+	if err := json.Unmarshal(quote, &d.Quote); err != nil {
+		return fmt.Errorf("attempt %s quote: %w", w.attemptID, err)
+	}
+	_, err = appendReceipt(ctx, tx, s.cfg.ReceiptSigner, d)
+	return err
 }
 
 // resolveMandate returns the leaf mandate: the selector when the principal

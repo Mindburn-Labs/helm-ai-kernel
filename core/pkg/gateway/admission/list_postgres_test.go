@@ -438,7 +438,7 @@ func TestPostgresListAttemptsSettledBeforeCoversATransactionThatCommitsOutOfOrde
 	f := newFixture(t)
 	ctx := context.Background()
 	const bound = 10 * time.Second
-	svc, err := New(f.runtime, Config{MaxTransaction: bound})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: bound})
 	must(t, err)
 
 	// T1 begins first and commits last: a note is admitted, and the admission
@@ -505,7 +505,7 @@ func TestPostgresListAttemptsPinsWatermarkAcrossALateCommitAndLongTraversal(t *t
 	f := newFixture(t)
 	ctx := context.Background()
 	const bound = 5 * time.Second
-	svc, err := New(f.runtime, Config{MaxTransaction: bound})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: bound})
 	must(t, err)
 
 	lock, err := f.owner.Begin()
@@ -572,7 +572,7 @@ func TestPostgresListAttemptsPinsWatermarkAcrossALateCommitAndLongTraversal(t *t
 func TestPostgresATransactionPastMaxTransactionIsAborted(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	svc, err := New(f.runtime, Config{MaxTransaction: 300 * time.Millisecond})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: 300 * time.Millisecond})
 	must(t, err)
 	a := f.propose(human, note("subject"))
 

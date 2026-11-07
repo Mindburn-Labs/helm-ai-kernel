@@ -13,7 +13,6 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 const connectorReleaseAuthoritySignatureDomainV1 = "HELM/ConnectorReleaseAuthoritySignature/v1"
@@ -85,25 +84,6 @@ func ConnectorReleaseAuthoritySigningPayload(authority contracts.ConnectorReleas
 		return nil, releaseAuthorityRejected("canonicalize signing payload: " + err.Error())
 	}
 	return payload, nil
-}
-
-func SignConnectorReleaseAuthority(authority contracts.ConnectorReleaseAuthority, signer crypto.Signer) (contracts.ConnectorReleaseAuthorityEnvelope, error) {
-	if signer == nil {
-		return contracts.ConnectorReleaseAuthorityEnvelope{}, releaseAuthorityRejected("signer is not configured")
-	}
-	payload, err := ConnectorReleaseAuthoritySigningPayload(authority)
-	if err != nil {
-		return contracts.ConnectorReleaseAuthorityEnvelope{}, err
-	}
-	signature, err := signer.Sign(payload)
-	if err != nil {
-		return contracts.ConnectorReleaseAuthorityEnvelope{}, releaseAuthorityRejected("sign authority: " + err.Error())
-	}
-	envelope := contracts.ConnectorReleaseAuthorityEnvelope{Authority: authority, Signature: signature}
-	if err := envelope.Validate(); err != nil {
-		return contracts.ConnectorReleaseAuthorityEnvelope{}, releaseAuthorityRejected("signer returned invalid signature encoding")
-	}
-	return envelope, nil
 }
 
 // VerifyEnvelope proves an envelope is signed by a currently trusted key. It is

@@ -274,7 +274,6 @@ visible in the receipt chain.
 
 | Component | Package |
 | :--- | :--- |
-| Receipt enforcement (library; not linked into the shipped binary) | `core/pkg/receipts/` |
 | ProofGraph DAG | `core/pkg/proofgraph/` |
 | Cryptographic signing | `core/pkg/crypto/` |
 | Evidence export/verify | `core/pkg/evidence/` |

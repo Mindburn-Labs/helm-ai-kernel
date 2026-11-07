@@ -83,7 +83,7 @@ non-TCB supporting infrastructure:
 | `executor/`        | Receipt ID derivation and receipt types; the standalone SafeExecutor was removed (no shipped caller) | Library only |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
 | `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |
-| `receipts/`        | Receipt policy enforcement (fail-closed); not linked into `core/cmd/helm-ai-kernel` | Library only |
+| `receipts/`        | Receipt tamper-resistance tests; the unlinked receipt policy enforcer was removed | Test-only |
 
 ### Supporting Infrastructure (Non-TCB)
 

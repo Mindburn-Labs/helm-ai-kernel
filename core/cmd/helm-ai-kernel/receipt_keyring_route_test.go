@@ -95,7 +95,7 @@ func TestReceiptKeyringMatchesTheIdentityStampedOnReceipts(t *testing.T) {
 			if decoder.More() {
 				t.Fatal("more than one JSON value")
 			}
-			if keyring.KeyringVersion != receiptkeyring.Version || len(keyring.Keys) != 1 {
+			if keyring.KeyringVersion != receiptkeyring.KernelVersion || len(keyring.Keys) != 1 {
 				t.Fatalf("keyring = %+v", keyring)
 			}
 

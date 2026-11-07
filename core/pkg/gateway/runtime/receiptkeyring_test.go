@@ -22,8 +22,8 @@ import (
 
 // TestServePublishesTheReceiptKeyringOnTheMainListener: serve answers GET
 // /api/v1/receipt-keyring on its API listener, without a token, with the
-// Kernel's keyring document for the key it signs decision receipts with; the
-// published key verifies a receipt that signer makes, the way receipt_verify
+// Kernel's keyring shape, under the gateway's own label, for the key it signs
+// decision receipts with; the published key verifies a receipt that signer makes, the way receipt_verify
 // --key "<key_id>=<hex>" will. The route is read-only and is not served on
 // the worker listener.
 func TestServePublishesTheReceiptKeyringOnTheMainListener(t *testing.T) {
@@ -45,7 +45,7 @@ func TestServePublishesTheReceiptKeyringOnTheMainListener(t *testing.T) {
 		t.Fatalf("GET %s = %d %v: %s", receiptkeyring.Path, resp.StatusCode, resp.Header, body)
 	}
 	public := hex.EncodeToString(ed25519.NewKeyFromSeed(testReceiptSeed).Public().(ed25519.PublicKey))
-	want := `{"keyring_version":"kernel-evaluate-receipt-keyring.v1","keys":[{"key_id":"` + testReceiptKeyID +
+	want := `{"keyring_version":"gateway-receipt-keyring.v1","keys":[{"key_id":"` + testReceiptKeyID +
 		`","profile":"classical","ed25519_public_key_hex":"` + public + `"}]}`
 	if string(body) != want {
 		t.Fatalf("keyring\n got %s\nwant %s", body, want)

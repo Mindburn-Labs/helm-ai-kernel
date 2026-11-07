@@ -122,9 +122,10 @@ func runReceiptKey(args []string, getenv func(string) string, stdout io.Writer) 
 }
 
 // receiptKeyringHandler serves the gateway's receipt keyring: the Kernel's
-// document (receiptkeyring) for the signer of the gateway's decision
+// document shape (receiptkeyring) under the gateway's own label,
+// gateway-receipt-keyring.v1, for the signer of the gateway's decision
 // receipts, at the Kernel's path, so a verifier reads either service's key the
-// same way. Like the Kernel's route it is public and read-only: it carries
+// same way and never mistakes one for the other. Like the Kernel's route it is public and read-only: it carries
 // the public half only, and asks for no token. The body is built once from the
 // running signer; a signer it cannot describe stops serve, so the gateway
 // never records receipts under a key it does not publish.
@@ -133,7 +134,7 @@ func receiptKeyringHandler(signer admission.ReceiptSigner) (string, http.Handler
 	if !ok {
 		return "", nil, errors.New("receipt keyring: the receipt signer cannot be published")
 	}
-	body, err := receiptkeyring.Encode(publishable)
+	body, err := receiptkeyring.Encode(receiptkeyring.GatewayVersion, publishable)
 	if err != nil {
 		return "", nil, fmt.Errorf("receipt keyring: %w", err)
 	}

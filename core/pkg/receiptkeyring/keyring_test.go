@@ -22,7 +22,7 @@ func TestEncodeIsTheControlPlaneVector(t *testing.T) {
 	for i := range seed {
 		seed[i] = byte(i)
 	}
-	body, err := Encode(helmcrypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(seed), "root"))
+	body, err := Encode(KernelVersion, helmcrypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(seed), "root"))
 	if err != nil || string(body) != vector {
 		t.Fatalf("Encode = %s, %v", body, err)
 	}
@@ -39,14 +39,24 @@ type opaqueSigner struct{ helmcrypto.Signer }
 func (opaqueSigner) SignReceipt(*contracts.Receipt) error { return nil }
 
 func TestForRefusesASignerItCannotDescribe(t *testing.T) {
-	if _, err := For(opaqueSigner{}); err == nil {
+	if _, err := For(KernelVersion, opaqueSigner{}); err == nil {
 		t.Fatal("a signer of an unknown profile was described")
 	}
-	if _, err := For(nil); err == nil {
+	if _, err := For(GatewayVersion, nil); err == nil {
 		t.Fatal("a nil signer was described")
 	}
 	unnamed := helmcrypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)), "")
-	if _, err := Encode(unnamed); err == nil {
+	if _, err := Encode(KernelVersion, unnamed); err == nil {
 		t.Fatal("a signer without a key id was described")
+	}
+	named := helmcrypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)), "root")
+	for _, version := range []string{"", "receipt-keyring.v1", "kernel-evaluate-receipt-keyring.v2"} {
+		if _, err := For(version, named); err == nil {
+			t.Fatalf("keyring version %q was accepted", version)
+		}
+	}
+	gateway, err := For(GatewayVersion, named)
+	if err != nil || gateway.KeyringVersion != GatewayVersion {
+		t.Fatalf("gateway keyring = %+v, %v", gateway, err)
 	}
 }

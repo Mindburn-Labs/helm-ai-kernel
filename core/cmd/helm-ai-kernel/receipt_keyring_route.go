@@ -12,8 +12,9 @@ import (
 )
 
 // receiptKeyringPath is where the keyring is served. The document is
-// receiptkeyring's, the one shape helm-gateway publishes for its own signer
-// at the same path: the Control Plane pins it as HELM_KERNEL_RECEIPT_KEYRING.
+// receiptkeyring's, under the Kernel's label, which the Control Plane pins as
+// HELM_KERNEL_RECEIPT_KEYRING; helm-gateway publishes the same shape for its
+// own signer under its own label.
 const receiptKeyringPath = receiptkeyring.Path
 
 // registerReceiptKeyringRoute serves the receipt keyring. The body is built
@@ -23,7 +24,7 @@ const receiptKeyringPath = receiptkeyring.Path
 func registerReceiptKeyringRoute(mux routeMux, svc *Services) {
 	var body []byte
 	if svc != nil && svc.ReceiptSigner != nil {
-		if encoded, err := receiptkeyring.Encode(svc.ReceiptSigner); err == nil {
+		if encoded, err := receiptkeyring.Encode(receiptkeyring.KernelVersion, svc.ReceiptSigner); err == nil {
 			body = encoded
 		}
 	}

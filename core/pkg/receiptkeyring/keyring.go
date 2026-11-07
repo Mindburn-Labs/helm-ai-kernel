@@ -1,7 +1,8 @@
-// Package receiptkeyring is the one receipt keyring document HELM publishes
-// at GET /api/v1/receipt-keyring: the Kernel for its evaluate receipts, and
-// helm-gateway for its decision receipts, each on its own listener and for its
-// own signer.
+// Package receiptkeyring is the one receipt keyring document shape HELM
+// publishes at GET /api/v1/receipt-keyring: the Kernel for its evaluate
+// receipts, and helm-gateway for its decision receipts, each on its own
+// listener, for its own signer and under its own keyring_version label, so
+// one service's keyring is never read as the other's.
 package receiptkeyring
 
 // quantum_posture: describes the public half of a receipt signer, classical
@@ -19,10 +20,13 @@ import (
 const (
 	// Path is where a HELM service publishes its receipt keyring.
 	Path = "/api/v1/receipt-keyring"
-	// Version names the document shape. The Control Plane pins it as
+	// KernelVersion labels the Kernel's keyring. The Control Plane pins it as
 	// HELM_KERNEL_RECEIPT_KEYRING with a strict decoder (unknown fields
-	// refused), so the shape must not grow fields under this version.
-	Version = "kernel-evaluate-receipt-keyring.v1"
+	// refused), so the shape must not grow fields under this label.
+	KernelVersion = "kernel-evaluate-receipt-keyring.v1"
+	// GatewayVersion labels helm-gateway's keyring: the same shape, for the
+	// key that signs the gateway's decision receipts.
+	GatewayVersion = "gateway-receipt-keyring.v1"
 )
 
 // Keyring is the published document.
@@ -40,10 +44,13 @@ type Authority struct {
 	MLDSA65PublicKeyHex string `json:"ml_dsa_65_public_key_hex,omitempty"`
 }
 
-// For describes the identity signer stamps on every receipt: the same key id,
-// profile and public keys that SignReceipt writes into KeyID,
-// SignatureProfile and PublicKeySet.
-func For(signer helmcrypto.Signer) (Keyring, error) {
+// For describes, under the publishing service's label, the identity signer
+// stamps on every receipt: the same key id, profile and public keys that
+// SignReceipt writes into KeyID, SignatureProfile and PublicKeySet.
+func For(version string, signer helmcrypto.Signer) (Keyring, error) {
+	if version != KernelVersion && version != GatewayVersion {
+		return Keyring{}, errors.New("receipt keyring version must be the Kernel's or the gateway's")
+	}
 	var authority Authority
 	switch s := signer.(type) {
 	case *helmcrypto.Ed25519Signer:
@@ -58,12 +65,12 @@ func For(signer helmcrypto.Signer) (Keyring, error) {
 	if authority.KeyID == "" {
 		return Keyring{}, errors.New("receipt signer has no key id")
 	}
-	return Keyring{KeyringVersion: Version, Keys: []Authority{authority}}, nil
+	return Keyring{KeyringVersion: version, Keys: []Authority{authority}}, nil
 }
 
 // Encode returns the exact response body for signer's keyring.
-func Encode(signer helmcrypto.Signer) ([]byte, error) {
-	keyring, err := For(signer)
+func Encode(version string, signer helmcrypto.Signer) ([]byte, error) {
+	keyring, err := For(version, signer)
 	if err != nil {
 		return nil, err
 	}

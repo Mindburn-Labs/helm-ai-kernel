@@ -196,11 +196,11 @@ checks:
       title: "helm-ai-kernel replay reproduces every decision bit-identically; any divergence is an invariant breach"
       verification:
         kind: go_test
-        target: "./core/pkg/replay/..."
-        match: "TestReplay_Identity|TestEngine"
+        target: "./core/pkg/tape/..."
+        match: "TestReplayer_|TestManifest_HashIntegrity"
       references:
-        - "core/pkg/replay/engine.go"
-        - "docs/research/replay.md"
+        - "core/pkg/tape/replayer.go"
+        - "core/cmd/helm-ai-kernel/replay_cmd.go"
       required: true
 
     - id: replay.divergence_detection

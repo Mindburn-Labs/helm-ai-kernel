@@ -2,6 +2,12 @@ package evidence_test
 
 import (
 	"context"
+	"testing"
+
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/provenance"
+	"github.com/stretchr/testify/assert"
 )
 
 // staticProber avoids external network calls in unit tests.
@@ -17,4 +23,31 @@ func (staticProber) Probe(ctx context.Context, url string) (lcp float64, a11y fl
 	default:
 		return 0, 0, nil
 	}
+}
+
+func TestEvidenceExporter(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test-evidence-bundle")
+	assert.NoError(t, err)
+	exporter := evidence.NewExporter(signer, signer.KeyID)
+	ctx := context.Background()
+
+	// 1. Export SOC2
+	env := &provenance.Envelope{
+		EnvelopeID: "env-1",
+		Version:    "1.0",
+		Segments:   []*provenance.Segment{{SegmentID: "seg-1", SourceType: provenance.SourceSystem, Content: "sys"}},
+	}
+
+	bundle, err := exporter.ExportSOC2(ctx, "trace-1", []*provenance.Envelope{env})
+	assert.NoError(t, err)
+	assert.Equal(t, evidence.BundleTypeSOC2, bundle.Type)
+	assert.Len(t, bundle.Artifacts, 1)
+	assert.Equal(t, "trace-1", bundle.TraceID)
+	assert.NotEmpty(t, bundle.Signature)
+
+	// 2. Export Incident
+	bundle2, err := exporter.ExportIncidentReport(ctx, "trace-2", map[string]string{"error": "timeout"})
+	assert.NoError(t, err)
+	assert.Equal(t, evidence.BundleTypeIncident, bundle2.Type)
+	assert.NotEmpty(t, bundle2.Signature)
 }

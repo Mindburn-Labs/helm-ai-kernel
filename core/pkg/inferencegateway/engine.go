@@ -166,6 +166,9 @@ func NewEngine(cfg EngineConfig) (*Engine, error) {
 	}, nil
 }
 
+// RoutePolicyHash exposes the deterministic policy hash bound into every quote.
+func (e *Engine) RoutePolicyHash() string { return e.routePolicyHash }
+
 // Quote runs route selection and the pre-dispatch spend verdict. It creates the
 // expiring RouteQuote BEFORE any provider dispatch. A non-ALLOW verdict yields a
 // *QuoteError so no dispatch can proceed; the quote is still returned for

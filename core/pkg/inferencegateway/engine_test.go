@@ -212,6 +212,26 @@ func TestSettlePreservesCanonicalProviderRequestID(t *testing.T) {
 
 // --- Quote expiry (financial invariant) ---------------------------------------
 
+func TestSettleFailsOnExpiredQuote(t *testing.T) {
+	h := newHarness(t)
+	res, err := h.engine.Quote(h.env, h.req("idem-exp", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("Quote() = %v", err)
+	}
+	h.advance(31 * time.Second)
+	settle, err := h.engine.Settle(res.Quote, "prov-req-1", 2, 1000, 500)
+	requireErrContains(t, err, "expired")
+	if settle == nil || settle.ReasonCode != economic.SpendReasonRouteQuoteExpired {
+		t.Fatalf("reason = %v, want %s", settle, economic.SpendReasonRouteQuoteExpired)
+	}
+	if h.ledger.BalanceCents() != 100_000 {
+		t.Fatalf("balance = %d, want untouched 100000", h.ledger.BalanceCents())
+	}
+	if len(h.ledger.Entries()) != 0 {
+		t.Fatalf("ledger entries = %d, want 0 on expiry", len(h.ledger.Entries()))
+	}
+}
+
 func TestQuoteExpiresDeterministically(t *testing.T) {
 	h := newHarness(t)
 	res, err := h.engine.Quote(h.env, h.req("idem-det", "gpt-6-sol", 10, 10))
@@ -338,6 +358,39 @@ func TestActualCostEscalatesWhenPolicyEscalate(t *testing.T) {
 
 // --- Idempotent debit (financial invariant) -----------------------------------
 
+func TestIdempotentDebitDoesNotDoubleCharge(t *testing.T) {
+	h := newHarness(t)
+	res, err := h.engine.Quote(h.env, h.req("idem-once", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("Quote() = %v", err)
+	}
+	first, err := h.engine.Settle(res.Quote, "prov-req-1", 50, 1000, 500)
+	if err != nil {
+		t.Fatalf("first Settle() = %v", err)
+	}
+	balAfterFirst := h.ledger.BalanceCents()
+	if first.Replayed {
+		t.Fatal("first settle must not be a replay")
+	}
+
+	second, err := h.engine.Settle(res.Quote, "prov-req-1", 50, 1000, 500)
+	if err != nil {
+		t.Fatalf("second Settle() = %v", err)
+	}
+	if !second.Replayed {
+		t.Fatal("second settle must be an idempotent replay")
+	}
+	if h.ledger.BalanceCents() != balAfterFirst {
+		t.Fatalf("balance changed on replay: %d != %d", h.ledger.BalanceCents(), balAfterFirst)
+	}
+	if len(h.ledger.Entries()) != 1 {
+		t.Fatalf("ledger entries = %d, want exactly 1 after replay", len(h.ledger.Entries()))
+	}
+	if second.UsageReceipt.ContentHash != first.UsageReceipt.ContentHash {
+		t.Fatal("replay must return the identical usage receipt")
+	}
+}
+
 // --- Ledger balancing invariant (direct) --------------------------------------
 
 func TestLedgerRejectsUnbalancedSettlement(t *testing.T) {
@@ -357,6 +410,29 @@ func TestLedgerRejectsUnbalancedSettlement(t *testing.T) {
 	requireErrContains(t, err, "balanced")
 	if h.ledger.BalanceCents() != 100_000 {
 		t.Fatal("balance must be untouched when settlement is unbalanced")
+	}
+}
+
+func TestLedgerConservationAcrossManyDebits(t *testing.T) {
+	h := newHarness(t)
+	start := h.ledger.BalanceCents()
+	var totalDebit int64
+	for i, idem := range []string{"a", "b", "c", "d"} {
+		res, err := h.engine.Quote(h.env, h.req("idem-"+idem, "gpt-6-sol", int64(100*(i+1)), int64(50*(i+1))))
+		if err != nil {
+			t.Fatalf("Quote(%s) = %v", idem, err)
+		}
+		settle, err := h.engine.Settle(res.Quote, "prov-"+idem, res.Quote.QuotedAmountCents, 10, 10)
+		if err != nil {
+			t.Fatalf("Settle(%s) = %v", idem, err)
+		}
+		totalDebit += settle.BalanceDebitCents
+	}
+	if h.ledger.BalanceCents() != start-totalDebit {
+		t.Fatalf("conservation violated: %d != %d - %d", h.ledger.BalanceCents(), start, totalDebit)
+	}
+	if len(h.ledger.Entries()) != 4 {
+		t.Fatalf("ledger entries = %d, want 4", len(h.ledger.Entries()))
 	}
 }
 
@@ -488,6 +564,42 @@ func TestLookupFindsSettledKeyBeforeDispatch(t *testing.T) {
 	}
 }
 
+func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
+	h := newHarness(t)
+	q, err := h.engine.Quote(h.env, h.req("idem-excl", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+		t.Fatalf("second reserve while in flight = %v, want ErrDispatchConflict", err)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
+		t.Fatalf("hold = %d, want one hold of %d", h.ledger.HoldCents(), q.Quote.MaxAmountCents)
+	}
+
+	// A failed dispatch releases; a retry with the same key reserves afresh.
+	if _, err := h.engine.ReleaseReservation(q.Quote); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve after release: %v", err)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
+		t.Fatalf("hold after retry = %d, want %d", h.ledger.HoldCents(), q.Quote.MaxAmountCents)
+	}
+
+	// Once settled the key can never reserve again.
+	if _, err := h.engine.Settle(q.Quote, "prov-req-excl", 2, 1000, 480); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+		t.Fatalf("reserve after settle = %v, want ErrDispatchConflict", err)
+	}
+}
+
 func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
 	h := newHarness(t)
 	q, err := h.engine.Quote(h.env, h.req("idem-late", "gpt-6-sol", 1000, 500))
@@ -497,6 +609,72 @@ func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
 	h.advance(31 * time.Second)
 	if _, err := h.engine.ReserveForDispatch(q.Quote); err == nil {
 		t.Fatal("an expired quote must not be reserved for dispatch")
+	}
+}
+
+func TestReservedDispatchSettlesAfterQuoteExpiry(t *testing.T) {
+	h := newHarness(t)
+	q, err := h.engine.Quote(h.env, h.req("idem-slow", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	h.advance(10 * time.Minute) // the provider took longer than the quote TTL
+	if _, err := h.engine.Settle(q.Quote, "prov-req-slow", 2, 1000, 480); err != nil {
+		t.Fatalf("settle of a reserved dispatch after expiry = %v, want nil", err)
+	}
+	if h.ledger.HoldCents() != 0 {
+		t.Fatalf("hold = %d, want 0 after settlement", h.ledger.HoldCents())
+	}
+}
+
+func TestDebitActualDebitsAndReportsOverage(t *testing.T) {
+	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
+	q, err := h.engine.Quote(h.env, h.req("idem-over", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	const providerCost = 300 // 10% fee -> 330 actual against a 2-cent ceiling
+	settle, err := h.engine.Settle(q.Quote, "prov-req-over", providerCost, 1000, 99_999)
+	if err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	wantActual := int64(providerCost + providerCost*1000/10_000)
+	if settle.Capped || settle.ActualAmountCents != wantActual || settle.BalanceDebitCents != wantActual {
+		t.Fatalf("settle = %+v, want an uncapped debit of %d", settle, wantActual)
+	}
+	if settle.OverageCents != wantActual-q.Quote.MaxAmountCents {
+		t.Fatalf("overage = %d, want %d", settle.OverageCents, wantActual-q.Quote.MaxAmountCents)
+	}
+	if settle.UsageReceipt.Metadata["overage_cents"] == "" {
+		t.Fatal("the usage receipt must record the overage")
+	}
+	if h.ledger.BalanceCents() != 100_000-wantActual || h.ledger.HoldCents() != 0 {
+		t.Fatalf("balance/hold = %d/%d, want %d/0", h.ledger.BalanceCents(), h.ledger.HoldCents(), 100_000-wantActual)
+	}
+}
+
+func TestFailedSettlementKeepsTheHold(t *testing.T) {
+	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
+	q, err := h.engine.Quote(h.env, h.req("idem-broke", "gpt-6-sol", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	settle, err := h.engine.Settle(q.Quote, "prov-req-broke", 200_000, 1000, 99_999)
+	requireErrContains(t, err, "exceeds available funds")
+	if settle == nil || settle.ActualAmountCents != 220_000 {
+		t.Fatalf("failed settle = %+v, want the actual cost reported", settle)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents || h.ledger.BalanceCents() != 100_000 {
+		t.Fatalf("hold/balance = %d/%d, want the hold kept and no debit", h.ledger.HoldCents(), h.ledger.BalanceCents())
 	}
 }
 

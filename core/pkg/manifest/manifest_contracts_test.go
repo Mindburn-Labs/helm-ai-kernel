@@ -55,15 +55,6 @@ func TestFinal_ErrorCodeConstants(t *testing.T) {
 	}
 }
 
-func TestFinal_OutputErrorCodeConstants(t *testing.T) {
-	codes := []string{ErrConnectorContractDrift, ErrConnectorOutputCanon, ErrConnectorOutputMissing, ErrConnectorOutputType}
-	for _, c := range codes {
-		if c == "" {
-			t.Fatal("empty error code")
-		}
-	}
-}
-
 func TestFinal_ToolArgErrorString(t *testing.T) {
 	e := &ToolArgError{Code: "TEST", Message: "msg", Field: "f"}
 	s := e.Error()
@@ -74,22 +65,6 @@ func TestFinal_ToolArgErrorString(t *testing.T) {
 
 func TestFinal_ToolArgErrorNoField(t *testing.T) {
 	e := &ToolArgError{Code: "TEST", Message: "msg"}
-	s := e.Error()
-	if strings.Contains(s, "field") {
-		t.Fatal("should not mention field")
-	}
-}
-
-func TestFinal_ToolOutputErrorString(t *testing.T) {
-	e := &ToolOutputError{Code: "TEST", Message: "msg", Field: "f"}
-	s := e.Error()
-	if !strings.Contains(s, "TEST") {
-		t.Fatal("error string")
-	}
-}
-
-func TestFinal_ToolOutputErrorNoField(t *testing.T) {
-	e := &ToolOutputError{Code: "TEST", Message: "msg"}
 	s := e.Error()
 	if strings.Contains(s, "field") {
 		t.Fatal("should not mention field")
@@ -171,54 +146,6 @@ func TestFinal_CanonicalHashDeterministic(t *testing.T) {
 	}
 }
 
-func TestFinal_ValidateOutputNoSchema(t *testing.T) {
-	result, err := ValidateAndCanonicalizeToolOutput(nil, map[string]interface{}{"result": "ok"})
-	if err != nil || result == nil {
-		t.Fatal("should succeed without schema")
-	}
-}
-
-func TestFinal_ValidateOutputMissingRequired(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"status": {Type: "string", Required: true}}}
-	_, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{})
-	if err == nil {
-		t.Fatal("should error on missing")
-	}
-}
-
-func TestFinal_ValidateOutputUnknownField(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"status": {Type: "string"}}}
-	_, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{"status": "ok", "extra": "bad"})
-	if err == nil {
-		t.Fatal("should error on drift")
-	}
-}
-
-func TestFinal_ValidateOutputAllowExtra(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"status": {Type: "string"}}, AllowExtra: true}
-	_, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{"status": "ok", "extra": "ok"})
-	if err != nil {
-		t.Fatal("should allow extra")
-	}
-}
-
-func TestFinal_ValidateOutputTypeMismatch(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"count": {Type: "number"}}}
-	_, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{"count": "str"})
-	if err == nil {
-		t.Fatal("should error")
-	}
-}
-
-func TestFinal_OutputHashDeterministic(t *testing.T) {
-	out := map[string]interface{}{"z": 1.0, "a": 2.0}
-	r1, _ := ValidateAndCanonicalizeToolOutput(nil, out)
-	r2, _ := ValidateAndCanonicalizeToolOutput(nil, out)
-	if r1.OutputHash != r2.OutputHash {
-		t.Fatal("not deterministic")
-	}
-}
-
 func TestFinal_ToolArgSchemaJSONRoundTrip(t *testing.T) {
 	s := ToolArgSchema{Fields: map[string]FieldSpec{"name": {Type: "string", Required: true}}, AllowExtra: false}
 	data, _ := json.Marshal(s)
@@ -229,32 +156,12 @@ func TestFinal_ToolArgSchemaJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestFinal_ToolOutputSchemaJSONRoundTrip(t *testing.T) {
-	s := ToolOutputSchema{Fields: map[string]FieldSpec{"result": {Type: "object"}}}
-	data, _ := json.Marshal(s)
-	var got ToolOutputSchema
-	json.Unmarshal(data, &got)
-	if got.Fields["result"].Type != "object" {
-		t.Fatal("output schema round-trip")
-	}
-}
-
 func TestFinal_ToolArgValidationResultJSONRoundTrip(t *testing.T) {
 	r := ToolArgValidationResult{ArgsHash: "abc123"}
 	data, _ := json.Marshal(r)
 	var got ToolArgValidationResult
 	json.Unmarshal(data, &got)
 	if got.ArgsHash != "abc123" {
-		t.Fatal("result round-trip")
-	}
-}
-
-func TestFinal_ToolOutputValidationResultJSONRoundTrip(t *testing.T) {
-	r := ToolOutputValidationResult{OutputHash: "def456"}
-	data, _ := json.Marshal(r)
-	var got ToolOutputValidationResult
-	json.Unmarshal(data, &got)
-	if got.OutputHash != "def456" {
 		t.Fatal("result round-trip")
 	}
 }

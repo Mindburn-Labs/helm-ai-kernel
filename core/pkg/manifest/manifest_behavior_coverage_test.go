@@ -73,27 +73,3 @@ func TestToolArgErrorFormatNoField(t *testing.T) {
 	e := &ToolArgError{Code: ErrToolArgsCanonFailed, Message: "fail"}
 	assert.NotContains(t, e.Error(), "field")
 }
-
-func TestToolOutputAllowExtra(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"a": {Type: "string"}}, AllowExtra: true}
-	r, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{"a": "v", "extra": true})
-	require.NoError(t, err)
-	assert.NotEmpty(t, r.OutputHash)
-}
-
-func TestToolOutputTypeMismatchBoolean(t *testing.T) {
-	schema := &ToolOutputSchema{Fields: map[string]FieldSpec{"ok": {Type: "boolean", Required: true}}}
-	_, err := ValidateAndCanonicalizeToolOutput(schema, map[string]interface{}{"ok": "true"})
-	require.Error(t, err)
-	assert.Equal(t, ErrConnectorOutputType, err.(*ToolOutputError).Code)
-}
-
-func TestToolOutputErrorFormat(t *testing.T) {
-	e := &ToolOutputError{Code: ErrConnectorContractDrift, Message: "drift", Field: "x"}
-	assert.Contains(t, e.Error(), "x")
-}
-
-func TestToolOutputErrorFormatNoField(t *testing.T) {
-	e := &ToolOutputError{Code: ErrConnectorOutputCanon, Message: "fail"}
-	assert.NotContains(t, e.Error(), "field")
-}

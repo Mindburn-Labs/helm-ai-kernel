@@ -638,11 +638,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime appStateRoot
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime parseFilesystemMount
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime projectAppStateMounts
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session ValidState
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest ToolOutputError.Error
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest ValidateAndCanonicalizeToolOutput
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest checkOutputType
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest outputToMap
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest validateOutputSchema
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp ExecutionFirewall.CounterfactualReceiptFor
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp ExecutionFirewall.FilterVisibleTools
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp Gateway.handleJSONRPCRequest
@@ -822,15 +817,9 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors InMemoryCon
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors InMemoryConnectorStore.ListByState
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors InMemoryConnectorStore.Put
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors NewInMemoryConnectorStore
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors NewPostgresReleaseAuthorityAdminStore
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors PostgresReleaseAuthorityAdminStore.Append
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors SignConnectorReleaseAuthority
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors Transition
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors VerifyRelease
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors VerifyReleaseWithSignature
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors nullableAuthorityHash
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors releaseAuthorityLookup
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors sameConnectorReleaseMaterial
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors verifyReleaseHash
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters BrowserSplitAdapter.ID
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters BrowserSplitAdapter.Intercept

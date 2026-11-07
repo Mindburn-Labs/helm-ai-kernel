@@ -10,7 +10,6 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
 
@@ -33,11 +32,6 @@ type UsageEvent struct {
 // Executor runs an effect if and only if it has a valid, notarized decision AND an execution intent.
 type Executor interface {
 	Execute(ctx context.Context, effect *contracts.Effect, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent) (*contracts.Receipt, *interfaces.Artifact, error)
-}
-
-// OutputSchemaRegistry provides tool output schemas for drift detection.
-type OutputSchemaRegistry interface {
-	LookupOutput(toolName string) *manifest.ToolOutputSchema
 }
 
 type SafeDepGate interface {

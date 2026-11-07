@@ -104,9 +104,12 @@ run_uc "UC-007" "EvidencePack Export" \
 run_uc "UC-008" "EvidencePack Replay" \
     "cd $CORE_DIR && go test ./pkg/tape -v"
 
-# UC-009: Output Drift Detection
+# UC-009: Output Drift Detection. A provider answer that does not match the
+# shape the GitHub adapter expects is ERR_CONNECTOR_CONTRACT_DRIFT, the dispatch
+# stays indefinite, and reconciliation never writes a second time. The unused
+# manifest output validator this case once ran was deleted (helm-tracker#266).
 run_uc "UC-009" "Output Drift" \
-    "cd $CORE_DIR && go test ./pkg/manifest -run TestValidateToolOutput_DriftDetected -v"
+    "cd $CORE_DIR && go test ./pkg/gateway/adapters/github -run '^(TestPullRequestMergeMalformedAnswerRetainsQueuedExposure|TestPullRequestMergeExistingPendingMustMatchApprovedOptions)\$' -v"
 
 # UC-010 (Trust Rotation Replay) is retired: pkg/trust/registry was reached
 # only from orphan packages and was deleted with them (helm-tracker#266).

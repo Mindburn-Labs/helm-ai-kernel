@@ -62,50 +62,21 @@ HELM should not replace AGT in a customer environment that has already standardi
 
 ## TypeScript SDK Coverage
 
-The `@mindburn/helm-ai-kernel` TypeScript SDK includes adapter helpers for the framework families called out in the AGT launch surface:
-
-| Framework | Helper |
-| --- | --- |
-| LangGraph | `fromLangGraphToolCall` |
-| CrewAI | `fromCrewAITask` |
-| OpenAI Agents SDK | `fromOpenAIAgentsToolCall` |
-| PydanticAI | `fromPydanticAIToolCall` |
-| LlamaIndex | `fromLlamaIndexToolCall` |
-
-Each helper normalizes a native tool-call event into an OpenAI-compatible HELM request and submits it through `chatCompletionsWithReceipt`. The framework adapter does not execute the tool. It prepares the intent for HELM policy, then returns the kernel-issued governance metadata from `X-Helm-*` headers.
-
-```ts
-import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "@mindburn/helm-ai-kernel";
-
-// This example targets `helm-ai-kernel server` on its default API port. Use
-// http://localhost:7714 for `helm-ai-kernel serve` or http://localhost:9090/v1 for the
-// OpenAI-compatible proxy path.
-const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-const adapter = createAgentFrameworkAdapter(helm, {
-  model: "helm-governance",
-  metadata: { boundary: "agt-coexistence" },
-});
-
-const governed = await adapter.submit(
-  fromLangGraphToolCall({
-    id: "call-lg-1",
-    name: "warehouse.query",
-    args: { table: "orders", limit: 10 },
-  }),
-);
-
-console.log(governed.governance.receiptId);
-```
+Route a framework's side-effecting tool call to the HELM effect gateway with the
+TypeScript SDK's `NativeGatewayClient`: it sends the exact tool name, arguments
+and target to the gateway, which decides, dispatches and records the attempt
+(see [Framework Adapters](framework-adapters.md)). The SDK no longer ships
+per-framework chat-completion helpers; they never evaluated the tool itself.
 
 ## Deployment Pattern
 
-Run the framework agent exactly where it already runs. Configure AGT or framework-local middleware first. Before any side-effecting tool executes, normalize that tool event with the HELM SDK helper and submit it to the HELM boundary. Execute the original tool only when the HELM response path returns a permitted result and a receipt is present.
+Run the framework agent exactly where it already runs. Configure AGT or framework-local middleware first. Before any side-effecting tool executes, send it through the HELM effect gateway with `NativeGatewayClient` instead of executing it directly.
 
-For OpenAI-compatible stacks, prefer routing through the HELM proxy base URL when possible. For native framework hooks, use the adapter helpers so the same action metadata reaches HELM even when the framework does not speak OpenAI's request shape directly.
+For OpenAI-compatible stacks, the HELM proxy base URL governs the model request; it does not govern tool calls, which go through the gateway.
 
 ## Limits
 
-This is compatibility coverage, not Microsoft certification. The helpers do not import AGT packages, do not modify AGT policies, and do not validate AGT evidence files. They give HELM a typed bridge for the same framework families so AGT and HELM can coexist without duplicating framework-specific glue in every customer project.
+This is coexistence guidance, not Microsoft certification. HELM does not import AGT packages, modify AGT policies or validate AGT evidence files.
 
 Primary sources verified on 2026-04-30:
 

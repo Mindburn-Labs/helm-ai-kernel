@@ -11,20 +11,18 @@ import (
 )
 
 type cliSupportMatrix struct {
-	DirectSetup       []string `json:"direct_setup"`
-	ConfigPrint       []string `json:"config_print"`
-	Bundle            []string `json:"bundle"`
-	WrapperExamples   []string `json:"wrapper_examples"`
-	FrameworkAdapters []string `json:"framework_adapters"`
+	DirectSetup     []string `json:"direct_setup"`
+	ConfigPrint     []string `json:"config_print"`
+	Bundle          []string `json:"bundle"`
+	WrapperExamples []string `json:"wrapper_examples"`
 }
 
 func supportMatrix() cliSupportMatrix {
 	return cliSupportMatrix{
-		DirectSetup:       []string{"claude-code", "codex", "hermes", "deepseek"},
-		ConfigPrint:       []string{"cursor", "windsurf", "vscode"},
-		Bundle:            []string{"claude-desktop"},
-		WrapperExamples:   []string{"openclaw", "hermes", "mastra", "browser-use", "tinyfish", "e2b", "composio"},
-		FrameworkAdapters: []string{"LangGraph", "LangChain", "CrewAI", "OpenAI Agents SDK", "AutoGen/AG2", "Semantic Kernel", "PydanticAI", "LlamaIndex", "LiteLLM", "n8n", "Zapier", "raw MCP"},
+		DirectSetup:     []string{"claude-code", "codex", "hermes", "deepseek"},
+		ConfigPrint:     []string{"cursor", "windsurf", "vscode"},
+		Bundle:          []string{"claude-desktop"},
+		WrapperExamples: []string{"openclaw", "hermes", "mastra", "browser-use", "tinyfish", "e2b", "composio"},
 	}
 }
 
@@ -74,7 +72,6 @@ func printSupportMatrix(out io.Writer) {
 	fmt.Fprintf(out, "  Config print:       %s\n", strings.Join(matrix.ConfigPrint, ", "))
 	fmt.Fprintf(out, "  Bundle:             %s\n", strings.Join(matrix.Bundle, ", "))
 	fmt.Fprintf(out, "  Wrapper examples:   %s\n", strings.Join(matrix.WrapperExamples, ", "))
-	fmt.Fprintf(out, "  Framework adapters: %s\n", strings.Join(matrix.FrameworkAdapters, ", "))
 }
 
 func writeSupportMatrixJSON(out io.Writer) int {

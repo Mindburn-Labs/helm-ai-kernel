@@ -8,7 +8,7 @@
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "go",
   "source": {
-    "sha256": "93bf233ac67cdac00237f0c5c1a0572025c2fcd0005df27a0620d94b88e6c893",
+    "sha256": "a1ca0be4895cebc41ce0d009a6d895ba40481b013154b759c37081e7194ee0d6",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

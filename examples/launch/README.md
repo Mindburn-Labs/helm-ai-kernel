@@ -55,9 +55,11 @@ false`. The script also verifies every receipt through `/api/demo/verify`.
 ## MCP Quarantine Demo
 
 `scripts/launch/demo-mcp.sh` discovers the local fixture server, keeps it
-quarantined by default, inspects the metadata/schema, classifies risk, creates
-an approval record bound to a HELM receipt, approves the registry record, then
-allows one schema-pinned `local.echo` call.
+quarantined by default, inspects the metadata/schema, classifies risk and
+creates an approval record bound to a HELM receipt. Registry approval then
+fails closed with 503 (no credential-verified approval authority backs it), so
+the schema-pinned `local.echo` call stays denied while the server is
+quarantined.
 
 Unknown MCP servers, unknown tools, and missing schema pins must return `DENY`
 or `ESCALATE`; they must never dispatch to the fixture server.

@@ -5,66 +5,39 @@ last_reviewed: 2026-08-05
 
 # Framework Adapters
 
-Use framework adapters when an agent framework already owns the tool-call hook
-and you need to normalize that proposed action before HELM evaluates it.
-
-## Supported Helpers
-
-| Framework | Helper |
-| --- | --- |
-| LangGraph | `fromLangGraphToolCall` |
-| LangChain | `fromLangChainToolCall` |
-| CrewAI | `fromCrewAITask` |
-| OpenAI Codex | `fromCodexToolCall` |
-| Claude Code | `fromClaudeToolCall` |
-| Hermes | `fromHermesToolCall` |
-| OpenAI Agents SDK | `fromOpenAIAgentsToolCall` |
-| AutoGen / AG2 | `fromAutoGenToolCall` |
-| Semantic Kernel | `fromSemanticKernelFunctionCall` |
-| PydanticAI | `fromPydanticAIToolCall` |
-| LlamaIndex | `fromLlamaIndexToolCall` |
-| LiteLLM | `fromLiteLLMToolCall` |
-| n8n | `fromN8NNodeExecution` |
-| Zapier-style webhook | `fromZapierWebhookCall` |
-| Raw MCP client | `fromRawMCPToolCall` |
+Use the effect gateway when an agent framework already owns the tool-call hook
+and the tool's side effect must be governed before it runs.
 
 ## Pattern
 
+The TypeScript SDK's `NativeGatewayClient` calls the gateway's native effect
+interface (`core/pkg/gateway/mcpserver`). Pass the exact discovered tool name,
+the framework's arguments and an explicit target; the gateway decides,
+dispatches and records the attempt.
+
 ```ts
-import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "@mindburn/helm-ai-kernel";
+import { NativeGatewayClient } from "@mindburn/helm-ai-kernel";
 
-const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-const adapter = createAgentFrameworkAdapter(helm, {
-  model: "helm-governance",
-  metadata: { boundary: "local-dev" },
+const gateway = new NativeGatewayClient({ mcpUrl, episodeToken: getEpisodeToken });
+const tools = await gateway.listTools();
+const result = await gateway.callEffect({
+  toolName: "github_pull_request_create",
+  arguments: { title: "Review me", head: "work", base: "main" },
+  target,
 });
-
-const result = await adapter.submit(
-  fromLangGraphToolCall({
-    id: "call-1",
-    name: "repo.read_file",
-    args: { path: "README.md" },
-  }),
-);
-
-console.log(result.governance.receiptId);
+if (result.structuredContent.status === "reconciling") {
+  await gateway.getAttempt(result.structuredContent.attempt_id!);
+}
 ```
 
-The adapter prepares the action for HELM. It does not execute the original
-tool. Named helpers are conveniences, not separate policy lanes: every helper
-produces the same `AgentFrameworkAction` and uses the same receipt-bearing HELM
-client. Use `fromRawMCPToolCall` for another framework that exposes an MCP tool
-call instead of adding a provider-specific authority path.
+The client owns no authority. A framework's metadata is never treated as
+authority, and a call is made once: keep the returned attempt and read it with
+`getAttempt` instead of retrying.
 
-Named helpers expect the provider's canonical envelope:
+## Removed helpers
 
-- `fromCodexToolCall`: `recipient_name` + `parameters`
-- `fromClaudeToolCall`: `tool_name` + `tool_input`
-- `fromHermesToolCall`: `tool_name` + `arguments`
-
-If those canonical fields are missing, or alias fields disagree with them, the
-helper throws `TypeError` before any HELM request is built.
-
-Source presence is not package-release proof. Before a production integration,
-verify the installed SDK version contains the helper, route one allow case and
-blocked deny/escalate cases, and verify the resulting receipt offline.
+The chat-completion helpers (`fromLangGraphToolCall`, `fromCrewAITask`,
+`fromOpenAIAgentsToolCall` and twelve others, plus
+`createAgentFrameworkAdapter`) were removed. They serialized the tool call as
+chat-message text and submitted a chat completion, so nothing evaluated the
+named tool or its arguments.

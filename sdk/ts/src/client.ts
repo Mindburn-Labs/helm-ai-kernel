@@ -4,7 +4,6 @@
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
-  ApprovalRequest,
   Receipt,
   Session,
   VerificationResult,
@@ -61,12 +60,6 @@ export interface McpRegistryDiscoverRequest {
   reason?: string;
 }
 
-export interface McpRegistryApprovalRequest {
-  server_id: string;
-  approver_id: string;
-  approval_receipt_id: string;
-  reason?: string;
-}
 
 export interface McpQuarantineRecord {
   server_id: string;
@@ -323,11 +316,6 @@ export class HelmClient {
     });
   }
 
-  // ── Approval Ceremony ────────────────────────────
-  async approveIntent(req: ApprovalRequest): Promise<Receipt> {
-    return this.request<Receipt>('POST', '/api/v1/kernel/approve', req);
-  }
-
   // ── ProofGraph ───────────────────────────────────
   async listSessions(limit = 50, offset = 0): Promise<Session[]> {
     return this.request<Session[]>('GET', `/api/v1/proofgraph/sessions?limit=${limit}&offset=${offset}`);
@@ -441,16 +429,8 @@ export class HelmClient {
     return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry', req);
   }
 
-  async approveMcpServer(req: McpRegistryApprovalRequest): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry/approve', req);
-  }
-
   async getMcpRegistryRecord(serverId: string): Promise<McpQuarantineRecord> {
     return this.request<McpQuarantineRecord>('GET', `/api/v1/mcp/registry/${encodeURIComponent(serverId)}`);
-  }
-
-  async approveMcpRegistryRecord(serverId: string, req: Partial<McpRegistryApprovalRequest>): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', `/api/v1/mcp/registry/${encodeURIComponent(serverId)}/approve`, req);
   }
 
   async revokeMcpRegistryRecord(serverId: string, reason?: string): Promise<McpQuarantineRecord> {

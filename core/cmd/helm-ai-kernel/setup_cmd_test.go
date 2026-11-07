@@ -648,11 +648,6 @@ func TestSetupJSONSupportMatrix(t *testing.T) {
 			t.Fatalf("wrapper examples missing %q: %#v", want, matrix.WrapperExamples)
 		}
 	}
-	for _, want := range []string{"LangGraph", "LangChain", "CrewAI", "OpenAI Agents SDK", "AutoGen/AG2", "Semantic Kernel", "PydanticAI", "LlamaIndex", "LiteLLM", "n8n", "Zapier", "raw MCP"} {
-		if !containsSetupString(matrix.FrameworkAdapters, want) {
-			t.Fatalf("framework adapters missing %q: %#v", want, matrix.FrameworkAdapters)
-		}
-	}
 }
 
 func TestSetupPrintConfigDelegatesSupportedClients(t *testing.T) {

@@ -397,38 +397,12 @@ impl HelmClient {
         ))
     }
 
-    pub fn verify_boundary_record(
-        &self,
-        record_id: &str,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value(
-            &format!(
-                "/api/v1/boundary/records/{}/verify",
-                encode_query(record_id)
-            ),
-            &serde_json::json!({}),
-        )
-    }
-
     pub fn list_boundary_checkpoints(&self) -> Result<serde_json::Value, HelmApiError> {
         self.get_value("/api/v1/boundary/checkpoints")
     }
 
     pub fn create_boundary_checkpoint(&self) -> Result<serde_json::Value, HelmApiError> {
         self.post_value("/api/v1/boundary/checkpoints", &serde_json::json!({}))
-    }
-
-    pub fn verify_boundary_checkpoint(
-        &self,
-        checkpoint_id: &str,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value(
-            &format!(
-                "/api/v1/boundary/checkpoints/{}/verify",
-                encode_query(checkpoint_id)
-            ),
-            &serde_json::json!({}),
-        )
     }
 
     /// POST /v1/chat/completions
@@ -604,35 +578,6 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/replay/verify
-    pub fn replay_verify(&self, bundle: &[u8]) -> Result<VerificationResult, HelmApiError> {
-        let form = reqwest::blocking::multipart::Form::new().part(
-            "bundle",
-            reqwest::blocking::multipart::Part::bytes(bundle.to_vec())
-                .file_name("pack.tar.gz")
-                .mime_str("application/octet-stream")
-                .unwrap(),
-        );
-        let resp = self
-            .client
-            .post(self.url("/api/v1/replay/verify"))
-            .multipart(form)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
     /// POST /api/v1/evidence/envelopes
     pub fn create_evidence_envelope_manifest(
         &self,
@@ -680,19 +625,6 @@ impl HelmClient {
             "/api/v1/evidence/envelopes/{}/payload",
             encode_query(manifest_id)
         ))
-    }
-
-    pub fn verify_evidence_envelope_manifest(
-        &self,
-        manifest_id: &str,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value(
-            &format!(
-                "/api/v1/evidence/envelopes/{}/verify",
-                encode_query(manifest_id)
-            ),
-            &serde_json::json!({}),
-        )
     }
 
     /// GET /api/v1/proofgraph/receipts/{hash}
@@ -931,13 +863,6 @@ impl HelmClient {
             "/api/v1/sandbox/grants/{}",
             encode_query(grant_id)
         ))
-    }
-
-    pub fn verify_sandbox_grant(&self, grant_id: &str) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value(
-            &format!("/api/v1/sandbox/grants/{}/verify", encode_query(grant_id)),
-            &serde_json::json!({}),
-        )
     }
 
     pub fn preflight_sandbox_grant<T: Serialize>(

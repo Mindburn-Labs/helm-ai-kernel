@@ -1,11 +1,11 @@
 # Reversibility-Aware Policy Classes (R3)
 
-**Status:** implemented and tested as a Guardian option (`WithRollbackPlanStore`)
-that no shipped binary installs, so it enforces nothing in `serve`, `proxy` or
-`mcp serve` today (`controls.yaml` CTL-042). As an option, validated rollback plans
-are bound before dispatch for reversible capabilities, invalid or expired
-plans deny, and external paths escalate. Rollback execution, outcome-receipt
-pairing, and authoritative approval-receipt verification remain follow-up.
+**Status:** retired (helm-tracker#266). The Guardian option
+(`WithRollbackPlanStore`) that bound validated rollback plans before dispatch was
+deleted with `core/pkg/capability`: no shipped binary installed it, so it never
+enforced anything in `serve`, `proxy` or `mcp serve` (`controls.yaml` CTL-042,
+retired). The `rollback_plan.v1` schema remains as the design record; this page
+describes the design, not running code.
 **Origin:** Step AOS alignment (their 可逆 "one-click rollback"), adapted to
 fail-closed enforcement instead of a UX promise.
 

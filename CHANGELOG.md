@@ -102,23 +102,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - The release reproducibility check now compares binary hashes. It used to
   compare file names only, so differing builds could not fail it.
 
-### Fixed
-
-- Dependabot coverage now parses singular and plural directories, including
-  globs, and checks every tracked Go module and SDK dependency manifest against
-  its package ecosystem (HELM-972).
-
 ### Changed
 
 - First-party skill packs: `helm/repo-auditor` 0.2.0 adds the `name` and
   `description` frontmatter agents need to discover it and tightens its body;
   `helm/codex-multi-agent-director` is removed because agents decompose work
   natively.
-- Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder
-  images; `golang.org/x/net` v0.60.0 and `golang.org/x/crypto` v0.57.0 clear
-  the 2026-10-08 govulncheck advisories (GO-2026-6599 through GO-2026-6617).
-  `sdk/go` and every other module now declare `go 1.26.9`, so consumers need
-  Go 1.26.9 or newer.
 
 ### Removed
 
@@ -152,8 +141,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Release process
 
-- The container, Go SDK tag and npm publishers now wait for the PyPI SDK job to
-  succeed.
+- The container, Go SDK tag, npm, crates.io and Maven publishers now wait for
+  the PyPI SDK job to succeed.
 - The PyPI job refuses to publish a `helm-sdk` version that already exists
   instead of skipping the upload.
 
@@ -183,11 +172,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ### Changed
 
 - Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder
-  images; `golang.org/x/net` v0.60.0 and `golang.org/x/crypto` v0.57.0 clear
-  the govulncheck advisories GO-2026-6599 through GO-2026-6617. `sdk/go` and
-  every other module now declare `go 1.26.9`, so consumers need Go 1.26.9 or
-  newer.
-- A Go dependency batch (41 updates in the root module) raises
+  images (#1119), then to 1.26.10 (#1151); `golang.org/x/net` v0.60.0 and
+  `golang.org/x/crypto` v0.57.0 clear the govulncheck advisories GO-2026-6599
+  through GO-2026-6617. `core`, `sdk/go` and the other modules declare
+  `go 1.26.10`, so consumers need Go 1.26.10 or newer.
+- A Go dependency batch (41 updates across `core`, `sdk/go`, the test modules
+  and tools) raises
   `golang.org/x/net` to v0.61.0 and `golang.org/x/crypto` to v0.58.0, among
   others.
 - The slim container image refreshes its Alpine runtime packages, clearing

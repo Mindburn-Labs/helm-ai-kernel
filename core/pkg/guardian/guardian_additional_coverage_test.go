@@ -30,18 +30,6 @@ func TestExt_FreezeGateDeniesWithReasonCode(t *testing.T) {
 	}
 }
 
-// ─── 2: Gate 0.5 — agent kill switch ──────────────────────────
-
-func TestExt_AgentKillSwitchDenies(t *testing.T) {
-	ks := kernel.NewAgentKillSwitch()
-	ks.Kill("bad-agent", "admin", "testing")
-	g := newMinimalGuardian(WithAgentKillSwitch(ks))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "bad-agent", Action: "x", Resource: "test-resource"})
-	if dec.Verdict != string(contracts.VerdictDeny) || dec.ReasonCode != string(contracts.ReasonAgentKilled) {
-		t.Fatalf("expected DENY/AGENT_KILLED, got %s/%s", dec.Verdict, dec.ReasonCode)
-	}
-}
-
 // ─── 3: Gate 1 — context mismatch denial ──────────────────────
 
 func TestExt_ContextMismatchDeniesWithCode(t *testing.T) {
@@ -196,22 +184,6 @@ func TestExt_FreezeVerdictIsDeny(t *testing.T) {
 	}
 }
 
-// ─── 11: Budget exceeded denial ───────────────────────────────
-
-func TestExt_BudgetExceededDenial(t *testing.T) {
-	bt := newMockBudgetTracker(0) // zero budget
-	g := newMinimalGuardian(WithBudgetTracker(bt))
-	effect := &contracts.Effect{EffectID: "e1", EffectType: "T", Params: map[string]any{"tool_name": "test_tool", "budget_id": "b1"}}
-	dec := &contracts.DecisionRecord{ID: "d1", SubjectID: "agent-1", Action: "EXECUTE_TOOL", Resource: "test_tool"}
-	err := g.SignDecision(context.Background(), dec, effect, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dec.ReasonCode != string(contracts.ReasonBudgetExceeded) {
-		t.Fatalf("expected BUDGET_EXCEEDED, got %s", dec.ReasonCode)
-	}
-}
-
 // ─── 12: checkEnvelope rejects nil effect type ────────────────
 
 func TestExt_CheckEnvelopeRejectsEmptyType(t *testing.T) {
@@ -333,18 +305,6 @@ func TestExt_UnfreezeAllowsDecisions(t *testing.T) {
 	// Should NOT be SYSTEM_FROZEN after unfreeze
 	if dec.ReasonCode == string(contracts.ReasonSystemFrozen) {
 		t.Fatal("should not deny after unfreeze")
-	}
-}
-
-// ─── 21: Agent not killed passes kill switch gate ─────────────
-
-func TestExt_AgentNotKilledPasses(t *testing.T) {
-	ks := kernel.NewAgentKillSwitch()
-	ks.Kill("other-agent", "admin", "testing")
-	g := newMinimalGuardian(WithAgentKillSwitch(ks))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "good-agent", Action: "x", Resource: "test-resource"})
-	if dec.ReasonCode == string(contracts.ReasonAgentKilled) {
-		t.Fatal("good-agent should not be killed")
 	}
 }
 

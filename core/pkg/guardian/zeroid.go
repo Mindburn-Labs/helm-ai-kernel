@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -115,11 +114,6 @@ func (z *ZeroIDInterceptor) denyWithReason(evalCtx *EvaluationContext, code cont
 
 	if err := z.g.signDecisionWithContext(decision, evalCtx); err != nil {
 		return nil, fmt.Errorf("failed to sign ZeroID deny decision: %w", err)
-	}
-
-	if z.g.auditLog != nil {
-		decisionBytes, _ := canonicalize.JCS(decision)
-		_, _ = z.g.auditLog.Append("guardian", "ZEROID_DENY", decision.ID, string(decisionBytes))
 	}
 
 	return decision, nil

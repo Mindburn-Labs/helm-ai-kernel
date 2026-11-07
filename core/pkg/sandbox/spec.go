@@ -49,15 +49,6 @@ type SandboxSpec struct {
 
 	// SandboxLeaseID binds the execution to a pre-warmed sandbox lease.
 	SandboxLeaseID string `json:"sandbox_lease_id,omitempty"`
-
-	// WarmLeaseConfig configures the warm pool leasing behavior.
-	WarmLeaseConfig *WarmLeaseConfig `json:"warm_lease_config,omitempty"`
-}
-
-// WarmLeaseConfig defines configuration for warm-leasing a sandbox.
-type WarmLeaseConfig struct {
-	Enabled      bool `json:"enabled"`
-	PreWarmCount int  `json:"pre_warm_count"`
 }
 
 // Mount is a filesystem mount for the sandbox.

@@ -25,9 +25,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	mux.HandleFunc("/api/v1/evidence/envelopes/env1/payload", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, EvidenceEnvelopePayload{"manifest_id": "env1", "payload_hash": "sha256:payload"})
 	})
-	mux.HandleFunc("/api/v1/boundary/checkpoints/cp1/verify", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, SurfaceRecord{"verdict": "PASS", "checkpoint_id": "cp1"})
-	})
 	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/challenge", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, ApprovalWebAuthnChallenge{"challenge_id": "ch1", "approval_id": "ap1"})
 	})
@@ -66,10 +63,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	payload, err := client.GetEvidenceEnvelopePayload("env1")
 	if err != nil || (*payload)["payload_hash"] != "sha256:payload" {
 		t.Fatalf("payload = %#v, err = %v", payload, err)
-	}
-	checkpoint, err := client.VerifyBoundaryCheckpoint("cp1")
-	if err != nil || (*checkpoint)["verdict"] != "PASS" {
-		t.Fatalf("checkpoint = %#v, err = %v", checkpoint, err)
 	}
 	challenge, err := client.CreateApprovalWebAuthnChallenge("ap1", SurfaceRecord{"actor": "user1"})
 	if err != nil || (*challenge)["challenge_id"] != "ch1" {
@@ -221,17 +214,12 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		{"get receipt", "GET /api/v1/proofgraph/receipts/receipt%23one", func() error { _, err := client.GetReceipt("receipt#one"); return err }},
 		{"export evidence", "POST /api/v1/evidence/export", func() error { _, err := client.ExportEvidence("session"); return err }},
 		{"verify evidence", "POST /api/v1/evidence/verify", func() error { _, err := client.VerifyEvidence([]byte("bundle")); return err }},
-		{"replay verify", "POST /api/v1/replay/verify", func() error { _, err := client.ReplayVerify([]byte("bundle")); return err }},
 		{"create evidence envelope", "POST /api/v1/evidence/envelopes", func() error {
 			_, err := client.CreateEvidenceEnvelopeManifest(EvidenceEnvelopeExportRequest{ManifestID: "m1", Envelope: "dsse", NativeEvidenceHash: "hash"})
 			return err
 		}},
 		{"list evidence envelopes", "GET /api/v1/evidence/envelopes", func() error { _, err := client.ListEvidenceEnvelopeManifests(); return err }},
 		{"get evidence envelope", "GET /api/v1/evidence/envelopes/manifest%2Fa%20b", func() error { _, err := client.GetEvidenceEnvelopeManifest("manifest/a b"); return err }},
-		{"verify evidence envelope", "POST /api/v1/evidence/envelopes/manifest%2Fa%20b/verify", func() error {
-			_, err := client.VerifyEvidenceEnvelopeManifest("manifest/a b")
-			return err
-		}},
 		{"get evidence payload", "GET /api/v1/evidence/envelopes/manifest%2Fa%20b/payload", func() error {
 			_, err := client.GetEvidenceEnvelopePayload("manifest/a b")
 			return err
@@ -243,16 +231,8 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			return err
 		}},
 		{"get boundary record", "GET /api/v1/boundary/records/record%2Fa%20b", func() error { _, err := client.GetBoundaryRecord("record/a b"); return err }},
-		{"verify boundary record", "POST /api/v1/boundary/records/record%2Fa%20b/verify", func() error {
-			_, err := client.VerifyBoundaryRecord("record/a b")
-			return err
-		}},
 		{"boundary checkpoints", "GET /api/v1/boundary/checkpoints", func() error { _, err := client.ListBoundaryCheckpoints(); return err }},
 		{"create boundary checkpoint", "POST /api/v1/boundary/checkpoints", func() error { _, err := client.CreateBoundaryCheckpoint(); return err }},
-		{"verify boundary checkpoint", "POST /api/v1/boundary/checkpoints/checkpoint%2Fa%20b/verify", func() error {
-			_, err := client.VerifyBoundaryCheckpoint("checkpoint/a b")
-			return err
-		}},
 		{"list conformance vectors", "GET /api/v1/conformance/vectors", func() error { _, err := client.ListConformanceVectors(); return err }},
 		{"list negative vectors", "GET /api/v1/conformance/negative", func() error { _, err := client.ListNegativeConformanceVectors(); return err }},
 		{"list mcp registry", "GET /api/v1/mcp/registry", func() error { _, err := client.ListMCPRegistry(); return err }},
@@ -278,10 +258,6 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		{"list sandbox grants", "GET /api/v1/sandbox/grants", func() error { _, err := client.ListSandboxGrants(); return err }},
 		{"create sandbox grant", "POST /api/v1/sandbox/grants", func() error { _, err := client.CreateSandboxGrant(SurfaceRecord{"runtime": "wasi"}); return err }},
 		{"get sandbox grant", "GET /api/v1/sandbox/grants/grant%2Fa%20b", func() error { _, err := client.GetSandboxGrant("grant/a b"); return err }},
-		{"verify sandbox grant", "POST /api/v1/sandbox/grants/grant%2Fa%20b/verify", func() error {
-			_, err := client.VerifySandboxGrant("grant/a b")
-			return err
-		}},
 		{"preflight sandbox", "POST /api/v1/sandbox/preflight", func() error {
 			_, err := client.PreflightSandboxGrant(SandboxPreflightRequest{"runtime": "wasi"})
 			return err
@@ -342,7 +318,7 @@ func responseForClientMatrix(method string, u *url.URL) any {
 		}
 	case "/healthz":
 		return map[string]string{"status": "ok", "version": "test"}
-	case "/api/v1/evidence/verify", "/api/v1/replay/verify":
+	case "/api/v1/evidence/verify":
 		return map[string]any{
 			"outcome":    "VERIFIED",
 			"checks_run": []map[string]any{{"name": "receipt_signatures", "status": "VERIFIED", "detail": "test"}},

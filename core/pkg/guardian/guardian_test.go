@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,33 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// mockBudgetTracker implements BudgetGate for tests.
-type mockBudgetTracker struct {
-	mu       sync.Mutex
-	limit    int64
-	consumed int64
-}
-
-func newMockBudgetTracker(limit int64) *mockBudgetTracker {
-	return &mockBudgetTracker{limit: limit}
-}
-
-func (m *mockBudgetTracker) Check(_ string, cost BudgetCost) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.consumed+cost.Requests <= m.limit, nil
-}
-
-func (m *mockBudgetTracker) Consume(_ string, cost BudgetCost) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.consumed+cost.Requests > m.limit {
-		return errors.New("budget exceeded")
-	}
-	m.consumed += cost.Requests
-	return nil
-}
 
 // --- Mocks ---
 
@@ -334,142 +306,5 @@ func TestGuardian_SignDecision(t *testing.T) {
 		err := brokenSubject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "signer broken")
-	})
-}
-
-// consumeFailBudgetTracker allows the pre-policy Check to pass but fails the
-// post-policy Consume, modelling budget exhausted between check and consume.
-type consumeFailBudgetTracker struct {
-	consumeCalls int
-}
-
-func (c *consumeFailBudgetTracker) Check(string, BudgetCost) (bool, error) { return true, nil }
-func (c *consumeFailBudgetTracker) Consume(string, BudgetCost) error {
-	c.consumeCalls++
-	return errors.New("budget backend unavailable")
-}
-
-func TestGuardian_BudgetNotConsumedOnPolicyDeny(t *testing.T) {
-	registry := pkg_artifact.NewRegistry(NewMockStore(), nil)
-	ruleGraph := prg.NewGraph()
-	// Rule exists but never passes, so PRG denies with MISSING_REQUIREMENT.
-	_ = ruleGraph.AddRule("gated_tool", prg.RequirementSet{
-		ID:           "always-fail",
-		Logic:        prg.AND,
-		Requirements: []prg.Requirement{{ID: "never", Expression: "false"}},
-	})
-
-	tracker := newMockBudgetTracker(100)
-	g := NewGuardian(&MockSigner{}, ruleGraph, registry, WithBudgetTracker(tracker))
-
-	decision := &contracts.DecisionRecord{ID: "dec-deny"}
-	effect := &contracts.Effect{
-		EffectType: "tool_call",
-		EffectID:   "eff-deny",
-		Params:     map[string]any{"tool_name": "gated_tool", "budget_id": "b1"},
-	}
-	require.NoError(t, g.SignDecision(context.Background(), testDecisionAuthority(decision), effect, nil, nil))
-	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict)
-	assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
-
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	assert.Equal(t, int64(0), tracker.consumed,
-		"a policy-denied request must not draw down budget")
-}
-
-func TestGuardian_BudgetConsumeFailureFailsClosed(t *testing.T) {
-	registry := pkg_artifact.NewRegistry(NewMockStore(), nil)
-	ruleGraph := prg.NewGraph()
-	_ = ruleGraph.AddRule("safe_tool", prg.RequirementSet{ID: "allow-all"})
-
-	tracker := &consumeFailBudgetTracker{}
-	g := NewGuardian(&MockSigner{}, ruleGraph, registry, WithBudgetTracker(tracker))
-
-	decision := &contracts.DecisionRecord{ID: "dec-consume-fail"}
-	effect := &contracts.Effect{
-		EffectType: "tool_call",
-		EffectID:   "eff-consume-fail",
-		Params:     map[string]any{"tool_name": "safe_tool", "budget_id": "b1"},
-	}
-	require.NoError(t, g.SignDecision(context.Background(), testDecisionAuthority(decision), effect, nil, nil))
-	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict,
-		"a failed budget consume must fail closed, not allow")
-	assert.Equal(t, string(contracts.ReasonBudgetError), decision.ReasonCode)
-	assert.Equal(t, 1, tracker.consumeCalls)
-}
-
-func TestGuardian_BudgetEnforcement(t *testing.T) {
-	// 1. Setup Dependencies
-	mockStore := NewMockStore()
-	registry := pkg_artifact.NewRegistry(mockStore, nil)
-	signer := &MockSigner{}
-	ruleGraph := prg.NewGraph()
-	// Allow safe_tool via PRG (so we don't fail on PRG)
-	_ = ruleGraph.AddRule("safe_tool", prg.RequirementSet{
-		ID:           "allow-all",
-		Requirements: []prg.Requirement{}, // Empty = always pass
-	})
-
-	// 2. Setup Budget
-	tracker := newMockBudgetTracker(1) // limit of 1 request
-
-	// 3. Setup Guardian with Tracker
-	subject := NewGuardian(signer, ruleGraph, registry)
-	subject.SetBudgetTracker(tracker)
-
-	ctx := context.Background()
-
-	t.Run("Pass: Within Budget", func(t *testing.T) {
-		decision := &contracts.DecisionRecord{ID: "dec-budget-1"}
-		effect := &contracts.Effect{
-			EffectType: "tool_call",
-			EffectID:   "eff-b1",
-			Params: map[string]any{
-				"tool_name": "safe_tool",
-				"budget_id": "tiny-budget",
-			},
-		}
-
-		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
-		require.NoError(t, err)
-		assert.Equal(t, "ALLOW", decision.Verdict)
-	})
-
-	t.Run("Fail: Budget Exceeded", func(t *testing.T) {
-		// Budget had limit 1, consumed 1 in previous step.
-		// Next request (cost 1) -> Total 2 > Limit 1.
-		decision := &contracts.DecisionRecord{ID: "dec-budget-2"}
-		effect := &contracts.Effect{
-			EffectType: "tool_call",
-			EffectID:   "eff-b2",
-			Params: map[string]any{
-				"tool_name": "safe_tool",
-				"budget_id": "tiny-budget",
-			},
-		}
-
-		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
-		// It might return error or sign fail depending on impl.
-		// My impl signs fail for "Budget Exceeded" but returns Signed decision (nil error).
-		require.NoError(t, err)
-		assert.Equal(t, "DENY", decision.Verdict)
-		assert.Contains(t, decision.Reason, "BUDGET_EXCEEDED")
-	})
-
-	t.Run("Pass: No Budget ID (Bypass Check)", func(t *testing.T) {
-		decision := &contracts.DecisionRecord{ID: "dec-budget-3"}
-		effect := &contracts.Effect{
-			EffectType: "tool_call",
-			EffectID:   "eff-b3",
-			Params: map[string]any{
-				"tool_name": "safe_tool",
-				// No budget_id
-			},
-		}
-
-		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
-		require.NoError(t, err)
-		assert.Equal(t, "ALLOW", decision.Verdict)
 	})
 }

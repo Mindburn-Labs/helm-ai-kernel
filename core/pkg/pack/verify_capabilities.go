@@ -13,12 +13,7 @@
 package pack
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"time"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // CapabilityVerification is the result of verifying a skill's declared capabilities
@@ -48,24 +43,6 @@ type CapabilityVerifier struct {
 
 // VerifierOption configures the CapabilityVerifier.
 type VerifierOption func(*CapabilityVerifier)
-
-// WithClock sets a custom clock for deterministic testing.
-func WithClock(clock func() time.Time) VerifierOption {
-	return func(v *CapabilityVerifier) {
-		v.clock = clock
-	}
-}
-
-// NewCapabilityVerifier creates a new verifier with the given options.
-func NewCapabilityVerifier(opts ...VerifierOption) *CapabilityVerifier {
-	v := &CapabilityVerifier{
-		clock: func() time.Time { return time.Now().UTC() },
-	}
-	for _, opt := range opts {
-		opt(v)
-	}
-	return v
-}
 
 // networkPatterns are byte sequences indicating undeclared network access.
 var networkPatterns = []patternDef{
@@ -106,121 +83,4 @@ type patternDef struct {
 	pattern  []byte
 	desc     string
 	severity string
-}
-
-// VerifyManifest scans content bytes for undeclared capabilities and returns
-// a verification result. Fail-closed: any detected violation marks the
-// verification as failed.
-func (v *CapabilityVerifier) VerifyManifest(skillID string, declaredCaps []string, content []byte) (*CapabilityVerification, error) {
-	now := v.clock()
-
-	result := &CapabilityVerification{
-		SkillID:      skillID,
-		DeclaredCaps: declaredCaps,
-		VerifiedAt:   now,
-		Verified:     true,
-	}
-
-	// Scan for undeclared capabilities.
-	hasCap := func(cap string) bool {
-		for _, c := range declaredCaps {
-			if c == cap {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Check network access patterns.
-	if !hasCap("network") {
-		for _, p := range networkPatterns {
-			if bytes.Contains(content, p.pattern) {
-				result.Violations = append(result.Violations, CapabilityViolation{
-					Type:        "NETWORK_ACCESS",
-					Description: p.desc,
-					Severity:    p.severity,
-					Evidence:    string(p.pattern),
-				})
-			}
-		}
-	}
-
-	// Check filesystem access patterns.
-	if !hasCap("filesystem") {
-		for _, p := range filesystemPatterns {
-			if bytes.Contains(content, p.pattern) {
-				result.Violations = append(result.Violations, CapabilityViolation{
-					Type:        "FILESYSTEM_ACCESS",
-					Description: p.desc,
-					Severity:    p.severity,
-					Evidence:    string(p.pattern),
-				})
-			}
-		}
-	}
-
-	// Check code execution patterns.
-	if !hasCap("code_execution") {
-		for _, p := range codeExecPatterns {
-			if bytes.Contains(content, p.pattern) {
-				result.Violations = append(result.Violations, CapabilityViolation{
-					Type:        "CODE_EXECUTION",
-					Description: p.desc,
-					Severity:    p.severity,
-					Evidence:    string(p.pattern),
-				})
-			}
-		}
-	}
-
-	// Check crypto mining patterns (never allowed, regardless of declared caps).
-	for _, p := range miningPatterns {
-		if bytes.Contains(content, p.pattern) {
-			result.Violations = append(result.Violations, CapabilityViolation{
-				Type:        "UNDECLARED_TOOL",
-				Description: p.desc,
-				Severity:    p.severity,
-				Evidence:    string(p.pattern),
-			})
-		}
-	}
-
-	// Fail-closed: any violation means verification failed.
-	if len(result.Violations) > 0 {
-		result.Verified = false
-	}
-
-	// Compute verification hash over the result (excluding the hash itself).
-	hash, err := computeVerificationHash(result)
-	if err != nil {
-		return nil, err
-	}
-	result.VerificationHash = hash
-
-	return result, nil
-}
-
-// computeVerificationHash produces a deterministic hash of the verification result.
-func computeVerificationHash(v *CapabilityVerification) (string, error) {
-	hashable := struct {
-		SkillID      string                `json:"skill_id"`
-		Verified     bool                  `json:"verified"`
-		DeclaredCaps []string              `json:"declared_capabilities"`
-		Violations   []CapabilityViolation `json:"violations,omitempty"`
-		VerifiedAt   time.Time             `json:"verified_at"`
-	}{
-		SkillID:      v.SkillID,
-		Verified:     v.Verified,
-		DeclaredCaps: v.DeclaredCaps,
-		Violations:   v.Violations,
-		VerifiedAt:   v.VerifiedAt,
-	}
-
-	data, err := canonicalize.JCS(hashable)
-	if err != nil {
-		return "", err
-	}
-
-	h := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(h[:]), nil
 }

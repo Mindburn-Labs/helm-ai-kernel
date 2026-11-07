@@ -84,7 +84,6 @@ func main() {
 | `GetReceipt(receiptHash)` | `GET /api/v1/proofgraph/receipts/{hash}` |
 | `ExportEvidence(sessionID)` | `POST /api/v1/evidence/export` |
 | `VerifyEvidence(bundle)` | `POST /api/v1/evidence/verify` |
-| `ReplayVerify(bundle)` | `POST /api/v1/replay/verify` |
 | `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
 | `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
@@ -93,10 +92,8 @@ func main() {
 | `GetBoundaryStatus()` | `GET /api/v1/boundary/status` |
 | `ListBoundaryCapabilities()` | `GET /api/v1/boundary/capabilities` |
 | `ListBoundaryRecords(query)` | `GET /api/v1/boundary/records` |
-| `VerifyBoundaryRecord(recordID)` | `POST /api/v1/boundary/records/{id}/verify` |
 | `ListBoundaryCheckpoints()` | `GET /api/v1/boundary/checkpoints` |
 | `CreateBoundaryCheckpoint()` | `POST /api/v1/boundary/checkpoints` |
-| `VerifyBoundaryCheckpoint(checkpointID)` | `POST /api/v1/boundary/checkpoints/{id}/verify` |
 | `ListSandboxBackendProfiles()` | `GET /api/v1/sandbox/grants/inspect` |
 | `InspectSandboxGrant(runtime, profile, policyEpoch)` | `GET /api/v1/sandbox/grants/inspect` |
 | `Health()` | `GET /healthz` |

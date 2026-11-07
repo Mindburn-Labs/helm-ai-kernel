@@ -19,12 +19,13 @@ python main.py
 
 1. Sends a chat completion through HELM proxy
 2. Exports an EvidencePack
-3. Verifies the evidence offline
-4. Runs L2 conformance
-5. Checks health
+3. Verifies the bundle with the kernel's `POST /api/v1/evidence/verify`
+   (for verification without the service, use `receipt_verify` or
+   `helm-ai-kernel verify`)
+4. Checks health
 
 ## Expected Output
 
 The example prints sections for chat completions, evidence export and
-verification, conformance, and health. The exact verdict, reason code, byte
+verification, and health. The exact verdict, reason code, byte
 count, and version depend on the policy and HELM server you run locally.

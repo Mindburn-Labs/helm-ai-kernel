@@ -282,13 +282,6 @@ func (c *HelmClient) VerifyEvidence(bundle []byte) (*VerificationResult, error) 
 	return &out, nil
 }
 
-// ReplayVerify calls POST /api/v1/replay/verify.
-func (c *HelmClient) ReplayVerify(bundle []byte) (*VerificationResult, error) {
-	var out VerificationResult
-	err := c.do("POST", "/api/v1/replay/verify", map[string]any{"bundle_b64": bundle}, &out)
-	return &out, err
-}
-
 // GetReceipt calls GET /api/v1/proofgraph/receipts/{hash}.
 func (c *HelmClient) GetReceipt(receiptHash string) (*Receipt, error) {
 	var out Receipt

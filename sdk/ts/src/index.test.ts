@@ -190,35 +190,22 @@ describe('HelmClient', () => {
       expect(result.native_authority).toBe(true);
     });
 
-    it('retrieves envelope payloads and verifies checkpoints', async () => {
+    it('retrieves envelope payloads', async () => {
       fetchSpy
         .mockResolvedValueOnce(jsonResponse({
           manifest_id: 'env1',
           payload_hash: 'sha256:payload',
           payload: { payloadType: 'application/vnd.dsse+json' },
-        }))
-        .mockResolvedValueOnce(jsonResponse({
-          checkpoint_id: 'cp1',
-          verdict: 'PASS',
-          checks: { checkpoint_hash: 'PASS' },
         }));
       const client = new HelmClient({ baseUrl: 'http://h' });
 
       const payload = await client.getEvidenceEnvelopePayload('env1');
-      const checkpoint = await client.verifyBoundaryCheckpoint('cp1');
 
-      expect(fetchSpy).toHaveBeenNthCalledWith(
-        1,
+      expect(fetchSpy).toHaveBeenCalledWith(
         'http://h/api/v1/evidence/envelopes/env1/payload',
         expect.objectContaining({ method: 'GET' }),
       );
-      expect(fetchSpy).toHaveBeenNthCalledWith(
-        2,
-        'http://h/api/v1/boundary/checkpoints/cp1/verify',
-        expect.objectContaining({ method: 'POST' }),
-      );
       expect(payload.payload_hash).toBe('sha256:payload');
-      expect(checkpoint.verdict).toBe('PASS');
     });
 
     it('creates and asserts approval WebAuthn ceremonies', async () => {

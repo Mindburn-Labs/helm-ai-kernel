@@ -108,7 +108,7 @@ func TestConsoleReplaySurfaceUsesVerifierContract(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode replay surface: %v", err)
 	}
-	if payload["source"] != "/api/v1/replay/verify" {
+	if payload["source"] != "/api/v1/evidence/verify" {
 		t.Fatalf("replay surface source = %v", payload["source"])
 	}
 }

@@ -7,9 +7,9 @@
   "summary": {
     "total": 83,
     "enforced": 44,
-    "observed_only": 26,
-    "unmanaged": 13,
-    "retired_invariants": 12,
+    "observed_only": 25,
+    "unmanaged": 14,
+    "retired_invariants": 13,
     "build_plane": 1
   },
   "controls": [
@@ -1395,13 +1395,8 @@
       "claim": "An action that passes policy draws down its budget, and a failed draw-down denies it.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, and `budget verify`, which printed a constant PASS, were removed (HELM-780). `budget set` records ceilings that nothing enforces.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/guardian.Guardian.SetBudgetTracker",
-          "reachability": "reachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the Guardian budget gate (BudgetGate, WithBudgetTracker, SetBudgetTracker) had no shipped installer and was deleted with its tests. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -1412,10 +1407,7 @@
       ],
       "tests": {
         "allowed": [],
-        "forbidden": [
-          "core/pkg/guardian.TestGuardian_BudgetConsumeFailureFailsClosed",
-          "core/pkg/guardian.TestGuardian_BudgetEnforcement"
-        ],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -2700,29 +2692,8 @@
       "claim": "The Guardian enforces capability registry entries, task capability tokens, rollback plans, session risk memory and privilege resolution.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/guardian.WithCapabilityRegistry",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithCapabilityTokenVerifier",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithRollbackPlanStore",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithSessionRiskMemory",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/guardian.WithPrivilegeResolver",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the capability registry, task capability token, rollback-plan, session risk memory and privilege resolver Guardian options had no shipped installer and were deleted with the gates they enabled and the core/pkg/capability package. No code in this tree holds the rule.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -2774,27 +2745,15 @@
       "title": "WASI sandbox containment",
       "owner": "Mindburn Labs core team (kernel)",
       "claim": "The WASI sandbox denies all filesystem and network I/O unless explicitly granted.",
-      "status": "observed-only",
+      "status": "unmanaged",
       "plane": "runtime",
-      "reason": "The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/runtime/sandbox.WASISandbox.Run",
-          "reachability": "unreachable"
-        },
-        {
-          "symbol": "core/pkg/runtime/sandbox.SandboxBroker.Execute",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential broker and policy enforcer were deleted; the shipped server never ran a pack. Only sandbox grant and backend-profile records remain in core/pkg/runtime/sandbox.",
+      "retired": true,
+      "entry_points": [],
       "gates": [],
       "config": [],
-      "protected_operations": [
-        "Running a pack in the WASI sandbox."
-      ],
-      "bypass_assumptions": [
-        "No shipped path runs a pack."
-      ],
+      "protected_operations": [],
+      "bypass_assumptions": [],
       "tests": {
         "allowed": [],
         "forbidden": [],

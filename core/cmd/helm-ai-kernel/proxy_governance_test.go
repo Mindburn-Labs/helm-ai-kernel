@@ -438,7 +438,7 @@ func TestProxyRefusesUnpricedBudgetFlags(t *testing.T) {
 	for _, flagName := range []string{"--daily-limit", "--monthly-limit"} {
 		var stdout, stderr bytes.Buffer
 		code := runProxyCmd([]string{flagName, "500", "--receipts-dir", t.TempDir()}, &stdout, &stderr)
-		if code != 2 || !strings.Contains(stderr.String(), "BUDGET_ERROR") {
+		if code != 2 || !strings.Contains(stderr.String(), "cannot enforce a spend budget") {
 			t.Fatalf("%s: exit=%d stderr=%s", flagName, code, stderr.String())
 		}
 	}

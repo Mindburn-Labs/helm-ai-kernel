@@ -20,8 +20,6 @@ import (
 
 // Drain and verify monotonicity of scheduling order
 
-// ── Nondeterminism Tracker Tests ─────────────────────────────────
-
 // ── FreezeController Tests ───────────────────────────────────────
 
 func TestDeepFreezeControllerInitiallyUnfrozen(t *testing.T) {
@@ -99,66 +97,5 @@ func TestDeepFreezeReceiptHashDeterministic(t *testing.T) {
 	r2, _ := fc2.Freeze("admin")
 	if r1.ContentHash != r2.ContentHash {
 		t.Fatal("same inputs/clock should produce same hash")
-	}
-}
-
-func TestDeepAgentKillSwitchKillRevive(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, err := ks.Kill("agent-1", "admin", "testing")
-	if err != nil || !ks.IsKilled("agent-1") {
-		t.Fatal("kill should succeed")
-	}
-	_, err = ks.Revive("agent-1", "admin")
-	if err != nil || ks.IsKilled("agent-1") {
-		t.Fatal("revive should succeed")
-	}
-}
-
-func TestDeepAgentKillSwitchDoubleKill(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	ks.Kill("a", "admin", "test")
-	_, err := ks.Kill("a", "admin", "test")
-	if err == nil {
-		t.Fatal("double kill should error")
-	}
-}
-
-func TestDeepAgentKillSwitchReviveNonKilled(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	_, err := ks.Revive("not-killed", "admin")
-	if err == nil {
-		t.Fatal("revive non-killed agent should error")
-	}
-}
-
-func TestDeepAgentKillSwitchConcurrent(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			agent := fmt.Sprintf("agent-%d", idx%20)
-			switch idx % 3 {
-			case 0:
-				ks.Kill(agent, "admin", "test")
-			case 1:
-				ks.Revive(agent, "admin")
-			case 2:
-				ks.IsKilled(agent)
-			}
-		}(i)
-	}
-	wg.Wait()
-}
-
-func TestDeepAgentKillSwitchListKilled(t *testing.T) {
-	ks := NewAgentKillSwitch()
-	ks.Kill("a", "admin", "r1")
-	ks.Kill("b", "admin", "r2")
-	ks.Kill("c", "admin", "r3")
-	killed := ks.ListKilled()
-	if len(killed) != 3 {
-		t.Fatalf("expected 3 killed, got %d", len(killed))
 	}
 }

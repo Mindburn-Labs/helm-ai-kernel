@@ -56,8 +56,13 @@ syntax = "proto3";
 //     buf breaking would then reject the field that later takes the number.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
-// values and no signatures or keys. Token verification is ADR-0005's and adds
-// no cryptographic control here; no post-quantum claim is made.
+// values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
+// lowercase hex string its chain links with, and no signatures or keys. An
+// attempt names its signed decision receipts by reference only (ReceiptRef):
+// each is a classical Ed25519 receipt.v5 signature the gateway keeps in its
+// ledger, verified offline against the gateway's published key. Token
+// verification is ADR-0005's and adds no cryptographic control here; no
+// post-quantum claim is made.
 package helm.gateway.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -802,6 +807,29 @@ message EffectAttempt {
   // proposed with an episode token, from that token's helm_episode claim alone
   // and never from a request field; unset for every other attempt.
   EpisodeRef episode = 29;
+  // The signed receipts of the attempt's decisions, oldest first: one for
+  // each ADMITTED, DENIED or ESCALATED version the attempt reached, the
+  // re-admission of an approved escalation included. Output only; set by the
+  // gateway from its ledger, never from a request.
+  repeated ReceiptRef receipts = 30;
+}
+
+// ReceiptRef names one signed decision receipt in the gateway's receipt
+// chain of the attempt's tenant and workspace. The receipt itself (a
+// receipt.v5 envelope whose output_hash is the SHA-256 of a
+// helm.gateway.receipt-binding.v1 document) stays in the gateway's ledger and
+// verifies offline with receipt_verify --key "<kid>=<public key hex>".
+message ReceiptRef {
+  // The chain: helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>,
+  // the receipt's session_id.
+  string chain_id = 1;
+  // The receipt's position in its chain, from 1: its lamport_clock.
+  uint64 seq = 2;
+  // The receipt's chain hash (lowercase hex SHA-256, no prefix): the
+  // prev_hash the next receipt of the chain carries.
+  string receipt_hash = 3;
+  // The id of the key that signed the receipt, its key_id.
+  string kid = 4;
 }
 
 // EpisodeRef names the bounded worker run an attempt belongs to: the

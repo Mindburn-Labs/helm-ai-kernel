@@ -101,7 +101,10 @@ func liftedStop(effectType, target string) string {
 // ApprovalState is a recorded approval or rejection of the attempt.
 type ApprovalState struct {
 	ApproverID string
-	Approved   bool
+	// ApproverActorID is the workload that carried the approval (the decide
+	// token's act.sub); empty for a direct call. A receipt binds it.
+	ApproverActorID string
+	Approved        bool
 	// StepUpVerified: the approval used up a verified step-up proof in this
 	// transaction (§10.1). Re-admission accepts an approval of an effect that
 	// needs step-up only with it.

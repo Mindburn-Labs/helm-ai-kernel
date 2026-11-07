@@ -260,7 +260,7 @@ func TestPostgresStepUpProofIsSingleUse(t *testing.T) {
 	if n := f.replayRows(decide.ID); n != 0 {
 		t.Fatal("a refused replay used up the decide token")
 	}
-	other, err := New(f.runtime, Config{})
+	other, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	_, _, err = other.Approve(ctx, approverB, decide, withProof(approval(second, ""), proof))
 	wantRefusal(t, "a replay on another gateway process", err, CodePermissionDenied, contracts.ReasonStepUpRequired)

@@ -37,7 +37,7 @@ func TestPostgresDeclaredResultSurvivesReplayAndRestart(t *testing.T) {
 	}
 	// A restart without today's adapter still reads the original stored
 	// result; it cannot recompute it from mutable current runtime state.
-	restarted, err := New(f.runtime, Config{})
+	restarted, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	replayed, err := restarted.Get(ctx, human, a.ID)
 	must(t, err)

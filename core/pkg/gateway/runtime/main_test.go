@@ -131,8 +131,12 @@ func freeAddress(t *testing.T) string {
 }
 
 // startServe runs serve until the test ends and waits for its health port.
+// It supplies the receipt signing key serve requires unless values name one.
 func startServe(t *testing.T, args []string, values map[string]string) string {
 	t.Helper()
+	if values[envReceiptSigningKeyFile] == "" {
+		values = with(values, receiptKeyEnv(t))
+	}
 	health := freeAddress(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -373,6 +377,10 @@ func TestCompositionRunsAfterIdentityValidationAndStopsBeforeListening(t *testin
 		t.Fatal("composition ran without identity")
 	}
 	values := with(identityEnv, map[string]string{"HELM_GATEWAY_DATABASE_URL": "postgres://127.0.0.1:1/none?sslmode=disable"})
+	if err := Run(t.Context(), args, env(values), io.Discard, configure); err == nil || !strings.Contains(err.Error(), envReceiptSigningKeyFile) || calls != 0 {
+		t.Fatalf("composition ran without a receipt key: err=%v calls=%d", err, calls)
+	}
+	values = with(values, receiptKeyEnv(t))
 	if err := Run(t.Context(), args, env(values), io.Discard, configure); !errors.Is(err, refusal) || calls != 1 {
 		t.Fatalf("err=%v calls=%d", err, calls)
 	}

@@ -545,6 +545,63 @@ func TestEpisodeIsOutputOnlyExceptTheListFilter(t *testing.T) {
 	}
 }
 
+// An attempt names its signed decision receipts (helm-tracker#276) as
+// EffectAttempt.receipts, field 30, a frozen reference shape a reader stores:
+// chain, sequence, chain hash and signing key id. The gateway sets them from
+// its ledger; no request message carries a receipt reference.
+func TestReceiptRefsAreOutputOnlyAndFrozen(t *testing.T) {
+	attempt := (&EffectAttempt{}).ProtoReflect().Descriptor()
+	receipts := attempt.Fields().ByName("receipts")
+	if receipts == nil || receipts.Number() != 30 || !receipts.IsList() || receipts.Message() == nil ||
+		receipts.Message().FullName() != "helm.gateway.v1.ReceiptRef" {
+		t.Fatalf("EffectAttempt.receipts = %v, want repeated helm.gateway.v1.ReceiptRef field 30", receipts)
+	}
+	ref := receipts.Message()
+	want := map[protoreflect.Name]struct {
+		number protoreflect.FieldNumber
+		kind   protoreflect.Kind
+	}{
+		"chain_id":     {1, protoreflect.StringKind},
+		"seq":          {2, protoreflect.Uint64Kind},
+		"receipt_hash": {3, protoreflect.StringKind},
+		"kid":          {4, protoreflect.StringKind},
+	}
+	if ref.Fields().Len() != len(want) {
+		t.Fatalf("ReceiptRef has %d fields, want %d", ref.Fields().Len(), len(want))
+	}
+	for name, w := range want {
+		if f := ref.Fields().ByName(name); f == nil || f.Number() != w.number || f.Kind() != w.kind || f.IsList() {
+			t.Errorf("ReceiptRef.%s: got %v, want %v field %d", name, f, w.kind, w.number)
+		}
+	}
+	var refersToReceipts func(protoreflect.MessageDescriptor, map[protoreflect.FullName]bool) bool
+	refersToReceipts = func(msg protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool) bool {
+		if msg.FullName() == ref.FullName() {
+			return true
+		}
+		if seen[msg.FullName()] {
+			return false
+		}
+		seen[msg.FullName()] = true
+		for i := 0; i < msg.Fields().Len(); i++ {
+			if m := msg.Fields().Get(i).Message(); m != nil && refersToReceipts(m, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	// Planted: an attempt refers to a receipt, which the walk must see.
+	if !refersToReceipts(attempt, map[protoreflect.FullName]bool{}) {
+		t.Fatal("the walk missed EffectAttempt.receipts")
+	}
+	methods := service(t).Methods()
+	for i := 0; i < methods.Len(); i++ {
+		if in := methods.Get(i).Input(); refersToReceipts(in, map[protoreflect.FullName]bool{}) {
+			t.Errorf("%s carries a receipt reference; receipts come only from the gateway's ledger", in.FullName())
+		}
+	}
+}
+
 // Field numbers held for fields a later slice shapes (typed result payloads).
 // They are not `reserved`, since buf breaking would then reject the field that
 // takes the number, so this test keeps them free. The slice that adds such a

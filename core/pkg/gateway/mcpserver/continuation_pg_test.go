@@ -197,7 +197,7 @@ func TestPostgresSignedContinuationReplaysOnlyCommittedAttempts(t *testing.T) {
 			}
 			// A fresh admission service over the same PostgreSQL state recovers
 			// the same immutable attempt without any process-local handoff map.
-			restarted, err := admission.New(e.runtime, admission.Config{Adapters: []adapters.Adapter{e.adapter}, Credentials: fakeCredentials{}})
+			restarted, err := admission.New(e.runtime, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{e.adapter}, Credentials: fakeCredentials{}})
 			must(t, err)
 			e.svc = restarted
 			e.srv.Close()

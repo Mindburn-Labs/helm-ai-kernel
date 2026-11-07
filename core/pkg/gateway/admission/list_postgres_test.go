@@ -438,7 +438,7 @@ func TestPostgresListAttemptsSettledBeforeCoversATransactionThatCommitsOutOfOrde
 	f := newFixture(t)
 	ctx := context.Background()
 	const bound = 10 * time.Second
-	svc, err := New(f.runtime, Config{MaxTransaction: bound})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: bound})
 	must(t, err)
 
 	// T1 begins first and commits last: a note is admitted, and the admission
@@ -505,7 +505,7 @@ func TestPostgresListAttemptsPinsWatermarkAcrossALateCommitAndLongTraversal(t *t
 	f := newFixture(t)
 	ctx := context.Background()
 	const bound = 5 * time.Second
-	svc, err := New(f.runtime, Config{MaxTransaction: bound})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: bound})
 	must(t, err)
 
 	lock, err := f.owner.Begin()
@@ -572,7 +572,7 @@ func TestPostgresListAttemptsPinsWatermarkAcrossALateCommitAndLongTraversal(t *t
 func TestPostgresATransactionPastMaxTransactionIsAborted(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	svc, err := New(f.runtime, Config{MaxTransaction: 300 * time.Millisecond})
+	svc, err := New(f.runtime, Config{ReceiptSigner: testReceiptSigner, MaxTransaction: 300 * time.Millisecond})
 	must(t, err)
 	a := f.propose(human, note("subject"))
 
@@ -636,7 +636,7 @@ func TestPostgresListAttemptsPageSizeDefaultsAndCaps(t *testing.T) {
 				(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id, requester_actor_id,
 				 commitment_id, effect_type, target, target_digest, argument_digest, state, updated_at)
 			SELECT tenant_id, gen_random_uuid(), workspace_id, 'bulk-' || n, request_digest, requester_principal_id, requester_actor_id,
-				commitment_id, effect_type, target, target_digest, argument_digest, state, $2::timestamptz + n * interval '1 microsecond'
+				commitment_id, effect_type, target, target_digest, argument_digest, 'CANCELLED', $2::timestamptz + n * interval '1 microsecond'
 			FROM authority_effect_attempts, generate_series(1, 205) n
 			WHERE tenant_id = $1 AND idempotency_key = 'seed'`, tenantA, t0)
 		return err

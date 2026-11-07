@@ -167,7 +167,7 @@ func (f *fixture) start(adapter adapters.Adapter, cfg Config, fence ...time.Dura
 	f.t.Helper()
 	r, err := New(f.runtime, cfg)
 	must(f.t, err)
-	acfg := admission.Config{Jobs: r, DispatchTimeout: 30 * time.Second}
+	acfg := admission.Config{ReceiptSigner: testReceiptSigner, Jobs: r, DispatchTimeout: 30 * time.Second}
 	if len(fence) == 1 {
 		acfg.DispatchTimeout, acfg.DispatchGrace = fence[0]/2, fence[0]/2
 	}
@@ -259,7 +259,7 @@ func TestPostgresEscalationExpiresOnItsTimer(t *testing.T) {
 func TestPostgresApprovalAndExpiryMakeOneTransition(t *testing.T) {
 	f := newFixture(t)
 	f.approvalRequired()
-	svc, err := admission.New(f.runtime, admission.Config{})
+	svc, err := admission.New(f.runtime, admission.Config{ReceiptSigner: testReceiptSigner})
 	must(t, err)
 	ctx := context.Background()
 	// Approved first: the timer finds nothing to expire.

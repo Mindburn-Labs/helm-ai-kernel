@@ -10,7 +10,7 @@
 //   - The disclosed entry's manifest record (path, content_hash, size,
 //     content_type).
 //   - A Merkle audit path from that entry's leaf to entries_merkle_root.
-//   - Optionally, an SD-JWT presentation (core/pkg/crypto/sdjwt) carrying the
+//   - Optionally, an SD-JWT presentation carrying the
 //     selectively-disclosed receipt claims. Always-public receipt fields
 //     (verdict, policy_hash, timestamps, signature) are present in every
 //     presentation; sensitive fields are omitted unless the holder discloses
@@ -254,8 +254,8 @@ func VerifyInclusionProofAgainstRoot(proof *InclusionProof, expectedRoot string)
 }
 
 // computeBindingHash hashes the immutable core of a proof (everything except the
-// optional disclosure, which is verified separately by the SD-JWT verifier and
-// MUST NOT change the entry's binding to the pack).
+// optional disclosure, which the relying party verifies separately with its own
+// SD-JWT verifier and which MUST NOT change the entry's binding to the pack).
 func computeBindingHash(proof *InclusionProof) (string, error) {
 	hashable := struct {
 		Version  string        `json:"version"`

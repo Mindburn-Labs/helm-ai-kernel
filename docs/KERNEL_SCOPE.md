@@ -82,7 +82,6 @@ non-TCB supporting infrastructure:
 | `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
 | `executor/`        | Receipt ID derivation and receipt types; the standalone SafeExecutor was removed (no shipped caller) | Library only |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
-| `trust/registry/`  | Event-sourced trust registry                                  | ✅ Active |
 | `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |
 | `receipts/`        | Receipt policy enforcement (fail-closed); not linked into `core/cmd/helm-ai-kernel` | Library only |
 
@@ -94,7 +93,6 @@ non-TCB supporting infrastructure:
 | `manifest/`            | Tool args/output validation (PEP boundary) | ✅ Active |
 | `bridge/`              | KernelBridge choke point                   | ✅ Active |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
-| `replay/`              | Replay engine for verification; not linked into `core/cmd/helm-ai-kernel` | Library only |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
 | `kernel/`              | Freeze, scoped-stop fences, context guard; request rate limiting lives in `api/` (CTL-013) | ✅ Active |
 | `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |

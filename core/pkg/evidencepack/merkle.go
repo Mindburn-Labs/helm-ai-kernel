@@ -1,9 +1,10 @@
+// quantum_posture: classical SHA-256 Merkle hashing only; no post-quantum assurance.
 // merkle.go implements a deterministic Merkle tree over EvidencePack manifest
 // entries, enabling privacy-preserving single-entry inclusion proofs (MIN-512).
 //
 // A verifier can confirm that one manifest entry (e.g. a single receipt) belongs
 // to a pack identified by its entries_merkle_root WITHOUT possessing the other
-// entries. Combined with SD-JWT selective disclosure (core/pkg/crypto/sdjwt),
+// entries. Combined with SD-JWT selective disclosure,
 // this lets an auditor confirm "this DENY happened under policy_hash X at time T"
 // while the rest of the pack's payloads stay sealed.
 //

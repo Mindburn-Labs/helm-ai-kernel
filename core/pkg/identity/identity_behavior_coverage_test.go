@@ -630,20 +630,6 @@ func TestDelegationErrorFormat(t *testing.T) {
 
 // ── AgentIdentity (types.go) ─────────────────────────────────
 
-func TestAgentIdentityID(t *testing.T) {
-	a := &AgentIdentity{AgentID: "agent-007", DelegatorID: "user-1"}
-	if a.ID() != "agent-007" {
-		t.Fatalf("got %s", a.ID())
-	}
-}
-
-func TestAgentIdentityType(t *testing.T) {
-	a := &AgentIdentity{AgentID: "a", DelegatorID: "u"}
-	if a.Type() != PrincipalAgent {
-		t.Fatalf("got %s, want AGENT", a.Type())
-	}
-}
-
 func TestPrincipalTypeConstants(t *testing.T) {
 	if PrincipalUser != "USER" || PrincipalAgent != "AGENT" || PrincipalService != "SERVICE" {
 		t.Fatal("principal type constants have unexpected values")

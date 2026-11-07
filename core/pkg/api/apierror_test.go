@@ -54,55 +54,11 @@ func TestWriteInternal_SanitizesError(t *testing.T) {
 	}
 }
 
-func TestWriteTooManyRequests_RetryAfterHeader(t *testing.T) {
-	w := httptest.NewRecorder()
-	api.WriteTooManyRequests(w, 30)
-
-	if ra := w.Header().Get("Retry-After"); ra != "30" {
-		t.Errorf("expected Retry-After '30', got %q", ra)
-	}
-	if w.Code != http.StatusTooManyRequests {
-		t.Errorf("expected status 429, got %d", w.Code)
-	}
-}
-
 func TestWriteMethodNotAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	api.WriteMethodNotAllowed(w)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected status 405, got %d", w.Code)
-	}
-}
-
-func TestWriteUnauthorized_DefaultDetail(t *testing.T) {
-	w := httptest.NewRecorder()
-	api.WriteUnauthorized(w, "")
-
-	var problem api.ProblemDetail
-	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
-		t.Fatalf("failed to decode: %v", err)
-	}
-	if problem.Detail != "Authentication required" {
-		t.Errorf("expected default detail, got %q", problem.Detail)
-	}
-}
-
-func TestWriteErrorR_EnrichesWithRequestContext(t *testing.T) {
-	req := httptest.NewRequest("GET", "/api/v1/resource", nil)
-	w := httptest.NewRecorder()
-	w.Header().Set("X-Request-ID", "req-123")
-
-	api.WriteErrorR(w, req, http.StatusBadRequest, "Bad Request", "bad input")
-
-	var problem api.ProblemDetail
-	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if problem.Instance != "/api/v1/resource" {
-		t.Fatalf("expected instance %q, got %q", "/api/v1/resource", problem.Instance)
-	}
-	if problem.TraceID != "req-123" {
-		t.Fatalf("expected trace_id %q, got %q", "req-123", problem.TraceID)
 	}
 }

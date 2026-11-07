@@ -92,7 +92,7 @@ func TestOutcomeBindingMatchesItsSchema(t *testing.T) {
 	}
 	model := parsed
 	model.SettledBy = "model_call"
-	model.ModelCall = &receiptverify.GatewayOutcomeModelCall{State: "CONFIRMED", HeldMicros: "900", ConfirmedMicros: "640",
+	model.ModelCall = &receiptverify.GatewayOutcomeModelCall{State: "CONFIRMED", CurrencyCode: "USD", HeldMicros: "900", ConfirmedMicros: "640",
 		BillableMicros: "640", UsageDigest: strings.Repeat("ab", 32)}
 	raw, err := json.Marshal(model)
 	must(t, err)
@@ -101,6 +101,11 @@ func TestOutcomeBindingMatchesItsSchema(t *testing.T) {
 		t.Fatalf("an outcome binding with a model call does not match its schema: %v", err)
 	}
 	// Known bad: the schema refuses what the verifier refuses.
+	instance.(map[string]any)["model_call"].(map[string]any)["currency_code"] = "usd"
+	if err := schema.Validate(instance); err == nil {
+		t.Fatal("the outcome schema accepted a lower-case currency code")
+	}
+	instance.(map[string]any)["model_call"].(map[string]any)["currency_code"] = "USD"
 	instance.(map[string]any)["verdict"] = "ALLOW"
 	if err := schema.Validate(instance); err == nil {
 		t.Fatal("the outcome schema accepted a verdict member")

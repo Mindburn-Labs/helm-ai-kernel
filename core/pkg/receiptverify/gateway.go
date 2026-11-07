@@ -147,9 +147,12 @@ type GatewayOutcomeExposure struct {
 	Amount      string `json:"amount"`
 }
 
-// GatewayOutcomeModelCall is a model call's money row after its settlement.
+// GatewayOutcomeModelCall is a model call's money row after its settlement:
+// micro-units of CurrencyCode (ISO 4217), and the SHA-256 of the RFC 8785
+// form of the usage it stores.
 type GatewayOutcomeModelCall struct {
 	State           string `json:"state"`
+	CurrencyCode    string `json:"currency_code"`
 	HeldMicros      string `json:"held_micros"`
 	EstimatedMicros string `json:"estimated_micros"`
 	ConfirmedMicros string `json:"confirmed_micros"`

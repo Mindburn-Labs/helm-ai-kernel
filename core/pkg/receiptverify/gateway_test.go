@@ -504,7 +504,7 @@ func TestParseGatewayOutcomeBindingIsClosedAndCanonical(t *testing.T) {
 	// A model call's money row is an object in the same closed shape.
 	model := parsed
 	model.SettledBy = "model_call"
-	model.ModelCall = &GatewayOutcomeModelCall{State: "CONFIRMED", HeldMicros: "900", EstimatedMicros: "", ConfirmedMicros: "640",
+	model.ModelCall = &GatewayOutcomeModelCall{State: "CONFIRMED", CurrencyCode: "USD", HeldMicros: "900", EstimatedMicros: "", ConfirmedMicros: "640",
 		BillableMicros: "640", UsageDigest: strings.Repeat("ab", 32)}
 	withModel, err := canonicalize.InteroperableJCS(model)
 	if err != nil {
@@ -534,6 +534,7 @@ func TestParseGatewayOutcomeBindingIsClosedAndCanonical(t *testing.T) {
 		"extra observation":  encode(func(m map[string]any) { m["observation"].(map[string]any)["grant"] = "all" }),
 		"decision version":   encode(func(m map[string]any) { m["binding_version"] = GatewayBindingVersion }),
 		"model call member":  bytes.Replace(withModel, []byte(`"held_micros":"900"`), []byte(`"grant":"all","held_micros":"900"`), 1),
+		"no currency":        bytes.Replace(withModel, []byte(`"currency_code":"USD",`), nil, 1),
 		"not canonical":      append([]byte(" "), good...),
 		"numeric readback":   bytes.Replace(good, []byte(`"readback_absent":false`), []byte(`"readback_absent":0`), 1),
 	} {

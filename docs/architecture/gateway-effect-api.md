@@ -1306,18 +1306,18 @@ signature is produced or claimed.
 | Receipt field | Value |
 |---|---|
 | `receipt_id` | a fresh UUIDv7 |
-| `decision_id` | `<attempt_id>:<version>`, the attempt row's version after the decision |
+| `decision_id` | `<attempt_id>:<version>`, the attempt row's version after the decision or outcome write |
 | `effect_id` | the attempt id |
-| `status` | the stored state: `ADMITTED`, `DENIED` or `ESCALATED` |
-| `verdict` | `ALLOW`, `DENY` or `ESCALATE` |
+| `status` | the stored state: `ADMITTED`, `DENIED` or `ESCALATED`; for an outcome, `OBSERVED`, `RECONCILED` or `SETTLED` |
+| `verdict` | `ALLOW`, `DENY` or `ESCALATE`; empty on an outcome |
 | `reason_code` | the stored reason code |
 | `args_hash` | lowercase hex of the attempt's argument digest: SHA-256 of the exact argument bytes it stored. This is not the hash of JCS-canonical arguments that `contracts.Receipt` describes for other producers. |
 | `output_hash` | lowercase hex SHA-256 of the binding document's exact bytes |
-| `policy_hash` | lowercase hex SHA-256 of the JCS bytes of `{"schema":"helm.gateway.authority-snapshot.v1","versions":[...]}`, the versions of the authority rows the decision locked |
+| `policy_hash` | lowercase hex SHA-256 of the JCS bytes of `{"schema":"helm.gateway.authority-snapshot.v1","versions":[...]}`, the versions of the authority rows the decision locked; for an outcome, the versions its permit was issued under |
 | `session_id` | the chain id, `helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>` |
 | `lamport_clock` | the receipt's sequence number in its chain, from 1 |
 | `prev_hash` | the predecessor's `contracts.ReceiptChainHash`, empty at genesis |
-| `timestamp` | database time of the decision transaction. It is outside the receipt.v5 preimage, but the next receipt's `prev_hash` hashes the whole envelope and so covers it. The same time is signed as the binding's `decided_at`. Order is the signed sequence. |
+| `timestamp` | database time of the decision or outcome transaction. It is outside the receipt.v5 preimage, but the next receipt's `prev_hash` hashes the whole envelope and so covers it. The same time is signed as the binding's `decided_at` (a decision) or `settled_at` (an outcome). Order is the signed sequence. |
 
 The binding document, `helm.gateway.receipt-binding.v1`
 ([schema](../../protocols/json-schemas/gateway/receipt-binding.v1.schema.json)),

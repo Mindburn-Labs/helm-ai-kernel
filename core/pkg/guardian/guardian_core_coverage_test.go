@@ -1062,3 +1062,20 @@ func TestSignDecisionBindsEffectDigestForIntentIssuance(t *testing.T) {
 		t.Fatalf("intent tool = %s", intent.AllowedTool)
 	}
 }
+
+func TestEvaluateDecisionStripsCapabilityTokenFromInputContext(t *testing.T) {
+	guardian := newTestGuardian(t)
+	reqContext := map[string]interface{}{"capability_token": "bearer-secret", "kept": "value"}
+	decision, err := guardian.EvaluateDecision(context.Background(), DecisionRequest{
+		Principal: "agent-1", Action: "read", Resource: "doc-1", Context: reqContext,
+	})
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if _, leaked := decision.InputContext["capability_token"]; leaked {
+		t.Fatalf("capability token leaked into InputContext: %#v", decision.InputContext)
+	}
+	if _, present := reqContext["capability_token"]; present {
+		t.Fatal("capability token still present in the request context")
+	}
+}

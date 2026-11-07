@@ -1160,11 +1160,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	noteIgnoredSharedBind(stderr, "the proxy", proxyBindAddrEnv)
 
-	// The budget gate charges cents, and the proxy only ever sees token counts.
-	// A configured budget therefore denied every tool call with BUDGET_ERROR
-	// before policy was consulted (audit 07-01); refuse it instead.
+	// The proxy only ever sees token counts, never prices, so it cannot enforce
+	// a spend budget (audit 07-01); refuse the flags instead of accepting them.
 	if dailyLimit != 0 || monthlyLimit != 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: --daily-limit and --monthly-limit are not supported by the proxy: it sees token counts, not prices, so a budget would deny every tool call with BUDGET_ERROR")
+		_, _ = fmt.Fprintln(stderr, "Error: --daily-limit and --monthly-limit are not supported by the proxy: it sees token counts, not prices, so it cannot enforce a spend budget")
 		return 2
 	}
 	if helmcrypto.ProductionMode() {

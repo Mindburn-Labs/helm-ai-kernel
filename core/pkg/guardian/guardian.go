@@ -738,6 +738,11 @@ type SessionAction struct {
 // It constructs a DecisionRecord and returns it.
 // When a PDP is configured, policy evaluation is delegated to it and the result
 // is bound into the DecisionRecord for receipt chain verification.
+// contextKeyCapabilityToken is the request-context key a transport may use to
+// carry a capability token. EvaluateDecision strips it before any decision is
+// built.
+const contextKeyCapabilityToken = "capability_token"
+
 func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (decision *contracts.DecisionRecord, err error) {
 	decisionStarted := time.Time{}
 	if g.clock != nil {
@@ -764,6 +769,11 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 	ctx = decisionCtx
 	ctx, span := otel.Tracer("helm.kernel").Start(ctx, "Guardian.EvaluateDecision")
 	defer span.End()
+	// A capability token is a bearer credential: it never enters a
+	// decision's InputContext, on any path.
+	if req.Context != nil {
+		delete(req.Context, contextKeyCapabilityToken)
+	}
 
 	span.SetAttributes(
 		attribute.String("action", req.Action),

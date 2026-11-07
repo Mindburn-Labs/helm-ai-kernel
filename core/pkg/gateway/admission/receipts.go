@@ -1,13 +1,17 @@
 package admission
 
-// quantum_posture: decision receipts are signed with classical Ed25519 under
-// the receipt.v5 preimage and chained with SHA-256 (contracts.ReceiptChainHash).
-// A signer that declares any other profile or algorithm is refused; no hybrid
-// or post-quantum protection is provided or claimed.
+// quantum_posture: decision and outcome receipts are signed with classical
+// Ed25519 under the receipt.v5 preimage and chained with SHA-256
+// (contracts.ReceiptChainHash). A signer that declares any other profile or
+// algorithm is refused; no hybrid or post-quantum protection is provided or
+// claimed.
 //
 // Every decision admission records (ADMITTED, DENIED, ESCALATED, including the
 // re-admission of an approved escalation) appends one signed receipt to its
-// workspace's chain in the decision's own transaction (helm-tracker#276):
+// workspace's chain in the decision's own transaction (helm-tracker#276). Every
+// outcome of an admitted effect (OBSERVED, RECONCILED, SETTLED) appends one to
+// the same chain in the transaction that records it, over its own binding
+// document (outcomes.go). For a decision receipt:
 //
 //   - the receipt is a contracts.Receipt signed under receipt.v5 (one signing
 //     envelope, R4); the gateway's own facts are committed through its
@@ -21,7 +25,8 @@ package admission
 //     until they commit; the exact envelope and binding bytes are stored with
 //     the digest the next receipt links to. Any failure rolls the decision
 //     back, and migration 15's deferred fence refuses at commit any decision
-//     written without its receipt (an older binary's, during an upgrade);
+//     written without its receipt (an older binary's, during an upgrade;
+//     migration 16 adds the same fence for outcomes);
 //   - args_hash is the hex SHA-256 of the exact argument bytes the attempt
 //     stored (its argument_digest), not of a JCS re-encoding of them;
 //   - the receipt's timestamp is outside the receipt.v5 preimage, but the next
@@ -139,6 +144,23 @@ type storedDecision struct {
 	StepUpIssuer, StepUpJTI          string
 	AuthorityVersions                []AuthorityVersion
 	DecidedAt                        time.Time
+}
+
+// receiptSubject is a stored attempt version a receipt describes: a decision
+// (storedDecision, receipt-binding.v1) or an outcome (storedOutcome,
+// outcome-binding.v1). row names the attempt version; build is the pure
+// builder of its unsigned receipt and exact binding bytes.
+type receiptSubject interface {
+	row() (tenantID, workspaceID, attemptID string, version int64, state string)
+	build(receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error)
+}
+
+func (d storedDecision) row() (string, string, string, int64, string) {
+	return d.TenantID, d.WorkspaceID, d.AttemptID, d.Version, d.State
+}
+
+func (d storedDecision) build(receiptID string, seq uint64, prevDigest string) (*contracts.Receipt, []byte, error) {
+	return buildDecisionReceipt(d, receiptID, seq, prevDigest)
 }
 
 // receiptBinding is helm.gateway.receipt-binding.v1. Every member is always
@@ -369,27 +391,30 @@ func sealReceipt(signer ReceiptSigner, r *contracts.Receipt) ([]byte, string, er
 	return envelope, digest, nil
 }
 
-// appendReceipt signs the receipt of a decision tx has just written and
-// appends it to the workspace's chain. The chain row is the last row lock the
-// transaction takes on a pre-existing row: every authority, counter and
-// attempt lock is already held, and what may follow in the same transaction
-// (an approval record, a lift's token replay row) only inserts rows of its
-// own. So the decisions of one workspace serialize on the chain row until
-// they commit, without a lock-order cycle. The head moves by compare-and-set;
-// any error rolls the decision back with it.
-func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, d storedDecision) (ReceiptRef, error) {
+// appendReceipt signs the receipt of a decision or an outcome tx has just
+// written and appends it to the workspace's chain. The chain row is the last
+// row lock the transaction takes on a pre-existing row: every authority,
+// counter, exposure and attempt lock is already held, and what may follow in
+// the same transaction (an approval record, a lift's token replay row, a
+// model call's SETTLED write to the attempt row it holds and that write's own
+// receipt) locks nothing new but rows of its own. So the decisions and
+// outcomes of one workspace serialize on the chain row until they commit,
+// without a lock-order cycle. The head moves by compare-and-set; any error
+// rolls the decision or the outcome back with it.
+func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, subject receiptSubject) (ReceiptRef, error) {
 	if signer == nil {
-		return ReceiptRef{}, errors.New("no receipt signer: a decision is never recorded without its receipt")
+		return ReceiptRef{}, errors.New("no receipt signer: a decision or an outcome is never recorded without its receipt")
 	}
-	chain := receiptChainID(d.TenantID, d.WorkspaceID)
+	tenantID, workspaceID, attemptID, version, state := subject.row()
+	chain := receiptChainID(tenantID, workspaceID)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO authority_receipt_chains (tenant_id, chain_id, format)
-		VALUES ($1, $2, $3) ON CONFLICT (tenant_id, chain_id) DO NOTHING`, d.TenantID, chain, ReceiptFormat); err != nil {
+		VALUES ($1, $2, $3) ON CONFLICT (tenant_id, chain_id) DO NOTHING`, tenantID, chain, ReceiptFormat); err != nil {
 		return ReceiptRef{}, fmt.Errorf("receipt chain: %w", err)
 	}
 	var seq int64
 	var head, format string
 	if err := tx.QueryRowContext(ctx, `SELECT seq, head_digest, format FROM authority_receipt_chains
-		WHERE tenant_id = $1 AND chain_id = $2 FOR UPDATE`, d.TenantID, chain).Scan(&seq, &head, &format); err != nil {
+		WHERE tenant_id = $1 AND chain_id = $2 FOR UPDATE`, tenantID, chain).Scan(&seq, &head, &format); err != nil {
 		return ReceiptRef{}, fmt.Errorf("receipt chain head: %w", err)
 	}
 	if format != ReceiptFormat {
@@ -403,7 +428,7 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, d stor
 		return ReceiptRef{}, err
 	}
 	next := uint64(seq) + 1
-	receipt, binding, err := buildDecisionReceipt(d, id.String(), next, head)
+	receipt, binding, err := subject.build(id.String(), next, head)
 	if err != nil {
 		return ReceiptRef{}, err
 	}
@@ -415,13 +440,13 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, d stor
 			(tenant_id, chain_id, seq, receipt_id, format, prev_digest, digest, attempt_id, attempt_version,
 			 workspace_id, state, key_id, envelope, binding)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		d.TenantID, chain, seq+1, receipt.ReceiptID, ReceiptFormat, head, digest, d.AttemptID, d.Version,
-		d.WorkspaceID, d.State, receipt.KeyID, envelope, binding); err != nil {
+		tenantID, chain, seq+1, receipt.ReceiptID, ReceiptFormat, head, digest, attemptID, version,
+		workspaceID, state, receipt.KeyID, envelope, binding); err != nil {
 		return ReceiptRef{}, fmt.Errorf("append receipt: %w", err)
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE authority_receipt_chains SET seq = $3, head_digest = $4, updated_at = now()
 		WHERE tenant_id = $1 AND chain_id = $2 AND seq = $5 AND head_digest = $6`,
-		d.TenantID, chain, seq+1, digest, seq, head)
+		tenantID, chain, seq+1, digest, seq, head)
 	if err != nil {
 		return ReceiptRef{}, fmt.Errorf("advance receipt chain: %w", err)
 	}
@@ -429,7 +454,7 @@ func appendReceipt(ctx context.Context, tx *sql.Tx, signer ReceiptSigner, d stor
 		return ReceiptRef{}, fmt.Errorf("receipt chain %q moved while it was locked (%d rows, %v)", chain, n, err)
 	}
 	return ReceiptRef{ReceiptID: receipt.ReceiptID, ChainID: chain, Seq: next, Digest: digest, KeyID: receipt.KeyID,
-		Format: ReceiptFormat, State: d.State, AttemptVersion: d.Version}, nil
+		Format: ReceiptFormat, State: state, AttemptVersion: version}, nil
 }
 
 // loadReceiptRefs reads the receipts of an attempt, oldest first.

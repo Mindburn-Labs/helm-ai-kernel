@@ -156,7 +156,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-056 | Gateway escalation timers and reconciliation jobs | enforced | — |
 | CTL-057 | Gateway worker endpoint and episode isolation | enforced | — |
 | CTL-058 | Kernel bounded retained work reassignment | enforced | — |
-| CTL-059 | Gateway signed decision receipts | enforced | — |
+| CTL-059 | Gateway signed decision and outcome receipts | enforced | — |
 
 ---
 

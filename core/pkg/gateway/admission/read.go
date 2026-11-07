@@ -50,8 +50,10 @@ type Attempt struct {
 	// proposing token's verified helm_episode claim; nil for any other attempt.
 	// Its WorkItemID is the attempt's CaseID.
 	Episode *Episode
-	// Receipts are the signed receipts of the attempt's decisions, oldest
-	// first: one for each ADMITTED, DENIED or ESCALATED version it reached.
+	// Receipts are the signed receipts of the attempt's decisions and
+	// outcomes, oldest first: one for each ADMITTED, DENIED or ESCALATED
+	// version it reached, then one for each OBSERVED, RECONCILED or SETTLED
+	// version.
 	Receipts  []ReceiptRef
 	Version   int64
 	CreatedAt time.Time

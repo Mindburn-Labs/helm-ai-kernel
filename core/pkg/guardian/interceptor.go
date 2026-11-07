@@ -62,9 +62,8 @@ type EvaluationContext struct {
 	Decisions      []*contracts.DecisionRecord
 
 	// Transient state populated by interceptors
-	Intervention        *contracts.InterventionMetadata
-	ThreatScanResult    *contracts.ThreatScanResult
-	SessionRiskSnapshot *SessionRiskSnapshot
+	Intervention     *contracts.InterventionMetadata
+	ThreatScanResult *contracts.ThreatScanResult
 
 	// PDP metadata
 	PDPBackend      string
@@ -229,11 +228,6 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 			if err := t.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign temporal-deny decision: %w", err)
 			}
-
-			if t.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = t.g.auditLog.Append("guardian", "DECISION_MADE", decision.ID, string(decisionBytes))
-			}
 			return decision, nil
 		} else if resp.Level == ResponseThrottle {
 			evalCtx.Intervention = &contracts.InterventionMetadata{
@@ -298,22 +292,6 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 				&state,
 			)
 		}
-	}
-
-	// Gate 0.5: Per-agent kill switch — if agent is killed, deny immediately
-	if f.g.agentKillSwitch != nil && f.g.agentKillSwitch.IsKilled(evalCtx.Request.Principal) {
-		now := f.g.clock.Now()
-		decision := &contracts.DecisionRecord{
-			ID:         newDecisionID(),
-			Timestamp:  now,
-			Verdict:    string(contracts.VerdictDeny),
-			Reason:     string(contracts.ReasonAgentKilled),
-			ReasonCode: string(contracts.ReasonAgentKilled),
-		}
-		if err := f.g.signDecisionWithContext(decision, evalCtx); err != nil {
-			return nil, fmt.Errorf("failed to sign agent-killed decision: %w", err)
-		}
-		return decision, nil
 	}
 
 	// Gate 1: Context mismatch guard — deny if environment fingerprint changed
@@ -515,10 +493,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign threat-deny decision: %w", err)
 				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
-				}
 				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", selectedScan.FindingCount))
 				return decision, nil
 			}
@@ -555,10 +529,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			}
 			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign semantic-escalation decision: %w", err)
-			}
-			if p.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = p.g.auditLog.Append("guardian", "SEMANTIC_THREAT_ESCALATE", decision.ID, string(decisionBytes))
 			}
 			return decision, nil
 		}
@@ -627,10 +597,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign delegation-principal-mismatch decision: %w", err)
 				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "DELEGATION_PRINCIPAL_MISMATCH", decision.ID, string(decisionBytes))
-				}
 				return decision, nil
 			}
 
@@ -644,10 +610,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				}
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 					return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", err)
-				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
 				}
 				return decision, nil
 			}
@@ -663,10 +625,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 					}
 					if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 						return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", err)
-					}
-					if p.g.auditLog != nil {
-						decisionBytes, _ := canonicalize.JCS(decision)
-						_, _ = p.g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
 					}
 					return decision, nil
 				}
@@ -726,11 +684,9 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				reasonCode = string(contracts.ReasonPDPDeny)
 			}
 			verdict := contracts.VerdictDeny
-			auditEvent := "PDP_DENY"
 			decisionKind := "deny"
 			if reasonCode == string(contracts.ReasonApprovalRequired) {
 				verdict = contracts.VerdictEscalate
-				auditEvent = "PDP_ESCALATE"
 				decisionKind = "escalation"
 			}
 			decision := &contracts.DecisionRecord{
@@ -747,10 +703,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			}
 			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
 				return nil, fmt.Errorf("failed to sign PDP-%s decision: %w", decisionKind, err)
-			}
-			if p.g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = p.g.auditLog.Append("guardian", auditEvent, decision.ID, string(decisionBytes))
 			}
 			return decision, nil
 		}

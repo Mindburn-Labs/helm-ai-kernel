@@ -1153,13 +1153,13 @@
             "autoSeed": {
               "type": "boolean",
               "default": false,
-              "description": "Create <gateway name>-receipts with a random seed, kept across upgrades through Helm lookup and across uninstalls. Off in the release chart; the charts-dev development chart sets it."
+              "description": "Create <gateway name>-receipts holding a random 32-byte seed, base64-encoded, kept across upgrades through Helm lookup and across uninstalls. Off in the release chart; the charts-dev development chart sets it."
             },
             "keyId": {
               "type": "string",
               "default": "",
               "pattern": "^([A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?$",
-              "description": "HELM_GATEWAY_RECEIPT_KEY_ID, the key_id every receipt carries. Empty derives helm-gateway:<namespace>:<gateway name>."
+              "description": "HELM_GATEWAY_RECEIPT_KEY_ID, the key_id every receipt carries, used verbatim. Empty derives helm-gateway:<namespace>:<gateway name>:<first 16 hex of SHA-256 of the public key> in helm-gateway (HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX), so a new seed gets a new key id."
             }
           }
         },

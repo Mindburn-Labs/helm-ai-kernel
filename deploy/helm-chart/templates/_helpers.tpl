@@ -215,11 +215,13 @@ existingSecret, else the chart's autoSeed Secret.
 {{- end }}
 
 {{/*
-The key id every receipt carries: gateway.receipts.keyId, else
-helm-gateway:<namespace>:<gateway name>.
+The key id every receipt carries: gateway.receipts.keyId verbatim
+(HELM_GATEWAY_RECEIPT_KEY_ID), else this prefix, to which helm-gateway appends
+":" and the first 16 hex of SHA-256 of the public key
+(HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX), so a new seed gets a new key id.
 */}}
-{{- define "helm-ai-kernel.gatewayReceiptKeyID" -}}
-{{- default (printf "helm-gateway:%s:%s" .Release.Namespace (include "helm-ai-kernel.gatewayName" .)) .Values.gateway.receipts.keyId | trunc 128 -}}
+{{- define "helm-ai-kernel.gatewayReceiptKeyIDPrefix" -}}
+{{- printf "helm-gateway:%s:%s" .Release.Namespace (include "helm-ai-kernel.gatewayName" .) | trunc 111 -}}
 {{- end }}
 
 {{/*
@@ -311,7 +313,7 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- if and $g.receipts.existingSecret (not $g.receipts.existingSecretKey) -}}
 {{- fail "gateway.receipts.existingSecret requires gateway.receipts.existingSecretKey, the key of the seed in that Secret" -}}
 {{- end -}}
-{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" (include "helm-ai-kernel.gatewayReceiptKeyID" .)) -}}
+{{- if and $g.receipts.keyId (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" $g.receipts.keyId)) -}}
 {{- fail "gateway.receipts.keyId must be 1 to 128 characters of letters, digits and . _ : / - starting with a letter or digit" -}}
 {{- end -}}
 {{- if and $g.database.bootstrap.enabled $g.database.migrate.existingSecret -}}

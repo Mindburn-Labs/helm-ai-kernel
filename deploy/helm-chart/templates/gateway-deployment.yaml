@@ -98,8 +98,14 @@ spec:
             # start without this key (helm-tracker#276).
             - name: HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE
               value: "/var/run/secrets/helm-gateway-receipts/seed"
+            {{- if $g.receipts.keyId }}
             - name: HELM_GATEWAY_RECEIPT_KEY_ID
-              value: {{ include "helm-ai-kernel.gatewayReceiptKeyID" . | quote }}
+              value: {{ $g.receipts.keyId | quote }}
+            {{- else }}
+            # The key id is this prefix plus the key's own fingerprint.
+            - name: HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX
+              value: {{ include "helm-ai-kernel.gatewayReceiptKeyIDPrefix" . | quote }}
+            {{- end }}
             {{- with $g.controlPlaneIdentity }}
             - name: HELM_CP_IDENTITY_JWKS_URL
               value: {{ .jwksURL | quote }}

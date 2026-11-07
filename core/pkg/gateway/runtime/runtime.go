@@ -19,10 +19,11 @@
 //
 // Every decision serve records is signed (helm-tracker#276): serve refuses to
 // start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE, a file holding a
-// 32-byte Ed25519 seed (hex or base64), and HELM_GATEWAY_RECEIPT_KEY_ID, the
-// key id the receipts carry. The chart mounts the seed into the gateway Pod
-// only (R8); `helm-gateway receipt-key` prints the public half a verifier
-// trusts.
+// 32-byte Ed25519 seed (hex or base64), and the key id the receipts carry:
+// HELM_GATEWAY_RECEIPT_KEY_ID verbatim, or HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX
+// with a fingerprint of the public key appended. The chart mounts the seed
+// into the gateway Pod only (R8); `helm-gateway receipt-key` prints the
+// public half a verifier trusts.
 //
 // Dispatch and Observe act on GitHub through the GitHub App whose files the
 // chart mounts into the gateway Pod only (R8): HELM_GATEWAY_GITHUB_APP_ID_FILE,

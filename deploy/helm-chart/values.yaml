@@ -423,8 +423,10 @@ gateway:
   # to start without its receipt signing key: a 32-byte Ed25519 seed, hex or
   # standard base64, mounted into the gateway Pod only (R8). Set one source:
   #   existingSecret  a Secret you manage, the seed under existingSecretKey;
-  #   autoSeed        the chart creates <gateway name>-receipts with a random
-  #                   seed and keeps it across upgrades (Helm `lookup`) and
+  #   autoSeed        the chart creates <gateway name>-receipts holding a
+  #                   random 32-byte seed, base64-encoded (the file content is
+  #                   the base64 text), and keeps it across upgrades (Helm
+  #                   `lookup`) and
   #                   uninstalls (helm.sh/resource-policy: keep). It needs a
   #                   Helm install or upgrade against the cluster: a pipeline
   #                   that renders with `helm template` mints a new key on
@@ -434,8 +436,10 @@ gateway:
   # from main (charts-dev) sets it true.
   # keyId is the key_id every receipt carries and a verifier names the key by
   # (receipt_verify --key "<key_id>=<hex>"). Empty derives
-  # helm-gateway:<namespace>:<gateway name>. `helm-gateway receipt-key` in the
-  # gateway Pod prints "<key_id>=<public key hex>"; the seed never leaves it.
+  # helm-gateway:<namespace>:<gateway name>:<first 16 hex of SHA-256 of the
+  # public key>, so a new seed always gets a new key id; set keyId only when
+  # you rotate ids yourself. `helm-gateway receipt-key` in the gateway Pod
+  # prints "<key_id>=<public key hex>"; the seed never leaves it.
   receipts:
     existingSecret: ""
     existingSecretKey: "seed"

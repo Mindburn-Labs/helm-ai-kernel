@@ -7,6 +7,7 @@ package runtime
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -26,6 +27,11 @@ const (
 	// envReceiptKeyID is the public label every receipt carries as key_id and
 	// a verifier names the key by: receipt_verify --key "<key_id>=<hex>".
 	envReceiptKeyID = "HELM_GATEWAY_RECEIPT_KEY_ID"
+	// envReceiptKeyIDPrefix, set instead of envReceiptKeyID, derives the key
+	// id from the key: "<prefix>:<first 16 hex of SHA-256(public key)>", so a
+	// new seed is never published under the old key's id. The chart's
+	// default key id uses it.
+	envReceiptKeyIDPrefix = "HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX"
 	// maxReceiptKeyFile bounds the read: a seed is at most 64 hex characters
 	// and a line ending.
 	maxReceiptKeyFile = 1024
@@ -37,9 +43,10 @@ const (
 func receiptSignerFromEnv(getenv func(string) string) (*crypto.Ed25519Signer, error) {
 	path := strings.TrimSpace(getenv(envReceiptSigningKeyFile))
 	keyID := strings.TrimSpace(getenv(envReceiptKeyID))
-	if path == "" || keyID == "" {
-		return nil, fmt.Errorf("%s and %s are required: every gateway decision is recorded with a signed receipt",
-			envReceiptSigningKeyFile, envReceiptKeyID)
+	prefix := strings.TrimSpace(getenv(envReceiptKeyIDPrefix))
+	if path == "" || (keyID == "") == (prefix == "") {
+		return nil, fmt.Errorf("%s and exactly one of %s or %s are required: every gateway decision is recorded with a signed receipt",
+			envReceiptSigningKeyFile, envReceiptKeyID, envReceiptKeyIDPrefix)
 	}
 	f, err := os.Open(path) // #nosec G304 -- operator-supplied Secret mount path
 	if err != nil {
@@ -58,12 +65,20 @@ func receiptSignerFromEnv(getenv func(string) string) (*crypto.Ed25519Signer, er
 		return nil, fmt.Errorf("%s must hold a 32-byte Ed25519 seed, hex or standard base64; a passphrase or a private key in another form is refused",
 			envReceiptSigningKeyFile)
 	}
+	if bytes.Equal(seed, make([]byte, ed25519.SeedSize)) {
+		return nil, fmt.Errorf("%s holds an all-zero seed, which is not a secret", envReceiptSigningKeyFile)
+	}
+	if prefix != "" {
+		public := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+		fingerprint := sha256.Sum256(public)
+		keyID = prefix + ":" + hex.EncodeToString(fingerprint[:8])
+	}
 	signer, err := crypto.NewEd25519SignerFromSeed(seed, keyID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", envReceiptSigningKeyFile, err)
 	}
 	if err := admission.CheckReceiptSigner(signer); err != nil {
-		return nil, fmt.Errorf("%s: %w", envReceiptKeyID, err)
+		return nil, fmt.Errorf("receipt key id: %w", err)
 	}
 	return signer, nil
 }
@@ -85,7 +100,7 @@ func decodeReceiptSeed(text string) []byte {
 // receipt_verify --key takes. The seed is never printed.
 func runReceiptKey(args []string, getenv func(string) string, stdout io.Writer) error {
 	if len(args) != 0 {
-		return fmt.Errorf("usage: helm-gateway receipt-key (reads %s and %s)", envReceiptSigningKeyFile, envReceiptKeyID)
+		return fmt.Errorf("usage: helm-gateway receipt-key (reads %s and %s or %s)", envReceiptSigningKeyFile, envReceiptKeyID, envReceiptKeyIDPrefix)
 	}
 	signer, err := receiptSignerFromEnv(getenv)
 	if err != nil {

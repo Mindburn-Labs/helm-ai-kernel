@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"io"
@@ -60,6 +61,11 @@ func TestServeRefusesToStartWithoutAUsableReceiptKey(t *testing.T) {
 		"an empty file":        {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, ""), envReceiptKeyID: testReceiptKeyID}, "32-byte Ed25519 seed"},
 		"a key id with =":      {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, good), envReceiptKeyID: "a=b"}, "key id"},
 		"a key id with spaces": {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, good), envReceiptKeyID: "gateway key"}, "key id"},
+		"an all-zero seed": {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, strings.Repeat("00", 32)), envReceiptKeyID: testReceiptKeyID},
+			"all-zero seed"},
+		"a key id and a prefix": {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, good), envReceiptKeyID: testReceiptKeyID,
+			envReceiptKeyIDPrefix: "helm-gateway:ns:gw"}, envReceiptKeyIDPrefix},
+		"a prefix with =": {map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, good), envReceiptKeyIDPrefix: "a=b"}, "key id"},
 	} {
 		err := Run(context.Background(), args, env(with(base, test.env)), io.Discard)
 		if err == nil || !strings.Contains(err.Error(), test.want) {
@@ -94,6 +100,24 @@ func TestReceiptKeyAcceptsHexAndBase64SeedsAndPrintsOnlyThePublicHalf(t *testing
 		if strings.Contains(out.String(), hex.EncodeToString(testReceiptSeed)) || strings.Contains(out.String(), base64.StdEncoding.EncodeToString(testReceiptSeed)) {
 			t.Fatalf("%s: receipt-key printed the seed", name)
 		}
+	}
+	// The chart's default: the key id ends in the key's own fingerprint, so a
+	// new seed is never published under the old key's id.
+	fingerprint := sha256.Sum256(ed25519.NewKeyFromSeed(testReceiptSeed).Public().(ed25519.PublicKey))
+	var derived bytes.Buffer
+	prefixed := map[string]string{envReceiptSigningKeyFile: writeKeyFile(t, hex.EncodeToString(testReceiptSeed)), envReceiptKeyIDPrefix: "helm-gateway:ns:gw"}
+	if err := runReceiptKey(nil, env(prefixed), &derived); err != nil {
+		t.Fatal(err)
+	}
+	wantID := "helm-gateway:ns:gw:" + hex.EncodeToString(fingerprint[:8])
+	if derived.String() != wantID+"="+want+"\n" {
+		t.Fatalf("a derived key id printed %q, want %s=%s", derived.String(), wantID, want)
+	}
+	other := bytes.Repeat([]byte{0x11}, ed25519.SeedSize)
+	prefixed[envReceiptSigningKeyFile] = writeKeyFile(t, hex.EncodeToString(other))
+	signer, err := receiptSignerFromEnv(env(prefixed))
+	if err != nil || signer.GetKeyID() == wantID || !strings.HasPrefix(signer.GetKeyID(), "helm-gateway:ns:gw:") {
+		t.Fatalf("another seed under the same prefix: %v, %v", signer, err)
 	}
 	if err := runReceiptKey([]string{"--seed"}, env(receiptKeyEnv(t)), io.Discard); err == nil {
 		t.Fatal("receipt-key accepted an argument")

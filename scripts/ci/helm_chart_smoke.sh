@@ -1127,8 +1127,14 @@ fi
 # Secret of its own.
 assert_contains "$gateway_rendered" "name: HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE"
 assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-receipts/seed"'
-assert_contains "$gateway_rendered" "name: HELM_GATEWAY_RECEIPT_KEY_ID"
+# The default key id is a prefix; helm-gateway appends the key's fingerprint,
+# so a new seed gets a new key id.
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX"
 assert_contains "$gateway_rendered" "value: \"helm-gateway:${NAMESPACE}:${GATEWAY_NAME}\""
+if grep -qE '^ *- name: HELM_GATEWAY_RECEIPT_KEY_ID$' "$gateway_rendered"; then
+    echo "::error::the default receipt key id is set verbatim instead of derived from the key"
+    exit 1
+fi
 assert_contains "$gateway_rendered" 'secretName: "gw-receipts"'
 assert_not_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml"
 gateway_receipts_docs="$(docs_containing "$gateway_rendered" "gw-receipts")"
@@ -1141,7 +1147,12 @@ helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARG
     --set gateway.receipts.existingSecretKey=ed25519-seed --set gateway.receipts.keyId=gateway-receipts-2 \
     --set gateway.receipts.autoSeed=true >"$gateway_receipts_key_rendered"
 assert_contains "$gateway_receipts_key_rendered" 'key: "ed25519-seed"'
+if ! grep -qE '^ *- name: HELM_GATEWAY_RECEIPT_KEY_ID$' "$gateway_receipts_key_rendered"; then
+    echo "::error::gateway.receipts.keyId is not set verbatim as HELM_GATEWAY_RECEIPT_KEY_ID"
+    exit 1
+fi
 assert_contains "$gateway_receipts_key_rendered" 'value: "gateway-receipts-2"'
+assert_not_contains "$gateway_receipts_key_rendered" "HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX"
 # existingSecret wins over autoSeed: no generated Secret.
 assert_not_contains "$gateway_receipts_key_rendered" "# Source: helm-ai-kernel/templates/gateway-receipts-secret.yaml"
 # autoSeed: the chart creates the seed Secret once, kept across upgrades

@@ -1231,50 +1231,50 @@ removal_proofs:
     replace: "receiptverify.Options{RequireGatewayBindings: *require && false}"
     tests:
       - "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/adapters/sandbox/sandbox.go
-    find: "\tcase !o.hasScope || info.Labels[connsandbox.LabelTenant] != o.tenant:\n"
+    find: "\tcase !o.hasScope || info.Labels[actuators.LabelTenant] != o.tenant:\n"
     replace: "\tcase !o.hasScope:\n"
     tests:
       - "core/pkg/gateway/adapters/sandbox.TestATenantReachesOnlyItsOwnSandboxes"
       - "core/pkg/gateway/sandboxproviders.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/adapters/sandbox/sandbox.go
     find: "\tif r := adapters.CheckPermitDigest(effect.Arguments, permitArgumentDigest); r != nil {\n\t\treturn notSent(r)\n\t}\n"
     replace: "\t_ = permitArgumentDigest\n"
     tests:
       - "core/pkg/gateway/adapters/sandbox.TestDispatchComparesTheArgumentDigestBeforeAnyProviderCall"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/adapters/sandbox/sandbox.go
     find: "\tif backend.NeedsKey {\n\t\tif creds == nil {\n"
     replace: "\tif true {\n\t\tif creds == nil {\n"
     tests:
       - "core/pkg/gateway/adapters/sandbox.TestAKeylessProviderIsNeverAskedForACredential"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/adapters/sandbox/exec.go
     find: "[ -e \"$d/started\" ] && exit 0\nmkdir -p"
     replace: "mkdir -p"
     tests:
       - "core/pkg/gateway/adapters/sandbox.TestExecDoesNotStartTwiceForOneAttempt"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/adapters/sandbox/ops.go
     find: "\tcase len(found) == 1:\n\t\treturn sent("
     replace: "\tcase false:\n\t\treturn sent("
     tests:
       - "core/pkg/gateway/adapters/sandbox.TestCreateDispatchesOnceLabelsTheSandboxAndReadsItBack"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/custody/sandboxkeys.go
     find: "\tif effectargs.IsSandboxEffect(effect.EffectType) {\n\t\tif r.Sandbox == nil {\n"
     replace: "\tif false {\n\t\tif r.Sandbox == nil {\n"
     tests:
       - "core/pkg/gateway/custody.TestRouteSendsSandboxEffectsToTheSandboxCustodyAndTheRestAway"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/effectargs/sandbox.go
     find: "\tif !known {\n"
     replace: "\tif false {\n"
     tests:
       - "core/pkg/gateway/effectargs.TestSandboxTargetsComeOnlyFromTheTarget"
-  - control: CTL-061
+  - control: CTL-063
     file: core/pkg/gateway/runtime/sandbox.go
     find: "\tc.Credentials = custody.Route{Sandbox: keys, Rest: c.Credentials}\n"
     replace: "\t_ = keys\n"
@@ -4521,7 +4521,7 @@ controls:
         - "core/pkg/receiptverify.TestGatewayBindingCheckIsNotApplicableWithoutBindings"
         - "core/pkg/receiptverify.TestGatewayChainIDFramesTenantAndWorkspace"
 
-  - id: CTL-061
+  - id: CTL-063
     title: "Gateway sandbox effects stay in their tenant and hold no provider key"
     owner: Mindburn Labs core team (kernel)
     claim: >-

@@ -4944,7 +4944,7 @@
       ]
     },
     {
-      "id": "CTL-061",
+      "id": "CTL-063",
       "title": "Gateway sandbox effects stay in their tenant and hold no provider key",
       "owner": "Mindburn Labs core team (kernel)",
       "claim": "When an operator configures a sandbox provider, helm-gateway performs sandbox.create, sandbox.exec and sandbox.terminate through it (helm-tracker#266, P17): Docker, E2B, Daytona, OpenSandbox and Claude Managed Agents, behind one adapter. The provider and the sandbox come only from the effect's target (sandbox/{provider}[/{sandbox_id}], checked at Propose by effectargs.SandboxTarget and again by the adapter), never from its arguments, whose closed schemas admission checks and which carry no environment and no secret. The adapter compares the permit's argument digest with the bytes it acts on before any provider call. A sandbox it creates carries a label with a digest of the creating tenant and one with the attempt; exec and terminate act only on a sandbox that carries the calling tenant's label, and a sandbox of another tenant, or one the gateway did not create, is refused as one that does not exist (NOT_SENT, PRECONDITION_FAILED), so a provider account shared by tenants does not share its sandboxes. Create looks for a sandbox carrying its attempt's label before it writes and never creates a second; exec records its start, output and exit status in the sandbox and does not start twice for one attempt. The provider key is asked for from the gateway's custody (custody.SandboxKeys, the key file the operator mounted into the gateway Pod only) on every operation, handed to the provider client for that operation, and appears in no request body, URL, command, label, stored attempt, observation or receipt; a keyless provider (Docker) is never asked. A dispatch is NOT_SENT only when the effect certainly did not happen (a refusal before any write, or a provider 4xx other than 408); a transport failure, a 5xx, a timeout, an answer too large or an answer of the wrong shape after a write is INDEFINITE (ERR_CONNECTOR_CONTRACT_DRIFT or PROVIDER_RESPONSE_TOO_LARGE for the last two), and Observe reconciles it by reading the provider back: the sandbox inventory by label for create and terminate, and the record the command left in the sandbox for exec. An established result is a schema-checked artifact (admission.typedResult). Every provider answer is read through a size limit and no redirect is followed, so the key is never replayed to another host. Claude Managed Agents commands run only on the customer's worker (a RemoteRunner over HTTPS with the custody's bearer token), never on the gateway's own host, and its egress changes are refused. Docker sandboxes are labelled containers from an image pinned by digest, with no environment, no mounts, all capabilities dropped and a read-only root. With no provider configured the gateway has no sandbox effect type.",
@@ -4953,6 +4953,10 @@
       "entry_points": [
         {
           "symbol": "core/pkg/gateway/runtime.sandboxFromEnv",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/sandboxproviders.Build",
           "reachability": "reachable"
         },
         {
@@ -4990,7 +4994,7 @@
       ],
       "gates": [],
       "config": [
-        "HELM_GATEWAY_SANDBOX_CONFIG_FILE: a JSON file (core/pkg/gateway/adapters/sandbox.Config) that lists the enabled providers and, for each provider that takes a key, the path of its key file (the chart mounts the Secret into the gateway Pod only). Unset, no sandbox effect type exists. A field that does not belong to a provider, an unknown field and a provider listed twice stop the gateway.",
+        "HELM_GATEWAY_SANDBOX_CONFIG_FILE: a JSON file (core/pkg/gateway/adapters/sandbox.Config) that lists the enabled providers and, for each provider that takes a key, the path of its key file (an operator mounts the Secret into the gateway Pod only; the Helm chart has no values for it yet). Unset, no sandbox effect type exists. A field that does not belong to a provider, an unknown field and a provider listed twice stop the gateway.",
         "A tenant registers sandbox.create, sandbox.exec and sandbox.terminate as effect types with the risk classes the catalog declares (medium, high, low), and a mandate grants them over targets; the gateway's adapter does not grant."
       ],
       "protected_operations": [
@@ -5015,9 +5019,9 @@
           "core/pkg/gateway/adapters/sandbox.TestExecRecordLargeOutputIsBoundedAndWorkdirIsUsed",
           "core/pkg/gateway/adapters/sandbox.TestTerminateAndItsReadBack",
           "core/pkg/gateway/adapters/sandbox.TestAnIndefiniteCreateIsReconciledByReadBack",
-          "core/pkg/gateway/adapters/sandbox.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers",
-          "core/pkg/gateway/adapters/sandbox.TestCloudCreateFaultsAreClassifiedAndReconciledByReadBack",
-          "core/pkg/gateway/adapters/sandbox.TestClaudeManagedExecutesOnlyOnTheRemoteWorker",
+          "core/pkg/gateway/sandboxproviders.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers",
+          "core/pkg/gateway/sandboxproviders.TestCloudCreateFaultsAreClassifiedAndReconciledByReadBack",
+          "core/pkg/gateway/sandboxproviders.TestClaudeManagedExecutesOnlyOnTheRemoteWorker",
           "core/pkg/gateway/runtime.TestSandboxEffectsAreWiredFromTheConfigurationFile",
           "core/pkg/gateway/custody.TestSandboxKeysServeTheTargetProvidersKeyOnly",
           "core/pkg/gateway/admission.TestPostgresSandboxEffectsAdmitDispatchReconcileAndStayInTheirTenant"
@@ -5031,10 +5035,10 @@
           "core/pkg/gateway/adapters/sandbox.TestExecOnASandboxThatIsNotRunning",
           "core/pkg/gateway/adapters/sandbox.TestAnEffectWithoutAnInvocationDoesNotDispatch",
           "core/pkg/gateway/adapters/sandbox.TestACredentialIsAskedForPerCallAndNeverLeavesTheProviderClient",
-          "core/pkg/gateway/adapters/sandbox.TestCloudCreateWithoutAKeyOrWithAWrongKeySendsNothingUseful",
+          "core/pkg/gateway/sandboxproviders.TestCloudCreateWithoutAKeyOrWithAWrongKeySendsNothingUseful",
           "core/pkg/gateway/adapters/sandbox.TestDeclarationsCompileAndTheirParsersAgreeWithTheirSchemas",
           "core/pkg/gateway/adapters/sandbox.TestParseConfigAcceptsAWellFormedFileAndRefusesTheRest",
-          "core/pkg/gateway/adapters/sandbox.TestDockerRuntimeMustBePinnedByDigest",
+          "core/pkg/gateway/sandboxproviders.TestDockerRuntimeMustBePinnedByDigest",
           "core/pkg/gateway/effectargs.TestSandboxTargetsComeOnlyFromTheTarget",
           "core/pkg/gateway/effectargs.TestValidateChecksASandboxEffectsTargetBeforeAdmission",
           "core/pkg/gateway/runtime.TestSandboxEffectsAreOffUnlessConfigured",
@@ -5045,7 +5049,7 @@
         ],
         "removal": [
           "core/pkg/gateway/adapters/sandbox.TestATenantReachesOnlyItsOwnSandboxes",
-          "core/pkg/gateway/adapters/sandbox.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers",
+          "core/pkg/gateway/sandboxproviders.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers",
           "core/pkg/gateway/adapters/sandbox.TestDispatchComparesTheArgumentDigestBeforeAnyProviderCall",
           "core/pkg/gateway/adapters/sandbox.TestAKeylessProviderIsNeverAskedForACredential",
           "core/pkg/gateway/adapters/sandbox.TestExecDoesNotStartTwiceForOneAttempt",
@@ -5056,9 +5060,9 @@
         ],
         "bypass": [
           "core/pkg/gateway/adapters/sandbox.TestCreateReadBackStates",
-          "core/pkg/gateway/adapters/sandbox.TestACreateDoesNotFollowARedirectWithTheKey",
+          "core/pkg/gateway/sandboxproviders.TestACreateDoesNotFollowARedirectWithTheKey",
           "core/pkg/gateway/adapters/sandbox.TestExecReadBackWhileTheCommandRunsAndAfterItsTimeout",
-          "core/pkg/gateway/adapters/sandbox.TestAnUnconfiguredProviderIsNotReachedByItsTarget",
+          "core/pkg/gateway/sandboxproviders.TestAnUnconfiguredProviderIsNotReachedByItsTarget",
           "core/pkg/connectors/sandbox.TestDoJSONDoesNotFollowARedirectWithTheCredential",
           "core/pkg/connectors/sandbox.TestShellJoinRunsTheOriginalArgumentVector",
           "core/pkg/connectors/sandbox.TestValidIDRefusesWhatCouldEscapeAPathOrACommandLine",
@@ -5071,7 +5075,7 @@
           "file": "core/pkg/gateway/adapters/sandbox/sandbox.go",
           "tests": [
             "core/pkg/gateway/adapters/sandbox.TestATenantReachesOnlyItsOwnSandboxes",
-            "core/pkg/gateway/adapters/sandbox.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers"
+            "core/pkg/gateway/sandboxproviders.TestCloudProvidersRunTheWholeLifecycleAgainstFakeServers"
           ]
         },
         {

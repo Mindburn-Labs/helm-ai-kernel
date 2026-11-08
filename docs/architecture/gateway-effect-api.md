@@ -1656,7 +1656,7 @@ root. Claude Managed Agents runs commands only on the customer's worker
 (`claudemanaged.RemoteRunner`, the HELM worker exec protocol v1), never on the
 gateway's host. The E2B, Daytona and OpenSandbox wire shapes are proven against
 fake provider servers only: no provider account exists, so no live
-qualification has run. The control is CTL-061 in `controls.yaml`.
+qualification has run. The control is CTL-063 in `controls.yaml`.
 
 ## Conformance table
 

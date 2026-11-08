@@ -1591,6 +1591,38 @@ chain of three decisions and one outcome signed with a fixed key, keeps
 verifying; it pins receipt.v5 gateway receipts and both binding versions for
 the move to the next envelope (helm-tracker#53).
 
+## TON Acton effects (P18)
+
+`helm-gateway` performs TON Acton operations as effects of type
+`ton.acton.<command>` when the operator sets `HELM_GATEWAY_TON_ACTON_BIN` and
+`HELM_GATEWAY_TON_ACTON_WORKSPACE`; with neither set the gateway has no TON
+effect type. The adapter is `core/pkg/gateway/adapters/tonacton`, which wraps
+the connector in `core/pkg/connectors/ton/acton`.
+
+What ships, local and testnet only:
+
+- local operations: project new and init, doctor, env, version, build, check,
+  format, test, wrapper generation, compile, disasm, doc;
+- testnet reads and forks: library info and fetch, `script.fork_testnet` and
+  `script.fork_mainnet` (a fork of state; nothing is broadcast);
+- testnet spends, only when `HELM_GATEWAY_TON_TESTNET_RPC_URL` and the wallets
+  file are both set: library publish and top-up, source verification.
+
+What is refused: every mainnet operation (publish, top-up, script, verify) is
+refused at admission and again in the adapter, because it spends real TON.
+`script.testnet` is refused too (`ERR_TON_TENANT_CODE_WITH_KEY_REFUSED`): it
+would run tenant-written code in a process that holds a signing key. Operations
+that run Acton over tenant files fail closed unless the operator sets
+`HELM_GATEWAY_TON_ACTON_ISOLATION_CMD`, a command prefix that runs Acton under
+another uid or container with no access to the gateway's credential files.
+
+The testnet wallet secret is read by custody for one operation and never
+appears in the arguments, the run record or the result. Dispatch is `NOT_SENT`
+before the process starts and `INDEFINITE` after; an exclusive attempt marker
+keeps a run without a record `UNKNOWN`, and Observe reconciles by reading back.
+The control is CTL-061 in `controls.yaml`, with what it does and does not
+confine.
+
 ## Conformance table
 
 [`protocols/conformance/gateway/v1`](../../protocols/conformance/gateway/v1/README.md)

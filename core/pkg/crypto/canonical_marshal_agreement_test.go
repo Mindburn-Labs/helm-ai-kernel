@@ -84,8 +84,8 @@ func TestCanonicalMarshalAgreesWithJCS(t *testing.T) {
 //   - translog.SignedTreeHead.SigningBytes (core/pkg/translog/sth.go:37) —
 //     signed, and cross-published in EvidencePacks.
 //   - CanonicalHasher.Hash (core/pkg/crypto/hasher.go:22).
-//   - releasepermit.calculatePermitID (core/pkg/releasepermit/evaluate.go:282)
-//     — a generic map decoded with UseNumber.
+//   - a generic nested map decoded with UseNumber (the shape that digest
+//     callers build before hashing).
 func TestCanonicalMarshalCallSiteShapesAreByteStable(t *testing.T) {
 	// Shape 1: the STH signing payload. Its four Go fields already appear in
 	// lexicographic order, which is exactly why the old encoder happened to
@@ -127,17 +127,17 @@ func TestCanonicalMarshalCallSiteShapesAreByteStable(t *testing.T) {
 		t.Fatalf("CanonicalHasher no longer hashes the canonical bytes")
 	}
 
-	// Shape 3: the generic map releasepermit builds before hashing. Keys and
+	// Shape 3: a generic nested map built before hashing. Keys and
 	// values are ASCII and every number is a safe integer, so the bytes are
 	// identical under the old and new encoders and RFC 8785 reproduces them.
 	permitShape := map[string]interface{}{
-		"schema":       "helm.release-permit/v1",
+		"schema":       "helm.example/v1",
 		"permit_id":    "",
 		"decision":     "allow",
 		"pull_request": 803,
 		"reviews":      []interface{}{map[string]interface{}{"verdict": "approve", "blocking_findings": 0}},
 	}
-	wantPermit := `{"decision":"allow","permit_id":"","pull_request":803,"reviews":[{"blocking_findings":0,"verdict":"approve"}],"schema":"helm.release-permit/v1"}`
+	wantPermit := `{"decision":"allow","permit_id":"","pull_request":803,"reviews":[{"blocking_findings":0,"verdict":"approve"}],"schema":"helm.example/v1"}`
 	gotPermit, err := CanonicalMarshal(permitShape)
 	if err != nil {
 		t.Fatalf("CanonicalMarshal(permit): %v", err)

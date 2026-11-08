@@ -20,6 +20,8 @@ const maxOutputBytes = 256 * 1024
 // what the adapter needs to tell "never started" from "ran".
 type processExecutor struct {
 	binary string
+	// prefix is the operator's isolation command, run before the binary.
+	prefix []string
 	dir    string
 	env    []string
 	// secret is redacted from both output streams before anything reads them.
@@ -38,7 +40,8 @@ func (p *processExecutor) Exec(ctx context.Context, _ string, req *actuators.Exe
 	if len(req.Command) == 0 || req.Command[0] != "acton" {
 		return nil, errors.New("the command is not an acton command")
 	}
-	cmd := exec.CommandContext(ctx, p.binary, req.Command[1:]...) // #nosec G204 -- operator-configured binary; argv is built from typed, schema-checked arguments
+	name, argv := commandLine(p.prefix, p.binary, req.Command[1:])
+	cmd := exec.CommandContext(ctx, name, argv...) // #nosec G204 -- operator-configured binary and isolation command; argv is built from typed, schema-checked arguments
 	cmd.Dir = p.dir
 	cmd.Env = p.env
 	cmd.WaitDelay = 5 * time.Second
@@ -100,4 +103,12 @@ func textOf(b []byte) (string, bool) {
 		b, truncated = b[:maxStdoutText], true
 	}
 	return strings.ToValidUTF8(string(b), "�"), truncated
+}
+
+// commandLine prepends the isolation command, if any, to the binary and its argv.
+func commandLine(prefix []string, binary string, argv []string) (string, []string) {
+	if len(prefix) == 0 {
+		return binary, argv
+	}
+	return prefix[0], append(append(append([]string{}, prefix[1:]...), binary), argv...)
 }

@@ -50,7 +50,7 @@ esac
 case "$1" in
   script|verify|library)
     if [ -n "$ACTON_WALLET_SECRET" ]; then echo '{"address":"%[4]s","tx_hash":"%[5]s","amount_ton":"0.05"}'; else echo '{"fork":"ok"}'; fi;;
-  --version) echo "acton 1.0.0";;
+  --version) echo "acton 1.0.0 (tolk 1.4.0)";;
   *) echo '{"ok":true}';;
 esac
 `, "", f.log, f.mode, address, txHash)
@@ -108,7 +108,7 @@ type rig struct {
 func newRig(t *testing.T, withChain bool) *rig {
 	t.Helper()
 	r := &rig{t: t, fake: newFakeActon(t), chain: &fakeChain{found: true}, workspace: t.TempDir()}
-	cfg := Config{Binary: r.fake.bin, WorkspaceRoot: r.workspace, Timeout: 3 * time.Second}
+	cfg := Config{Binary: r.fake.bin, WorkspaceRoot: r.workspace, Timeout: 3 * time.Second, Isolation: []string{"/usr/bin/env"}}
 	if withChain {
 		cfg.Chain = r.chain
 	}
@@ -143,15 +143,11 @@ func effectOf(t *testing.T, action acton.ActionURN, project string, args map[str
 }
 
 func scriptArgs() map[string]any {
-	hash := "sha256:" + strings.Repeat("a", 64)
-	eff := map[string]any{"effect_kind": "TON_DEPLOY", "effect_class": "IRREVERSIBLE", "network": "testnet",
+	eff := map[string]any{"effect_kind": "TON_LIBRARY_PUBLISH", "effect_class": "IRREVERSIBLE", "network": "testnet",
 		"wallet_ref": "wallet:tenant-test-1", "max_ton_spend": "0.05"}
 	return map[string]any{
-		"script_path": "scripts/deploy.tolk", "script_hash": hash, "wallet_ref": "wallet:tenant-test-1", "max_ton_spend": "0.05",
+		"library_path": "libs/lib.boc", "wallet_ref": "wallet:tenant-test-1", "max_ton_spend": "0.05",
 		"expected_effects": []any{eff},
-		"script_manifest": map[string]any{"schema_version": acton.ScriptManifestSchemaVersion, "script_path": "scripts/deploy.tolk",
-			"script_hash": hash, "allowed_networks": []string{"testnet"}, "expected_effects": []any{eff},
-			"required_preflight": map[string]any{"build": true, "test": true, "check": true, "fmt_check": true, "verify_dry_run": false}},
 	}
 }
 
@@ -176,7 +172,20 @@ func TestDeclarationsAreTheOwnersScopeAndNeverMainnet(t *testing.T) {
 			t.Fatalf("%s result schema: %v", d.EffectType, err)
 		}
 	}
-	for _, want := range []string{"ton.acton.contract.build", "ton.acton.script.fork_mainnet", "ton.acton.script.testnet",
+	if declared["ton.acton.script.testnet"] {
+		t.Fatal("script.testnet runs tenant code next to a signing key and must not be declared")
+	}
+	bare, _ := New(Config{Binary: full.fake.bin, WorkspaceRoot: full.workspace, Chain: full.chain})
+	for _, d := range bare.Declarations() {
+		o, _ := lookup(d.EffectType)
+		if o.needsIsolation() {
+			t.Fatalf("%s runs over tenant files and is declared without an isolation command", d.EffectType)
+		}
+	}
+	if len(bare.Declarations()) != 6 {
+		t.Fatalf("without isolation only the six operations that do not run over tenant files remain: %d", len(bare.Declarations()))
+	}
+	for _, want := range []string{"ton.acton.contract.build", "ton.acton.script.fork_mainnet",
 		"ton.acton.library.publish_testnet", "ton.acton.library.topup_testnet", "ton.acton.source.verify_testnet", "ton.acton.library.fetch"} {
 		if !declared[want] {
 			t.Errorf("%s is not declared", want)
@@ -200,6 +209,10 @@ func TestEveryConnectorCommandIsDecided(t *testing.T) {
 		mainnet := spec.Network == acton.NetworkMainnet && spec.Broadcast
 		effectType := effectargs.TONActonPrefix + strings.TrimPrefix(string(urn), actionPrefix)
 		switch {
+		case urn == acton.ActionScriptTestnet:
+			if admitted[urn] || !effectargs.IsTONActonKeyWithTenantCode(effectType) {
+				t.Errorf("%s runs a script with a signing key and must be refused, not admitted", urn)
+			}
 		case mainnet:
 			if admitted[urn] || !effectargs.IsTONActonMainnet(effectType) {
 				t.Errorf("%s is a mainnet broadcast and must be refused, not admitted", urn)
@@ -215,11 +228,15 @@ func TestEveryConnectorCommandIsDecided(t *testing.T) {
 
 func TestMainnetEffectsAreRefusedByTheAdapterToo(t *testing.T) {
 	r := newRig(t, true)
-	for _, et := range []string{"ton.acton.script.mainnet", "ton.acton.library.publish_mainnet", "ton.acton.library.topup_mainnet", "ton.acton.source.verify_mainnet"} {
+	for _, et := range []string{"ton.acton.script.mainnet", "ton.acton.library.publish_mainnet", "ton.acton.library.topup_mainnet", "ton.acton.source.verify_mainnet", "ton.acton.script.testnet"} {
 		e := adapters.Effect{EffectType: et, Target: "ton-acton:p", Arguments: []byte(`{}`)}
 		sum := sha256.Sum256(e.Arguments)
 		got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, sum[:])
-		if got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonTONMainnetRefused {
+		want := contracts.ReasonTONMainnetRefused
+		if et == "ton.acton.script.testnet" {
+			want = contracts.ReasonTONTenantCodeWithKeyRefused
+		}
+		if got.Status != adapters.DispatchNotSent || got.Reason != want {
 			t.Fatalf("%s: %+v", et, got)
 		}
 		if _, err := r.a.Prepare(context.Background(), nil, e); err == nil {
@@ -273,7 +290,7 @@ func declarationOf(t *testing.T, a *Adapter, effectType string) adapters.Declara
 func TestTestnetBroadcastKeepsTheSecretInTheEnvironmentOnly(t *testing.T) {
 	r := newRig(t, true)
 	r.project("demo")
-	e, digest := effectOf(t, acton.ActionScriptTestnet, "demo", scriptArgs())
+	e, digest := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
 	if got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, digest); got.Status != adapters.DispatchSent {
 		t.Fatalf("dispatch: %+v", got)
 	}
@@ -309,7 +326,7 @@ func TestSecretEchoedByActonIsRedacted(t *testing.T) {
 	r := newRig(t, true)
 	r.project("demo")
 	r.fake.setMode(t, "leak")
-	e, digest := effectOf(t, acton.ActionScriptTestnet, "demo", scriptArgs())
+	e, digest := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
 	r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, digest)
 	obs := r.a.Observe(context.Background(), nil, e)
 	if obs.Observation == nil || strings.Contains(string(obs.Observation.Artifact.CanonicalBytes), testSecret) ||
@@ -336,7 +353,7 @@ func TestTestnetFailureModes(t *testing.T) {
 			r.a.cfg.Timeout = 2 * time.Second
 			r.project("demo")
 			r.fake.setMode(t, c.mode)
-			e, digest := effectOf(t, acton.ActionScriptTestnet, "demo", scriptArgs())
+			e, digest := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
 			got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, digest)
 			if got.Status != c.wantSent || got.Reason != c.reason {
 				t.Fatalf("dispatch: %+v", got)
@@ -351,7 +368,7 @@ func TestTestnetFailureModes(t *testing.T) {
 func TestChainReadBack(t *testing.T) {
 	r := newRig(t, true)
 	r.project("demo")
-	e, digest := effectOf(t, acton.ActionScriptTestnet, "demo", scriptArgs())
+	e, digest := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
 	r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, digest)
 
 	r.chain.found = false
@@ -375,21 +392,15 @@ func TestDispatchRefusals(t *testing.T) {
 		t.Fatalf("digest: %+v", got)
 	}
 
-	ts, tsDigest := effectOf(t, acton.ActionScriptTestnet, "demo", scriptArgs())
+	ts, tsDigest := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
 	if got := r.a.Dispatch(ctx, creds{err: errors.New("none")}, ts, tsDigest); got.Reason != contracts.ReasonProviderCredentialRejected || got.Status != adapters.DispatchNotSent {
 		t.Fatalf("no wallet: %+v", got)
 	}
 	over := scriptArgs()
 	over["max_ton_spend"] = "5"
-	oe, od := effectOf(t, acton.ActionScriptTestnet, "demo", over)
+	oe, od := effectOf(t, acton.ActionLibraryPublishTN, "demo", over)
 	if got := r.a.Dispatch(ctx, creds{secret: testSecret}, oe, od); got.Reason != contracts.ReasonTONSpendCeilingExceeded || got.Status != adapters.DispatchNotSent {
 		t.Fatalf("spend: %+v", got)
-	}
-	mism := scriptArgs()
-	mism["script_manifest"].(map[string]any)["script_hash"] = "sha256:" + strings.Repeat("b", 64)
-	me, md := effectOf(t, acton.ActionScriptTestnet, "demo", mism)
-	if got := r.a.Dispatch(ctx, creds{secret: testSecret}, me, md); got.Reason != contracts.ReasonTONScriptManifestHashMismatch || got.Status != adapters.DispatchNotSent {
-		t.Fatalf("manifest: %+v", got)
 	}
 	if _, err := os.Stat(r.fake.log); err == nil {
 		t.Fatal("acton ran for a refused effect")
@@ -444,12 +455,14 @@ func TestLocalFailureAndMissingBinary(t *testing.T) {
 	}
 	// A pure operation that failed changed nothing: NOT_SENT.
 	c, cd := effectOf(t, acton.ActionCheck, "demo", map[string]any{})
+	c.Invocation.AttemptID = "att-check"
 	if got := r.a.Dispatch(context.Background(), nil, c, cd); got.Status != adapters.DispatchNotSent {
 		t.Fatalf("failed read: %+v", got)
 	}
 
 	gone, _ := New(Config{Binary: filepath.Join(t.TempDir(), "missing"), WorkspaceRoot: r.workspace})
-	g, gd := effectOf(t, acton.ActionBuild, "demo", map[string]any{})
+	g, gd := effectOf(t, acton.ActionVersion, "demo", map[string]any{})
+	g.Invocation.AttemptID = "att-gone"
 	if got := gone.Dispatch(context.Background(), nil, g, gd); got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonProviderError {
 		t.Fatalf("missing binary: %+v", got)
 	}
@@ -533,5 +546,178 @@ func TestNewRefusesRelativePaths(t *testing.T) {
 	}
 	if _, err := New(Config{Binary: "/x/acton", WorkspaceRoot: "x"}); err == nil {
 		t.Fatal("relative workspace")
+	}
+}
+
+func TestAdapterRevalidatesArgumentsWithoutTheSchema(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	ctx := context.Background()
+	for name, c := range map[string]struct {
+		action acton.ActionURN
+		args   map[string]any
+	}{
+		"mainnet network":    {acton.ActionLibraryInfo, map[string]any{"library_ref": "lib1", "network": "mainnet"}},
+		"no network":         {acton.ActionLibraryInfo, map[string]any{"library_ref": "lib1"}},
+		"dash path":          {acton.ActionCompile, map[string]any{"source_path": "-rf"}},
+		"dash nested path":   {acton.ActionCompile, map[string]any{"source_path": "src/--out"}},
+		"traversal":          {acton.ActionCompile, map[string]any{"source_path": "../x"}},
+		"dash library ref":   {acton.ActionLibraryInfo, map[string]any{"library_ref": "--net", "network": "testnet"}},
+		"dash doc query":     {acton.ActionDoc, map[string]any{"query": "--help"}},
+		"mainnet effect net": {acton.ActionLibraryPublishTN, withEffectNet(scriptArgs(), "mainnet")},
+	} {
+		e, d := effectOf(t, c.action, "demo", c.args)
+		got := r.a.Dispatch(ctx, creds{secret: testSecret}, e, d)
+		if got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonSchemaViolation {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+	if _, err := os.Stat(r.fake.log); err == nil {
+		t.Fatal("acton ran for an invalid argument")
+	}
+}
+
+func withEffectNet(a map[string]any, net string) map[string]any {
+	a["expected_effects"].([]any)[0].(map[string]any)["network"] = net
+	return a
+}
+
+func TestWorkspaceConfigActonLoadsIsRefused(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	for _, name := range []string{".env", ".env.local", "wallets.toml"} {
+		path := filepath.Join(r.workspace, "t1", "demo", name)
+		if err := os.WriteFile(path, []byte("X=1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		e, d := effectOf(t, acton.ActionBuild, "demo", map[string]any{})
+		if got := r.a.Dispatch(context.Background(), nil, e, d); got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonPreconditionFailed {
+			t.Errorf("%s: %+v", name, got)
+		}
+		_ = os.Remove(path)
+	}
+	// One level up, in the tenant root, applies to every project below it.
+	if err := os.WriteFile(filepath.Join(r.workspace, "t1", ".env"), []byte("X=1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e, d := effectOf(t, acton.ActionBuild, "demo", map[string]any{})
+	if got := r.a.Dispatch(context.Background(), nil, e, d); got.Status != adapters.DispatchNotSent {
+		t.Fatalf("tenant root .env: %+v", got)
+	}
+	if _, err := os.Stat(r.fake.log); err == nil {
+		t.Fatal("acton ran in a workspace with an auto-loaded file")
+	}
+}
+
+func TestVersionPinsAreMeasuredAgainstTheBinary(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	ctx := context.Background()
+	ok, d := effectOf(t, acton.ActionBuild, "demo", map[string]any{"acton_version": "1.0.0", "tolk_compiler_version": "1.4.0"})
+	if got := r.a.Dispatch(ctx, nil, ok, d); got.Status != adapters.DispatchSent {
+		t.Fatalf("matching pins: %+v", got)
+	}
+	r2 := newRig(t, true)
+	r2.project("demo")
+	bad, bd := effectOf(t, acton.ActionBuild, "demo", map[string]any{"acton_version": "0.5.0"})
+	if got := r2.a.Dispatch(ctx, nil, bad, bd); got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonTONActonUnsupportedVersion {
+		t.Fatalf("acton pin: %+v", got)
+	}
+	tolk, td := effectOf(t, acton.ActionBuild, "demo", map[string]any{"tolk_compiler_version": "0.13.0"})
+	if got := r2.a.Dispatch(ctx, nil, tolk, td); got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonTONTolkCompilerMismatch {
+		t.Fatalf("tolk pin: %+v", got)
+	}
+	for _, line := range r2.fake.runs(t) {
+		if strings.Contains(line, " build") {
+			t.Fatalf("a build ran despite a pin mismatch: %s", line)
+		}
+	}
+}
+
+func TestPlaintextWalletMaterialIsRefusedByPolicy(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	a := scriptArgs()
+	a["wallet_ref"] = "wallet:mnemonic"
+	e, d := effectOf(t, acton.ActionLibraryPublishTN, "demo", a)
+	if got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, d); got.Reason != contracts.ReasonTONPlaintextMnemonicForbidden || got.Status != adapters.DispatchNotSent {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// A run that started must always be accounted for: with no record, Observe is
+// UNKNOWN and never FAILED by absence, which would release the reservation.
+func TestAttemptMarkerKeepsAnUnrecordedBroadcastUnknown(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	runs := filepath.Join(r.workspace, "t1", ".runs")
+	if err := os.MkdirAll(runs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	e, d := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
+
+	// The marker cannot be written: nothing is launched.
+	if err := os.Chmod(runs, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	if os.Geteuid() != 0 {
+		if got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, d); got.Status != adapters.DispatchNotSent {
+			t.Fatalf("unwritable marker: %+v", got)
+		}
+		if _, err := os.Stat(r.fake.log); err == nil {
+			t.Fatal("acton launched without a marker")
+		}
+	}
+	if err := os.Chmod(runs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Acton ran but its record is lost.
+	if got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, d); got.Status != adapters.DispatchSent {
+		t.Fatalf("dispatch: %+v", got)
+	}
+	if err := os.Remove(recordPath(filepath.Join(r.workspace, "t1"), "att-1")); err != nil {
+		t.Fatal(err)
+	}
+	if obs := r.a.Observe(context.Background(), nil, e); obs.Outcome != adapters.OutcomeUnknown {
+		t.Fatalf("a marker without a record must be UNKNOWN: %+v", obs)
+	}
+	// The same attempt is never launched twice.
+	before := len(r.fake.runs(t))
+	if got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, d); got.Status != adapters.DispatchIndefinite {
+		t.Fatalf("second dispatch: %+v", got)
+	}
+	if len(r.fake.runs(t)) != before {
+		t.Fatal("the attempt was launched again")
+	}
+}
+
+func TestRecordWriteFailureAfterABroadcastIsIndefiniteAndStaysUnknown(t *testing.T) {
+	r := newRig(t, true)
+	r.project("demo")
+	e, d := effectOf(t, acton.ActionLibraryPublishTN, "demo", scriptArgs())
+	// A directory where the record goes makes the atomic rename fail after Acton ran.
+	if err := os.MkdirAll(recordPath(filepath.Join(r.workspace, "t1"), "att-1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	got := r.a.Dispatch(context.Background(), creds{secret: testSecret}, e, d)
+	if got.Status != adapters.DispatchIndefinite {
+		t.Fatalf("dispatch: %+v", got)
+	}
+	if obs := r.a.Observe(context.Background(), nil, e); obs.Outcome == adapters.OutcomeFailed {
+		t.Fatalf("an unaccounted broadcast must not read FAILED: %+v", obs)
+	}
+}
+
+func TestOperationsOverTenantFilesNeedIsolation(t *testing.T) {
+	r := newRig(t, false)
+	r.project("demo")
+	bare, _ := New(Config{Binary: r.fake.bin, WorkspaceRoot: r.workspace})
+	e, d := effectOf(t, acton.ActionTest, "demo", map[string]any{})
+	if got := bare.Dispatch(context.Background(), nil, e, d); got.Status != adapters.DispatchNotSent || got.Reason != contracts.ReasonSchemaViolation {
+		t.Fatalf("test without isolation: %+v", got)
+	}
+	if _, err := New(Config{Binary: r.fake.bin, WorkspaceRoot: r.workspace, Isolation: []string{"env"}}); err == nil {
+		t.Fatal("a relative isolation program must be refused")
 	}
 }

@@ -88,10 +88,6 @@ var ops = []op{
 		description: "Runs a script against a fork of TON testnet state; nothing is broadcast."},
 	{action: acton.ActionScriptForkMainnet, group: groupFork, properties: []string{"script_path"}, required: []string{"script_path"},
 		description: "Runs a script against a fork of TON mainnet state; nothing is broadcast and no mainnet wallet is used."},
-	{action: acton.ActionScriptTestnet, group: groupTestnet,
-		properties:  append([]string{"script_path", "script_hash", "script_manifest"}, spend...),
-		required:    []string{"script_path", "script_hash", "script_manifest", "wallet_ref", "max_ton_spend", "expected_effects"},
-		description: "Runs a script on TON testnet, broadcasting with the gateway's testnet wallet."},
 	{action: acton.ActionVerifyTestnet, group: groupTestnet,
 		properties:  []string{"address", "source_path", "tolk_compiler_version", "wallet_ref", "max_ton_spend"},
 		required:    []string{"address", "source_path", "tolk_compiler_version", "wallet_ref", "max_ton_spend"},
@@ -127,7 +123,7 @@ func lookup(effectType string) (op, bool) {
 // Go, which has no look-around, so a path pattern forbids ".." by allowing no
 // segment to start with a dot.
 const (
-	pathPattern = `^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$`
+	pathPattern = `^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_][A-Za-z0-9._-]{0,63}){0,7}$`
 	// versionPattern admits a pinned tool version such as 1.0.0.
 	versionPattern = `^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`
 )
@@ -155,29 +151,8 @@ var effectSchema = map[string]any{
 const (
 	walletRefPattern = `^wallet:[A-Za-z0-9][A-Za-z0-9_.:/@-]{0,120}$`
 	spendPattern     = `^[0-9]{1,6}(\.[0-9]{1,9})?$`
-	addressPattern   = `^[A-Za-z0-9_:-]{1,100}$`
+	addressPattern   = `^[A-Za-z0-9_][A-Za-z0-9_:-]{0,99}$`
 )
-
-var manifestSchema = map[string]any{
-	"type": "object", "additionalProperties": false,
-	"required": []string{"schema_version", "script_path", "script_hash", "allowed_networks", "expected_effects", "required_preflight"},
-	"properties": map[string]any{
-		"schema_version":   map[string]any{"const": acton.ScriptManifestSchemaVersion},
-		"script_path":      str(pathPattern, 600),
-		"script_hash":      str(`^sha256:[0-9a-f]{64}$`, 71),
-		"allowed_networks": map[string]any{"type": "array", "minItems": 1, "maxItems": 1, "items": map[string]any{"enum": []string{"testnet"}}},
-		"expected_effects": map[string]any{"type": "array", "minItems": 1, "maxItems": 8, "items": effectSchema},
-		"required_preflight": map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required": []string{"build", "test", "check", "fmt_check", "verify_dry_run"},
-			"properties": map[string]any{
-				"build": map[string]any{"type": "boolean"}, "test": map[string]any{"type": "boolean"},
-				"check": map[string]any{"type": "boolean"}, "fmt_check": map[string]any{"type": "boolean"},
-				"verify_dry_run": map[string]any{"type": "boolean"},
-			},
-		},
-	},
-}
 
 // propertySchemas is the schema of every argument property any operation takes.
 var propertySchemas = map[string]map[string]any{
@@ -187,7 +162,7 @@ var propertySchemas = map[string]map[string]any{
 	"script_path":           str(pathPattern, 600),
 	"library_path":          str(pathPattern, 600),
 	"output_path":           str(pathPattern, 600),
-	"query":                 str(`^[A-Za-z0-9 _.:-]{0,200}$`, 200),
+	"query":                 str(`^([A-Za-z0-9_][A-Za-z0-9 _.:-]{0,199})?$`, 200),
 	"library_ref":           str(`^[A-Za-z0-9][A-Za-z0-9:_.-]{0,127}$`, 128),
 	"network":               {"enum": []string{"testnet"}},
 	"address":               str(addressPattern, 100),
@@ -195,8 +170,6 @@ var propertySchemas = map[string]map[string]any{
 	"max_ton_spend":         str(spendPattern, 20),
 	"acton_version":         str(versionPattern, 40),
 	"tolk_compiler_version": str(versionPattern, 40),
-	"script_hash":           str(`^sha256:[0-9a-f]{64}$`, 71),
-	"script_manifest":       manifestSchema,
 	"expected_effects":      {"type": "array", "minItems": 1, "maxItems": 8, "items": effectSchema},
 }
 
@@ -290,18 +263,33 @@ func reversibilityOf(o op) adapters.Reversibility {
 	}
 }
 
-// declaration is the operation's §9.1 declaration. Only the testnet operations
-// are mediation-enforced: the testnet wallet exists nowhere but the gateway. The
-// others run on workspace files that the gateway's operator can also reach.
+// needsIsolation is whether the operation runs Acton over files a tenant wrote
+// (Tolk sources, tests, scripts, Acton.toml). Acton can execute such code, which
+// then runs with the privileges of the process; the operations that read only
+// the tenant root or write a fresh template do not.
+func (o op) needsIsolation() bool {
+	switch o.action {
+	case acton.ActionVersion, acton.ActionDoctor, acton.ActionEnv, acton.ActionDoc, acton.ActionProjectNew, acton.ActionProjectInit:
+		return false
+	}
+	return true
+}
+
+// declaration is the operation's §9.1 declaration. No operation is
+// mediation-enforced: the Acton process runs on the gateway host, and the
+// workspace is reachable by whoever operates it, so the gateway is not the only
+// path to any of these effects.
 func (o op) declaration() adapters.Declaration {
 	mediation := adapters.MediationObservedOnly
 	notes := "Runs the Acton binary the operator configured, with typed arguments only, in the tenant's workspace. " +
 		"Observe reads back the run record the gateway wrote for this attempt and checks it against the arguments."
+	if o.needsIsolation() {
+		notes += " It runs only through the operator's isolation command, because Acton can execute tenant-written code."
+	}
 	if o.group == groupTestnet {
-		mediation = adapters.MediationEnforced
-		notes = "Broadcasts to TON testnet with the gateway's testnet wallet, which reaches the Acton process only for this call. " +
+		notes += " It broadcasts to TON testnet with a gateway-held testnet wallet whose secret is put in the Acton process environment for this call. " +
 			"A run whose answer breaks the output contract, or that is cut short, is INDEFINITE; Observe confirms the transaction on testnet " +
-			"through the configured RPC before it reports SUCCEEDED."
+			"through the configured RPC before it reports SUCCEEDED. max_ton_spend is a declared ceiling, not a measured spend."
 	}
 	return adapters.Declaration{
 		EffectType:     o.effectType(),

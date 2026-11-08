@@ -42,8 +42,6 @@ type args struct {
 	MaxTONSpend         string                 `json:"max_ton_spend"`
 	ActonVersion        string                 `json:"acton_version"`
 	TolkCompilerVersion string                 `json:"tolk_compiler_version"`
-	ScriptHash          string                 `json:"script_hash"`
-	ScriptManifest      *acton.ScriptManifest  `json:"script_manifest"`
 	ExpectedEffects     []acton.ExpectedEffect `json:"expected_effects"`
 }
 
@@ -87,7 +85,57 @@ func parseArgs(o op, raw []byte) (args, *adapters.Refusal) {
 	if a.Schema != o.schemaConst() {
 		return args{}, schemaViolation("schema must be %q", o.schemaConst())
 	}
+	if r := a.checkValues(); r != nil {
+		return args{}, r
+	}
 	return a, nil
+}
+
+var (
+	pathRe       = regexp.MustCompile(pathPattern)
+	projectRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+	queryRe      = regexp.MustCompile(`^([A-Za-z0-9_][A-Za-z0-9 _.:-]{0,199})?$`)
+	libraryRefRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_.-]{0,127}$`)
+	walletRefRe  = regexp.MustCompile(walletRefPattern)
+	versionRe    = regexp.MustCompile(versionPattern)
+)
+
+// checkValues re-checks every value against the patterns the published schema
+// states. The gateway validates the schema at admission, but the adapter does
+// not rely on it: nothing that starts with a dash (an Acton flag), reaches
+// outside the project, or names mainnet gets as far as argv.
+func (a args) checkValues() *adapters.Refusal {
+	check := func(name, v string, re *regexp.Regexp) *adapters.Refusal {
+		if v != "" && !re.MatchString(v) {
+			return schemaViolation("%s is not a valid %s", name, name)
+		}
+		return nil
+	}
+	for _, c := range []struct {
+		name, v string
+		re      *regexp.Regexp
+	}{
+		{"project_name", a.ProjectName, projectRe}, {"source_path", a.SourcePath, pathRe}, {"artifact_path", a.ArtifactPath, pathRe},
+		{"script_path", a.ScriptPath, pathRe}, {"library_path", a.LibraryPath, pathRe}, {"output_path", a.OutputPath, pathRe},
+		{"query", a.Query, queryRe}, {"library_ref", a.LibraryRef, libraryRefRe}, {"address", a.Address, addressRe},
+		{"wallet_ref", a.WalletRef, walletRefRe}, {"max_ton_spend", a.MaxTONSpend, spendRe},
+		{"acton_version", a.ActonVersion, versionRe}, {"tolk_compiler_version", a.TolkCompilerVersion, versionRe},
+	} {
+		if r := check(c.name, c.v, c.re); r != nil {
+			return r
+		}
+	}
+	// The only network an Acton operation here may name is testnet; an
+	// operation that takes no network has none.
+	if a.Network != "" && a.Network != "testnet" {
+		return schemaViolation("network must be testnet")
+	}
+	for _, e := range a.ExpectedEffects {
+		if e.Network != "" && e.Network != "testnet" {
+			return schemaViolation("expected_effects network must be testnet")
+		}
+	}
+	return nil
 }
 
 // params turns checked arguments into the connector's parameter map. Only
@@ -122,10 +170,6 @@ func (a args) params(o op, inv *adapters.Invocation, ceilingsHash string) map[st
 	set("max_ton_spend", a.MaxTONSpend)
 	set("acton_version", a.ActonVersion)
 	set("tolk_compiler_version", a.TolkCompilerVersion)
-	set("script_hash", a.ScriptHash)
-	if a.ScriptManifest != nil {
-		p["script_manifest"] = a.ScriptManifest
-	}
 	if len(a.ExpectedEffects) > 0 {
 		p["expected_effects"] = a.ExpectedEffects
 	}

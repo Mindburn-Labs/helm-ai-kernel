@@ -26,12 +26,18 @@
 // public half a verifier trusts.
 //
 // With HELM_GATEWAY_TON_ACTON_BIN and HELM_GATEWAY_TON_ACTON_WORKSPACE (both
-// absolute) the gateway also performs local and fork Acton operations. The
-// testnet operations additionally need HELM_GATEWAY_TON_TESTNET_RPC_URL and
-// HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (tenant, wallet_ref and the file that
-// holds the testnet secret; mounted into the gateway Pod only), and take
-// HELM_GATEWAY_TON_TESTNET_MAX_SPEND as their per-action ceiling. Every
-// mainnet operation is refused at admission (ERR_TON_MAINNET_REFUSED).
+// absolute) the gateway performs the Acton operations that do not run over
+// tenant files (version, doctor, env, doc, project new and init). Acton can
+// execute tenant-written code, so every other operation also needs
+// HELM_GATEWAY_TON_ACTON_ISOLATION_CMD, a JSON array that is the command prefix
+// running Acton under another uid or in a container with no access to the
+// gateway's credential files; without it they are not declared. The testnet
+// operations additionally need HELM_GATEWAY_TON_TESTNET_RPC_URL and
+// HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (tenant, wallet_ref and an owner-only
+// file per testnet secret, outside the workspace), and take
+// HELM_GATEWAY_TON_TESTNET_MAX_SPEND as their per-action ceiling. These
+// settings are operator-provided; the chart does not mount them yet. Every
+// mainnet operation, and script.testnet, is refused at admission.
 //
 // Dispatch and Observe act on GitHub through the GitHub App whose files the
 // chart mounts into the gateway Pod only (R8): HELM_GATEWAY_GITHUB_APP_ID_FILE,

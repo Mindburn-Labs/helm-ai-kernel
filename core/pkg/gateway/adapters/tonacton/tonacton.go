@@ -5,10 +5,16 @@
 //
 // Dispatch runs the operator-configured Acton binary with typed argv built by
 // the connector (core/pkg/connectors/ton/acton), inside the tenant's workspace
-// directory, with an environment built from nothing. The testnet wallet secret
-// comes from the gateway's connection custody and is put into that
-// environment for a testnet operation only (R8); it is never in the arguments,
-// the argv, the run record or the result.
+// directory. The process environment is built from nothing, but Acton itself
+// loads a project's .env and wallets.toml, so a workspace that holds either is
+// refused. Acton can execute tenant-written code (tests, scripts), so every
+// operation that runs over tenant files goes through the operator's isolation
+// command, and without one it is not declared. An operation that would run a
+// script next to a signing key (script.testnet) is refused outright. The
+// testnet wallet secret of the other testnet operations comes from the
+// gateway's connection custody and is put into the process environment for
+// that call only (R8); it is never in the arguments, the argv, the run record
+// or the result.
 //
 // Observe reads back the run record Dispatch wrote for the attempt and checks it
 // against the arguments. A testnet broadcast is SUCCEEDED only when the
@@ -27,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -34,6 +41,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
@@ -59,6 +67,11 @@ type Config struct {
 	// Chain reads TON testnet. Without it the testnet operations are not
 	// declared: the gateway will not broadcast what it cannot read back.
 	Chain ChainReader
+	// Isolation is the command prefix (absolute program first) that runs Acton
+	// under another uid or in a container that cannot read the gateway's
+	// credential files. Without it, no operation that runs over tenant files is
+	// declared.
+	Isolation []string
 	// Timeout bounds one run; default two minutes.
 	Timeout time.Duration
 	// MaxTestnetSpend is the per-action TON ceiling for a testnet operation;
@@ -99,6 +112,9 @@ type runRecord struct {
 // Adapter performs the Acton effect types.
 type Adapter struct {
 	cfg Config
+
+	mu      sync.Mutex
+	version string
 }
 
 var _ adapters.Adapter = (*Adapter)(nil)
@@ -110,6 +126,9 @@ func New(cfg Config) (*Adapter, error) {
 	}
 	if !filepath.IsAbs(cfg.WorkspaceRoot) {
 		return nil, errors.New("the Acton workspace root must be absolute")
+	}
+	if len(cfg.Isolation) > 0 && !filepath.IsAbs(cfg.Isolation[0]) {
+		return nil, errors.New("the isolation command must start with an absolute program path")
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 2 * time.Minute
@@ -126,7 +145,12 @@ func New(cfg Config) (*Adapter, error) {
 	return &Adapter{cfg: cfg}, nil
 }
 
-func (a *Adapter) enabled(o op) bool { return o.group != groupTestnet || a.cfg.Chain != nil }
+func (a *Adapter) enabled(o op) bool {
+	if o.needsIsolation() && len(a.cfg.Isolation) == 0 {
+		return false
+	}
+	return o.group != groupTestnet || a.cfg.Chain != nil
+}
 
 // Declarations implements adapters.Adapter.
 func (a *Adapter) Declarations() []adapters.Declaration {
@@ -140,8 +164,8 @@ func (a *Adapter) Declarations() []adapters.Declaration {
 }
 
 func (a *Adapter) resolveOp(effectType string) (op, *adapters.Refusal) {
-	if effectargsMainnet(effectType) {
-		return op{}, adapters.Refuse(contracts.ReasonTONMainnetRefused, "%s operates on TON mainnet", effectType)
+	if reason, detail, refused := effectargs.TONActonRefusal(effectType); refused {
+		return op{}, adapters.Refuse(reason, "%s", detail)
 	}
 	o, ok := lookup(effectType)
 	if !ok || !a.enabled(o) {
@@ -279,6 +303,12 @@ func (a *Adapter) Dispatch(ctx context.Context, creds adapters.TokenSource, effe
 	if r != nil {
 		return notSent(r)
 	}
+	if r := refuseProjectConfig(a.cfg.WorkspaceRoot, root, dir); r != nil {
+		return notSent(r)
+	}
+	if r := a.checkPins(ctx, root, ar); r != nil {
+		return notSent(r)
+	}
 	env := []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=" + filepath.Join(root, ".home"), "LANG=C"}
 	secret := ""
 	if o.usesWallet() {
@@ -296,7 +326,19 @@ func (a *Adapter) Dispatch(ctx context.Context, creds adapters.TokenSource, effe
 		return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "the sandbox grant is invalid"))
 	}
 	ceilings := a.ceilings(o)
-	exec := &processExecutor{binary: a.cfg.Binary, dir: dir, env: env, secret: secret}
+	// The marker is written before Acton starts and never removed once it has:
+	// a marker without a record means a run may have happened that nobody can
+	// account for, which Observe reports as UNKNOWN. A marker that cannot be
+	// written stops the dispatch, and one that already exists means this attempt
+	// was dispatched before and is not launched again (R6).
+	marker := markerPath(root, inv.AttemptID)
+	if err := writeMarker(marker); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return indefinite(contracts.ReasonPreconditionFailed, "this attempt was dispatched before; Acton is not launched again")
+		}
+		return notSent(adapters.Refuse(contracts.ReasonProviderError, "the attempt marker could not be written"))
+	}
+	exec := &processExecutor{binary: a.cfg.Binary, prefix: a.cfg.Isolation, dir: dir, env: env, secret: secret}
 	conn := acton.NewConnector(acton.Config{
 		Runner:       acton.Runner{Executor: exec, SandboxID: "helm-gateway", Timeout: a.cfg.Timeout},
 		DefaultP0:    ceilings,
@@ -311,6 +353,9 @@ func (a *Adapter) Dispatch(ctx context.Context, creds adapters.TokenSource, effe
 	out, err := conn.Execute(ctx, permit, string(o.action), ar.params(o, inv, ceilings.Hash()))
 	receipt, _ := out.(*acton.ActonReceipt)
 	side := o.spec().SideEffect
+	if !exec.started {
+		_ = os.Remove(marker) // nothing ran: the attempt left no trace to account for
+	}
 	switch {
 	case exec.startErr != nil:
 		return notSent(adapters.Refuse(contracts.ReasonProviderError, "the Acton binary could not be started"))
@@ -397,7 +442,14 @@ func (a *Adapter) Observe(ctx context.Context, _ adapters.TokenSource, effect ad
 	synthetic := Result{Action: string(o.action), Network: string(o.spec().Network), Status: "error", ExitCode: -1,
 		RequestHash: "sha256:" + digest, StdoutHash: emptyHash, StderrHash: emptyHash}
 	if errors.Is(err, os.ErrNotExist) {
-		return failed(true, contracts.ReasonReadbackMismatch, synthetic, sum[:], "no run record exists for this attempt")
+		_, merr := os.Stat(markerPath(filepath.Join(a.cfg.WorkspaceRoot, inv.TenantID), inv.AttemptID))
+		switch {
+		case merr == nil:
+			return unknown(contracts.ReasonProviderError, "Acton was started for this attempt but left no run record")
+		case !errors.Is(merr, os.ErrNotExist):
+			return unknown(contracts.ReasonProviderError, "the attempt marker could not be read")
+		}
+		return failed(true, contracts.ReasonReadbackMismatch, synthetic, sum[:], "no run was started for this attempt")
 	}
 	if err != nil {
 		return unknown(contracts.ReasonProviderError, "the run record could not be read")

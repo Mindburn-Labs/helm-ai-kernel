@@ -8,6 +8,32 @@
 # 48 of 96 declared codes were unreachable at seed time. Format: identifier
 # first; the rest of the line is free text.
 
+# ── TON / Acton — no path of helm-gateway emits these ────────────────────────
+# core/pkg/connectors/ton/acton/errors.go keeps their wire values as literals.
+# They are mainnet-only, manifest-only (script.testnet is refused), threshold or
+# bytecode checks nothing performs, or gas accounting nothing sets. Remedy is to
+# give each a real emit path or delete the connector code behind it.
+ReasonTONActonArgvRejected                   ERR_TON_ACTON_ARGV_REJECTED
+ReasonTONActonGenericMainnetScriptDenied     ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED
+ReasonTONActonRawShellForbidden              ERR_TON_ACTON_RAW_SHELL_FORBIDDEN
+ReasonTONActonUnknownCommand                 ERR_TON_ACTON_UNKNOWN_COMMAND
+ReasonTONApprovalCeremonyRequired            ERR_TON_APPROVAL_CEREMONY_REQUIRED
+ReasonTONCoverageThresholdFailed             ERR_TON_COVERAGE_THRESHOLD_FAILED
+ReasonTONExpectedEffectMismatch              ERR_TON_EXPECTED_EFFECT_MISMATCH
+ReasonTONLibraryMainnetRequiresApproval      ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL
+ReasonTONLibrarySpendCeilingExceeded         ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED
+ReasonTONMainnetRequiresApproval             ERR_TON_MAINNET_REQUIRES_APPROVAL
+ReasonTONMutationThresholdFailed             ERR_TON_MUTATION_THRESHOLD_FAILED
+ReasonTONNetworkGrantRequired                ERR_TON_NETWORK_GRANT_REQUIRED
+ReasonTONSandboxGrantRequired                ERR_TON_SANDBOX_GRANT_REQUIRED
+ReasonTONScriptManifestHashMismatch          ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH
+ReasonTONScriptManifestRequired              ERR_TON_SCRIPT_MANIFEST_REQUIRED
+ReasonTONSourceVerificationRequired          ERR_TON_SOURCE_VERIFICATION_REQUIRED
+ReasonTONTolkCompilerUnpinned                ERR_TON_TOLK_COMPILER_UNPINNED
+ReasonTONVerifyBytecodeMismatch              ERR_TON_VERIFY_BYTECODE_MISMATCH
+ReasonTONVerifyDryRunRequired                ERR_TON_VERIFY_DRY_RUN_REQUIRED
+ReasonTONWalletRefRequired                   ERR_TON_WALLET_REF_REQUIRED
+
 # ── Harness Engineering v1.4 (6 of the 10-code block) — specified, unbuilt ──
 # These remaining codes are declared with conformance vectors in
 # core/pkg/conformance/negative_vectors.go and never emitted.
@@ -46,6 +72,7 @@ ReasonCapabilityTokenInvalid                 CAPABILITY_TOKEN_INVALID
 ReasonCapabilityUnknown                      CAPABILITY_UNKNOWN
 
 # ── Remaining (8) ───────────────────────────────────────────────────────────
+ReasonComputeGasExhausted                    ERR_COMPUTE_GAS_EXHAUSTED
 ReasonContinuityStale                        ERR_CONTINUITY_STALE
 ReasonDevFallbackPresent                     ERR_DEV_FALLBACK_PRESENT
 ReasonEmergencyCapsuleInvalid                ERR_EMERGENCY_CAPSULE_INVALID

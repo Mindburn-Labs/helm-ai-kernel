@@ -16,8 +16,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 )
 
-// EnvTONWalletsFile names the wallets file the chart mounts into the gateway
-// Pod only (R8).
+// EnvTONWalletsFile names the wallets file: tenant, wallet_ref and the file that
+// holds each testnet secret. The operator provides both; the chart does not yet.
 const EnvTONWalletsFile = "HELM_GATEWAY_TON_TESTNET_WALLETS_FILE"
 
 const tonActonPrefix = "ton.acton."
@@ -80,6 +80,15 @@ func TONWalletsFromEnv(getenv func(string) string) (*TONWallets, error) {
 	return NewTONWallets(b)
 }
 
+// SecretFiles lists the secret files the wallets file names.
+func (w *TONWallets) SecretFiles() []string {
+	out := make([]string, 0, len(w.by))
+	for _, f := range w.by {
+		out = append(out, f)
+	}
+	return out
+}
+
 // Token returns the testnet wallet secret for one TON effect of one tenant. The
 // wallet_ref is read from the effect's arguments, which the permit's digest
 // binds, and is only a lookup key.
@@ -102,6 +111,11 @@ func (w *TONWallets) Token(_ context.Context, tenantID string, effect adapters.E
 		return "", errors.New("custody: the wallet secret is not readable")
 	}
 	defer func() { _ = f.Close() }()
+	// A secret that group or others can read is readable by whatever runs Acton
+	// under another account; the file must be the gateway's alone.
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return "", errors.New("custody: the wallet secret file must be a regular file readable by its owner only")
+	}
 	buf := make([]byte, maxWalletSecretBytes+1)
 	n, _ := f.Read(buf)
 	secret := strings.TrimSpace(string(buf[:n]))

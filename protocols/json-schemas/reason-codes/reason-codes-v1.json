@@ -616,6 +616,14 @@
       "finality": "class_forbidden"
     },
     {
+      "code": "ERR_TON_TENANT_CODE_WITH_KEY_REFUSED",
+      "applies_to": ["DENY"],
+      "domain": "connector.ton.acton",
+      "description": "TON Acton operation refused: it would run tenant-authored code in a process that holds a signing key",
+      "since": "1.8.0",
+      "finality": "class_forbidden"
+    },
+    {
       "code": "ERR_CONNECTOR_CONTRACT_DRIFT",
       "applies_to": ["DENY"],
       "domain": "connector",

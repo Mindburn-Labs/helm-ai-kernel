@@ -4495,33 +4495,52 @@ controls:
         - "core/pkg/receiptverify.TestGatewayChainIDFramesTenantAndWorkspace"
 
   - id: CTL-061
-    title: "TON Acton runs local, fork and testnet only"
+    title: "TON Acton runs local, fork and testnet only, and never tenant code beside a key"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      helm-gateway performs TON Acton operations as gateway effects (helm-tracker#266),
-      in the owner's scope: local project work (new, init, version, doctor, env,
-      build, check, format, test, wrapper generation, compile, disasm, docs,
-      library info and fetch), forks of testnet and mainnet state, and the four
-      testnet operations (library.publish_testnet, library.topup_testnet,
-      script.testnet, source.verify_testnet). Every mainnet operation
-      (library.publish_mainnet, library.topup_mainnet, script.mainnet,
-      source.verify_mainnet) is refused at Propose with ERR_TON_MAINNET_REFUSED
-      before any mandate, adapter or database is consulted, and has no adapter.
-      The adapter builds argv from the connector's typed commands, runs the
-      operator-configured Acton binary in the target's directory of the
-      tenant's workspace with an environment built from nothing, and checks the
-      connector's policy (spend ceiling, manifest, wallet reference, sandbox
-      grant) first. The testnet wallet secret is held only by the gateway's
-      custody (a mounted file per tenant and wallet_ref), reaches the process
-      through one environment variable for a testnet operation only, and is
-      redacted from output; it is never in a request body, the argv, the run
-      record or the result. Testnet operations are declared only when a testnet
-      RPC and a wallets file are configured. Dispatch answers NOT_SENT before
-      any process runs, SENT when Acton ran, and INDEFINITE when a broadcast
-      was cut short, exited non-zero or printed something other than its
-      output contract (ERR_CONNECTOR_CONTRACT_DRIFT); Observe reads back the
-      attempt's run record and, for a broadcast, the transaction on testnet
-      through the RPC, and a result must satisfy the declared result schema.
+      helm-gateway performs TON Acton operations as gateway effects (helm-tracker#266)
+      in the owner's scope. Local operations: project new and init, version,
+      doctor, env, doc, build, check, format, format_check, test, wrapper
+      generation, compile, disasm, library info and fetch. Forks of testnet and
+      mainnet state: script.fork_testnet and script.fork_mainnet. Testnet
+      operations: library.publish_testnet, library.topup_testnet and
+      source.verify_testnet. Two classes are refused at Propose, before any
+      mandate, adapter or database read, and have no adapter: every mainnet
+      operation (library.publish_mainnet, library.topup_mainnet, script.mainnet,
+      source.verify_mainnet) with ERR_TON_MAINNET_REFUSED, and script.testnet
+      with ERR_TON_TENANT_CODE_WITH_KEY_REFUSED, because an Acton script is
+      tenant-authored code that can read the process environment and files and
+      must not share a process with a signing key. Acton can execute tenant
+      files in every operation except version, doctor, env, doc, project new and
+      project init, so those operations are declared only when the operator
+      configures an isolation command (HELM_GATEWAY_TON_ACTON_ISOLATION_CMD, a
+      JSON array: the program and arguments that run Acton under another uid or
+      in a container with no access to the gateway's credential files); without
+      it they fail closed at declaration. The adapter re-validates every
+      argument itself (no flag-shaped or escaping path, no network other than
+      testnet, only the properties the operation takes), refuses a workspace
+      that holds a .env or wallets.toml in the project or any directory above it
+      up to the tenant root (Acton loads them on its own), and compares a
+      declared acton_version or tolk_compiler_version with what the configured
+      binary reports for acton --version, refusing on any mismatch or any pin
+      the binary does not report. The testnet wallet secret is held by the
+      gateway's custody (one owner-only file per tenant and wallet_ref, outside
+      the workspace), is put in one environment variable of the Acton process
+      for a testnet call only, and is never in a request body, the argv, the
+      run record or the result; exact occurrences in output are replaced before
+      anything is stored. Testnet operations are declared only when a testnet
+      RPC, a wallets file and an isolation command are configured. An attempt
+      marker is created exclusively before Acton starts: if it cannot be
+      written nothing is launched, and an existing marker means the attempt is
+      not launched again. Dispatch answers NOT_SENT when the adapter or the
+      connector's policy refuses before a process runs, when the binary cannot
+      start, or when a read-only operation failed or was cut short; SENT when
+      Acton ran; and INDEFINITE when a write or broadcast was cut short, exited
+      non-zero, left no record or printed something other than its output
+      contract (ERR_CONNECTOR_CONTRACT_DRIFT). Observe reads back the attempt's
+      run record, and for a broadcast the transaction on testnet through the
+      RPC; a marker with no record is UNKNOWN, never FAILED by absence. A result
+      must satisfy the declared result schema.
     status: enforced
     entry_points:
       - "core/pkg/gateway/admission.validateProposal"
@@ -4530,16 +4549,20 @@ controls:
       - "core/pkg/gateway/custody.TONWallets.Token"
       - "core/pkg/gateway/runtime.tonActonFromEnv"
     config:
-      - "HELM_GATEWAY_TON_ACTON_BIN and HELM_GATEWAY_TON_ACTON_WORKSPACE (absolute paths, both or neither) install the local and fork operations."
-      - "HELM_GATEWAY_TON_TESTNET_RPC_URL and HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (both or neither, and only with the binary and workspace) add the testnet operations; HELM_GATEWAY_TON_TESTNET_MAX_SPEND is their per-action TON ceiling, default 1."
+      - "HELM_GATEWAY_TON_ACTON_BIN and HELM_GATEWAY_TON_ACTON_WORKSPACE (absolute paths, both or neither) install the operations that do not run over tenant files."
+      - "HELM_GATEWAY_TON_ACTON_ISOLATION_CMD (a JSON array whose first element is an absolute program) adds the operations that run over tenant files."
+      - "HELM_GATEWAY_TON_TESTNET_RPC_URL and HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (both or neither, only with the isolation command) add the testnet operations; HELM_GATEWAY_TON_TESTNET_MAX_SPEND is their per-action TON ceiling, default 1. These are operator-provided: the gateway chart does not mount a wallets file or set these variables yet."
     protected_operations:
-      - "Running Acton for a tenant, and broadcasting from the gateway's testnet wallet, through the Propose, Dispatch and Observe path of helm-gateway; the wallet secret never leaves the gateway's custody and the process environment of a testnet call."
+      - "Running Acton for a tenant, and broadcasting from the gateway's testnet wallet, through the Propose, Dispatch and Observe path of helm-gateway."
     bypass_assumptions:
-      - "The Acton process runs on the gateway host with the gateway's user and network. The sandbox grant the connector checks is a record of what the gateway composed, not an operating-system sandbox: confine egress and the workspace with the deployment (network policy, a read-only root, a dedicated user)."
-      - "The testnet wallet secret is in the process environment for the length of a testnet call, readable by that user's other processes. It is a testnet key; a mainnet key must never be mounted."
-      - "The output contract of a broadcast (one JSON object with address and tx_hash) and the wallet environment variable ACTON_WALLET_SECRET are the gateway's declared interface to Acton; they are not qualified against a real Acton release, and a release that differs makes testnet operations INDEFINITE, never SUCCEEDED."
-      - "The testnet check shows that a transaction with the printed hash exists on the account; it does not show that the transaction did what the script intended."
-      - "The run record is a file in the tenant's workspace written by the gateway; anyone who can write there can forge or delete it. A forged record cannot confirm a broadcast, which also needs the RPC, and a missing one reads as FAILED by absence. Authority, reservations and receipts stay in Postgres."
+      - "Nothing confines Acton unless the operator's isolation command does. The gateway cannot see what the command does; the control claims only that the operations that run over tenant files are not declared without one, and that wallet secret files must be owner-only and outside the workspace. If the isolation command runs Acton under the gateway's own uid, or with a credential file mounted, tenant code can read it."
+      - "Mediation is observed-only for every operation: Acton runs on the gateway host and the workspace is reachable by whoever operates it, so the gateway is not the only path to any effect."
+      - "The testnet wallet secret is in the Acton process environment for the length of a testnet call. publish, topup and verify were not shown, against upstream Acton, to run no tenant-authored code; they are admitted on the strength of the isolation command and the .env and wallets.toml refusal, and the secret is a testnet key whose tenant owns the wallet_ref. A mainnet key must never be mounted. script.testnet, the one operation known to run tenant Tolk, is refused."
+      - "Redaction replaces exact occurrences of the secret only; an encoded or reversed copy in output is not recognised."
+      - "max_ton_spend is a declared ceiling compared with the configured ceiling; the amount actually spent is not measured against it. The testnet check shows a transaction with the printed hash exists on the account, not what it did."
+      - "A version or Tolk pin is confirmed only as a substring of acton --version output. A binary that does not print the Tolk compiler version makes every Tolk pin fail closed. The workspace file check is made before the run; a tenant can write a .env between the check and the run."
+      - "The broadcast output contract (one JSON object with address and tx_hash) and the variable ACTON_WALLET_SECRET are the gateway's declared interface to Acton, not qualified against a real Acton release; a release that differs makes testnet operations INDEFINITE, never SUCCEEDED."
+      - "The run record and the attempt marker are files in the tenant's workspace written by the gateway; anyone who can write there can forge or delete them. A forged record cannot confirm a broadcast, which also needs the RPC; a deleted marker and record read as FAILED by absence for an operation that left no other trace. Authority, reservations and receipts stay in Postgres."
       - "Project paths inside a project are checked by pattern; Acton itself follows symlinks a project contains."
     tests:
       allowed:
@@ -4550,6 +4573,9 @@ controls:
         - "core/pkg/gateway/admission.TestTONMainnetEffectsAreRefusedBeforeAnyDatabaseUse"
         - "core/pkg/gateway/adapters/tonacton.TestMainnetEffectsAreRefusedByTheAdapterToo"
         - "core/pkg/gateway/adapters/tonacton.TestDispatchRefusals"
+        - "core/pkg/gateway/adapters/tonacton.TestAdapterRevalidatesArgumentsWithoutTheSchema"
+        - "core/pkg/gateway/adapters/tonacton.TestWorkspaceConfigActonLoadsIsRefused"
+        - "core/pkg/gateway/adapters/tonacton.TestOperationsOverTenantFilesNeedIsolation"
         - "core/pkg/gateway/custody.TestTONWalletsServeOnlyTheTenantsOwnWallet"
       removal:
         - "core/pkg/gateway/adapters/tonacton.TestDeclarationsAreTheOwnersScopeAndNeverMainnet"
@@ -4561,4 +4587,9 @@ controls:
         - "core/pkg/gateway/adapters/tonacton.TestProjectCannotResolveOutsideTheTenantWorkspace"
         - "core/pkg/gateway/adapters/tonacton.TestTestnetFailureModes"
         - "core/pkg/gateway/adapters/tonacton.TestChainReadBack"
+        - "core/pkg/gateway/adapters/tonacton.TestVersionPinsAreMeasuredAgainstTheBinary"
+        - "core/pkg/gateway/adapters/tonacton.TestAttemptMarkerKeepsAnUnrecordedBroadcastUnknown"
+        - "core/pkg/gateway/adapters/tonacton.TestRecordWriteFailureAfterABroadcastIsIndefiniteAndStaysUnknown"
+        - "core/pkg/gateway/adapters/tonacton.TestPlaintextWalletMaterialIsRefusedByPolicy"
         - "core/pkg/gateway/custody.TestRoutedSendsTONEffectsToTheWalletsOnly"
+        - "core/pkg/gateway/custody.TestTONWalletSecretMustBeOwnerOnly"

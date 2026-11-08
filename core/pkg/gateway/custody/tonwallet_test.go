@@ -86,3 +86,23 @@ type stubSource string
 func (s stubSource) Token(context.Context, string, adapters.Effect) (string, error) {
 	return string(s), nil
 }
+
+func TestTONWalletSecretMustBeOwnerOnly(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "w")
+	if err := os.WriteFile(secret, []byte("s"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewTONWallets([]byte(`{"wallets":[{"tenant_id":"t1","wallet_ref":"wallet:a","secret_file":"` + secret + `"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(secret, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := w.Token(context.Background(), "t1", tonEffect("wallet:a")); err == nil || got != "" {
+		t.Fatalf("a group-readable secret must be refused: %q %v", got, err)
+	}
+	if files := w.SecretFiles(); len(files) != 1 || files[0] != secret {
+		t.Fatalf("secret files: %v", files)
+	}
+}

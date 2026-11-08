@@ -3,10 +3,17 @@
 `ton.acton` is the HELM AI Kernel connector for running the Acton TON smart-contract
 toolchain through HELM's deterministic execution boundary.
 
-Acton remains the TON development toolchain. HELM remains the policy,
-sandbox, receipt, EvidencePack, and replay authority. The connector exposes
-typed Acton command classes only; it does not expose raw shell execution or a
-generic `acton` command field.
+Acton remains the TON development toolchain. HELM remains the policy and
+receipt authority. The connector exposes typed Acton command classes only; it
+does not expose raw shell execution or a generic `acton` command field.
+
+helm-gateway links this package through `core/pkg/gateway/adapters/tonacton`
+(see `controls.yaml` CTL-061). That adapter performs a subset of the command
+classes below: local work, forks, and four testnet operations. It refuses every
+mainnet operation and `script.testnet` at admission, and runs the operations
+that execute tenant files only through an operator-configured isolation
+command. The mainnet and script paths described here remain in the package as
+connector policy that the gateway does not reach.
 
 ## Supported Command Classes
 
@@ -29,8 +36,9 @@ generic `acton` command field.
 - Testnet broadcast requires policy allowance, wallet scope, spend cap, network
   grant, and expected effects.
 - Mainnet broadcast and mainnet library publish/top-up are T3 irreversible
-  actions. They default to `ESCALATE` until approval ceremony evidence is
-  present and policy explicitly allows dispatch.
+  actions. The connector's own policy escalates them until approval ceremony
+  evidence is present; helm-gateway never reaches that path because it refuses
+  every mainnet operation at admission (`ERR_TON_MAINNET_REFUSED`).
 - Generic `acton script --net mainnet` is denied.
 - Plaintext wallet mnemonics, seed phrases, private keys, and secret values are
   denied and redacted.
@@ -39,8 +47,8 @@ generic `acton` command field.
 
 Receipts bind the typed command envelope, argv array, sandbox grant hash,
 stdout/stderr hashes, Acton/Tolk versions, artifact hashes, drift status, and
-transaction metadata when present. EvidencePacks are generated through the
-native `evidencepack` package and include replay instructions.
+transaction metadata when present. This package builds no EvidencePack; the
+builder was removed, and `acton_evidence.schema.json` is non-normative.
 
 ## Commercial Wrapper Policy
 

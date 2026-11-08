@@ -14,9 +14,14 @@ connectors:
 - **Connector** = ID + Capabilities + Execute (single request/response)
 - **SandboxActuator** = Lifecycle + Exec + Filesystem + Network + Observability
 
-The sandbox adapters are resolved through the `SandboxRegistry` (below),
-not the `ConnectorRegistry`. The `RunnerBridge` in `bridge.go` provides
-backward compatibility with the legacy `sandbox.Runner` interface.
+Each adapter also implements `actuators.Inventory` (`Lookup`, `Find`): a read
+of the provider's own state by sandbox id or by label. `helm-gateway` drives
+the adapters through `actuators.Provider` (actuator plus inventory) as the
+sandbox effects `sandbox.create`, `sandbox.exec` and `sandbox.terminate`; see
+"Sandbox effects (P17)" in `docs/architecture/gateway-effect-api.md`. The
+shared pieces here are `DoJSON` (a bounded, classified provider call that never
+follows a redirect), `ShellJoin` and `ValidID`. The legacy `RunnerBridge` and
+the `BranchFS` placeholder were removed: nothing called them.
 
 ## Provider Matrix
 

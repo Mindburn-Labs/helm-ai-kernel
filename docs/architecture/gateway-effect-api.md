@@ -1591,6 +1591,73 @@ chain of three decisions and one outcome signed with a fixed key, keeps
 verifying; it pins receipt.v5 gateway receipts and both binding versions for
 the move to the next envelope (helm-tracker#53).
 
+## Sandbox effects (P17)
+
+`helm-gateway` performs three sandbox effects when an operator configures a
+sandbox provider: `sandbox.create`, `sandbox.exec` and `sandbox.terminate`.
+One adapter (`core/pkg/gateway/adapters/sandbox`) serves Docker, E2B, Daytona,
+OpenSandbox and Claude Managed Agents. With no provider configured the gateway
+has no sandbox effect type, and the catalog does not list one.
+
+| Effect type | Target | Risk | Result schema (artifact) |
+| --- | --- | --- | --- |
+| `sandbox.create` | `sandbox/{provider}` | medium | `helm.sandbox.create.result.v1` |
+| `sandbox.exec` | `sandbox/{provider}/{sandbox_id}` | high | `helm.sandbox.exec.result.v1` |
+| `sandbox.terminate` | `sandbox/{provider}/{sandbox_id}` | low | `helm.sandbox.terminate.result.v1` |
+
+The provider and the sandbox come only from the target. The arguments are
+closed schemas (`helm.sandbox.create.v1`, `helm.sandbox.exec.v1`,
+`helm.sandbox.terminate.v1`, served by `ListEffectTypes`): a create carries the
+runtime and resource limits; an exec carries a command as an argument vector, a
+working directory and a timeout, and **no environment and no secret**.
+
+**Configuration.** `HELM_GATEWAY_SANDBOX_CONFIG_FILE` names a JSON file
+(`adapters/sandbox.Config`) that lists the enabled providers and, for each
+provider that takes a key, the path of its key file. The key is never in that
+file: custody (`custody.SandboxKeys`) reads the key file on each operation and
+hands the key to the provider client for that operation only (R8). Docker takes
+no key. An unknown field, a field that belongs to another provider and a
+provider listed twice stop the gateway.
+
+```json
+{"providers": [
+  {"provider": "e2b", "key_file": "/var/run/secrets/helm-sandbox/e2b", "template_id": "base"},
+  {"provider": "docker", "docker_socket": "/var/run/helm-docker.sock"}
+]}
+```
+
+**Tenants.** A sandbox the gateway creates carries a label with a digest of the
+creating tenant and one with the attempt. `sandbox.exec` and
+`sandbox.terminate` act only on a sandbox that carries the caller's tenant
+label; any other sandbox is refused (`NOT_SENT`, `PRECONDITION_FAILED`) as one
+that does not exist.
+
+**Dispatch and Observe.** `NOT_SENT` only when the effect certainly did not
+happen: a refusal before any write, or a provider 4xx other than 408. A
+transport failure, a 5xx, a timeout, an answer too large
+(`PROVIDER_RESPONSE_TOO_LARGE`) or of the wrong shape
+(`ERR_CONNECTOR_CONTRACT_DRIFT`) after a write is `INDEFINITE`, and Observe
+reconciles by reading back:
+
+- create looks up the sandbox by its attempt label (and creates none if one
+  exists); the read-back finds it by that label;
+- terminate reads the sandbox from the provider: gone or terminated is
+  `SUCCEEDED`, still running is `UNKNOWN`;
+- exec runs under a fixed wrapper that records the command's start, output and
+  exit status in the sandbox, and does not start twice for one attempt; the
+  read-back reads that record. It is the sandbox's own account (trust class
+  `sandbox_reported`), and the result carries the exit status, the output sizes
+  and the first 8 KiB of each stream. A sandbox that is gone before the
+  read-back leaves the exec `UNKNOWN`.
+
+**Providers.** Docker creates a labelled container from an image pinned by
+digest, with no environment or mounts, all capabilities dropped and a read-only
+root. Claude Managed Agents runs commands only on the customer's worker
+(`claudemanaged.RemoteRunner`, the HELM worker exec protocol v1), never on the
+gateway's host. The E2B, Daytona and OpenSandbox wire shapes are proven against
+fake provider servers only: no provider account exists, so no live
+qualification has run. The control is CTL-061 in `controls.yaml`.
+
 ## Conformance table
 
 [`protocols/conformance/gateway/v1`](../../protocols/conformance/gateway/v1/README.md)

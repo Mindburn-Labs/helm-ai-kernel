@@ -90,15 +90,17 @@ func newMockServer() (*httptest.Server, *mockE2B) {
 
 		stdout := ""
 		timedOut := ""
+		// The adapter quotes every argument; the mock reads the plain words.
+		plain := strings.ReplaceAll(req.Cmd, "'", "")
 		// Simulate echo.
-		if len(req.Cmd) > 5 && req.Cmd[:5] == "echo " {
-			stdout = req.Cmd[5:] + "\n"
+		if len(plain) > 5 && plain[:5] == "echo " {
+			stdout = plain[5:] + "\n"
 		}
-		if req.Cmd == "large-output" {
+		if plain == "large-output" {
 			stdout = strings.Repeat("a", 300*1024)
 		}
 		// Simulate timeout.
-		if len(req.Cmd) > 6 && req.Cmd[:6] == "sleep " && req.Timeout > 0 {
+		if len(plain) > 6 && plain[:6] == "sleep " && req.Timeout > 0 {
 			timedOut = "timeout"
 		}
 

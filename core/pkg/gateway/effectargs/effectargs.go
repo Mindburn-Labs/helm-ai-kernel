@@ -91,6 +91,10 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		return nil, invalid("arguments are not one JSON object")
 	}
 	switch effectType {
+	case SandboxCreate, SandboxExec, SandboxTerminate:
+		if err := checkSandboxTarget(effectType, target); err != nil {
+			return nil, err
+		}
 	case AuthorityWorkReassignmentRevoke:
 		revoke, err := ParseWorkReassignmentRevoke(raw)
 		if err != nil {

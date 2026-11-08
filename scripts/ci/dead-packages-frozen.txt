@@ -11,9 +11,6 @@ core/pkg/conformance/negative # has tests
 core/pkg/conformance/sandbox # 4 test-only importer(s)
 core/pkg/conformance/scenarios # has tests
 core/pkg/connectors/linear # 1 test-only importer(s)
-core/pkg/connectors/sandbox # has tests
-core/pkg/connectors/sandbox/claudemanaged # has tests
-core/pkg/connectors/sandbox/opensandbox # has tests
 core/pkg/connectors/ton/acton # has tests
 core/pkg/crypto/shredding # 1 test-only importer(s)
 core/pkg/gateway # no tests

@@ -178,6 +178,7 @@ type sandboxState struct {
 	metadata    map[string]string
 	logs        []actuators.LogEntry
 	egressRules []actuators.EgressRule
+	labels      map[string]string
 }
 
 // New creates an adapter for the customer-controlled self-hosted worker.
@@ -277,6 +278,7 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 		outputs:   outputs,
 		metadata:  metadata,
 		logs:      make([]actuators.LogEntry, 0),
+		labels:    copyStringMap(spec.Labels),
 	}
 	return handle, nil
 }

@@ -1233,8 +1233,8 @@ removal_proofs:
       - "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne"
   - control: CTL-061
     file: core/pkg/gateway/admission/validate.go
-    find: "\tif effectargs.IsTONActonMainnet(in.EffectType) {\n"
-    replace: "\tif false && effectargs.IsTONActonMainnet(in.EffectType) {\n"
+    find: "\tif reason, detail, refused := effectargs.TONActonRefusal(in.EffectType); refused {\n"
+    replace: "\tif reason, detail, refused := effectargs.TONActonRefusal(in.EffectType); false && refused {\n"
     tests:
       - "core/pkg/gateway/admission.TestTONMainnetEffectsAreRefusedBeforeAnyDatabaseUse"
   - control: CTL-061

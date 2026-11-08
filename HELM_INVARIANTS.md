@@ -158,7 +158,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-058 | Kernel bounded retained work reassignment | enforced | — |
 | CTL-059 | Gateway signed decision and outcome receipts | enforced | — |
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
-| CTL-061 | TON Acton runs local, fork and testnet only | enforced | — |
+| CTL-061 | TON Acton runs local, fork and testnet only, and never tenant code beside a key | enforced | — |
 
 ---
 

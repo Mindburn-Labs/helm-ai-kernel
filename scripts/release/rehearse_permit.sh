@@ -5,7 +5,8 @@
 # recorded answers in release/permit-fixtures through the real reducer and
 # requires ALLOW, then feeds the recorded blocking answer and requires the
 # reducer to DENY (exit 3). No network call goes to a model provider and no
-# secret is read. It needs GITHUB_TOKEN to look up the merged pull request.
+# secret is read. It needs GITHUB_TOKEN to look up the merged pull request
+# (REHEARSAL_PULL_REQUEST=<n> skips the lookup for a local run).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -15,7 +16,7 @@ cd "${root}"
 
 (cd core && GOWORK=off go build -trimpath -o "${work}/release-permit-verify" ./cmd/release-permit-verify)
 commit="$(git rev-parse HEAD)"
-python3 scripts/release/release_permit.py context --output "${work}/context.json" --commit "${commit}"
+python3 scripts/release/release_permit.py context --output "${work}/context.json" --commit "${commit}" ${REHEARSAL_PULL_REQUEST:+--pull-request "${REHEARSAL_PULL_REQUEST}"}
 
 reduce() {
   local fixtures="$1" outdir="$2"

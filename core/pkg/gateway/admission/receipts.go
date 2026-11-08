@@ -57,8 +57,9 @@ const (
 	ReceiptFormat = contracts.ReceiptSignatureV5
 	// ReceiptBindingVersion names the closed binding document whose SHA-256 a
 	// receipt signs as output_hash. Its JSON schema is
-	// protocols/json-schemas/gateway/receipt-binding.v1.schema.json.
-	ReceiptBindingVersion = "helm.gateway.receipt-binding.v1"
+	// protocols/json-schemas/gateway/receipt-binding.v1.schema.json; the
+	// verifier owns the one definition of its shape (receiptverify).
+	ReceiptBindingVersion = receiptverify.GatewayBindingVersion
 	// authoritySnapshotSchema names the document whose SHA-256 a receipt signs
 	// as policy_hash: the versions of the authority rows the decision locked.
 	authoritySnapshotSchema = "helm.gateway.authority-snapshot.v1"
@@ -121,7 +122,7 @@ func CheckReceiptSigner(signer ReceiptSigner) error {
 // prefixed by its byte length, so no two pairs share an id whatever they
 // contain.
 func receiptChainID(tenantID, workspaceID string) string {
-	return "helm-gateway:" + strconv.Itoa(len(tenantID)) + ":" + tenantID + ":" + strconv.Itoa(len(workspaceID)) + ":" + workspaceID
+	return receiptverify.GatewayChainID(tenantID, workspaceID)
 }
 
 // storedDecision is the attempt row a decision wrote, as UPDATE ... RETURNING
@@ -163,55 +164,15 @@ func (d storedDecision) build(receiptID string, seq uint64, prevDigest string) (
 	return buildDecisionReceipt(d, receiptID, seq, prevDigest)
 }
 
-// receiptBinding is helm.gateway.receipt-binding.v1. Every member is always
-// present: an empty string is a signed value, never an omitted field. Amounts
-// are decimal strings so the document stays inside the number range every
-// RFC 8785 implementation reproduces.
-type receiptBinding struct {
-	BindingVersion        string                    `json:"binding_version"`
-	ChainID               string                    `json:"chain_id"`
-	Seq                   uint64                    `json:"seq"`
-	TenantID              string                    `json:"tenant_id"`
-	WorkspaceID           string                    `json:"workspace_id"`
-	AttemptID             string                    `json:"attempt_id"`
-	AttemptVersion        int64                     `json:"attempt_version"`
-	FromState             string                    `json:"from_state"`
-	State                 string                    `json:"state"`
-	Verdict               string                    `json:"verdict"`
-	ReasonCode            string                    `json:"reason_code"`
-	EffectType            string                    `json:"effect_type"`
-	RequesterPrincipalID  string                    `json:"requester_principal_id"`
-	RequesterActorID      string                    `json:"requester_actor_id"`
-	MandateID             string                    `json:"mandate_id"`
-	RiskClass             string                    `json:"risk_class"`
-	RequestDigest         string                    `json:"request_digest"`
-	TargetDigest          string                    `json:"target_digest"`
-	ArgumentDigest        string                    `json:"argument_digest"`
-	Quote                 []bindingAmount           `json:"quote"`
-	ApprovalDigest        string                    `json:"approval_digest"`
-	ApprovalExpiresAt     string                    `json:"approval_expires_at"`
-	ApproverPrincipalID   string                    `json:"approver_principal_id"`
-	ApproverActorID       string                    `json:"approver_actor_id"`
-	StepUpIssuer          string                    `json:"step_up_issuer"`
-	StepUpJTI             string                    `json:"step_up_jti"`
-	PermitID              string                    `json:"permit_id"`
-	AuthorityVersions     []bindingAuthorityVersion `json:"authority_versions"`
-	PolicyHash            string                    `json:"policy_hash"`
-	EpisodeID             string                    `json:"episode_id"`
-	OrganizationVersionID string                    `json:"organization_version_id"`
-	DecidedAt             string                    `json:"decided_at"`
-}
+// receiptBinding is helm.gateway.receipt-binding.v1. Its one definition is
+// receiptverify.GatewayBinding, which receipt_verify parses as a closed
+// document: every member is always present, an empty string is a signed
+// value, and amounts are decimal strings.
+type receiptBinding = receiptverify.GatewayBinding
 
-type bindingAmount struct {
-	Unit   string `json:"unit"`
-	Amount string `json:"amount"`
-}
+type bindingAmount = receiptverify.GatewayBindingAmount
 
-type bindingAuthorityVersion struct {
-	Kind    string `json:"kind"`
-	Key     string `json:"key"`
-	Version int64  `json:"version"`
-}
+type bindingAuthorityVersion = receiptverify.GatewayBindingAuthorityVersion
 
 // authoritySnapshot is helm.gateway.authority-snapshot.v1, in the order the
 // decision locked the rows (the permit records the same list).

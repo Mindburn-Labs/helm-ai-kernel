@@ -37,7 +37,7 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		out.Episode = &gatewayv1.EpisodeRef{EpisodeId: e.EpisodeID, WorkItemId: e.WorkItemID, OrganizationVersionId: e.OrganizationVersionID}
 	}
 	for _, r := range a.Receipts {
-		out.Receipts = append(out.Receipts, &gatewayv1.ReceiptRef{ChainId: r.ChainID, Seq: r.Seq, ReceiptHash: r.Digest, Kid: r.KeyID})
+		out.Receipts = append(out.Receipts, receiptRefProto(r))
 	}
 	switch {
 	case a.CommitmentID != "":

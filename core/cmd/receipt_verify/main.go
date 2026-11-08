@@ -17,6 +17,8 @@
 //	receipt_verify --receipt bundle.json --key <hex> --key issuer=<hex>
 //	receipt_verify --receipt chain.json --key-file pub.hex
 //	receipt_verify --receipt chain.json --allow-self-attested
+//	receipt_verify --receipt export.json --key "<key_id>=<hex>" --require-bindings --json
+//	receipt_verify --receipt r.json --key "<key_id>=<hex>" --binding <receipt_id>=binding.json --require-bindings
 //
 // The receipt file is either a single receipt object, a JSON array of receipts
 // in causal order, or an object with a "receipts" array (an EvidencePack-shaped
@@ -28,6 +30,18 @@
 // and "key_id" about itself; those are only used when --allow-self-attested is
 // set, because a key that travels with the thing it verifies is not a trust
 // root.
+//
+// A gateway receipt signs, as output_hash, the SHA-256 of a binding document
+// (helm.gateway.receipt-binding.v1) that names its tenant, workspace, attempt,
+// version and state. A bundle exported by the gateway carries those documents
+// as "gateway_bindings" (receipt id to the base64 of the exact bytes);
+// --binding <receipt_id>=<file> supplies one from a file and repeats. Each
+// supplied binding is checked against the receipt that signs it (the binding
+// check); with none supplied that check is not_applicable, so a gateway
+// receipt's own facts go unchecked and the exit code is still 0.
+// --require-bindings fails verification instead when any receipt whose
+// session_id names a gateway chain has no binding; use it for gateway
+// exports. The JSON verdict counts gateway_receipts and bindings_checked.
 //
 // Exit codes: 0 verified, 1 verification failed, 2 no verdict reported (bad or
 // missing flags, no key, an unreadable receipt or key file, a receipt file that
@@ -58,16 +72,19 @@ func (r *repeatable) Set(v string) error {
 func run(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("receipt_verify", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var keyValues, keyFiles repeatable
+	var keyValues, keyFiles, bindingFiles repeatable
 	var (
 		receiptPath = fs.String("receipt", "", "path to a receipt, receipt array, or receipts bundle (JSON); \"-\" for stdin")
 		selfAttest  = fs.Bool("allow-self-attested", false,
 			"verify against the key carried inside the receipt. This proves internal consistency only: "+
 				"whoever wrote the receipt also wrote the key. Never sufficient to trust a counterparty's receipt.")
-		asJSON = fs.Bool("json", false, "emit the verdict as JSON")
+		asJSON  = fs.Bool("json", false, "emit the verdict as JSON")
+		require = fs.Bool("require-bindings", false,
+			"fail when a receipt whose session_id names a gateway chain has no binding document, so a pass covers every gateway receipt's own facts")
 	)
 	fs.Var(&keyValues, "key", "hex-encoded Ed25519 public key to trust, optionally as <key-id>=<hex>; repeatable")
 	fs.Var(&keyFiles, "key-file", "file holding a hex-encoded Ed25519 public key, optionally as <key-id>=<path>; repeatable")
+	fs.Var(&bindingFiles, "binding", "gateway binding document as <receipt-id>=<path>, the exact bytes the receipt's output_hash covers; repeatable")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "receipt_verify — verify a HELM receipt chain offline.\n\n"+
 			"Usage:\n  receipt_verify --receipt <file> --key <hex>\n\n"+
@@ -91,6 +108,11 @@ func run(args []string, stdout, stderr *os.File) int {
 
 	b, err := parseReceipts(raw)
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 2
+	}
+
+	if err := addBindings(&b, bindingFiles); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 2
 	}
@@ -135,7 +157,7 @@ func run(args []string, stdout, stderr *os.File) int {
 		return 2
 	}
 
-	res := receiptverify.VerifyBundle(b, trust)
+	res := receiptverify.VerifyBundleWith(b, trust, receiptverify.Options{RequireGatewayBindings: *require})
 
 	if *asJSON {
 		out, merr := json.MarshalIndent(res, "", "  ")
@@ -161,6 +183,30 @@ func splitKeySpec(v string) (id, value string) {
 		return v[:i], v[i+1:]
 	}
 	return "", v
+}
+
+// addBindings reads each --binding <receipt_id>=<path> into the bundle's
+// gateway bindings. A receipt id given twice, or one the bundle already binds,
+// is refused rather than silently replaced.
+func addBindings(b *receiptverify.Bundle, specs []string) error {
+	for _, spec := range specs {
+		id, path := splitKeySpec(spec)
+		if id == "" || path == "" {
+			return fmt.Errorf("--binding %q must be <receipt-id>=<path>", spec)
+		}
+		if _, taken := b.GatewayBindings[id]; taken {
+			return fmt.Errorf("--binding: receipt %q already has a binding", id)
+		}
+		data, err := os.ReadFile(path) // #nosec G304 -- operator-supplied binding file
+		if err != nil {
+			return fmt.Errorf("read binding file: %w", err)
+		}
+		if b.GatewayBindings == nil {
+			b.GatewayBindings = map[string][]byte{}
+		}
+		b.GatewayBindings[id] = data
+	}
+	return nil
 }
 
 func readInput(path string) ([]byte, error) {
@@ -191,6 +237,9 @@ func writeHuman(w *os.File, res receiptverify.Result) {
 	fmt.Fprintf(w, "%s — %d receipt(s)", verdict, res.Receipts)
 	if res.Permits > 0 {
 		fmt.Fprintf(w, ", %d permit(s)", res.Permits)
+	}
+	if res.GatewayReceipts > 0 {
+		fmt.Fprintf(w, ", %d gateway receipt(s) with %d binding(s) checked", res.GatewayReceipts, res.BindingsChecked)
 	}
 	if res.PreimageVersion != "" {
 		fmt.Fprintf(w, ", preimage %s", res.PreimageVersion)

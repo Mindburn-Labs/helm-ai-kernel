@@ -295,6 +295,12 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		mux.Handle("POST /internal/github/activity", activity.webhook)
 	}
 	mux.Handle(admin.TeamCounterHandler())
+	// The public half of the receipt key, where the Kernel publishes its own.
+	keyringPattern, keyring, err := receiptKeyringHandler(admissionConfig.ReceiptSigner)
+	if err != nil {
+		return err
+	}
+	mux.Handle(keyringPattern, keyring)
 	plain := cfg.devInsecureListen != ""
 
 	// The model gateway: on the main listener for the Control Plane's calls,

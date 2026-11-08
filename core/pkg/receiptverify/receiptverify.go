@@ -116,10 +116,17 @@ type Result struct {
 	PreimageVersion string `json:"preimage_version,omitempty"`
 	// KeyID echoes the receipt's declared key id purely so a caller can see
 	// which key the receipt *claims*. It is never used to select a key.
-	KeyID    string   `json:"key_id,omitempty"`
-	Receipts int      `json:"receipts"`
-	Permits  int      `json:"permits,omitempty"`
-	Errors   []string `json:"errors,omitempty"`
+	KeyID    string `json:"key_id,omitempty"`
+	Receipts int    `json:"receipts"`
+	Permits  int    `json:"permits,omitempty"`
+	// GatewayReceipts counts the receipts whose session_id names a gateway
+	// receipt chain (helm-gateway:...). BindingsChecked counts the receipts
+	// whose binding document the binding check verified; it is 0 unless that
+	// check passed. A gateway receipt counted in the first and not the second
+	// had its gateway facts unchecked.
+	GatewayReceipts int      `json:"gateway_receipts,omitempty"`
+	BindingsChecked int      `json:"bindings_checked,omitempty"`
+	Errors          []string `json:"errors,omitempty"`
 }
 
 // Bundle is the shape a receipt reaches a counterparty in: one or more
@@ -129,11 +136,16 @@ type Result struct {
 // PublicKeyHex and KeyID are what the bundle *claims* its verification key is.
 // They are used only under TrustRoot.AllowSelfAttested, because a key that
 // travels with the thing it verifies is not a trust root.
+//
+// GatewayBindings maps a gateway receipt's receipt_id to the exact bytes of
+// the binding document its output_hash covers (base64 in JSON). They are data
+// to check against the signed receipts, never a source of trust.
 type Bundle struct {
-	Receipts     []*contracts.Receipt `json:"receipts"`
-	Permits      []*PermitRecord      `json:"permits,omitempty"`
-	PublicKeyHex string               `json:"public_key_hex,omitempty"`
-	KeyID        string               `json:"key_id,omitempty"`
+	Receipts        []*contracts.Receipt `json:"receipts"`
+	Permits         []*PermitRecord      `json:"permits,omitempty"`
+	PublicKeyHex    string               `json:"public_key_hex,omitempty"`
+	KeyID           string               `json:"key_id,omitempty"`
+	GatewayBindings map[string][]byte    `json:"gateway_bindings,omitempty"`
 }
 
 // embeddedKeys returns the bundle-level self-declared key material, keyed by
@@ -479,12 +491,26 @@ func Verify(receipts []*contracts.Receipt, trust TrustRoot) Result {
 	return VerifyBundle(Bundle{Receipts: receipts}, trust)
 }
 
+// Options is the caller's verification policy. The zero value is
+// VerifyBundle's.
+type Options struct {
+	// RequireGatewayBindings fails the binding check when a receipt whose
+	// session_id names a gateway receipt chain has no binding document, so a
+	// pass covers the gateway facts of every gateway receipt.
+	RequireGatewayBindings bool
+}
+
 // VerifyBundle checks a receipts-plus-permits bundle against a trust root.
 //
 // Receipts are required: a bundle with no receipts attests to nothing and is
 // an error, not a lesser success. Permits are verified when present, in
 // addition to — never instead of — the receipt chain.
 func VerifyBundle(b Bundle, trust TrustRoot) Result {
+	return VerifyBundleWith(b, trust, Options{})
+}
+
+// VerifyBundleWith is VerifyBundle under the caller's options.
+func VerifyBundleWith(b Bundle, trust TrustRoot, opts Options) Result {
 	receipts := b.Receipts
 	res := Result{Receipts: len(receipts), Permits: len(b.Permits)}
 
@@ -516,9 +542,10 @@ func VerifyBundle(b Bundle, trust TrustRoot) Result {
 	res.Checks = append(res.Checks, identity)
 	res.Checks = append(res.Checks, checkIntegrity(receipts))
 	res.Checks = append(res.Checks, checkPolicy(receipts))
-	res.Checks = append(res.Checks, checkExecution(receipts))
+	res.Checks = append(res.Checks, checkExecution(receipts, len(b.GatewayBindings)))
 	res.Checks = append(res.Checks, checkClosure(receipts))
 	res.Checks = append(res.Checks, checkPermits(b.Permits, trust, embedded))
+	res.Checks = append(res.Checks, checkBindings(receipts, b.GatewayBindings, opts.RequireGatewayBindings, &res))
 
 	res.Valid = len(res.Errors) == 0
 	for _, c := range res.Checks {
@@ -614,7 +641,7 @@ func checkPolicy(receipts []*contracts.Receipt) Check {
 	return Check{CheckPolicy, StatusPass, d}
 }
 
-func checkExecution(receipts []*contracts.Receipt) Check {
+func checkExecution(receipts []*contracts.Receipt, bindings int) Check {
 	observed := 0
 	for _, r := range receipts {
 		if r.ArgsHash != "" || r.OutputHash != "" {
@@ -623,6 +650,13 @@ func checkExecution(receipts []*contracts.Receipt) Check {
 	}
 	if observed == 0 {
 		return Check{CheckExecution, StatusNotApplicable, "no receipt carries an args_hash or output_hash"}
+	}
+	if bindings > 0 {
+		return Check{CheckExecution, StatusPass, fmt.Sprintf(
+			"%d/%d receipt(s) bind an execution observation (args_hash/output_hash) inside the signature; "+
+				"the binding check recomputes output_hash for the %d receipt(s) whose binding document is supplied, "+
+				"and no other hash is recomputed: this verifier does not hold the payloads",
+			observed, len(receipts), bindings)}
 	}
 	return Check{CheckExecution, StatusPass, fmt.Sprintf(
 		"%d/%d receipt(s) bind an execution observation (args_hash/output_hash) inside the signature; "+

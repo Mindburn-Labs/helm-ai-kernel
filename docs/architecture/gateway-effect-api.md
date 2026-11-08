@@ -50,6 +50,7 @@ eight RPCs for them. WS-B's review adds two more, `Cancel` and
 | §4.2 `Get` | `GetAttempt` (`NO_SIDE_EFFECTS`, so Connect allows GET) | read | — |
 | added: content read | `GetAttemptContent` (`NO_SIDE_EFFECTS`) | read | §5.6 content blobs |
 | §4.2 `Stop` / `Lift` | `Stop`, `Lift` | `(tenant, idempotency_key)` | `admission.Stop`, `admission.Lift` |
+| added: receipt reads | `GetAttemptReceipts`, `ExportReceiptChain` (`NO_SIDE_EFFECTS`) | read | "Reading and verifying receipts offline" |
 
 `Lift` widens authority, so it does not lift anything by itself. It creates a
 `helm.authority.lift` effect attempt, which is approved with `Approve` (with
@@ -440,7 +441,9 @@ land.
 
 Tenant, workspace and principal come only from the token (R9, ADR-0005). No
 request message has a tenant, workspace or caller-principal field, and the
-contract test enforces that. ADR-0005 allows one scope per token. An RPC may
+contract test enforces that. The one listed exception is
+`ExportReceiptChainRequest.workspace_id`: the caller restates the token's
+workspace, and any other value is refused. ADR-0005 allows one scope per token. An RPC may
 accept tokens of more than one scope; `Cancel` does.
 
 WS-B (Control Plane) proposed the scopes on 2026-09-25: one per authority
@@ -452,7 +455,7 @@ names:
 |---|---|---|---|
 | `helm.gateway.propose` | `Propose`; `Cancel` of one's own attempt | any principal, humans included | — |
 | `helm.gateway.decide` | `Approve`, `Reject` | a human principal only, from an interactive session, never a worker | single-use; bound by `authorization_details` |
-| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts`, `result_ref` blobs, and `GetProvisioning` and `ListEffectTypes` of `AuthorityAdminService` | any principal with workspace read | — |
+| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts`, `GetAttemptReceipts`, `ExportReceiptChain`, `result_ref` blobs, and `GetProvisioning` and `ListEffectTypes` of `AuthorityAdminService` | any principal with workspace read | — |
 | `helm.gateway.stop` | `Stop`, `Lift`; `Cancel` of another principal's attempt | human operators and admins only | single-use; a `Lift` token is bound by `authorization_details` |
 | `helm.gateway.execute` | `Dispatch`, `Observe`, and the model gateway's inference endpoint (§8) | workload principals only: the Control Plane backend and SDK agent runtimes. Never a human session, and never a worker's propose token | — |
 
@@ -1458,12 +1461,13 @@ helm-gateway:<namespace>:<release>-helm-ai-kernel-gateway:<fingerprint>=<public 
 decision and outcome receipts, oldest first, as `ReceiptRef {chain_id, seq, receipt_hash, kid}`:
 `receipt_hash` is the receipt's chain hash, the `prev_hash` of the next
 receipt in its chain, and `kid` its `key_id`. The read model carries the
-same references; the receipt bytes stay in the gateway's ledger until an
-export RPC serves them.
+same references. `GetAttemptReceipts` and `ExportReceiptChain` serve the
+receipt bytes (see "Reading and verifying receipts offline").
 
-**Verifying offline.** Record the public key out of band, export the
-envelopes of a chain segment in sequence order as one JSON array, and run the
-kernel's verifier against the gateway's key alone:
+**Verifying offline from the database.** An operator with database access can
+also export the envelopes of a chain segment in sequence order as one JSON
+array and run the kernel's verifier against the gateway's key alone (the RPC
+route, with bindings, is in "Reading and verifying receipts offline"):
 
 ```bash
 psql "$HELM_GATEWAY_DATABASE_URL" -At -c "SELECT set_config('app.current_tenant', 'tenant-a', false);
@@ -1484,9 +1488,108 @@ every append. Exporting chain segments and anchoring the head outside the
 database is the follow-up that makes truncation visible.
 
 An attempt's receipts are not adjacent in its workspace's chain, so verify
-them one by one or as a contiguous segment. To check what a receipt binds,
-hash its stored binding bytes and compare the result with `output_hash`, then
-read the document against its schema.
+them one by one or as a contiguous segment. `receipt_verify` checks what a
+receipt binds when its binding bytes are supplied (the `binding` check).
+
+## Reading and verifying receipts offline
+
+Three pieces let a reader check the gateway's decision and outcome receipts
+without a gateway or a database in the trust path (helm-tracker#276, CTL-060).
+
+**The key.** `helm-gateway serve` publishes the public half of its receipt key
+at `GET /api/v1/receipt-keyring` on its API listener. The document has the
+Kernel's keyring shape (`core/pkg/receiptkeyring`, CTL-050) under the
+gateway's own label, `gateway-receipt-keyring.v1`, so it cannot be mistaken
+for the Kernel's `kernel-evaluate-receipt-keyring.v1`:
+
+```json
+{"keyring_version":"gateway-receipt-keyring.v1","keys":[{"key_id":"<key_id>","profile":"classical","ed25519_public_key_hex":"<public key hex>"}]}
+```
+
+The route is public and read-only like the Kernel's: no token, `GET` only,
+`Cache-Control: no-store`, and the Kernel's public rate class (120 requests a
+second, bursts of 240, per process; `429` with `Retry-After` beyond it). It is
+not served on the worker or executor listeners. `serve` refuses to start with
+a receipt signer it cannot publish. Fetch it over the TLS listener, or record
+`helm-gateway receipt-key` out of band: a key read over plain HTTP can be
+substituted in transit.
+
+**The reads.** Both RPCs take a `helm.gateway.read` token and have no side
+effects.
+
+- `GetAttemptReceipts(attempt_id)` returns the attempt's receipts, oldest
+  first, as `SignedReceipt {ref, receipt_id, format, receipt, binding}`:
+  `receipt` is the exact receipt.v5 envelope the gateway stored and `binding`
+  the exact `helm.gateway.receipt-binding.v1` bytes whose SHA-256 is its
+  `output_hash`. It reads what `GetAttempt` reads: an attempt of the token's
+  tenant and workspace, and for an episode token only one of its own episode.
+  Continuation and reassignment grants do not extend to receipts.
+- `ExportReceiptChain(workspace_id, from_seq, to_seq)` returns receipts
+  `from_seq` to `to_seq` of the chain of the token's tenant and workspace, at
+  most 256 per call, with `chain_id`, `head_seq` and their references, and
+  `bundle`: the segment as the JSON document `receipt_verify` reads. The
+  bundle holds the stored envelopes in chain order under `receipts`,
+  `gateway_bindings` mapping each `receipt_id` to the base64 of its binding
+  bytes, and `key_id` when every receipt names one key. It carries no key.
+  `workspace_id` must be the token's workspace (`permission_denied`
+  otherwise), and an episode token is refused (the chain holds every
+  episode's decisions). A `to_seq` past the head reads up to the head;
+  `head_seq` and the references returned say which range the bundle holds,
+  and it holds all of it or the call fails. A `from_seq` past the head is
+  `not_found`. Page with consecutive ranges until `head_seq`.
+
+**The check.** Save the bundle unchanged and verify it against the published
+key, requiring a binding for every gateway receipt:
+
+```bash
+curl -s https://<gateway>/api/v1/receipt-keyring \
+  | jq -r '.keys[] | "\(.key_id)=\(.ed25519_public_key_hex)"'
+curl -s https://<gateway>/helm.gateway.v1.EffectGatewayService/ExportReceiptChain \
+  -H "Authorization: Bearer $HELM_GATEWAY_READ_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"<workspace>","fromSeq":"1","toSeq":"256"}' | jq -r .bundle > export.json
+receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --require-bindings --json
+```
+
+Exit 0 means every signature verifies under that key and every `prev_hash`
+matches its predecessor. Bindings are checked only when supplied. For each
+receipt whose binding the bundle carries, the `binding` check requires:
+
+- a receipt.v5 signature;
+- the binding's SHA-256 equal to the receipt's `output_hash`;
+- the binding to be the closed document its `binding_version` names, in its
+  own JCS form: `helm.gateway.receipt-binding.v1` for a decision,
+  `helm.gateway.outcome-binding.v1` for an outcome; any other version fails;
+- its chain id (length-framed from its tenant and workspace), sequence,
+  attempt and version, state, reason code, policy hash and argument digest to
+  equal the receipt's `session_id`, `lamport_clock`, `decision_id`,
+  `effect_id`, `status`, `reason_code`, `policy_hash` and `args_hash`;
+- for a decision, its `verdict` to equal the receipt's and its `decided_at`
+  the receipt's `timestamp`; for an outcome, a state of `OBSERVED`,
+  `RECONCILED` or `SETTLED`, an empty receipt `verdict`, a permit, and its
+  `settled_at` equal to the receipt's `timestamp`. The timestamp is outside
+  the receipt.v5 preimage; this comparison is what binds it.
+
+A tampered binding, a binding for a receipt the bundle does not hold, a
+binding version the verifier does not know, or a gap in the range fails
+verification (exit 1). A receipt with no binding is not checked, and without
+`--require-bindings` exit 0 does not say otherwise: the JSON verdict counts
+`gateway_receipts` (receipts whose `session_id` names a gateway chain) and
+`bindings_checked`. With `--require-bindings`, a gateway receipt without a
+binding fails verification, so exit 0 covers every gateway receipt's own facts.
+For one receipt from `GetAttemptReceipts`, save `receipt` and `binding` to two
+files and run
+`receipt_verify --receipt receipt.json --binding <receipt_id>=binding.json --key "<key_id>=<public key hex>" --require-bindings`.
+The WASM verifier (`core/cmd/receipt_verify_wasm`) reads the same bundle and
+reports the same counts; it has no `--require-bindings` option, so a caller
+compares `bindings_checked` with `gateway_receipts`.
+
+A passing export shows its range is contiguous and signed. It does not show
+that nothing follows `to_seq`: `head_seq` is what the ledger held when it was
+read, and the chain alone cannot reveal truncation (see "Signed decision
+receipts"). `core/pkg/receiptverify/testdata/frozen-gateway-chain.json`, a
+chain of three decisions and one outcome signed with a fixed key, keeps
+verifying; it pins receipt.v5 gateway receipts and both binding versions for
+the move to the next envelope (helm-tracker#53).
 
 ## Conformance table
 

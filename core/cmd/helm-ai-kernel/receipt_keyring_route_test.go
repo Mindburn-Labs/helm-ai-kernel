@@ -15,6 +15,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptkeyring"
 )
 
 // receiptKeyringVectorSeed is the fixed test key: the Ed25519 seed 0x00..0x1f.
@@ -87,14 +88,14 @@ func TestReceiptKeyringMatchesTheIdentityStampedOnReceipts(t *testing.T) {
 			}
 			decoder := json.NewDecoder(bytes.NewReader(rec.Body.Bytes()))
 			decoder.DisallowUnknownFields()
-			var keyring receiptKeyring
+			var keyring receiptkeyring.Keyring
 			if err := decoder.Decode(&keyring); err != nil {
 				t.Fatalf("strict decode: %v", err)
 			}
 			if decoder.More() {
 				t.Fatal("more than one JSON value")
 			}
-			if keyring.KeyringVersion != receiptKeyringVersion || len(keyring.Keys) != 1 {
+			if keyring.KeyringVersion != receiptkeyring.KernelVersion || len(keyring.Keys) != 1 {
 				t.Fatalf("keyring = %+v", keyring)
 			}
 

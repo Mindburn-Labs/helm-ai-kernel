@@ -59,12 +59,14 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
 // OutcomeBindingVersion names the closed document whose SHA-256 an outcome
 // receipt signs as output_hash. Its JSON schema is
-// protocols/json-schemas/gateway/outcome-binding.v1.schema.json.
-const OutcomeBindingVersion = "helm.gateway.outcome-binding.v1"
+// protocols/json-schemas/gateway/outcome-binding.v1.schema.json; the verifier
+// owns the one definition of its shape (receiptverify).
+const OutcomeBindingVersion = receiptverify.GatewayOutcomeBindingVersion
 
 // What established an outcome.
 const (
@@ -134,67 +136,18 @@ func (o storedOutcome) build(receiptID string, seq uint64, prevDigest string) (*
 	return buildOutcomeReceipt(o, receiptID, seq, prevDigest)
 }
 
-// outcomeBinding is helm.gateway.outcome-binding.v1. Every member is always
-// present; model_call is null for an effect that is not a model call. Amounts
-// are decimal strings (empty for an amount the ledger does not hold), so the
-// document stays inside the number range every RFC 8785 implementation
-// reproduces.
-type outcomeBinding struct {
-	BindingVersion    string                    `json:"binding_version"`
-	ChainID           string                    `json:"chain_id"`
-	Seq               uint64                    `json:"seq"`
-	TenantID          string                    `json:"tenant_id"`
-	WorkspaceID       string                    `json:"workspace_id"`
-	AttemptID         string                    `json:"attempt_id"`
-	AttemptVersion    int64                     `json:"attempt_version"`
-	FromState         string                    `json:"from_state"`
-	State             string                    `json:"state"`
-	ReasonCode        string                    `json:"reason_code"`
-	EffectType        string                    `json:"effect_type"`
-	RequestDigest     string                    `json:"request_digest"`
-	TargetDigest      string                    `json:"target_digest"`
-	ArgumentDigest    string                    `json:"argument_digest"`
-	PermitID          string                    `json:"permit_id"`
-	AuthorityVersions []bindingAuthorityVersion `json:"authority_versions"`
-	PolicyHash        string                    `json:"policy_hash"`
-	Outcome           string                    `json:"outcome"`
-	OutcomeBasis      string                    `json:"outcome_basis"`
-	SettledBy         string                    `json:"settled_by"`
-	Observation       outcomeObservation        `json:"observation"`
-	Reservation       string                    `json:"reservation"`
-	ReadbackAbsent    bool                      `json:"readback_absent"`
-	Exposures         []bindingExposure         `json:"exposures"`
-	ModelCall         *bindingModelCall         `json:"model_call"`
-	SettledAt         string                    `json:"settled_at"`
-}
+// outcomeBinding is helm.gateway.outcome-binding.v1. Its one definition is
+// receiptverify.GatewayOutcomeBinding, which receipt_verify parses as a closed
+// document: every member is always present, model_call is null for an effect
+// that is not a model call, and amounts are decimal strings (empty for an
+// amount the ledger does not hold).
+type outcomeBinding = receiptverify.GatewayOutcomeBinding
 
-type outcomeObservation struct {
-	ID             int64  `json:"id"`
-	Source         string `json:"source"`
-	TrustClass     string `json:"trust_class"`
-	Outcome        string `json:"outcome"`
-	EvidenceDigest string `json:"evidence_digest"`
-	ResultKind     string `json:"result_kind"`
-	ResultRef      string `json:"result_ref"`
-	ObservedAt     string `json:"observed_at"`
-}
+type outcomeObservation = receiptverify.GatewayOutcomeObservation
 
-type bindingExposure struct {
-	LimitID     string `json:"limit_id"`
-	BucketStart string `json:"bucket_start"`
-	Kind        string `json:"kind"`
-	Amount      string `json:"amount"`
-}
+type bindingExposure = receiptverify.GatewayOutcomeExposure
 
-type bindingModelCall struct {
-	State           string `json:"state"`
-	CurrencyCode    string `json:"currency_code"`
-	HeldMicros      string `json:"held_micros"`
-	EstimatedMicros string `json:"estimated_micros"`
-	ConfirmedMicros string `json:"confirmed_micros"`
-	BillableMicros  string `json:"billable_micros"`
-	UsageDigest     string `json:"usage_digest"`
-}
+type bindingModelCall = receiptverify.GatewayOutcomeModelCall
 
 func decimal(v *int64) string {
 	if v == nil {

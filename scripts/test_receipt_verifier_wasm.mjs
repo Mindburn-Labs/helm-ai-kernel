@@ -23,6 +23,7 @@ for (const [file, expected] of Object.entries(corpus.source_sha256)) {
   assert.equal(createHash("sha256").update(await readFile(path.join(path.dirname(corpusPath), file))).digest("hex"), expected);
 }
 assert.deepEqual(JSON.parse(corpus.documents.chain), await readJSON(path.join(path.dirname(corpusPath), "frozen-chain-2026.json")), "frozen receipt lineage");
+assert.deepEqual(JSON.parse(corpus.documents.gateway_chain), await readJSON(path.join(path.dirname(corpusPath), "frozen-gateway-chain.json")), "frozen gateway receipt lineage");
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 await import(pathToFileURL(path.join(bundle, "wasm_exec.js")).href);
 const { loadReceiptVerifier } = await import(pathToFileURL(path.join(bundle, "receipt-verifier.mjs")).href);

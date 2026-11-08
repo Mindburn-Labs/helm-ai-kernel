@@ -122,6 +122,62 @@ needs independently trusted key material. Normative source status also does
 not, by itself, prove that a particular release tag or binary has been
 published or deployed. **Status: Final normative standard in source.**
 
+## Verifying gateway receipts
+
+`helm-gateway` signs one `receipt.v5` receipt for every admission decision
+(`ADMITTED`, `DENIED`, `ESCALATED`) and for every outcome of an admitted
+effect (`OBSERVED`, `RECONCILED`, `SETTLED`), and chains them per tenant and
+workspace. Its own facts are signed through `output_hash`: the SHA-256 of a
+closed binding document whose exact bytes the gateway keeps beside the
+receipt. A decision's document, `helm.gateway.receipt-binding.v1`
+([schema](../../protocols/json-schemas/gateway/receipt-binding.v1.schema.json)),
+holds the tenant, workspace, attempt and version, state, mandate, approver,
+quote and authority versions. An outcome's document,
+`helm.gateway.outcome-binding.v1`
+([schema](../../protocols/json-schemas/gateway/outcome-binding.v1.schema.json)),
+holds the attempt and its permit, the outcome, the observation it rests on and
+the settlement. **Status: Live in
+source** ([gateway effect API](../architecture/gateway-effect-api.md),
+"Reading and verifying receipts offline").
+
+Read the gateway's public key from `GET /api/v1/receipt-keyring` on its API
+listener (the kernel's keyring shape under the gateway's own label,
+`gateway-receipt-keyring.v1`), export a range of a
+workspace's chain with the `ExportReceiptChain` RPC (a `helm.gateway.read`
+token of that workspace; at most 256 receipts per call, read up to the
+chain's head, which the response names as `head_seq`), and verify the
+`bundle` it returns:
+
+```bash
+curl -s https://<gateway>/api/v1/receipt-keyring \
+  | jq -r '.keys[] | "\(.key_id)=\(.ed25519_public_key_hex)"'
+curl -s https://<gateway>/helm.gateway.v1.EffectGatewayService/ExportReceiptChain \
+  -H "Authorization: Bearer $HELM_GATEWAY_READ_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"<workspace>","fromSeq":"1","toSeq":"256"}' | jq -r .bundle > export.json
+receipt_verify --receipt export.json --key "<key_id>=<public key hex>" --require-bindings --json
+```
+
+The bundle carries each binding as `gateway_bindings` (receipt id to the base64
+of the exact bytes). Besides signatures and chain linkage, `receipt_verify`
+runs a `binding` check on every receipt whose binding is supplied. Each
+binding's SHA-256 must be its receipt's `output_hash`, and the receipt must be
+signed under receipt.v5. The binding must be the closed document its version
+names, in canonical form. Its chain, sequence, attempt, version, state,
+verdict, reason code, policy hash, argument digest and time must equal the
+signed receipt's fields and its timestamp. A tampered binding, a binding for a
+receipt that is not in the file, or a gap in the range fails verification.
+
+Bindings are checked only when supplied, and exit 0 alone does not say a
+gateway receipt's own facts were checked. `--require-bindings` makes it so: a
+gateway receipt without a binding then fails verification. The JSON verdict
+reports `gateway_receipts` and `bindings_checked`. For one receipt read with
+`GetAttemptReceipts`, pass its binding with `--binding
+<receipt_id>=binding.json`.
+
+The binding states what the gateway recorded; the verifier cannot see the
+gateway's ledger. A verified range is contiguous, but it does not show that
+nothing follows it.
+
 ## Source Truth
 
 - [Quickstart](../QUICKSTART.md)
@@ -132,3 +188,4 @@ published or deployed. **Status: Final normative standard in source.**
 - [ADR 0003 — normative artifact arbitration](../adr/0003-normative-artifact-arbitration.md)
 - [`receipt.v5` normative signing-preimage specification](../../protocols/specs/receipts/receipt-v5.md)
 - [`receipt.v5` conformance reference pack](../../reference_packs/receipt-v5/)
+- [Gateway effect API: signed decision and outcome receipts](../architecture/gateway-effect-api.md)

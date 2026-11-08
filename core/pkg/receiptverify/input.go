@@ -14,6 +14,7 @@ type rawReceiptInput struct {
 	permits      []*PermitRecord
 	publicKeyHex string
 	keyID        string
+	bindings     map[string][]byte
 	single       bool
 }
 
@@ -26,10 +27,11 @@ func ParseBundle(raw []byte) (Bundle, error) {
 		return Bundle{}, err
 	}
 	b := Bundle{
-		Receipts:     make([]*contracts.Receipt, 0, len(input.receipts)),
-		Permits:      input.permits,
-		PublicKeyHex: input.publicKeyHex,
-		KeyID:        input.keyID,
+		Receipts:        make([]*contracts.Receipt, 0, len(input.receipts)),
+		Permits:         input.permits,
+		PublicKeyHex:    input.publicKeyHex,
+		KeyID:           input.keyID,
+		GatewayBindings: input.bindings,
 	}
 	for i, rawReceipt := range input.receipts {
 		if _, err := ParseReceiptDocument(rawReceipt); err != nil {
@@ -77,9 +79,10 @@ func normalizeReceiptInput(raw []byte) (rawReceiptInput, error) {
 			return rawReceiptInput{}, fmt.Errorf("parse receipts bundle: receipts: %w", err)
 		}
 		for key, target := range map[string]any{
-			"permits":        &input.permits,
-			"public_key_hex": &input.publicKeyHex,
-			"key_id":         &input.keyID,
+			"permits":          &input.permits,
+			"public_key_hex":   &input.publicKeyHex,
+			"key_id":           &input.keyID,
+			"gateway_bindings": &input.bindings,
 		} {
 			value, ok := object[key]
 			if ok {

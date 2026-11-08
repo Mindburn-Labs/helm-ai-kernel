@@ -20,7 +20,8 @@
 //     Identifiers that appear in requests (mandate_id, stop scope keys) are
 //     selectors the gateway checks against the authenticated principal; they
 //     never grant authority (R3). Attempts belong to the workspace of the
-//     token that proposed them.
+//     token that proposed them. ExportReceiptChain's workspace_id restates
+//     the token's workspace and is refused when it names any other.
 //   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
 //     allows one scope per token. Scopes are one per authority class (WS-B
 //     proposal, resolved by the coordinator on 2026-09-26):
@@ -59,12 +60,14 @@
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values, except ReceiptRef.receipt_hash, a receipt's chain hash as the
-// lowercase hex string its chain links with, and no signatures or keys. An
-// attempt names its signed decision receipts by reference only (ReceiptRef):
-// each is a classical Ed25519 receipt.v5 signature the gateway keeps in its
-// ledger, verified offline against the gateway's published key. Token
-// verification is ADR-0005's and adds no cryptographic control here; no
-// post-quantum claim is made.
+// lowercase hex string its chain links with. An attempt names its signed
+// decision and outcome receipts by reference (ReceiptRef); only the receipt reads
+// (GetAttemptReceipts, ExportReceiptChain) carry signed material: the exact
+// bytes of classical Ed25519 receipt.v5 envelopes as the gateway stored them,
+// which name the signer's public key, and their SHA-256-bound binding
+// documents, verified offline against the key the gateway publishes. No other
+// message carries a signature or a key. Token verification is ADR-0005's and
+// adds no cryptographic control here; no post-quantum claim is made.
 package gatewayv1
 
 import (
@@ -143,6 +146,12 @@ const (
 	// EffectGatewayServiceListRecoveryAttemptsProcedure is the fully-qualified name of the
 	// EffectGatewayService's ListRecoveryAttempts RPC.
 	EffectGatewayServiceListRecoveryAttemptsProcedure = "/helm.gateway.v1.EffectGatewayService/ListRecoveryAttempts"
+	// EffectGatewayServiceGetAttemptReceiptsProcedure is the fully-qualified name of the
+	// EffectGatewayService's GetAttemptReceipts RPC.
+	EffectGatewayServiceGetAttemptReceiptsProcedure = "/helm.gateway.v1.EffectGatewayService/GetAttemptReceipts"
+	// EffectGatewayServiceExportReceiptChainProcedure is the fully-qualified name of the
+	// EffectGatewayService's ExportReceiptChain RPC.
+	EffectGatewayServiceExportReceiptChainProcedure = "/helm.gateway.v1.EffectGatewayService/ExportReceiptChain"
 )
 
 // EffectGatewayServiceClient is a client for the helm.gateway.v1.EffectGatewayService service.
@@ -384,6 +393,54 @@ type EffectGatewayServiceClient interface {
 	// Get/Observe authorization remains mandatory for each attempt.
 	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
+	// GetAttemptReceipts returns the signed decision and outcome receipts of
+	// one attempt, oldest first: for each, the exact bytes of the receipt.v5
+	// envelope the gateway stored, the exact bytes of the binding document
+	// (helm.gateway.receipt-binding.v1 for a decision,
+	// helm.gateway.outcome-binding.v1 for an outcome) whose SHA-256 it signs as
+	// output_hash, and its place in its chain. Each verifies offline with
+	//
+	//	receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
+	//	  --key "<kid>=<public key hex>"
+	//
+	// using the key the gateway publishes at GET /api/v1/receipt-keyring.
+	// Receipts of one attempt are not adjacent in their chain; to check the
+	// linkage around them, export the range with ExportReceiptChain.
+	//
+	// It reads what GetAttempt reads: an attempt of the token's tenant and
+	// workspace, and for a token that carries an episode claim (a worker token)
+	// only an attempt of its own episode; any other attempt is not_found.
+	// Continuation and reassignment grants do not extend to receipts.
+	//
+	// Token scope: helm.gateway.read.
+	GetAttemptReceipts(context.Context, *connect.Request[GetAttemptReceiptsRequest]) (*connect.Response[GetAttemptReceiptsResponse], error)
+	// ExportReceiptChain exports a contiguous segment of the receipt chain of
+	// the token's tenant and workspace: the receipts with sequence numbers
+	// from_seq to to_seq, in chain order, as one document receipt_verify checks
+	// offline, signatures, chain linkage and bindings included:
+	//
+	//	receipt_verify --receipt export.json --key "<kid>=<public key hex>" --json
+	//
+	// One call exports one chain and never another tenant's or workspace's.
+	//
+	// Token scope: helm.gateway.read.
+	//
+	//   - workspace_id must be the token's workspace; any other is
+	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]. It names
+	//     the chain the caller expects and never selects another.
+	//   - A token that carries an episode claim (a worker token) is
+	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
+	//     holds the decisions of every episode in the workspace.
+	//   - from_seq is at least 1, to_seq at least from_seq, and the requested
+	//     range holds at most 256 receipts, or the call is invalid_argument
+	//     [reason_code: SCHEMA_VIOLATION].
+	//   - A to_seq past the chain's head reads up to the head: head_seq and the
+	//     receipts returned say exactly which range the bundle holds, and it
+	//     holds every receipt of that range or the call fails. A from_seq past
+	//     the head, or a workspace with no chain yet, is not_found. Page with
+	//     consecutive ranges; the last receipt of one range is the predecessor
+	//     of the next.
+	ExportReceiptChain(context.Context, *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error)
 }
 
 // NewEffectGatewayServiceClient constructs a client for the helm.gateway.v1.EffectGatewayService
@@ -499,6 +556,20 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getAttemptReceipts: connect.NewClient[GetAttemptReceiptsRequest, GetAttemptReceiptsResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceGetAttemptReceiptsProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttemptReceipts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		exportReceiptChain: connect.NewClient[ExportReceiptChainRequest, ExportReceiptChainResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceExportReceiptChainProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("ExportReceiptChain")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -520,6 +591,8 @@ type effectGatewayServiceClient struct {
 	getRecoveryFence       *connect.Client[GetRecoveryFenceRequest, GetRecoveryFenceResponse]
 	bindRecoveryCheckpoint *connect.Client[BindRecoveryCheckpointRequest, BindRecoveryCheckpointResponse]
 	listRecoveryAttempts   *connect.Client[ListRecoveryAttemptsRequest, ListRecoveryAttemptsResponse]
+	getAttemptReceipts     *connect.Client[GetAttemptReceiptsRequest, GetAttemptReceiptsResponse]
+	exportReceiptChain     *connect.Client[ExportReceiptChainRequest, ExportReceiptChainResponse]
 }
 
 // Propose calls helm.gateway.v1.EffectGatewayService.Propose.
@@ -600,6 +673,16 @@ func (c *effectGatewayServiceClient) BindRecoveryCheckpoint(ctx context.Context,
 // ListRecoveryAttempts calls helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts.
 func (c *effectGatewayServiceClient) ListRecoveryAttempts(ctx context.Context, req *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error) {
 	return c.listRecoveryAttempts.CallUnary(ctx, req)
+}
+
+// GetAttemptReceipts calls helm.gateway.v1.EffectGatewayService.GetAttemptReceipts.
+func (c *effectGatewayServiceClient) GetAttemptReceipts(ctx context.Context, req *connect.Request[GetAttemptReceiptsRequest]) (*connect.Response[GetAttemptReceiptsResponse], error) {
+	return c.getAttemptReceipts.CallUnary(ctx, req)
+}
+
+// ExportReceiptChain calls helm.gateway.v1.EffectGatewayService.ExportReceiptChain.
+func (c *effectGatewayServiceClient) ExportReceiptChain(ctx context.Context, req *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error) {
+	return c.exportReceiptChain.CallUnary(ctx, req)
 }
 
 // EffectGatewayServiceHandler is an implementation of the helm.gateway.v1.EffectGatewayService
@@ -842,6 +925,54 @@ type EffectGatewayServiceHandler interface {
 	// Get/Observe authorization remains mandatory for each attempt.
 	// Token scope: helm.gateway.read.
 	ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error)
+	// GetAttemptReceipts returns the signed decision and outcome receipts of
+	// one attempt, oldest first: for each, the exact bytes of the receipt.v5
+	// envelope the gateway stored, the exact bytes of the binding document
+	// (helm.gateway.receipt-binding.v1 for a decision,
+	// helm.gateway.outcome-binding.v1 for an outcome) whose SHA-256 it signs as
+	// output_hash, and its place in its chain. Each verifies offline with
+	//
+	//	receipt_verify --receipt <receipt> --binding <receipt_id>=<binding>
+	//	  --key "<kid>=<public key hex>"
+	//
+	// using the key the gateway publishes at GET /api/v1/receipt-keyring.
+	// Receipts of one attempt are not adjacent in their chain; to check the
+	// linkage around them, export the range with ExportReceiptChain.
+	//
+	// It reads what GetAttempt reads: an attempt of the token's tenant and
+	// workspace, and for a token that carries an episode claim (a worker token)
+	// only an attempt of its own episode; any other attempt is not_found.
+	// Continuation and reassignment grants do not extend to receipts.
+	//
+	// Token scope: helm.gateway.read.
+	GetAttemptReceipts(context.Context, *connect.Request[GetAttemptReceiptsRequest]) (*connect.Response[GetAttemptReceiptsResponse], error)
+	// ExportReceiptChain exports a contiguous segment of the receipt chain of
+	// the token's tenant and workspace: the receipts with sequence numbers
+	// from_seq to to_seq, in chain order, as one document receipt_verify checks
+	// offline, signatures, chain linkage and bindings included:
+	//
+	//	receipt_verify --receipt export.json --key "<kid>=<public key hex>" --json
+	//
+	// One call exports one chain and never another tenant's or workspace's.
+	//
+	// Token scope: helm.gateway.read.
+	//
+	//   - workspace_id must be the token's workspace; any other is
+	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]. It names
+	//     the chain the caller expects and never selects another.
+	//   - A token that carries an episode claim (a worker token) is
+	//     permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]: the chain
+	//     holds the decisions of every episode in the workspace.
+	//   - from_seq is at least 1, to_seq at least from_seq, and the requested
+	//     range holds at most 256 receipts, or the call is invalid_argument
+	//     [reason_code: SCHEMA_VIOLATION].
+	//   - A to_seq past the chain's head reads up to the head: head_seq and the
+	//     receipts returned say exactly which range the bundle holds, and it
+	//     holds every receipt of that range or the call fails. A from_seq past
+	//     the head, or a workspace with no chain yet, is not_found. Page with
+	//     consecutive ranges; the last receipt of one range is the predecessor
+	//     of the next.
+	ExportReceiptChain(context.Context, *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error)
 }
 
 // NewEffectGatewayServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -953,6 +1084,20 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	effectGatewayServiceGetAttemptReceiptsHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceGetAttemptReceiptsProcedure,
+		svc.GetAttemptReceipts,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttemptReceipts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	effectGatewayServiceExportReceiptChainHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceExportReceiptChainProcedure,
+		svc.ExportReceiptChain,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("ExportReceiptChain")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/helm.gateway.v1.EffectGatewayService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EffectGatewayServiceProposeProcedure:
@@ -987,6 +1132,10 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 			effectGatewayServiceBindRecoveryCheckpointHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceListRecoveryAttemptsProcedure:
 			effectGatewayServiceListRecoveryAttemptsHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceGetAttemptReceiptsProcedure:
+			effectGatewayServiceGetAttemptReceiptsHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceExportReceiptChainProcedure:
+			effectGatewayServiceExportReceiptChainHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1058,4 +1207,12 @@ func (UnimplementedEffectGatewayServiceHandler) BindRecoveryCheckpoint(context.C
 
 func (UnimplementedEffectGatewayServiceHandler) ListRecoveryAttempts(context.Context, *connect.Request[ListRecoveryAttemptsRequest]) (*connect.Response[ListRecoveryAttemptsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) GetAttemptReceipts(context.Context, *connect.Request[GetAttemptReceiptsRequest]) (*connect.Response[GetAttemptReceiptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetAttemptReceipts is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) ExportReceiptChain(context.Context, *connect.Request[ExportReceiptChainRequest]) (*connect.Response[ExportReceiptChainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.ExportReceiptChain is not implemented"))
 }

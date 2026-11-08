@@ -556,7 +556,9 @@ func (o ModelCallOutcome) validate() error {
 // SettleModelCall settles a claimed call in one transaction (ADR-0003): it
 // locks the attempt row and then the call's money row, moves the attempt's
 // held exposure as the outcome says, records the observation and, for a
-// completed call, the response to replay. A provider confirmation may replace
+// completed call, the response to replay, and last writes the outcome with
+// its signed receipt (OBSERVED or RECONCILED, then SETTLED for a confirmed
+// call; outcomes.go). A cut call is UNKNOWN and has no outcome yet. A provider confirmation may replace
 // an ESTIMATED amount once, including after a cut stream left the attempt
 // UNKNOWN. It corrects used exposure without reserving or dispatching again.
 // A final settlement, or an attempt that has otherwise moved on, is unchanged.
@@ -623,11 +625,19 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 	if len(out.EvidenceDigest) > 0 {
 		evidence = out.EvidenceDigest
 	}
+	// observe records the call's observation and names the row that holds it,
+	// which the outcome's receipt binds.
+	var observationID int64
 	observe := func(outcome adapters.Outcome, trust string) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome, evidence_digest)
+		var inserted sql.NullInt64
+		err := tx.QueryRowContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome, evidence_digest)
 			VALUES ($1, $2, $3, $4, $5, $6)
 			ON CONFLICT (tenant_id, attempt_id, evidence_digest) WHERE evidence_digest IS NOT NULL
-			DO NOTHING`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence)
+			DO NOTHING RETURNING observation_id`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence).Scan(&inserted)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		observationID, err = observationOf(ctx, tx, tenantID, attemptID, inserted, out.EvidenceDigest)
 		return err
 	}
 	setCall := func(state string, estimated, confirmed *int64, billable int64) error {
@@ -636,6 +646,14 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 			    version = version + 1, updated_at = now()
 			WHERE tenant_id = $1 AND attempt_id = $2`, tenantID, attemptID, state, nullInt(estimated), nullInt(confirmed), billable, usage)
 		return err
+	}
+	// outcomes are the attempt's outcome writes, each with its signed receipt.
+	// They run last, after the replay below, so that the receipt chain stays
+	// the last row lock the transaction takes on a pre-existing row.
+	var outcomes []outcomeWrite
+	settle := func(outcome adapters.Outcome, reason contracts.ReasonCode, reservation string) {
+		outcomes = append(outcomes, outcomeWrite{tenantID: tenantID, attemptID: attemptID, from: a.state, to: observedState,
+			outcome: outcome, reason: reason, settledBy: settledByModelCall, reservation: reservation})
 	}
 
 	switch out.Result {
@@ -652,12 +670,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeSucceeded, modelProviderTrust); err != nil {
 			return err
 		}
-		if err := settleState(ctx, tx, tenantID, attemptID, a.state, observedState, adapters.OutcomeSucceeded, ""); err != nil {
-			return err
-		}
-		if err := transition(ctx, tx, tenantID, attemptID, observedState, "SETTLED", ""); err != nil {
-			return err
-		}
+		settle(adapters.OutcomeSucceeded, "", "confirmed")
+		outcomes = append(outcomes, outcomeWrite{tenantID: tenantID, attemptID: attemptID, from: observedState, to: "SETTLED",
+			settledBy: settledByModelCall, reservation: "confirmed"})
 	case ModelCallEstimated:
 		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-estimated"); err != nil {
 			return err
@@ -668,9 +683,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeSucceeded, modelProviderTrust); err != nil {
 			return err
 		}
-		if err := settleState(ctx, tx, tenantID, attemptID, a.state, observedState, adapters.OutcomeSucceeded, ""); err != nil {
-			return err
-		}
+		settle(adapters.OutcomeSucceeded, "", "estimated")
 	case ModelCallCut:
 		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-cut"); err != nil {
 			return err
@@ -693,9 +706,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		if err := observe(adapters.OutcomeFailed, "adapter_refusal"); err != nil {
 			return err
 		}
-		if err := settleState(ctx, tx, tenantID, attemptID, a.state, observedState, adapters.OutcomeFailed, out.Reason); err != nil {
-			return err
-		}
+		settle(adapters.OutcomeFailed, out.Reason, "released")
 	}
 	// A late usage report corrects accounting only. It cannot fabricate the
 	// response a cut caller never received or replace an expired replay.
@@ -716,12 +727,24 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 		}
 	}
 	// Expired responses are cleared as calls settle: the body goes, the row
-	// and its digest stay. Bounded, so no settlement pays for a backlog.
-	_, err := tx.ExecContext(ctx, `UPDATE authority_model_replays SET body = NULL, purged_at = now()
+	// and its digest stay. Bounded, so no settlement pays for a backlog. The
+	// rows it clears stay locked until the settlement commits, through the
+	// signing of its receipts, so a concurrent settlement skips the rows
+	// another is clearing instead of waiting for them.
+	if _, err := tx.ExecContext(ctx, `UPDATE authority_model_replays SET body = NULL, purged_at = now()
 		WHERE (tenant_id, attempt_id) IN (
 			SELECT tenant_id, attempt_id FROM authority_model_replays
-			WHERE tenant_id = $1 AND body IS NOT NULL AND expires_at < now() LIMIT 100)`, tenantID)
-	return err
+			WHERE tenant_id = $1 AND body IS NOT NULL AND expires_at < now() LIMIT 100
+			FOR UPDATE SKIP LOCKED)`, tenantID); err != nil {
+		return err
+	}
+	for _, w := range outcomes {
+		w.observationID = observationID
+		if err := recordOutcome(ctx, tx, s.cfg.ReceiptSigner, w); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func nullInt(v *int64) any {

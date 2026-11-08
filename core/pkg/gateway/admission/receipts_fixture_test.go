@@ -6,15 +6,12 @@ package admission
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
@@ -69,43 +66,26 @@ func frozenGatewayDecisions() []storedDecision {
 	return []storedDecision{escalated, denied, admitted}
 }
 
-// frozenGatewayOutcome is the outcome receipt of the admitted attempt: its
-// read-back OBSERVED it SUCCEEDED and confirmed its reservation. It is built
-// the way the gateway's outcome builder (helm-tracker#276, PR #1217) builds
-// one: a helm.gateway.outcome-binding.v1 document, and a receipt.v5 receipt
-// with the attempt's version, the outcome state as status, no verdict, the
-// stored reason code, the permit's policy hash, the argument digest and the
-// settlement time.
+// frozenGatewayOutcome is the outcome receipt of the admitted attempt, built
+// by the gateway's outcome builder: its read-back OBSERVED it SUCCEEDED and
+// confirmed its reservation.
 func frozenGatewayOutcome(t *testing.T, admitted storedDecision, receiptID string, seq uint64, prev string) (*contracts.Receipt, []byte) {
 	t.Helper()
-	policyHash, err := authoritySnapshotHash(admitted.AuthorityVersions)
-	must(t, err)
 	settledAt := admitted.DecidedAt.Add(time.Second + 250*time.Millisecond)
-	chain := receiptChainID(admitted.TenantID, admitted.WorkspaceID)
-	argument := hex.EncodeToString(admitted.ArgumentDigest)
-	const version = 7 // ADMITTED 4, DISPATCHING 5, DISPATCHED 6, OBSERVED 7
-	binding, err := canonicalize.InteroperableJCS(receiptverify.GatewayOutcomeBinding{
-		BindingVersion: receiptverify.GatewayOutcomeBindingVersion, ChainID: chain, Seq: seq,
-		TenantID: admitted.TenantID, WorkspaceID: admitted.WorkspaceID, AttemptID: admitted.AttemptID, AttemptVersion: version,
-		FromState: "DISPATCHED", State: "OBSERVED", ReasonCode: "", EffectType: admitted.EffectType,
-		RequestDigest: hex.EncodeToString(admitted.RequestDigest), TargetDigest: hex.EncodeToString(admitted.TargetDigest),
-		ArgumentDigest: argument, PermitID: admitted.PermitID, AuthorityVersions: bindingVersions(admitted.AuthorityVersions),
-		PolicyHash: policyHash, Outcome: "SUCCEEDED", OutcomeBasis: "OBSERVED", SettledBy: "readback",
-		Observation: receiptverify.GatewayOutcomeObservation{ID: 41, Source: "adapter", TrustClass: "provider_readback",
-			Outcome: "SUCCEEDED", EvidenceDigest: hex.EncodeToString(sum256("evidence")),
-			ObservedAt: settledAt.Add(-time.Millisecond).UTC().Format(time.RFC3339Nano)},
-		Reservation: "confirmed", ReadbackAbsent: false,
-		Exposures: []receiptverify.GatewayOutcomeExposure{{LimitID: "0190a5b4-0000-7000-8000-0000000000dd",
-			BucketStart: time.Unix(0, 0).UTC().Format(time.RFC3339Nano), Kind: "confirmed", Amount: "1"}},
-		SettledAt: settledAt.UTC().Format(time.RFC3339Nano),
-	})
+	epoch := time.Unix(0, 0).UTC()
+	o := storedOutcome{
+		storedDecision: admitted,
+		Outcome:        "SUCCEEDED", OutcomeBasis: "OBSERVED", SettledBy: settledByReadback, Reservation: "confirmed",
+		Exposures: []Exposure{{LimitID: "0190a5b4-0000-7000-8000-0000000000dd", BucketStart: &epoch, Kind: "confirmed", Amount: 1}},
+		Observation: boundObservation{ID: 41, Source: "adapter", TrustClass: "provider_readback", Outcome: "SUCCEEDED",
+			EvidenceDigest: sum256("evidence"), ObservedAt: settledAt.Add(-time.Millisecond)},
+		SettledAt: settledAt,
+	}
+	// ADMITTED 4, DISPATCHING 5, DISPATCHED 6, OBSERVED 7.
+	o.Version, o.FromState, o.State, o.ReasonCode = 7, "DISPATCHED", "OBSERVED", ""
+	r, binding, err := buildOutcomeReceipt(o, receiptID, seq, prev)
 	must(t, err)
-	sum := sha256.Sum256(binding)
-	return &contracts.Receipt{
-		ReceiptID: receiptID, DecisionID: admitted.AttemptID + ":7", EffectID: admitted.AttemptID,
-		Status: "OBSERVED", OutputHash: hex.EncodeToString(sum[:]), Timestamp: settledAt.UTC(),
-		PrevHash: prev, LamportClock: seq, ArgsHash: argument, PolicyHash: policyHash, SessionID: chain,
-	}, binding
+	return r, binding
 }
 
 // frozenGatewayChain signs the fixture decisions with the gateway's own

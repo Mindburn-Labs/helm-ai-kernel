@@ -1268,14 +1268,13 @@ the re-admission of an approved escalation, for every effect type the gateway
 admits (GitHub effects, authority plans, lifts, work effects through the MCP
 tools, and the model gateway's admissions). The receipt commits in the
 decision's own transaction; if it cannot be built, signed, verified or
-appended, the decision rolls back with it.
+appended, the decision rolls back with it. The outcome of every admitted
+effect is signed the same way, in the transaction that records it (see
+"Outcome receipts" below).
 
-Not receipted yet: `ESCALATED` to `REJECTED`, `CANCELLED` and `EXPIRED`, and
-every lifecycle transition after a decision (dispatch, observation,
-reconciliation, settlement). Those receipts are a later slice.
-
-**Ledger fence.** The database refuses a decision without its receipt.
-Migration 15 adds a deferred constraint trigger on `authority_effect_attempts`.
+**Ledger fence.** The database refuses a decision or an outcome without its
+receipt. Migration 15 adds a deferred constraint trigger on
+`authority_effect_attempts`.
 Whenever a row is inserted in, or changes state into, `ADMITTED`, `DENIED` or
 `ESCALATED`, a receipt for exactly that (tenant, attempt, version) must exist
 at commit (`decision_receipt_missing`, SQLSTATE 23514 otherwise). This
@@ -1284,6 +1283,27 @@ while Pods of the previous binary still serve open connections, and those
 Pods write decisions without receipts. After the migration, those decisions
 fail at commit instead of entering the ledger unreceipted. Expect such
 requests to fail until the old Pods are replaced.
+
+Migration 16 lets `authority_receipts` hold the outcome states and adds the
+outcome fence, a second deferred constraint trigger. An attempt row that
+enters `OBSERVED`, `RECONCILED` or `SETTLED`, or is written again at a new
+version in one of them, commits only with the receipt of that (tenant,
+attempt, version, state) (`outcome_receipt_missing`, SQLSTATE 23514
+otherwise). During an upgrade, an older gateway's outcome fails at commit. Its
+attempt keeps its state (`DISPATCHING`, `DISPATCHED` or `UNKNOWN`) for the
+reconciliation job its claim enqueued, and a model call keeps its hold. An
+outcome whose receipt cannot be signed rolls back the same way. Migration 16
+locks `authority_effect_attempts` before it alters `authority_receipts`: an
+older gateway's decision writes its attempt row before its receipt, so the
+other order could deadlock against it during the upgrade. It also pins both
+fence functions' `search_path` to the schema that holds `authority_receipts`,
+read from `pg_class` (with `pg_temp` last),
+so a look-alike `authority_receipts` on a writer's search path, or a
+temporary table, satisfies neither fence. The fence
+checks that the receipt exists when the state or version changes. It does not
+stop an in-place rewrite of the outcome columns at the same version, which the
+runtime role's `UPDATE` grant allows; the signed receipt keeps what was
+settled.
 
 **Envelope.** A receipt is a `contracts.Receipt` signed with classical
 Ed25519 under the `receipt.v5` preimage, the kernel's one receipt envelope.
@@ -1296,18 +1316,18 @@ signature is produced or claimed.
 | Receipt field | Value |
 |---|---|
 | `receipt_id` | a fresh UUIDv7 |
-| `decision_id` | `<attempt_id>:<version>`, the attempt row's version after the decision |
+| `decision_id` | `<attempt_id>:<version>`, the attempt row's version after the decision or outcome write |
 | `effect_id` | the attempt id |
-| `status` | the stored state: `ADMITTED`, `DENIED` or `ESCALATED` |
-| `verdict` | `ALLOW`, `DENY` or `ESCALATE` |
+| `status` | the stored state: `ADMITTED`, `DENIED` or `ESCALATED`; for an outcome, `OBSERVED`, `RECONCILED` or `SETTLED` |
+| `verdict` | `ALLOW`, `DENY` or `ESCALATE`; empty on an outcome |
 | `reason_code` | the stored reason code |
 | `args_hash` | lowercase hex of the attempt's argument digest: SHA-256 of the exact argument bytes it stored. This is not the hash of JCS-canonical arguments that `contracts.Receipt` describes for other producers. |
 | `output_hash` | lowercase hex SHA-256 of the binding document's exact bytes |
-| `policy_hash` | lowercase hex SHA-256 of the JCS bytes of `{"schema":"helm.gateway.authority-snapshot.v1","versions":[...]}`, the versions of the authority rows the decision locked |
+| `policy_hash` | lowercase hex SHA-256 of the JCS bytes of `{"schema":"helm.gateway.authority-snapshot.v1","versions":[...]}`, the versions of the authority rows the decision locked; for an outcome, the versions its permit was issued under |
 | `session_id` | the chain id, `helm-gateway:<byte length>:<tenant_id>:<byte length>:<workspace_id>` |
 | `lamport_clock` | the receipt's sequence number in its chain, from 1 |
 | `prev_hash` | the predecessor's `contracts.ReceiptChainHash`, empty at genesis |
-| `timestamp` | database time of the decision transaction. It is outside the receipt.v5 preimage, but the next receipt's `prev_hash` hashes the whole envelope and so covers it. The same time is signed as the binding's `decided_at`. Order is the signed sequence. |
+| `timestamp` | database time of the decision or outcome transaction. It is outside the receipt.v5 preimage, but the next receipt's `prev_hash` hashes the whole envelope and so covers it. The same time is signed as the binding's `decided_at` (a decision) or `settled_at` (an outcome). Order is the signed sequence. |
 
 The binding document, `helm.gateway.receipt-binding.v1`
 ([schema](../../protocols/json-schemas/gateway/receipt-binding.v1.schema.json)),
@@ -1322,6 +1342,76 @@ permit issued, the locked authority versions with their `policy_hash`, the
 episode, and the decision time. Its exact RFC 8785 bytes are stored beside the
 receipt.
 
+**Outcome receipts.** The outcome of every admitted effect is signed too, on
+the same chain, in the transaction that records it. It is the external proof
+that the commitment the effect served was closed, whether the effect
+completed or failed. These are the outcome states and the writes that reach
+them (`recordOutcome`):
+
+| State | Outcome | Written by |
+|---|---|---|
+| `OBSERVED` | `SUCCEEDED` or `FAILED` | A read-back that establishes the outcome of a dispatched attempt: Dispatch's own read-back, Observe, the reconcile job and the MCP tools. An adapter's `NOT_SENT` answer (`FAILED`, observation source `gateway.dispatch`). A model call's confirmed, estimated or refused settlement, and its late usage re-settling an estimated call at a new version. |
+| `RECONCILED` | `SUCCEEDED` or `FAILED` | The same writes, for an attempt that was `UNKNOWN`: an indefinite answer, a dispatch past its fence, or a cut model call. |
+| `SETTLED` | the stored outcome | A model call whose provider reported its usage, after `OBSERVED` or `RECONCILED` in the same transaction. Both versions are receipted. |
+
+These transitions are not receipted:
+
+- `REJECTED` and `EXPIRED`: the escalation was never admitted.
+- `CANCELLED`: a refused claim or a cancellation, so nothing was sent.
+- `DISPATCHING`, `DISPATCHED` and `UNKNOWN`: no outcome is known yet.
+- `ESCALATED_TO_HUMAN`: reconciliation gave up, and the reservation stays held.
+
+A cut model call is the exception to "no outcome, no money moved": the call
+becomes `UNKNOWN`, but its hold has already moved to `estimated`, so the
+budget is spent as an estimate. That spend is receipted only when a provider
+confirmation reconciles the call (`RECONCILED`, then `SETTLED`), and never if
+none arrives.
+
+There are no start or heartbeat receipts. `COMPENSATED` is in the schema, but
+nothing writes it.
+
+An outcome receipt differs from a decision receipt in four fields:
+
+- `status` is the outcome state;
+- `verdict` is empty;
+- `policy_hash` hashes the authority versions the permit was issued under, so
+  it equals the admitting decision receipt's;
+- `timestamp` is the database time of the outcome transaction.
+
+`args_hash` stays the exact-argument digest. `output_hash` is the SHA-256 of
+the outcome's own closed document, `helm.gateway.outcome-binding.v1`
+([schema](../../protocols/json-schemas/gateway/outcome-binding.v1.schema.json)),
+stored as exact RFC 8785 bytes beside the receipt. Decision receipts keep
+`helm.gateway.receipt-binding.v1` unchanged. The outcome document binds:
+
+- the attempt core that ties it to the decision: tenant, workspace, attempt,
+  version, the states it moved from and to, the effect type, the request,
+  target and argument digests, the `permit_id` the effect was dispatched
+  under and its authority versions with their `policy_hash`;
+- the `outcome`, its `outcome_basis` and `reason_code`, and `settled_by`:
+  `readback`, `not_sent` or `model_call`;
+- the stored `observation` the outcome rests on: its id, source, trust class,
+  outcome (always the receipt's), evidence digest (for a model call, the
+  digest of the delivered response bytes), typed result kind and content
+  address, and observation time;
+- the settlement as the ledger holds it after the write: `reservation` (the
+  exposure kind the held reservation moved to: `confirmed`, `released` or
+  `estimated`), `readback_absent` (a read-back found the object absent after
+  the fence), every exposure with its kind and amount, and for a model call
+  its money row (`currency_code`, the currency its amounts are micro-units
+  of; `held_micros`, `estimated_micros`, `confirmed_micros` and
+  `billable_micros` as decimal strings) and `usage_digest`, the SHA-256 of
+  the RFC 8785 form of the usage the row stores. Numbers in that form are
+  IEEE 754 doubles in ECMAScript notation, so the usage a provider sent and
+  its JSONB rendering (`1e-7` and `0.0000001`) have one digest. A late usage report that
+  re-settles an estimated call therefore signs the new amounts and usage,
+  not only a new version;
+- `settled_at`.
+
+The builder refuses a (from, to) pair no outcome write makes, an observation
+that records another outcome, and settlement facts that do not fit how the
+outcome was established.
+
 **Chain.** One chain per (tenant, workspace), the read boundary of
 `helm.gateway.read`. `authority_receipt_chains` holds each chain's head;
 `authority_receipts` (migration 15, forced row security) holds the exact
@@ -1331,8 +1421,9 @@ transaction takes on a pre-existing row, after every authority, counter and
 attempt lock, so there is no lock-order cycle. It then inserts the receipt
 and moves the head by compare-and-set.
 
-The decisions of one workspace therefore serialize on the chain row until each
-commits. Their throughput is bounded by one decision transaction at a time,
+The decisions and outcomes of one workspace therefore serialize on the chain
+row until each commits. Their throughput is bounded by one such transaction at
+a time,
 including the sealing cost: build, sign, verify the stored bytes and hash them
 (`BenchmarkSealDecisionReceipt`, a few hundred microseconds on a development
 machine). The table refuses a second
@@ -1367,7 +1458,7 @@ helm-gateway:<namespace>:<release>-helm-ai-kernel-gateway:<fingerprint>=<public 
 ```
 
 **On the wire.** `EffectAttempt.receipts` (field 30) lists the attempt's
-receipts, oldest first, as `ReceiptRef {chain_id, seq, receipt_hash, kid}`:
+decision and outcome receipts, oldest first, as `ReceiptRef {chain_id, seq, receipt_hash, kid}`:
 `receipt_hash` is the receipt's chain hash, the `prev_hash` of the next
 receipt in its chain, and `kid` its `key_id`. The read model carries the
 same references. `GetAttemptReceipts` and `ExportReceiptChain` serve the
@@ -1402,8 +1493,8 @@ receipt binds when its binding bytes are supplied (the `binding` check).
 
 ## Reading and verifying receipts offline
 
-Three pieces let a reader check the gateway's decision receipts without a
-gateway or a database in the trust path (helm-tracker#276, CTL-060).
+Three pieces let a reader check the gateway's decision and outcome receipts
+without a gateway or a database in the trust path (helm-tracker#276, CTL-060).
 
 **The key.** `helm-gateway serve` publishes the public half of its receipt key
 at `GET /api/v1/receipt-keyring` on its API listener. The document has the

@@ -2660,13 +2660,8 @@
       "claim": "A connector release authority is append-only, tenant-isolated and current-state resolved.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/registry/connectors.PostgresReleaseAuthorityAdminStore.Append",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): no shipped path ever appended a release authority, so the writer (PostgresReleaseAuthorityAdminStore.Append) and SignConnectorReleaseAuthority moved into a test fixture and the control has no shipped entry point. The shipped runtime builds PostgresReleaseAuthorityStore only to verify release-authority envelopes carried in effect reservation events; its load methods verify what they read but have no shipped caller. The table's insert trigger enforces append-only succession for any row a deployment inserts.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -2769,13 +2764,8 @@
       "claim": "A connector response whose schema drifts from its pin is denied with ERR_CONNECTOR_CONTRACT_DRIFT.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/manifest.ValidateAndCanonicalizeToolOutput",
-          "reachability": "unreachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no caller and was deleted with its tests, so no shipped validator reports ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway instead checks each established observation against the effect type's result contract (admission.typedResult: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt UNKNOWN. The GitHub adapter linked into helm-gateway is the only shipped adapter that reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own typed response checks; the preview TON Acton connector is not linked into any shipped binary.",
+      "entry_points": [],
       "gates": [],
       "config": [],
       "protected_operations": [
@@ -4501,9 +4491,9 @@
     },
     {
       "id": "CTL-059",
-      "title": "Gateway signed decision receipts",
+      "title": "Gateway signed decision and outcome receipts",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Every decision helm-gateway admission writes through recordDecision commits in its own transaction with one signed receipt (helm-tracker#276); tested for ADMITTED, DENIED, ESCALATED, the stepped-up re-admission of an approved escalation, a stop's lift and a model-call admission. The receipt is a classical Ed25519 receipt.v5 envelope over the attempt row the decision's UPDATE returned: decision_id is \u003cattempt_id\u003e:\u003cversion\u003e, args_hash the hex SHA-256 of the exact argument bytes the attempt stored (its argument_digest, not a JCS re-encoding), policy_hash the SHA-256 of the locked authority versions, and output_hash the SHA-256 of a closed helm.gateway.receipt-binding.v1 document, stored as exact JCS bytes with it, which also binds the approver's workload and any step-up proof used up. Receipts form one hash chain per (tenant, workspace): the chain row is the last row lock the transaction takes on a pre-existing row, so a workspace's decisions serialize on it until commit; lamport_clock is the sequence, prev_hash the predecessor's chain hash, and the ledger refuses a fork, a second genesis or a reused sequence. A signing failure, a refused profile or a moved head rolls the decision back, and a deferred constraint trigger (migration 15) refuses at commit any attempt that enters ADMITTED, DENIED or ESCALATED without the receipt of that version, whoever writes it, including an older gateway still serving during an upgrade. admission refuses a nil signer and one whose receipts are not classical Ed25519 that verify offline under its published key; serve refuses to start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte seed, never a passphrase or all zeros) and a key id, verbatim or derived from a prefix and the key's fingerprint. The runtime role may only SELECT and INSERT receipt rows, and the stored chain verifies with receiptverify under the gateway key alone. EffectAttempt.receipts names each receipt by chain, sequence, chain hash and key id.",
+      "claim": "Every decision helm-gateway admission writes through recordDecision commits in its own transaction with one signed receipt (helm-tracker#276); tested for ADMITTED, DENIED, ESCALATED, the stepped-up re-admission of an approved escalation, a stop's lift and a model-call admission. The receipt is a classical Ed25519 receipt.v5 envelope over the attempt row the decision's UPDATE returned: decision_id is \u003cattempt_id\u003e:\u003cversion\u003e, args_hash the hex SHA-256 of the exact argument bytes the attempt stored (its argument_digest, not a JCS re-encoding), policy_hash the SHA-256 of the locked authority versions, and output_hash the SHA-256 of a closed helm.gateway.receipt-binding.v1 document, stored as exact JCS bytes with it, which also binds the approver's workload and any step-up proof used up. The outcome of every admitted effect is receipted the same way, in the transaction that records it (recordOutcome): OBSERVED and RECONCILED, SUCCEEDED or FAILED, from a read-back of Dispatch, Observe, the reconciliation job or the MCP tools, from an adapter's NOT_SENT answer, and from a model call's confirmed, estimated, refused or late-confirmed settlement, and a model call's SETTLED; tested for each. An outcome receipt's status is the outcome state and its verdict empty; its policy_hash is that of the authority versions the permit was issued under (the decision receipt's), and its output_hash is the SHA-256 of its own closed document, helm.gateway.outcome-binding.v1, so decision receipts keep receipt-binding.v1 byte for byte. That document binds the attempt core (tenant, workspace, attempt, version, from and to state, effect type, request, target and argument digests, permit, authority versions), the outcome and its basis, the stored observation it rests on, what established it (read-back, NOT_SENT or model call), whether a read-back found the object absent, what it did to the reservation, every exposure as the ledger holds it after the write, and for a model call its money row (currency, held, estimated, confirmed and billable micros) and the SHA-256 of the RFC 8785 form of its stored usage, so a late usage report re-settles with a receipt of the new amounts. The builder refuses a (from, to) pair no outcome write makes, an observation of another outcome, and settlement facts that do not fit how the outcome was established. Receipts form one hash chain per (tenant, workspace): the chain row is the last row lock the transaction takes on a pre-existing row, so a workspace's decisions and outcomes serialize on it until commit; lamport_clock is the sequence, prev_hash the predecessor's chain hash, and the ledger refuses a fork, a second genesis or a reused sequence. A signing failure, a refused profile, a missing observation or a moved head rolls the decision or the outcome back (an attempt whose outcome rolled back keeps its state for a later read-back), and deferred constraint triggers (migrations 15 and 16) refuse at commit any attempt that enters ADMITTED, DENIED or ESCALATED, or enters (or is rewritten at a new version in) OBSERVED, RECONCILED or SETTLED, without the receipt of that version and state, whoever writes it, including an older gateway still serving during an upgrade. Migration 16 locks authority_effect_attempts before it alters authority_receipts, and pins both fence functions' search_path to the gateway schema, so a look-alike authority_receipts on a writer's search_path or in its temporary schema satisfies neither fence. admission refuses a nil signer and one whose receipts are not classical Ed25519 that verify offline under its published key; serve refuses to start without HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte seed, never a passphrase or all zeros) and a key id, verbatim or derived from a prefix and the key's fingerprint. The runtime role may only SELECT and INSERT receipt rows, and the stored chain verifies with receiptverify under the gateway key alone. EffectAttempt.receipts names each receipt by chain, sequence, chain hash and key id.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -4528,6 +4518,22 @@
           "reachability": "reachable"
         },
         {
+          "symbol": "core/pkg/gateway/admission.Service.recordDispatch",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.recordObservation",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.SettleModelCall",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.recordOutcome",
+          "reachability": "reachable"
+        },
+        {
           "symbol": "core/pkg/gateway/admission.appendReceipt",
           "reachability": "reachable"
         }
@@ -4535,19 +4541,29 @@
       "gates": [],
       "config": [
         "HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE (a 32-byte Ed25519 seed, hex or base64) and HELM_GATEWAY_RECEIPT_KEY_ID or HELM_GATEWAY_RECEIPT_KEY_ID_PREFIX; the chart mounts gateway.receipts.existingSecret, or its autoSeed Secret, into the gateway Pod only, and by default sets the prefix.",
-        "Gateway schema migration 15: authority_receipt_chains and authority_receipts under forced row security, and the deferred decision-receipt fence on authority_effect_attempts. The chart's 002_grants.sql gives the runtime role SELECT, INSERT only on authority_receipts."
+        "Gateway schema migration 15: authority_receipt_chains and authority_receipts under forced row security, and the deferred decision-receipt fence on authority_effect_attempts. The chart's 002_grants.sql gives the runtime role SELECT, INSERT only on authority_receipts.",
+        "Gateway schema migration 16: authority_receipts also holds OBSERVED, RECONCILED and SETTLED receipts, and the deferred outcome-receipt fence on authority_effect_attempts."
       ],
       "protected_operations": [
-        "Every ADMITTED, DENIED and ESCALATED write of helm.gateway.v1.EffectGatewayService Propose, Approve and Lift, the MCP tools on the worker and executor listeners, and the model gateway's admissions on helm-gateway serve."
+        "Every ADMITTED, DENIED and ESCALATED write of helm.gateway.v1.EffectGatewayService Propose, Approve and Lift, the MCP tools on the worker and executor listeners, and the model gateway's admissions on helm-gateway serve.",
+        "Every OBSERVED, RECONCILED and SETTLED write of helm.gateway.v1.EffectGatewayService Dispatch and Observe, the reconcile job, the MCP tools' dispatch and read-back, and the model gateway's settlement on helm-gateway serve."
       ],
       "bypass_assumptions": [
         "The receipt format is receipt.v5, an interim: the gateway's own facts are signed only through output_hash, and the binding bytes are retained beside the receipt. The gateway is one of the producers Mindburn-Labs/helm-tracker#53 moves to the DSSE v6 envelope; receipt.v5 stays verify-only after that. A gateway receipt's args_hash is the exact-argument-bytes digest, not the JCS-arguments hash contracts.Receipt documents for other producers.",
-        "Receipts cover decisions only. ESCALATED to REJECTED, CANCELLED and EXPIRED, and every lifecycle transition after a decision (dispatch, observation, reconciliation, settlement), are not receipted in this slice; the fence does not require receipts for them.",
+        "Receipts cover decisions and outcomes. Not receipted, and not fenced: ESCALATED to REJECTED and EXPIRED (no effect was admitted), CANCELLED (a refused claim or a cancellation: nothing was dispatched, and the decision receipt stays the attempt's last), the lifecycle in between (DISPATCHING, DISPATCHED, UNKNOWN), and ESCALATED_TO_HUMAN (no outcome is known, and an outcome a human later establishes has no gateway write path today). An effect API attempt's reservation stays held there, but a cut model call (UNKNOWN) has already moved its hold to estimated, spending budget as an estimate; that spend is receipted only when a provider confirmation reconciles the call (RECONCILED, then SETTLED), and never if none arrives. There are no start or heartbeat lifecycle receipts; delivery gate 2 needs the decision and the outcome only. COMPENSATED is in the schema but nothing writes it.",
+        "The outcome fence checks that a receipt exists for the row's (tenant, attempt, version, state) when the state or the version changes. The runtime role holds UPDATE on authority_effect_attempts, so it can rewrite the outcome, its basis or its reason in place at the same version without the fence noticing; the signed receipt still records what was settled, and a reader compares the row with it.",
+        "An outcome receipt binds the one observation its outcome rests on. Distinct provider facts a later read-back records after the attempt settled are kept as observations, not receipted; a model call's late usage is receipted because it re-settles the attempt at a new version.",
+        "During an upgrade to schema 16, an older gateway's outcome fails at commit: an effect API attempt stays DISPATCHING, DISPATCHED or UNKNOWN for the reconciliation job the claim enqueued, and a model call's settlement is not written, so the attempt keeps its hold and is reconciled as the model gateway documents for any settlement that cannot be written. Outcomes an older gateway committed before the migration keep no receipt.",
         "The signing key lives in the gateway process and its Secret. Whoever holds the seed, or the gateway's runtime database role together with it, can sign and insert a receipt the chain accepts; a row inserted without the key does not verify offline.",
         "A missing receipt is detected only as a gap before a later receipt. The runtime role moves the chain head on every append; the database owner can also delete the newest receipts and rewind the head, which the chain alone cannot reveal. Chain export and external anchoring are the follow-up.",
         "With gateway.receipts.autoSeed the key is generated by the chart and kept through Helm lookup. A pipeline that renders with helm template, or a deleted Secret, starts a new key (and, with the default derived key id, a new key id); receipts signed before verify only under the old public key, which must be recorded (helm-gateway receipt-key) to stay verifiable.",
-        "The receipt.v5 timestamp is outside the signed preimage; the next receipt's prev_hash covers it, and decided_at is signed through the binding. Order is the signed sequence.",
-        "The ledger fence is a database trigger; the database owner (or a superuser in replica mode) can drop or bypass it."
+        "The receipt.v5 timestamp is outside the signed preimage; the next receipt's prev_hash covers it, and decided_at (a decision) or settled_at (an outcome) is signed through the binding. Order is the signed sequence.",
+        "The ledger fence is a database trigger; the database owner (or a superuser in replica mode) can drop or bypass it.",
+        "Outcome receipts sign helm.gateway.outcome-binding.v1, a second closed document beside receipt-binding.v1. receiptverify checks their signature, chain links and output_hash like any receipt.v5; reading what an outcome binding says needs its schema, which the verifier lane adds.",
+        "An outcome binding's settlement facts are the exposure and model-call rows its own transaction read just before signing. The runtime role holds UPDATE on authority_exposures and authority_model_calls, so a later in-place rewrite is not fenced; the signed receipt keeps what was settled, and a reader compares the rows with it.",
+        "Migration 16 takes authority_effect_attempts before authority_receipts, so an older gateway's decision cannot deadlock it. A transaction that reads authority_receipts and then writes an attempt (Propose's work-effect replay check) can still form a cycle with it; PostgreSQL's deadlock detector aborts one side, and a failed migration records nothing and runs again.",
+        "The fences' search_path is pinned to the schema that holds authority_receipts when migration 16 runs (read from pg_class); a deployment that moved the tables to another schema afterwards would have to pin the functions again.",
+        "A model call's settlement clears expired replay bodies tenant-wide and keeps those rows locked until it commits, through the signing of its receipts; concurrent settlements skip rows another is clearing (SKIP LOCKED) rather than wait for them."
       ],
       "tests": {
         "allowed": [
@@ -4556,7 +4572,14 @@
           "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast",
           "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision",
           "core/pkg/gateway/server.TestPostgresAttemptReceiptRefsOnTheWire",
-          "core/pkg/gateway/runtime.TestReceiptKeyAcceptsHexAndBase64SeedsAndPrintsOnlyThePublicHalf"
+          "core/pkg/gateway/runtime.TestReceiptKeyAcceptsHexAndBase64SeedsAndPrintsOnlyThePublicHalf",
+          "core/pkg/gateway/admission.TestPostgresEveryEffectOutcomeCommitsWithItsSignedReceipt",
+          "core/pkg/gateway/admission.TestPostgresModelCallOutcomesCarryReceipts",
+          "core/pkg/gateway/mcpserver.TestPostgresMCPToolOutcomesAreReceipted",
+          "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast",
+          "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome",
+          "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast",
+          "core/pkg/gateway/admission.TestDecisionBindingIsUnchangedByOutcomeReceipts"
         ],
         "forbidden": [
           "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner",
@@ -4566,7 +4589,11 @@
           "core/pkg/gateway/admission.TestPostgresSigningFailureCommitsNoDecision",
           "core/pkg/gateway/admission.TestPostgresReceiptRowsAreAppendOnlyForTheRuntimeRole",
           "core/pkg/gateway/admission.TestPostgresStoredReceiptsVerifyOfflineWithTheGatewayKey",
-          "core/pkg/gateway/admission.TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants"
+          "core/pkg/gateway/admission.TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants",
+          "core/pkg/gateway/admission.TestAnOutcomeWhoseReceiptCannotBeSignedFailsTheTransaction",
+          "core/pkg/gateway/admission.TestPostgresAnOutcomeWithoutItsReceiptFailsAtCommit",
+          "core/pkg/gateway/admission.TestPostgresOutcomeReceiptsVerifyOfflineAsAChain",
+          "core/pkg/gateway/admission.TestPostgresFencesIgnoreALookAlikeReceiptTable"
         ],
         "removal": [
           "core/pkg/gateway/admission.TestDecisionTransactionAppendsItsSignedReceiptLast",
@@ -4574,11 +4601,19 @@
           "core/pkg/gateway/admission.TestDecisionReceiptBindsTheStoredDecision",
           "core/pkg/gateway/admission.TestNewRefusesAMissingOrUnusableReceiptSigner",
           "core/pkg/gateway/admission.TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite",
-          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutAUsableReceiptKey"
+          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutAUsableReceiptKey",
+          "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast",
+          "core/pkg/gateway/admission.TestAnOutcomeWhoseReceiptCannotBeSignedFailsTheTransaction",
+          "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome",
+          "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite",
+          "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
         ],
         "bypass": [
           "core/pkg/gateway/admission.TestPostgresReceiptChainStaysContiguousUnderConcurrentProposals",
-          "core/pkg/gateway/admission.TestPostgresReceiptSchemaUpgradesFrom14"
+          "core/pkg/gateway/admission.TestPostgresReceiptSchemaUpgradesFrom14",
+          "core/pkg/gateway/admission.TestPostgresOutcomeReceiptChainStaysContiguousUnderConcurrentSettles",
+          "core/pkg/gateway/admission.TestPostgresOutcomeReceiptSchemaUpgradesFrom15",
+          "core/pkg/gateway/admission.TestPostgresFencesIgnoreALookAlikeReceiptTable"
         ]
       },
       "removal_proofs": [
@@ -4624,6 +4659,62 @@
           "tests": [
             "core/pkg/gateway/admission.TestReceiptFenceIsADeferredCheckOnEveryDecisionWrite"
           ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/outcomes.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast",
+            "core/pkg/gateway/admission.TestAnOutcomeWhoseReceiptCannotBeSignedFailsTheTransaction"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestEveryOutcomeWriteAppendsItsSignedReceiptLast"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/modelcall.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/outcomes.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/outcomes.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome",
+            "core/pkg/gateway/admission.TestModelCallSettlementAppendsItsSignedReceiptsLast"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/outcomes.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestOutcomeReceiptBindsTheStoredOutcome"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/schema/016_outcome_receipts.sql",
+          "tests": [
+            "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/schema/016_outcome_receipts.sql",
+          "tests": [
+            "core/pkg/gateway/admission.TestOutcomeFenceIsADeferredCheckOnEveryOutcomeWrite"
+          ]
         }
       ]
     },
@@ -4631,7 +4722,7 @@
       "id": "CTL-060",
       "title": "Gateway receipts verify offline with their bindings",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "A reader verifies helm-gateway's signed decision receipts (CTL-059) offline, the gateway's own facts included (helm-tracker#276). receiptverify, receipt_verify and the WASM verifier take a gateway receipt's binding document (bundle member gateway_bindings, receipt id to the base64 of the exact bytes, or receipt_verify --binding \u003creceipt_id\u003e=\u003cfile\u003e) and run a binding check: it passes only when every supplied binding's receipt is signed under receipt.v5, the binding's SHA-256 is that receipt's signed output_hash, the binding is the closed document its binding_version names (helm.gateway.receipt-binding.v1 for a decision, helm.gateway.outcome-binding.v1 for an outcome; an unknown version fails) in its own JCS form, and its chain id (length-framed from its tenant and workspace), sequence, attempt and version, state, reason code, policy hash and argument digest equal the receipt's session_id, lamport_clock, decision_id, effect_id, status, reason_code, policy_hash and args_hash; a decision binding's verdict and decided_at equal the receipt's verdict and timestamp, and an outcome binding's state is OBSERVED, RECONCILED or SETTLED, it names its permit, the receipt's verdict is empty and its settled_at equals the receipt's timestamp (outside the receipt.v5 preimage, bound by these rows). A binding for a receipt the bundle does not hold, or for a receipt id the bundle holds twice, fails; with no binding the check is not_applicable, never a pass. The result counts gateway_receipts and bindings_checked, and receipt_verify --require-bindings (Options.RequireGatewayBindings) fails a gateway receipt that has no binding, so exit 0 then covers every gateway receipt's own facts. helm-gateway serves GET /api/v1/receipt-keyring on its API listener, public and read-only, in the Kernel's keyring shape (CTL-050) under its own label, gateway-receipt-keyring.v1, for the key it signs receipts with, and refuses to start with a signer it cannot publish. GetAttemptReceipts returns an attempt's receipts as the exact stored envelope and binding bytes, to a helm.gateway.read token that can read the attempt (its tenant, workspace and episode scope). ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of the chain of the token's tenant and workspace, in order, as the document receipt_verify checks offline; it refuses a workspace_id other than the token's and an episode token, reads a range that runs past the chain's head up to the head and names it (one that starts past it is not found), and never returns a range with a gap. A frozen gateway chain of three decisions and one outcome keeps verifying.",
+      "claim": "A reader verifies helm-gateway's signed decision and outcome receipts (CTL-059) offline, the gateway's own facts included (helm-tracker#276). receiptverify, receipt_verify and the WASM verifier take a gateway receipt's binding document (bundle member gateway_bindings, receipt id to the base64 of the exact bytes, or receipt_verify --binding \u003creceipt_id\u003e=\u003cfile\u003e) and run a binding check: it passes only when every supplied binding's receipt is signed under receipt.v5, the binding's SHA-256 is that receipt's signed output_hash, the binding is the closed document its binding_version names (helm.gateway.receipt-binding.v1 for a decision, helm.gateway.outcome-binding.v1 for an outcome; an unknown version fails) in its own JCS form, and its chain id (length-framed from its tenant and workspace), sequence, attempt and version, state, reason code, policy hash and argument digest equal the receipt's session_id, lamport_clock, decision_id, effect_id, status, reason_code, policy_hash and args_hash; a decision binding's verdict and decided_at equal the receipt's verdict and timestamp, and an outcome binding's state is OBSERVED, RECONCILED or SETTLED, it names its permit, the receipt's verdict is empty and its settled_at equals the receipt's timestamp (outside the receipt.v5 preimage, bound by these rows). A binding for a receipt the bundle does not hold, or for a receipt id the bundle holds twice, fails; with no binding the check is not_applicable, never a pass. The result counts gateway_receipts and bindings_checked, and receipt_verify --require-bindings (Options.RequireGatewayBindings) fails a gateway receipt that has no binding, so exit 0 then covers every gateway receipt's own facts. helm-gateway serves GET /api/v1/receipt-keyring on its API listener, public and read-only, in the Kernel's keyring shape (CTL-050) under its own label, gateway-receipt-keyring.v1, for the key it signs receipts with, and refuses to start with a signer it cannot publish. GetAttemptReceipts returns an attempt's receipts as the exact stored envelope and binding bytes, to a helm.gateway.read token that can read the attempt (its tenant, workspace and episode scope). ExportReceiptChain returns receipts from_seq to to_seq, at most 256, of the chain of the token's tenant and workspace, in order, as the document receipt_verify checks offline; it refuses a workspace_id other than the token's and an episode token, reads a range that runs past the chain's head up to the head and names it (one that starts past it is not found), and never returns a range with a gap. A frozen gateway chain of three decisions and one outcome keeps verifying.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [

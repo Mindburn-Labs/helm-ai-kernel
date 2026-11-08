@@ -125,12 +125,18 @@ published or deployed. **Status: Final normative standard in source.**
 ## Verifying gateway receipts
 
 `helm-gateway` signs one `receipt.v5` receipt for every admission decision
-(`ADMITTED`, `DENIED`, `ESCALATED`) and chains them per tenant and workspace.
-Its own facts (tenant, workspace, attempt and version, state, mandate,
-approver, quote, authority versions) are signed through `output_hash`: the
-SHA-256 of a closed binding document, `helm.gateway.receipt-binding.v1`
+(`ADMITTED`, `DENIED`, `ESCALATED`) and for every outcome of an admitted
+effect (`OBSERVED`, `RECONCILED`, `SETTLED`), and chains them per tenant and
+workspace. Its own facts are signed through `output_hash`: the SHA-256 of a
+closed binding document whose exact bytes the gateway keeps beside the
+receipt. A decision's document, `helm.gateway.receipt-binding.v1`
 ([schema](../../protocols/json-schemas/gateway/receipt-binding.v1.schema.json)),
-whose exact bytes the gateway keeps beside the receipt. **Status: Live in
+holds the tenant, workspace, attempt and version, state, mandate, approver,
+quote and authority versions. An outcome's document,
+`helm.gateway.outcome-binding.v1`
+([schema](../../protocols/json-schemas/gateway/outcome-binding.v1.schema.json)),
+holds the attempt and its permit, the outcome, the observation it rests on and
+the settlement. **Status: Live in
 source** ([gateway effect API](../architecture/gateway-effect-api.md),
 "Reading and verifying receipts offline").
 
@@ -182,4 +188,4 @@ nothing follows it.
 - [ADR 0003 — normative artifact arbitration](../adr/0003-normative-artifact-arbitration.md)
 - [`receipt.v5` normative signing-preimage specification](../../protocols/specs/receipts/receipt-v5.md)
 - [`receipt.v5` conformance reference pack](../../reference_packs/receipt-v5/)
-- [Gateway effect API: signed decision receipts](../architecture/gateway-effect-api.md)
+- [Gateway effect API: signed decision and outcome receipts](../architecture/gateway-effect-api.md)

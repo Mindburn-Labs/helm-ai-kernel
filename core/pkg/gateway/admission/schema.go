@@ -107,6 +107,9 @@ var migrations = []migration{
 	{15, "signed decision receipt chains", func() (string, error) {
 		return withRowSecurity("", "schema/015_receipts.sql", []string{"authority_receipt_chains", "authority_receipts"})
 	}},
+	{16, "signed outcome receipts", func() (string, error) {
+		return withRowSecurity("", "schema/016_outcome_receipts.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

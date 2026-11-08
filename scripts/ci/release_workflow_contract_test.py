@@ -104,6 +104,7 @@ RELEASE_VALIDATION_JOBS = frozenset(
         "benchmark-pin",
         "deployment-smoke",
         "kind-smoke",
+        "release-permit",
         "release-preflight",
         "release-smoke",
         "reproducibility-check",
@@ -385,6 +386,50 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(job=job_name):
                 missing = RELEASE_VALIDATION_JOBS - self.transitive_needs(job_name)
                 self.assertFalse(missing, f"{job_name} can publish before {sorted(missing)} pass")
+
+    def test_release_permit_is_a_hard_gate_of_every_publish_job(self) -> None:
+        for job_name in sorted(TAG_RELEASE_MUTATION_JOBS):
+            with self.subTest(job=job_name):
+                self.assertIn("release-permit", self.job_needs(job_name), f"{job_name} does not need the release permit gate")
+        self.assertIn("needs.release-permit.result == 'success'", self.job_if("post-release-version-drift"))
+
+        gate = self.job("release-permit")
+        self.assertIn("needs: release-preflight", gate)
+        # Built from the tagged commit, reduced by the reducer, fails unless ALLOW.
+        self.assertIn("go build -trimpath -o ../dist/bin/release-permit-verify ./cmd/release-permit-verify", gate)
+        self.assertIn("scripts/release/release_permit.py context", gate)
+        self.assertIn("scripts/release/release_permit.py review", gate)
+        self.assertIn("--commit \"${GITHUB_SHA}\"", gate)
+        self.assertIn("--verify-permit release-permit.json", gate)
+        self.assertIn("jq -e '.decision == \"ALLOW\"' release-permit.json", gate)
+        self.assertNotIn("continue-on-error", gate)
+        # One repo secret, read only by the review step; a missing one fails.
+        self.assertEqual(gate.count("secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY"), 1)
+        self.assertIn('if [ -z "${OPENROUTER_API_KEY}" ]; then', gate)
+        # Recorded answers are for the rehearsal only; the release never uses them.
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("--fixtures", workflow)
+        self.assertNotIn("permit-fixtures", workflow)
+        # The permit ships with the GitHub Release.
+        release = self.job("github-release")
+        self.assertIn("name: release-permit", release)
+        self.assertIn("release-permit/release-permit.json", release)
+        self.assertIn("release-permit/release-permit-context.json", release)
+
+    def test_release_permit_gate_is_built_from_a_shipped_root(self) -> None:
+        roots = DEADCODE_ROOTS.read_text(encoding="utf-8").splitlines()
+        self.assertIn("core/cmd/release-permit-verify", roots)
+
+    def test_rehearsal_exercises_the_permit_gate_without_spending(self) -> None:
+        rehearsal = (WORKFLOWS / "release-rehearsal.yml").read_text(encoding="utf-8")
+        self.assertIn("scripts/release/rehearse_permit.sh", rehearsal)
+        script = (ROOT / "scripts" / "release" / "rehearse_permit.sh").read_text(encoding="utf-8")
+        self.assertIn('--fixtures "${fixtures}"', script)
+        self.assertIn("reduce release/permit-fixtures ", script)
+        self.assertIn("reduce release/permit-fixtures/deny ", script)
+        self.assertNotIn("OPENROUTER", script)
+        step = rehearsal.split("Rehearse the release permit gate", 1)[1]
+        self.assertNotIn("secrets.", step.split("\n      - ", 1)[0].replace("${{ github.token }}", ""))
 
     def test_registry_publishers_use_trusted_publishing(self) -> None:
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
@@ -693,7 +738,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
         self.assertIn(
-            "needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]",
+            "needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin, release-permit]",
             binaries,
         )
         self.assertIn("HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}", binaries)
@@ -735,11 +780,11 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
                 self.job_needs(publisher)), publisher)
 
-        self.assertIn("needs: container", self.job("cosign-container"))
+        self.assertIn("needs: [container, release-permit]", self.job("cosign-container"))
         self.assertIn("container", self.job("chart"))
         self.assertIn("cosign-container", self.job("chart"))
-        self.assertIn("needs: chart", self.job("artifacthub-repo"))
-        self.assertIn("needs: github-release", self.job("homebrew"))
+        self.assertIn("needs: [chart, release-permit]", self.job("artifacthub-repo"))
+        self.assertIn("needs: [github-release, release-permit]", self.job("homebrew"))
 
         reproducibility = self.job("reproducibility-check")
         self.assertIn("needs: validate", reproducibility)
@@ -949,7 +994,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
         post_release = self.job("post-release-version-drift")
         self.assertIn(
-            "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]",
+            "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets, release-permit]",
             post_release,
         )
         self.assertIn("always()", post_release)

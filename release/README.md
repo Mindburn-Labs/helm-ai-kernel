@@ -98,3 +98,11 @@ indexed EvidencePack file is missing.
 Cosign verification requires matching `*.cosign.bundle` files in the release
 directory. OpenVEX consumption requires an OpenVEX file attached to that
 release.
+
+## Release permit inputs
+
+`permit-reviewers.json` pins the two reviewers (one Anthropic and one OpenAI
+model, both through OpenRouter) and the review budget.
+`permit-review-policy.md` is their system prompt. `permit-fixtures/` holds
+recorded answers that `release-rehearsal.yml` replays with no model call. See
+`RELEASE.md` for the gate.

@@ -131,6 +131,75 @@ jobs:
             exit 1
           fi
 
+  release-permit:
+    # Hard release gate: two independent providers (one Anthropic and one
+    # OpenAI model, both through OpenRouter) review the exact tagged commit,
+    # core/pkg/releasepermit reduces their answers, and the job fails unless
+    # the permit is ALLOW. Every publishing job needs this job. Model output is
+    # advisory input to the reducer; a missing secret, a provider error or a
+    # malformed answer fails the job. See RELEASE.md.
+    runs-on: ubuntu-latest
+    needs: release-preflight
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.26.10"
+          cache-dependency-path: "**/go.sum"
+      - name: Build release-permit-verify from the tagged commit
+        run: |
+          set -euo pipefail
+          mkdir -p dist/bin dist/release-permit
+          (cd core && GOWORK=off go build -trimpath -o ../dist/bin/release-permit-verify ./cmd/release-permit-verify)
+      - name: Bind the context to the tagged commit and its workflow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release/release_permit.py context \
+            --output dist/release-permit/release-permit-context.json \
+            --commit "${GITHUB_SHA}" \
+            --tag "${GITHUB_REF_NAME}"
+      - name: Collect both provider reviews
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "::error::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY is not configured; the release review quorum cannot run."
+            exit 1
+          fi
+          python3 scripts/release/release_permit.py review \
+            --context dist/release-permit/release-permit-context.json \
+            --outdir dist/release-permit/reviews
+      - name: Reduce the reviews to a release permit and require ALLOW
+        working-directory: dist/release-permit
+        run: |
+          set -euo pipefail
+          reviews=(reviews/review-*.json)
+          if [ "${#reviews[@]}" -ne 2 ]; then
+            echo "::error::Expected exactly two review files, found ${#reviews[@]}."
+            exit 1
+          fi
+          args=()
+          for review in "${reviews[@]}"; do args+=(--review "${review}"); done
+          # Exit 3 is a well-formed DENY permit; any other non-zero exit is an
+          # invalid input. Both fail the job.
+          ../bin/release-permit-verify --context release-permit-context.json "${args[@]}" --output release-permit.json
+          ../bin/release-permit-verify --context release-permit-context.json --verify-permit release-permit.json > /dev/null
+          jq -e '.decision == "ALLOW"' release-permit.json > /dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-permit
+          path: dist/release-permit/
+          if-no-files-found: error
+
   validate:
     runs-on: ubuntu-latest
     needs: release-preflight
@@ -236,7 +305,7 @@ jobs:
     # only its aggregate keyless manifest and an exact source pin committed in
     # the Kernel release source; it never accepts a mutable Console main build.
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin, release-permit]
     outputs:
       manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
     permissions:
@@ -367,7 +436,7 @@ jobs:
 
   binaries:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin, release-permit]
     environment: release-production
     env:
       HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}
@@ -435,7 +504,7 @@ jobs:
     runs-on: ubuntu-latest
     # Keyless signatures are externally visible release evidence. Do not create
     # them until both release authorities have closed successfully.
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, release-permit]
     permissions:
       actions: read
       contents: read
@@ -506,7 +575,7 @@ jobs:
     runs-on: ubuntu-latest
     # Public registry publication starts only after the EvidencePack-backed
     # release assets and the exact Console source closure both succeed.
-    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit, python-sdk]
     permissions:
       contents: read
       id-token: write
@@ -619,7 +688,7 @@ jobs:
 
   cosign-container:
     runs-on: ubuntu-latest
-    needs: container
+    needs: [container, release-permit]
     permissions:
       contents: read
       id-token: write
@@ -662,7 +731,7 @@ jobs:
 
   homebrew:
     runs-on: ubuntu-latest
-    needs: github-release
+    needs: [github-release, release-permit]
     environment: release-production
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -744,7 +813,7 @@ jobs:
 
   chart:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, container, cosign-container]
+    needs: [validate, deployment-smoke, kind-smoke, container, cosign-container, release-permit]
     permissions:
       contents: read
       id-token: write
@@ -797,7 +866,7 @@ jobs:
 
   artifacthub-repo:
     runs-on: ubuntu-latest
-    needs: chart
+    needs: [chart, release-permit]
     permissions:
       contents: read
       packages: write
@@ -823,7 +892,7 @@ jobs:
 
   go-sdk-tag:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit, python-sdk]
     permissions:
       contents: write
     steps:
@@ -855,7 +924,7 @@ jobs:
 
   npm-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit, python-sdk]
     environment: npm-production
     permissions:
       contents: read
@@ -908,7 +977,7 @@ jobs:
 
   python-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, release-permit, verify-slsa]
     environment: pypi-production
     permissions:
       contents: read
@@ -967,7 +1036,7 @@ jobs:
 
   crates-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit, python-sdk]
     environment: crates-production
     permissions:
       contents: read
@@ -1037,7 +1106,7 @@ jobs:
 
   maven-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa, python-sdk]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit, python-sdk]
     # Maven Central has no OIDC trusted publishing, so these MAVEN_* secrets
     # are the only long-lived registry credentials left in the release.
     environment: maven-central
@@ -1175,7 +1244,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets, verify-slsa]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets, verify-slsa, release-permit]
     permissions:
       actions: read
       contents: write
@@ -1208,6 +1277,10 @@ jobs:
         with:
           name: verified-slsa-provenance
           path: slsa-provenance/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-permit
+          path: release-permit/
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -1222,6 +1295,8 @@ jobs:
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
+            release-permit/release-permit.json
+            release-permit/release-permit-context.json
             console-release-assets/helm-console-local-sidecar-*
             console-release-assets/helm-ai-kernel-*-console.tar.gz
             console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle
@@ -1232,7 +1307,7 @@ jobs:
     # v0.8.0 includes the local Console. Build and verify every Console asset
     # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, verify-slsa]
+    needs: [binaries, console-local-sidecar, verify-slsa, release-permit]
     permissions:
       actions: read
       contents: read
@@ -1374,7 +1449,7 @@ jobs:
           if-no-files-found: error
 
   slsa-provenance:
-    needs: binaries
+    needs: [binaries, release-permit]
     permissions:
       actions: read
       contents: write
@@ -1436,14 +1511,15 @@ jobs:
     runs-on: ubuntu-latest
     # Registry wait (~25 min) plus the eventually consistent surface wait (~20 min).
     timeout-minutes: 75
-    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets, release-permit]
     if: >-
       always() &&
       needs.github-release.result == 'success' &&
       needs.slsa-provenance.result == 'success' &&
       needs.homebrew.result == 'success' &&
       needs.go-sdk-tag.result == 'success' &&
-      needs.console-release-assets.result == 'success'
+      needs.console-release-assets.result == 'success' &&
+      needs.release-permit.result == 'success'
     permissions:
       contents: write
     env:

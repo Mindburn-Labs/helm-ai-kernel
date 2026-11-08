@@ -1,0 +1,1 @@
+{"verdict":"DENY","findings":[{"severity":"P1","code":"FIXTURE_BLOCKING","summary":"Recorded fixture answer that must make the reducer deny."}]}

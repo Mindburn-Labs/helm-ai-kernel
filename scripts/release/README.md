@@ -25,6 +25,9 @@ specific GitHub release attached a matching asset.
 | `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
 | `rehearse.py` | Computes the version the next tag would carry and checks the pre-publish preconditions of `release.yml`; prints PASS / FAIL / ACTION-NEEDED / UNKNOWN rows. | `make release-rehearsal`, `release-rehearsal.yml`. |
 | `rehearse_test.py` | Hermetic self-test for the rehearsal: version computation through the real contract gate, catalog and pin outcomes, planted chart defects and unprotected release environments. | `make test-release-rehearsal`, `release-rehearsal-self-test` gate. |
+| `release_permit.py` | Builds the commit-bound release-permit context and collects the two OpenRouter reviews (one Anthropic, one OpenAI model) that `release-permit-verify` reduces to a permit. Fails closed. | `release.yml` job `release-permit`. |
+| `release_permit_test.py` | Hermetic test of the context binding, the closed answer shape and the fail-closed paths. | `release-workflow-contract` gate. |
+| `rehearse_permit.sh` | Runs the permit pipeline on recorded answers (`release/permit-fixtures`): ALLOW for the quorum, DENY for a blocking answer. No model call. | `release-rehearsal.yml`. |
 
 The rehearsal reads live deployment policies for every environment declared by
 `release.yml`. Each must allow exactly `tag:v*` and have no required reviewers.

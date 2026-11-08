@@ -320,7 +320,7 @@
     {
       "id": "release-workflow-contract",
       "title": "Release workflow provenance contract",
-      "command": "python3 scripts/ci/release_workflow_contract_test.py && python3 scripts/release/publish_go_module_tags_test.py",
+      "command": "python3 scripts/ci/release_workflow_contract_test.py && python3 scripts/release/publish_go_module_tags_test.py && python3 scripts/release/release_permit_test.py",
       "timeout_seconds": 60,
       "paths": [
         ".github/workflows/**",
@@ -328,6 +328,14 @@
         "scripts/ci/release_workflow_contract_test.py",
         "scripts/release/publish_go_module_tags.sh",
         "scripts/release/publish_go_module_tags_test.py",
+        "scripts/release/release_permit.py",
+        "scripts/release/release_permit_test.py",
+        "scripts/release/rehearse_permit.sh",
+        "release/permit-reviewers.json",
+        "release/permit-review-policy.md",
+        "release/permit-fixtures/**",
+        "core/pkg/releasepermit/**",
+        "core/cmd/release-permit-verify/**",
         "scripts/release/prepare_dev_chart.py",
         "deploy/helm-chart/**",
         "Makefile",

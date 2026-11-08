@@ -1,0 +1,1 @@
+{"verdict":"ALLOW","findings":[{"severity":"P3","code":"FIXTURE_ADVISORY","summary":"Recorded fixture answer; no model was called."}]}

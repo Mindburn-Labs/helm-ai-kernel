@@ -5,12 +5,12 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 85,
-    "enforced": 46,
+    "total": 86,
+    "enforced": 47,
     "observed_only": 25,
     "unmanaged": 14,
     "retired_invariants": 13,
-    "build_plane": 1
+    "build_plane": 2
   },
   "controls": [
     {
@@ -4942,6 +4942,58 @@
           ]
         }
       ]
+    },
+    {
+      "id": "CTL-061",
+      "title": "Release permit gate",
+      "owner": "Mindburn Labs core team (release)",
+      "claim": "A tag-driven release publishes nothing unless the release-permit job of release.yml reduced two independent, commit-bound reviews, one Anthropic model and one OpenAI model, to an ALLOW permit (helm-tracker#266). The job builds release-permit-verify from the tagged commit; every publishing job needs it; a missing secret, a provider error, a malformed review, a stale commit or workflow binding, a duplicate or same-provider reviewer, or any P0-P2 finding yields no ALLOW and fails the job. Model output only proposes: core/pkg/releasepermit validates it against the context, and the permit is attached to the GitHub Release.",
+      "status": "enforced",
+      "plane": "build",
+      "entry_points": [],
+      "gates": [
+        "quality:release-workflow-contract",
+        "quality:release-rehearsal-self-test"
+      ],
+      "config": [
+        "release/permit-reviewers.json pins the two reviewers and the budget; the repository secret HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY pays for them."
+      ],
+      "protected_operations": [
+        "Every publishing job of .github/workflows/release.yml: container and chart images, GitHub Release, Homebrew, Go module tags, npm, PyPI, crates.io and Maven."
+      ],
+      "bypass_assumptions": [
+        "The gate holds a tag-driven release of this workflow file. Whoever can push a tag whose release.yml lacks the gate, or edit the workflow in the tagged commit, removes it; the contract test blocks that edit in a pull request but does not authenticate the tag.",
+        "Two model reviews are evidence, not proof of safety. The reducer proves the quorum is complete, distinct and bound to this commit and run; it cannot prove either model read the whole delta (the delta is capped and the prompt says when it was truncated).",
+        "The reducer's context fixes event to pull_request and forbids the authority workflow from being the reviewed commit, so the context names the previous release commit as workflow_sha and the release's merged pull request as pull_request; the running workflow is recorded in workflow_ref.",
+        "The permit is not signed. release-permit-verify --verify-permit checks it against a trusted context; provenance of the files is the GitHub Release and the workflow run.",
+        "release-rehearsal.yml and the fixtures in release/permit-fixtures exercise the reducer with recorded answers; they never prove a live provider call works."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/releasepermit.TestEvaluateAllowsTwoProviderQuorum",
+          "core/pkg/releasepermit.TestValidateAllowPermitAcceptsReducerOutput"
+        ],
+        "forbidden": [
+          "core/pkg/releasepermit.TestEvaluateDeniesBlockingFinding",
+          "core/pkg/releasepermit.TestEvaluateDeniesMissingReviewer",
+          "core/pkg/releasepermit.TestEvaluateDeniesDuplicateReviewer",
+          "core/pkg/releasepermit.TestEvaluateDeniesStaleHead",
+          "core/pkg/releasepermit.TestEvaluateDeniesMergeTreeSubstitution",
+          "core/pkg/releasepermit.TestEvaluateRejectsCaseAliasedProviderQuorum",
+          "core/pkg/releasepermit.TestEvaluateDeniesNilFindings"
+        ],
+        "removal": [
+          "core/pkg/releasepermit.TestEvaluateDeniesMissingReviewer",
+          "core/pkg/releasepermit.TestEvaluateDeniesBlockingFinding"
+        ],
+        "bypass": [
+          "core/pkg/releasepermit.TestValidateAllowPermitRejectsDigestOrQuorumSubstitution",
+          "core/pkg/releasepermit.TestValidateAllowPermitRejectsRecomputedReviewerSubstitution",
+          "core/cmd/release-permit-verify.TestVerifyPermitFileRejectsTamperedPermit",
+          "core/cmd/release-permit-verify.TestDecodeStrictReviewRejectsAmbiguousShapes"
+        ]
+      },
+      "removal_proofs": []
     }
   ]
 }

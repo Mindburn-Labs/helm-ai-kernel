@@ -88,8 +88,35 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+## [0.12.0]
+
+### Upgrade notes
+
+- `helm-gateway` now signs its receipts and needs a signing key: set
+  `HELM_GATEWAY_RECEIPT_SIGNING_KEY_FILE`, or `gateway.receipts.existingSecret`
+  in the chart. Without a key the gateway does not start.
+- Nine verify routes are removed because each one reported a verification that
+  could not fail: `/api/v1/replay/verify` and the `verify` operations under
+  `/api/v1/boundary/records`, `/api/v1/boundary/checkpoints`,
+  `/api/v1/evidence/envelopes`, `/api/v1/evidence/verification-scopes`,
+  `/api/v1/sandbox/grants`, `/api/v1/telemetry/harness-traces`,
+  `/api/v1/plans/transactions` and `/api/v1/harness/change-contracts`.
+  Migration: verify evidence with `POST /api/v1/evidence/verify` or offline
+  with `receipt_verify`.
+- `POST /api/v1/evidence/verify` has a new response: `outcome` is `VERIFIED`,
+  `FAILED` or `UNVERIFIABLE`, and `checks_run` names only the checks that ran.
+  Clients reading the former synthesized `PASS` fields must move to it.
+
 ### Added
 
+- `helm-gateway` signs a hash-chained `receipt.v5` receipt for every admission
+  decision, in the same transaction as the decision, and a receipt for the
+  outcome of every admitted effect. Each tenant and workspace pair has its own
+  chain.
+- `receipt_verify` checks the gateway's own facts against their binding
+  documents; `--require-bindings` makes that check mandatory. The gateway
+  serves its public keys at `GET /api/v1/receipt-keyring` and exports receipt
+  chains for offline verification.
 - The standalone offline receipt verifier is now a release asset:
   `receipt_verify-linux-amd64`, `receipt_verify-linux-arm64`,
   `receipt_verify-darwin-amd64`, `receipt_verify-darwin-arm64` and
@@ -128,6 +155,18 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   effect gateway with `NativeGatewayClient`.
 - `helm-ai-kernel setup --json` no longer reports `framework_adapters`, and the
   compatibility registry lists no framework adapters.
+- Code that no shipped binary reached is gone from the kernel, including the
+  WASI sandbox and broker, the SafeExecutor, de-scoped Guardian gates with no
+  installer, the approval ceremony effect lifecycle, and dead trust, pack,
+  registry, identity SSO, MCP scanner, budget and policy tooling. Controls
+  covering removed code are retired in `controls.yaml`.
+
+### Fixed
+
+- `core` now requires `sdk/go` at a commit on `main`. The previous requirement
+  named a commit from a deleted pull request branch, so a cold module fetch
+  failed.
+- Gateway runtime tests no longer hand out the same loopback port twice.
 
 ## [0.11.3]
 

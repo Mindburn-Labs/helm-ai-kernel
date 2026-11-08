@@ -14,7 +14,6 @@ core/pkg/connectors/linear # 1 test-only importer(s)
 core/pkg/connectors/sandbox # has tests
 core/pkg/connectors/sandbox/claudemanaged # has tests
 core/pkg/connectors/sandbox/opensandbox # has tests
-core/pkg/connectors/ton/acton # has tests
 core/pkg/crypto/shredding # 1 test-only importer(s)
 core/pkg/gateway # no tests
 core/pkg/httpsig # has tests

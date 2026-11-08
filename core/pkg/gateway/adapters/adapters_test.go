@@ -90,7 +90,14 @@ func TestResultTypesMirrorTheProto(t *testing.T) {
 // depend, even transitively, on none of the legacy runtime.
 func TestAdaptersDoNotImportTheLegacyRuntime(t *testing.T) {
 	forbidden := []string{"guardian", "proxy", "mcp", "executor", "connectors"}
+	// The TON Acton adapter fronts the Acton connector, the one connector the
+	// gateway links (helm-tracker#266). It is a leaf over contracts, effects and
+	// proofgraph; any other package under connectors stays forbidden.
+	const allowedConnector = "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/ton/acton"
 	isForbidden := func(dep string) bool {
+		if dep == allowedConnector {
+			return false
+		}
 		for _, f := range forbidden {
 			p := "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/" + f
 			if dep == p || strings.HasPrefix(dep, p+"/") {
@@ -100,7 +107,9 @@ func TestAdaptersDoNotImportTheLegacyRuntime(t *testing.T) {
 		return false
 	}
 	if !isForbidden("github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian/firewall") ||
-		isForbidden("github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcpx") {
+		isForbidden("github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcpx") ||
+		!isForbidden("github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/linear") ||
+		isForbidden(allowedConnector) {
 		t.Fatal("the boundary check does not recognise what it should")
 	}
 	_, file, _, _ := runtime.Caller(0)

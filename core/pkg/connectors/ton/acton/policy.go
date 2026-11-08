@@ -2,7 +2,6 @@ package acton
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -220,18 +219,4 @@ func policyFromParams(params map[string]any) P0Ceilings {
 		ceilings.AllowedTolkCompilerVersions = SupportedTolkCompilerVersions
 	}
 	return ceilings
-}
-
-func validateThresholds(env *ActonCommandEnvelope, metrics map[string]float64) PolicyDecision {
-	if env.EvidenceRequirements.RequireCoverageMin > 0 {
-		if metrics["coverage_percent"] < float64(env.EvidenceRequirements.RequireCoverageMin) {
-			return escalate(ReasonCoverageThresholdFailed, fmt.Sprintf("coverage %.2f below threshold %d", metrics["coverage_percent"], env.EvidenceRequirements.RequireCoverageMin))
-		}
-	}
-	if env.EvidenceRequirements.RequireMutationScoreMin > 0 {
-		if metrics["mutation_score_percent"] < float64(env.EvidenceRequirements.RequireMutationScoreMin) {
-			return escalate(ReasonMutationThresholdFailed, fmt.Sprintf("mutation score %.2f below threshold %d", metrics["mutation_score_percent"], env.EvidenceRequirements.RequireMutationScoreMin))
-		}
-	}
-	return PolicyDecision{Verdict: contracts.VerdictAllow, ReasonCode: ReasonOK, Dispatch: true}
 }

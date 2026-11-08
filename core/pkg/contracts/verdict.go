@@ -149,6 +149,7 @@ const (
 	ReasonTONMutationThresholdFailed         ReasonCode = "ERR_TON_MUTATION_THRESHOLD_FAILED"
 	ReasonTONLibraryMainnetRequiresApproval  ReasonCode = "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL"
 	ReasonTONLibrarySpendCeilingExceeded     ReasonCode = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED"
+	ReasonTONMainnetRefused                  ReasonCode = "ERR_TON_MAINNET_REFUSED"
 	ReasonConnectorContractDrift             ReasonCode = "ERR_CONNECTOR_CONTRACT_DRIFT"
 	ReasonComputeGasExhausted                ReasonCode = "ERR_COMPUTE_GAS_EXHAUSTED"
 	ReasonComputeTimeExhausted               ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"

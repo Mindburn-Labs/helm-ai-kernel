@@ -1,39 +1,41 @@
 package acton
 
-// ReasonCode is the connector-local stable reason code carried by ActonReceipt.
-// DENY/ESCALATE codes that cross the generic execution-boundary record are also
-// registered in contracts/verdict.go.
+import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+
+// ReasonCode is the stable reason code carried by ActonReceipt. Every code
+// except OK takes its wire value from the one registry in contracts/verdict.go
+// (R4), so the connector and the gateway cannot disagree on a code.
 type ReasonCode string
 
 const (
 	ReasonOK                             ReasonCode = "OK"
-	ReasonUnknownCommand                 ReasonCode = "ERR_TON_ACTON_UNKNOWN_COMMAND"
-	ReasonUnsupportedVersion             ReasonCode = "ERR_TON_ACTON_UNSUPPORTED_VERSION"
-	ReasonCompilerUnpinned               ReasonCode = "ERR_TON_TOLK_COMPILER_UNPINNED"
-	ReasonCompilerMismatch               ReasonCode = "ERR_TON_TOLK_COMPILER_MISMATCH"
-	ReasonArgvRejected                   ReasonCode = "ERR_TON_ACTON_ARGV_REJECTED"
-	ReasonRawShellForbidden              ReasonCode = "ERR_TON_ACTON_RAW_SHELL_FORBIDDEN"
-	ReasonGenericMainnetScriptDenied     ReasonCode = "ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED"
-	ReasonScriptManifestRequired         ReasonCode = "ERR_TON_SCRIPT_MANIFEST_REQUIRED"
-	ReasonScriptManifestHashMismatch     ReasonCode = "ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH"
-	ReasonExpectedEffectMismatch         ReasonCode = "ERR_TON_EXPECTED_EFFECT_MISMATCH"
-	ReasonSpendCeilingExceeded           ReasonCode = "ERR_TON_SPEND_CEILING_EXCEEDED"
-	ReasonMainnetRequiresApproval        ReasonCode = "ERR_TON_MAINNET_REQUIRES_APPROVAL"
-	ReasonApprovalCeremonyRequired       ReasonCode = "ERR_TON_APPROVAL_CEREMONY_REQUIRED"
-	ReasonWalletRefRequired              ReasonCode = "ERR_TON_WALLET_REF_REQUIRED"
-	ReasonPlaintextMnemonicForbidden     ReasonCode = "ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN"
-	ReasonNetworkGrantRequired           ReasonCode = "ERR_TON_NETWORK_GRANT_REQUIRED"
-	ReasonSandboxGrantRequired           ReasonCode = "ERR_TON_SANDBOX_GRANT_REQUIRED"
-	ReasonSourceVerificationRequired     ReasonCode = "ERR_TON_SOURCE_VERIFICATION_REQUIRED"
-	ReasonVerifyDryRunRequired           ReasonCode = "ERR_TON_VERIFY_DRY_RUN_REQUIRED"
-	ReasonVerifyBytecodeMismatch         ReasonCode = "ERR_TON_VERIFY_BYTECODE_MISMATCH"
-	ReasonCoverageThresholdFailed        ReasonCode = "ERR_TON_COVERAGE_THRESHOLD_FAILED"
-	ReasonMutationThresholdFailed        ReasonCode = "ERR_TON_MUTATION_THRESHOLD_FAILED"
-	ReasonLibraryMainnetRequiresApproval ReasonCode = "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL"
-	ReasonLibrarySpendCeilingExceeded    ReasonCode = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED"
-	ReasonConnectorContractDrift         ReasonCode = "ERR_CONNECTOR_CONTRACT_DRIFT"
-	ReasonComputeGasExhausted            ReasonCode = "ERR_COMPUTE_GAS_EXHAUSTED"
-	ReasonComputeTimeExhausted           ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"
+	ReasonUnknownCommand                 ReasonCode = ReasonCode(contracts.ReasonTONActonUnknownCommand)
+	ReasonUnsupportedVersion             ReasonCode = ReasonCode(contracts.ReasonTONActonUnsupportedVersion)
+	ReasonCompilerUnpinned               ReasonCode = ReasonCode(contracts.ReasonTONTolkCompilerUnpinned)
+	ReasonCompilerMismatch               ReasonCode = ReasonCode(contracts.ReasonTONTolkCompilerMismatch)
+	ReasonArgvRejected                   ReasonCode = ReasonCode(contracts.ReasonTONActonArgvRejected)
+	ReasonRawShellForbidden              ReasonCode = ReasonCode(contracts.ReasonTONActonRawShellForbidden)
+	ReasonGenericMainnetScriptDenied     ReasonCode = ReasonCode(contracts.ReasonTONActonGenericMainnetScriptDenied)
+	ReasonScriptManifestRequired         ReasonCode = ReasonCode(contracts.ReasonTONScriptManifestRequired)
+	ReasonScriptManifestHashMismatch     ReasonCode = ReasonCode(contracts.ReasonTONScriptManifestHashMismatch)
+	ReasonExpectedEffectMismatch         ReasonCode = ReasonCode(contracts.ReasonTONExpectedEffectMismatch)
+	ReasonSpendCeilingExceeded           ReasonCode = ReasonCode(contracts.ReasonTONSpendCeilingExceeded)
+	ReasonMainnetRequiresApproval        ReasonCode = ReasonCode(contracts.ReasonTONMainnetRequiresApproval)
+	ReasonApprovalCeremonyRequired       ReasonCode = ReasonCode(contracts.ReasonTONApprovalCeremonyRequired)
+	ReasonWalletRefRequired              ReasonCode = ReasonCode(contracts.ReasonTONWalletRefRequired)
+	ReasonPlaintextMnemonicForbidden     ReasonCode = ReasonCode(contracts.ReasonTONPlaintextMnemonicForbidden)
+	ReasonNetworkGrantRequired           ReasonCode = ReasonCode(contracts.ReasonTONNetworkGrantRequired)
+	ReasonSandboxGrantRequired           ReasonCode = ReasonCode(contracts.ReasonTONSandboxGrantRequired)
+	ReasonSourceVerificationRequired     ReasonCode = ReasonCode(contracts.ReasonTONSourceVerificationRequired)
+	ReasonVerifyDryRunRequired           ReasonCode = ReasonCode(contracts.ReasonTONVerifyDryRunRequired)
+	ReasonVerifyBytecodeMismatch         ReasonCode = ReasonCode(contracts.ReasonTONVerifyBytecodeMismatch)
+	ReasonCoverageThresholdFailed        ReasonCode = ReasonCode(contracts.ReasonTONCoverageThresholdFailed)
+	ReasonMutationThresholdFailed        ReasonCode = ReasonCode(contracts.ReasonTONMutationThresholdFailed)
+	ReasonLibraryMainnetRequiresApproval ReasonCode = ReasonCode(contracts.ReasonTONLibraryMainnetRequiresApproval)
+	ReasonLibrarySpendCeilingExceeded    ReasonCode = ReasonCode(contracts.ReasonTONLibrarySpendCeilingExceeded)
+	ReasonConnectorContractDrift         ReasonCode = ReasonCode(contracts.ReasonConnectorContractDrift)
+	ReasonComputeGasExhausted            ReasonCode = ReasonCode(contracts.ReasonComputeGasExhausted)
+	ReasonComputeTimeExhausted           ReasonCode = ReasonCode(contracts.ReasonComputeTimeExhausted)
 )
 
 func (r ReasonCode) String() string {

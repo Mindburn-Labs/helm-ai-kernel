@@ -12,8 +12,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
-var _ effects.Connector = (*Connector)(nil)
-
 type Connector struct {
 	runner       Runner
 	defaultP0    P0Ceilings
@@ -39,14 +37,6 @@ func NewConnector(cfg Config) *Connector {
 		defaultGrant: cfg.SandboxGrant,
 		graph:        proofgraph.NewGraph(),
 	}
-}
-
-func (c *Connector) ID() string {
-	return ConnectorID
-}
-
-func (c *Connector) Graph() *proofgraph.Graph {
-	return c.graph
 }
 
 func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, toolName string, params map[string]any) (any, error) {
@@ -153,22 +143,6 @@ func (c *Connector) appendProofNode(t proofgraph.NodeType, payload any) error {
 	seq := c.seq.Add(1)
 	_, err = c.graph.Append(t, data, ConnectorID, seq)
 	return err
-}
-
-func sandboxGrantFromParams(params map[string]any) *contracts.SandboxGrant {
-	raw, ok := params["sandbox_grant"]
-	if !ok || raw == nil {
-		return nil
-	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	var grant contracts.SandboxGrant
-	if err := json.Unmarshal(data, &grant); err != nil {
-		return nil
-	}
-	return &grant
 }
 
 func scriptManifestFromParams(params map[string]any) *ScriptManifest {

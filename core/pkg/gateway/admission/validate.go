@@ -53,6 +53,10 @@ func validateProposal(in ProposeInput) (map[string]any, error) {
 	if !effectTypePattern.MatchString(in.EffectType) {
 		return nil, bad("effect.effect_type %q is not an effect type", in.EffectType)
 	}
+	if effectargs.IsTONActonMainnet(in.EffectType) {
+		return nil, refuse(CodePermissionDenied, contracts.ReasonTONMainnetRefused,
+			"%s operates on TON mainnet, which spends real TON; this gateway performs local, fork and testnet Acton operations only", in.EffectType)
+	}
 	if in.Target == "" || len(in.Target) > maxTargetBytes || !utf8.ValidString(in.Target) ||
 		strings.IndexFunc(in.Target, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
 		return nil, bad("effect.target must be 1 to %d bytes of UTF-8 without control characters", maxTargetBytes)

@@ -16,7 +16,3 @@ func ValidateSourceVerification(env *ActonCommandEnvelope) error {
 	}
 	return nil
 }
-
-func VerifyDryRunRequiredForDeploy(env *ActonCommandEnvelope) bool {
-	return env.ActionURN == ActionScriptMainnet && env.EvidenceRequirements.RequireVerifierDryRun
-}

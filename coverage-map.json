@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 85,
-    "enforced": 46,
+    "total": 86,
+    "enforced": 47,
     "observed_only": 25,
     "unmanaged": 14,
     "retired_invariants": 13,
@@ -2764,7 +2764,7 @@
       "claim": "A connector response whose schema drifts from its pin is denied with ERR_CONNECTOR_CONTRACT_DRIFT.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no caller and was deleted with its tests, so no shipped validator reports ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway instead checks each established observation against the effect type's result contract (admission.typedResult: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt UNKNOWN. The GitHub adapter linked into helm-gateway is the only shipped adapter that reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own typed response checks; the preview TON Acton connector is not linked into any shipped binary.",
+      "reason": "Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no caller and was deleted with its tests, so no shipped validator reports ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway instead checks each established observation against the effect type's result contract (admission.typedResult: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt UNKNOWN. Two adapters linked into helm-gateway report ERR_CONNECTOR_CONTRACT_DRIFT from their own checks: the GitHub adapter, from its typed response checks, and the TON Acton adapter (CTL-061), which answers INDEFINITE when a testnet broadcast prints something other than its output contract. Neither check pins a response schema by hash, and the Acton output contract is the gateway's own expectation, not one qualified against a real Acton release.",
       "entry_points": [],
       "gates": [],
       "config": [],
@@ -4939,6 +4939,99 @@
           "file": "core/cmd/receipt_verify/main.go",
           "tests": [
             "core/cmd/receipt_verify.TestRequireBindingsFailsAGatewayReceiptWithoutOne"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-061",
+      "title": "TON Acton runs local, fork and testnet only",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "helm-gateway performs TON Acton operations as gateway effects (helm-tracker#266), in the owner's scope: local project work (new, init, version, doctor, env, build, check, format, test, wrapper generation, compile, disasm, docs, library info and fetch), forks of testnet and mainnet state, and the four testnet operations (library.publish_testnet, library.topup_testnet, script.testnet, source.verify_testnet). Every mainnet operation (library.publish_mainnet, library.topup_mainnet, script.mainnet, source.verify_mainnet) is refused at Propose with ERR_TON_MAINNET_REFUSED before any mandate, adapter or database is consulted, and has no adapter. The adapter builds argv from the connector's typed commands, runs the operator-configured Acton binary in the target's directory of the tenant's workspace with an environment built from nothing, and checks the connector's policy (spend ceiling, manifest, wallet reference, sandbox grant) first. The testnet wallet secret is held only by the gateway's custody (a mounted file per tenant and wallet_ref), reaches the process through one environment variable for a testnet operation only, and is redacted from output; it is never in a request body, the argv, the run record or the result. Testnet operations are declared only when a testnet RPC and a wallets file are configured. Dispatch answers NOT_SENT before any process runs, SENT when Acton ran, and INDEFINITE when a broadcast was cut short, exited non-zero or printed something other than its output contract (ERR_CONNECTOR_CONTRACT_DRIFT); Observe reads back the attempt's run record and, for a broadcast, the transaction on testnet through the RPC, and a result must satisfy the declared result schema.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/gateway/admission.validateProposal",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/tonacton.Adapter.Dispatch",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/tonacton.Adapter.Observe",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/custody.TONWallets.Token",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/runtime.tonActonFromEnv",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_GATEWAY_TON_ACTON_BIN and HELM_GATEWAY_TON_ACTON_WORKSPACE (absolute paths, both or neither) install the local and fork operations.",
+        "HELM_GATEWAY_TON_TESTNET_RPC_URL and HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (both or neither, and only with the binary and workspace) add the testnet operations; HELM_GATEWAY_TON_TESTNET_MAX_SPEND is their per-action TON ceiling, default 1."
+      ],
+      "protected_operations": [
+        "Running Acton for a tenant, and broadcasting from the gateway's testnet wallet, through the Propose, Dispatch and Observe path of helm-gateway; the wallet secret never leaves the gateway's custody and the process environment of a testnet call."
+      ],
+      "bypass_assumptions": [
+        "The Acton process runs on the gateway host with the gateway's user and network. The sandbox grant the connector checks is a record of what the gateway composed, not an operating-system sandbox: confine egress and the workspace with the deployment (network policy, a read-only root, a dedicated user).",
+        "The testnet wallet secret is in the process environment for the length of a testnet call, readable by that user's other processes. It is a testnet key; a mainnet key must never be mounted.",
+        "The output contract of a broadcast (one JSON object with address and tx_hash) and the wallet environment variable ACTON_WALLET_SECRET are the gateway's declared interface to Acton; they are not qualified against a real Acton release, and a release that differs makes testnet operations INDEFINITE, never SUCCEEDED.",
+        "The testnet check shows that a transaction with the printed hash exists on the account; it does not show that the transaction did what the script intended.",
+        "The run record is a file in the tenant's workspace written by the gateway; anyone who can write there can forge or delete it. A forged record cannot confirm a broadcast, which also needs the RPC, and a missing one reads as FAILED by absence. Authority, reservations and receipts stay in Postgres.",
+        "Project paths inside a project are checked by pattern; Acton itself follows symlinks a project contains."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/gateway/adapters/tonacton.TestLocalBuildRunsWithoutTheWalletAndReadsBack",
+          "core/pkg/gateway/adapters/tonacton.TestTestnetBroadcastKeepsTheSecretInTheEnvironmentOnly",
+          "core/pkg/gateway/adapters/tonacton.TestProjectNewAndInit"
+        ],
+        "forbidden": [
+          "core/pkg/gateway/admission.TestTONMainnetEffectsAreRefusedBeforeAnyDatabaseUse",
+          "core/pkg/gateway/adapters/tonacton.TestMainnetEffectsAreRefusedByTheAdapterToo",
+          "core/pkg/gateway/adapters/tonacton.TestDispatchRefusals",
+          "core/pkg/gateway/custody.TestTONWalletsServeOnlyTheTenantsOwnWallet"
+        ],
+        "removal": [
+          "core/pkg/gateway/adapters/tonacton.TestDeclarationsAreTheOwnersScopeAndNeverMainnet",
+          "core/pkg/gateway/adapters/tonacton.TestEveryConnectorCommandIsDecided",
+          "core/pkg/gateway/runtime.TestTONActonIsOptionalAndAllOrNothing",
+          "core/pkg/gateway/admission.TestTONMainnetEffectsAreRefusedBeforeAnyDatabaseUse"
+        ],
+        "bypass": [
+          "core/pkg/gateway/adapters/tonacton.TestSecretEchoedByActonIsRedacted",
+          "core/pkg/gateway/adapters/tonacton.TestProjectCannotResolveOutsideTheTenantWorkspace",
+          "core/pkg/gateway/adapters/tonacton.TestTestnetFailureModes",
+          "core/pkg/gateway/adapters/tonacton.TestChainReadBack",
+          "core/pkg/gateway/custody.TestRoutedSendsTONEffectsToTheWalletsOnly"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/admission/validate.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestTONMainnetEffectsAreRefusedBeforeAnyDatabaseUse"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/tonacton/ops.go",
+          "tests": [
+            "core/pkg/gateway/adapters/tonacton.TestDeclarationsAreTheOwnersScopeAndNeverMainnet",
+            "core/pkg/gateway/adapters/tonacton.TestEveryConnectorCommandIsDecided"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/runtime/tonacton.go",
+          "tests": [
+            "core/pkg/gateway/runtime.TestTONActonIsOptionalAndAllOrNothing"
           ]
         }
       ]

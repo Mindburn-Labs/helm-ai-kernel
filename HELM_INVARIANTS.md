@@ -158,7 +158,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-058 | Kernel bounded retained work reassignment | enforced | — |
 | CTL-059 | Gateway signed decision and outcome receipts | enforced | — |
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
-| CTL-061 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
+| CTL-062 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
 
 ---
 

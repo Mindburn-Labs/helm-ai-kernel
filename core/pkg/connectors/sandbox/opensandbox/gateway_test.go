@@ -268,3 +268,22 @@ func TestGatewayExecKeepsTheArgumentVectorIntact(t *testing.T) {
 	assertExecCommand(t, rec.all()[0].Body, argv)
 	assert.NotContains(t, rec.all()[0].Body, testKey)
 }
+
+// A list answer of the wrong shape is contract drift, never an empty list: an
+// empty list would say a sandbox that exists is absent.
+func TestGatewayFindAnswerOfTheWrongShapeIsDrift(t *testing.T) {
+	for name, body := range map[string]string{
+		"object":     `{}`,
+		"null items": `{"items":null}`,
+		"array":      `[]`,
+		"null":       `null`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, _ := fake(t, reply(200, body))
+			_, err := gwAdapter(srv.URL).Find(t.Context(), map[string]string{connsandbox.LabelAttempt: "a"})
+			ce := connsandbox.AsCallError(err)
+			require.NotNil(t, ce, "%v", err)
+			assert.True(t, ce.Drift)
+		})
+	}
+}

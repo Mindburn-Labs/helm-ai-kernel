@@ -18,6 +18,7 @@
 package sandbox
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
@@ -63,4 +64,38 @@ func ShellJoin(argv []string) string {
 		quoted[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
 	}
 	return strings.Join(quoted, " ")
+}
+
+// UnappliedPolicy refuses a spec that asks for what a provider adapter does
+// not apply. An adapter whose provider call carries none of the resource
+// limits, the egress policy, the environment or the mounts must not create a
+// sandbox for a spec that asks for them: the sandbox would run without the
+// limits its permit named and still be reported as created. appliesTimeout is
+// whether the adapter sends the spec's timeout. The error wraps
+// actuators.ErrNotSupported, so the gateway's dispatch is NOT_SENT.
+func UnappliedPolicy(spec *actuators.SandboxSpec, appliesTimeout bool) error {
+	if spec == nil {
+		return fmt.Errorf("sandbox spec is required")
+	}
+	var unapplied []string
+	add := func(asked bool, name string) {
+		if asked {
+			unapplied = append(unapplied, name)
+		}
+	}
+	r := spec.Resources
+	add(r.CPUMillis != 0, "cpu_millis")
+	add(r.MemoryMB != 0, "memory_mb")
+	add(r.DiskMB != 0, "disk_mb")
+	add(r.MaxProcesses != 0, "max_processes")
+	add(!appliesTimeout && r.Timeout != 0, "timeout")
+	add(spec.Egress.Disabled, "egress_disabled")
+	add(len(spec.Egress.DefaultAllowlist) != 0, "an egress allowlist")
+	add(len(spec.Env) != 0, "environment variables")
+	add(len(spec.Mounts) != 0, "mounts")
+	if len(unapplied) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: this provider adapter does not apply %s, and a sandbox is not created without the limits it was asked for",
+		actuators.ErrNotSupported, strings.Join(unapplied, ", "))
 }

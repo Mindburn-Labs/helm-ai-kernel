@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"net/http/httptest"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/sandbox"
 )
@@ -173,7 +176,129 @@ func TestClaudeManagedExecutesOnlyOnTheRemoteWorker(t *testing.T) {
 	assert.Equal(t, adapters.DispatchNotSent, a.Dispatch(t.Context(), creds, other, digest(args)).Status)
 	assert.Equal(t, n, len(w.requests()))
 
+	// The worker was told the tenant and the spec, and the id is random.
+	assert.Regexp(t, `^claude-managed-[0-9a-f]{32}$`, id)
+	for _, r := range reqs {
+		assert.NotEmpty(t, r.body.Tenant)
+		require.NotNil(t, r.body.Spec)
+		assert.True(t, r.body.Spec.EgressDisabled)
+		assert.EqualValues(t, 256, r.body.Spec.MemoryMB)
+	}
+	assert.Equal(t, "gateway_record", observationTrust(t, co), "the create read-back is the gateway's own record")
+
+	// Terminate reaches the worker, which refuses the other tenant.
+	otherTerm := effectFor(sandbox.EffectTerminate, "sandbox/claude-managed-agents/"+id, terminateArgsJSON, tenantB, attemptID(t))
+	assert.Equal(t, adapters.DispatchNotSent, a.Dispatch(t.Context(), creds, otherTerm, digest(terminateArgsJSON)).Status)
+	assert.Empty(t, w.terminated)
+	te := effectFor(sandbox.EffectTerminate, "sandbox/claude-managed-agents/"+id, terminateArgsJSON, tenantA, attemptID(t))
+	require.Equal(t, adapters.DispatchSent, a.Dispatch(t.Context(), creds, te, digest(terminateArgsJSON)).Status)
+	assert.Equal(t, []string{id}, w.terminated, "the worker was asked to end the sandbox")
+	to := a.Observe(t.Context(), creds, te)
+	require.Equal(t, adapters.OutcomeSucceeded, to.Outcome, to.Detail)
+	assert.Equal(t, "gateway_record", observationTrust(t, to))
+
 	// No sandbox that was never created through the gateway.
 	ghost := effectFor(sandbox.EffectExec, "sandbox/claude-managed-agents/ghost-1", args, tenantA, attemptID(t))
 	assert.Equal(t, adapters.DispatchNotSent, a.Dispatch(t.Context(), creds, ghost, digest(args)).Status)
+}
+
+func TestBuildRefusesPlainHTTPAndInsecureTLSAtStart(t *testing.T) {
+	agents := `{"worker_id":"w","remote_endpoint":"http://127.0.0.1:9"}`
+	for name, pc := range map[string]sandbox.ProviderConfig{
+		"e2b":                  {Provider: "e2b", KeyFile: "/k", APIURL: "http://api.example"},
+		"e2b loopback":         {Provider: "e2b", KeyFile: "/k", APIURL: "http://127.0.0.1:9"},
+		"daytona":              {Provider: "daytona", KeyFile: "/k", BaseURL: "http://d.example"},
+		"opensandbox":          {Provider: "opensandbox", KeyFile: "/k", BaseURL: "http://o.example"},
+		"claude loopback":      {Provider: "claude-managed-agents", KeyFile: "/k", ManagedAgents: json.RawMessage(agents)},
+		"credentials in url":   {Provider: "daytona", KeyFile: "/k", BaseURL: "https://u:p@d.example"},
+		"opensandbox no tls":   {Provider: "opensandbox", KeyFile: "/k", BaseURL: "https://o.example", TLSRequired: boolPtr(false)},
+		"daytona schemeless":   {Provider: "daytona", KeyFile: "/k", BaseURL: "d.example"},
+		"daytona with a query": {Provider: "daytona", KeyFile: "/k", BaseURL: "https://d.example/?k=v"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Build(sandbox.Config{Providers: []sandbox.ProviderConfig{pc}}, BuildOptions{ManagedSigner: signerStub{}})
+			assert.Error(t, err)
+		})
+	}
+	// tls_required: false is also refused when the file is parsed.
+	_, err := sandbox.ParseConfig([]byte(`{"providers":[{"provider":"opensandbox","key_file":"/k","base_url":"https://o.example","tls_required":false}]}`))
+	assert.ErrorContains(t, err, "tls_required")
+	// And https is accepted.
+	_, err = Build(sandbox.Config{Providers: []sandbox.ProviderConfig{{Provider: "opensandbox", KeyFile: "/k", BaseURL: "https://o.example", TLSRequired: boolPtr(true)}}}, BuildOptions{})
+	assert.NoError(t, err)
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// A provider whose create call does not carry the limits and the egress
+// policy is refused at admission and at dispatch, before any request: the
+// sandbox would run without the limits its permit named.
+func TestE2BAndDaytonaRefuseACreateWhoseLimitsTheyDoNotApply(t *testing.T) {
+	for _, d := range dialects[:2] {
+		t.Run(d.name, func(t *testing.T) {
+			f, srv := newFakeCloud(t, d)
+			pc := sandbox.ProviderConfig{Provider: d.name, KeyFile: "/run/helm/key"}
+			if d.name == "e2b" {
+				pc.APIURL, pc.TemplateID = srv.URL, "base"
+			} else {
+				pc.BaseURL = srv.URL
+			}
+			backends, err := Build(sandbox.Config{Providers: []sandbox.ProviderConfig{pc}}, BuildOptions{HTTPClient: srv.Client()})
+			require.NoError(t, err)
+			a, err := sandbox.New(backends)
+			require.NoError(t, err)
+			creds := &staticToken{token: testKey}
+			e := effectFor(sandbox.EffectCreate, "sandbox/"+d.name, createArgsJSON, tenantA, attemptID(t))
+			_, err = a.Prepare(t.Context(), creds, e)
+			require.Error(t, err)
+			got := a.Dispatch(t.Context(), creds, e, digest(createArgsJSON))
+			assert.Equal(t, adapters.DispatchNotSent, got.Status, got.Detail)
+			assert.Equal(t, contracts.ReasonPreconditionFailed, got.Reason)
+			assert.Zero(t, f.count())
+			f.mu.Lock()
+			assert.Empty(t, f.seen, "no request, so the key was not sent")
+			f.mu.Unlock()
+		})
+	}
+}
+
+// A list answer of the wrong shape is drift, never an empty list: Observe
+// must not fail an effect whose sandbox exists.
+func TestAListAnswerOfTheWrongShapeLeavesTheCreateUnknown(t *testing.T) {
+	eachProvider(t, func(t *testing.T, d dialect, f *fakeCloud, a *sandbox.Adapter, _ *httptest.Server) {
+		creds := &staticToken{token: testKey}
+		e := effectFor(sandbox.EffectCreate, "sandbox/"+d.name, createArgsJSON, tenantA, attemptID(t))
+		require.Equal(t, adapters.DispatchSent, a.Dispatch(t.Context(), creds, e, digest(createArgsJSON)).Status)
+		require.Equal(t, 1, f.count())
+		f.listBody = "null"
+		if d.name == "opensandbox" {
+			f.listBody = "{}"
+		}
+		o := a.Observe(t.Context(), creds, e)
+		assert.Equal(t, adapters.OutcomeUnknown, o.Outcome, o.Detail)
+		assert.Equal(t, contracts.ReasonConnectorContractDrift, o.Reason)
+		assert.False(t, o.Absent)
+	})
+}
+
+func TestDockerRefusesANetworkedSandboxAtAdmission(t *testing.T) {
+	cfg, err := sandbox.ParseConfig([]byte(`{"providers":[{"provider":"docker"}]}`))
+	require.NoError(t, err)
+	backends, err := Build(cfg, BuildOptions{})
+	require.NoError(t, err)
+	a, err := sandbox.New(backends)
+	require.NoError(t, err)
+	args := `{"schema":"helm.sandbox.create.v1","runtime":"alpine@sha256:` + strings.Repeat("a", 64) + `","cpu_millis":500,"memory_mb":256,"disk_mb":0,"timeout_seconds":600,"max_processes":64,"egress_disabled":false}`
+	e := effectFor(sandbox.EffectCreate, "sandbox/docker", args, tenantA, attemptID(t))
+	_, err = a.Prepare(t.Context(), &staticToken{}, e)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "network")
+	got := a.Dispatch(t.Context(), &staticToken{}, e, digest(args))
+	assert.Equal(t, adapters.DispatchNotSent, got.Status)
+}
+
+func observationTrust(t *testing.T, o adapters.ObserveResult) string {
+	t.Helper()
+	require.NotNil(t, o.Observation)
+	return o.Observation.TrustClass
 }

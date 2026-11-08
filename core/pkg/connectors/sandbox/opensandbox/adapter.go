@@ -478,13 +478,18 @@ func (a *Adapter) Find(ctx context.Context, labels map[string]string) ([]connsan
 		q.Add("label", k+"="+labels[k])
 	}
 	var list struct {
-		Items []osSandbox `json:"items"`
+		Items *[]osSandbox `json:"items"`
 	}
 	if err := a.doJSON(ctx, "GET", "/api/sandbox?"+q.Encode(), nil, &list); err != nil {
 		return nil, fmt.Errorf("opensandbox: find failed: %w", err)
 	}
+	// {} and {"items":null} are not an empty list: reading them as one would
+	// say a sandbox that exists is absent.
+	if list.Items == nil {
+		return nil, fmt.Errorf("opensandbox: find failed: %w", &connsandbox.CallError{Provider: "opensandbox", Drift: true, Detail: "the list answer carries no items array"})
+	}
 	var found []connsandbox.Info
-	for _, s := range list.Items {
+	for _, s := range *list.Items {
 		if !labelsMatch(s.Metadata, labels) {
 			continue
 		}

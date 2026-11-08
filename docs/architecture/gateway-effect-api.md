@@ -1611,6 +1611,18 @@ closed schemas (`helm.sandbox.create.v1`, `helm.sandbox.exec.v1`,
 runtime and resource limits; an exec carries a command as an argument vector, a
 working directory and a timeout, and **no environment and no secret**.
 
+A create's limits and egress policy are applied by the provider or the create
+is refused; none is silently dropped. Docker applies memory, CPU and process
+limits and runs every container with no network (`egress_disabled: false` and a
+`disk_mb` limit are refused: the default bridge would link the containers of
+different tenants, and no disk limit is applied). OpenSandbox sends them all in
+its create request. E2B and Daytona send the template or language, the timeout
+and the labels only, so their creates are refused (`NOT_SENT`,
+`PRECONDITION_FAILED`, at admission and at dispatch) until their create call
+carries the limits and the egress policy; their exec and terminate effects work
+on a sandbox that already exists. Claude Managed Agents sends the egress policy
+and the limits to the worker with every exec, and the worker must apply them.
+
 **Configuration.** `HELM_GATEWAY_SANDBOX_CONFIG_FILE` names a JSON file
 (`adapters/sandbox.Config`) that lists the enabled providers and, for each
 provider that takes a key, the path of its key file. The key is never in that
@@ -1641,6 +1653,9 @@ reconciles by reading back:
 
 - create looks up the sandbox by its attempt label (and creates none if one
   exists); the read-back finds it by that label;
+- a provider's list answer that is not a list (`null`, `{}`, a missing `items`)
+  is `ERR_CONNECTOR_CONTRACT_DRIFT`, never an empty list, so a sandbox that
+  exists is not read as absent;
 - terminate reads the sandbox from the provider: gone or terminated is
   `SUCCEEDED`, still running is `UNKNOWN`;
 - exec runs under a fixed wrapper that records the command's start, output and
@@ -1648,15 +1663,46 @@ reconciles by reading back:
   read-back reads that record. It is the sandbox's own account (trust class
   `sandbox_reported`), and the result carries the exit status, the output sizes
   and the first 8 KiB of each stream. A sandbox that is gone before the
-  read-back leaves the exec `UNKNOWN`.
+  read-back, or a record that is missing, leaves the exec `UNKNOWN` (a command
+  can delete the file that records it, so a missing record never proves it did
+  not run). The command runs in a subshell, so a builtin such as `eval`, `exec`
+  or `exit` cannot end the wrapper. A wrapper that ends with status 125 to 127
+  is `NOT_SENT` only when the record, read back, shows no start; the status
+  alone is never trusted, since a provider may derive it from stderr the
+  command wrote. `timed_out` in a result means the command had not finished
+  past its timeout and may still be running: the gateway does not kill it.
 
 **Providers.** Docker creates a labelled container from an image pinned by
-digest, with no environment or mounts, all capabilities dropped and a read-only
-root. Claude Managed Agents runs commands only on the customer's worker
-(`claudemanaged.RemoteRunner`, the HELM worker exec protocol v1), never on the
-gateway's host. The E2B, Daytona and OpenSandbox wire shapes are proven against
-fake provider servers only: no provider account exists, so no live
-qualification has run. The control is CTL-063 in `controls.yaml`.
+digest, with no environment or mounts, no network, all capabilities dropped and
+a read-only root. Its entrypoint is `sleep`, so the image's own ENTRYPOINT and
+CMD never run (a medium-risk create cannot execute image code and bypass the
+high-risk exec), and the exec timeout stops the docker CLI, not the process in
+the container. Docker's "no such container" on an exec is believed only after
+`docker inspect` agrees, since the command's stderr is relayed. Claude Managed
+Agents runs commands only on the customer's worker (`claudemanaged.RemoteRunner`,
+the HELM worker exec protocol v1), never on the gateway's host:
+
+- sandbox ids are random (a counter repeated across replicas);
+- every `POST /v1/exec` and `POST /v1/terminate` carries the creating tenant's
+  digest (`tenant`); the worker binds a sandbox id to the first tenant it sees
+  and refuses (4xx) another, and echoes the tenant, and an answer that does not
+  is contract drift;
+- an exec carries the sandbox's egress policy and limits (`spec`), and the
+  worker answers `spec_applied: true` once it applies them; an answer that does
+  not is contract drift. The gateway cannot see the worker apply them;
+- terminate calls the worker (`POST /v1/terminate`, answer `terminated: true`)
+  before the gateway's record changes. The create and terminate read-backs read
+  the gateway's own record, so their trust class is `gateway_record`, not
+  `provider_readback`. The record is in the gateway process's memory: a restart
+  forgets the sandboxes (the gateway can no longer reach them) but does not
+  end them on the worker.
+
+Every provider URL must be an absolute `https` URL without credentials, query
+or fragment, and `tls_required: false` is refused: both stop the gateway at
+start, since the provider key is sent on every call, including the reads before
+a create. The E2B, Daytona and OpenSandbox wire shapes are proven against fake
+provider servers only: no provider account exists, so no live qualification has
+run. The control is CTL-062 in `controls.yaml`.
 
 ## Conformance table
 

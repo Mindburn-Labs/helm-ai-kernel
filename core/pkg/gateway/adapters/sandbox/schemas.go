@@ -84,7 +84,7 @@ const execResultSchema = `{
   "properties": {
     "provider": {"enum": ` + providerEnum + `},
     "sandbox_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
-    "state": {"enum": ["not_started", "completed", "timed_out"]},
+    "state": {"enum": ["not_started", "completed", "timed_out"], "description": "timed_out means the sandbox's record shows the command started and had not finished past its timeout; the command may still be running, since the gateway does not kill it. not_started is not produced by this adapter."},
     "exit_code": {"type": "integer", "minimum": -1, "maximum": 255},
     "stdout_bytes": {"type": "integer", "minimum": 0},
     "stderr_bytes": {"type": "integer", "minimum": 0},

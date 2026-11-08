@@ -96,10 +96,29 @@ type Backend struct {
 	Open func(ctx context.Context, token string) (actuators.Provider, context.Context, error)
 	// ValidateRuntime checks a create's runtime (a template id or an image).
 	ValidateRuntime func(runtime string) error
+	// CheckSpec refuses a create whose limits or egress policy the provider
+	// does not apply. A provider that would drop a requested limit must say
+	// so here (and in Create, with actuators.ErrNotSupported): a sandbox that
+	// runs without the limits its permit named is never reported SUCCEEDED.
+	// Nil accepts every spec.
+	CheckSpec func(spec *actuators.SandboxSpec) error
+	// ReadBackTrust is the trust class of the inventory read-back (create,
+	// terminate). Empty is provider_readback: the provider's own service
+	// answered. A provider whose inventory is a record the gateway keeps
+	// itself (Claude Managed Agents) names that, since the read-back then
+	// shows what the gateway recorded, not what the provider holds.
+	ReadBackTrust string
 	// CompareRuntime is whether the runtime the provider reports must equal
 	// the requested one (an image reference does; a template alias need not
 	// equal the template id a provider reports).
 	CompareRuntime bool
+}
+
+func (b Backend) readBackTrust() string {
+	if b.ReadBackTrust != "" {
+		return b.ReadBackTrust
+	}
+	return trustProvider
 }
 
 // Adapter is the sandbox effect adapter. It holds no credential.
@@ -174,8 +193,10 @@ func (a *Adapter) declarations() []adapters.Declaration {
 			Description: "Runs one command, given as an argument vector, in a sandbox this tenant created. The command runs with the sandbox's own environment: no environment or secret is passed.",
 			Notes: "The command runs under a fixed wrapper that records its start, output and exit status in the sandbox, and does " +
 				"not start twice for one attempt. The read-back reads that record: it is the sandbox's own account, so its trust " +
-				"class is sandbox_reported, and a sandbox that is gone leaves the outcome UNKNOWN. The result carries the exit " +
-				"code, output sizes and bounded excerpts, not the complete output. " + configured,
+				"class is sandbox_reported, and a sandbox that is gone, or a record that is missing, leaves the outcome UNKNOWN. " +
+				"A command that has not finished past its timeout is reported timed_out: it may still be running, the gateway " +
+				"does not kill it. The result carries the exit code, output sizes and bounded excerpts, not the complete " +
+				"output. " + configured,
 		},
 		{
 			EffectType: EffectTerminate,
@@ -201,6 +222,13 @@ func (a *Adapter) declaration(effectType string) (adapters.Declaration, bool) {
 		}
 	}
 	return adapters.Declaration{}, false
+}
+
+func (b Backend) checkSpec(spec *actuators.SandboxSpec) error {
+	if b.CheckSpec == nil {
+		return nil
+	}
+	return b.CheckSpec(spec)
 }
 
 // op is one operation's resolved context.
@@ -293,14 +321,14 @@ func (a *Adapter) Prepare(ctx context.Context, creds adapters.TokenSource, effec
 	if !ok {
 		return nil, schemaViolation("effect type %q is not a sandbox effect", effect.EffectType)
 	}
-	var runtime string
+	var cargs createArgs
 	switch effect.EffectType {
 	case EffectCreate:
 		args, r := parseCreate(effect.Arguments)
 		if r != nil {
 			return nil, r
 		}
-		runtime = args.Runtime
+		cargs = args
 	case EffectExec:
 		if _, r := parseExec(effect.Arguments); r != nil {
 			return nil, r
@@ -315,8 +343,11 @@ func (a *Adapter) Prepare(ctx context.Context, creds adapters.TokenSource, effec
 		return nil, r
 	}
 	if effect.EffectType == EffectCreate {
-		if err := o.backend.ValidateRuntime(runtime); err != nil {
+		if err := o.backend.ValidateRuntime(cargs.Runtime); err != nil {
 			return nil, adapters.Refuse(contracts.ReasonPreconditionFailed, "runtime: %s", describe(err))
+		}
+		if err := o.backend.checkSpec(specOf(cargs, o.labels())); err != nil {
+			return nil, adapters.Refuse(contracts.ReasonPreconditionFailed, "%s", describe(err))
 		}
 	} else if o.hasScope {
 		if _, r := o.owned(); r != nil {

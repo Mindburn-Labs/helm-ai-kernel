@@ -94,7 +94,7 @@ func TestAdapterEgressControllerAndIDBranches(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "claude-session-session-only-1", handle.ID)
+	require.Regexp(t, `^claude-session-session-only-[0-9a-f]{32}$`, handle.ID)
 	require.NoError(t, adapter.AllowEgress(context.Background(), handle.ID, nil))
 	require.NoError(t, adapter.AllowEgress(context.Background(), handle.ID, []actuators.EgressRule{{Host: "api.anthropic.com", Port: 443}}))
 	require.Equal(t, 1, egress.calls)
@@ -116,7 +116,7 @@ func TestAdapterEgressControllerAndIDBranches(t *testing.T) {
 	generic := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{}))
 	genericHandle, err := generic.Create(context.Background(), basicSpec())
 	require.NoError(t, err)
-	require.Equal(t, "claude-managed-1", genericHandle.ID)
+	require.Regexp(t, `^claude-managed-[0-9a-f]{32}$`, genericHandle.ID)
 	generic.clock = nil
 	require.False(t, generic.now().IsZero())
 }

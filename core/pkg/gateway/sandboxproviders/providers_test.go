@@ -56,6 +56,8 @@ type fakeCloud struct {
 	// createFault, when set, applies to the next create.
 	createFault string
 	redirectTo  string
+	// listBody, when set, replaces the list answer.
+	listBody string
 }
 
 func newFakeCloud(t *testing.T, d dialect) (*fakeCloud, *httptest.Server) {
@@ -212,16 +214,17 @@ func (f *fakeCloud) list(w http.ResponseWriter, r *http.Request) {
 	}
 	// A sloppy server: it ignores the filter and lists everything. The
 	// adapter must filter again.
-	var all []any
+	if f.listBody != "" {
+		reply(w, 200, f.listBody)
+		return
+	}
+	all := []any{}
 	for _, b := range f.boxes {
 		all = append(all, f.obj(b))
 	}
 	if f.d.name == "opensandbox" {
 		reply(w, 200, map[string]any{"items": all})
 		return
-	}
-	if all == nil {
-		all = []any{}
 	}
 	reply(w, 200, all)
 }
@@ -287,7 +290,7 @@ func providerAdapter(t *testing.T, d dialect, srv *httptest.Server) *sandbox.Ada
 	}
 	cfg, err := sandbox.ParseConfig(mustJSON(t, sandbox.Config{Providers: []sandbox.ProviderConfig{pc}}))
 	require.NoError(t, err)
-	backends, err := Build(cfg, BuildOptions{HTTPClient: srv.Client()})
+	backends, err := Build(cfg, BuildOptions{HTTPClient: srv.Client(), AllowUnappliedPolicy: true})
 	require.NoError(t, err)
 	a, err := sandbox.New(backends)
 	require.NoError(t, err)
@@ -430,7 +433,13 @@ func TestAnUnconfiguredProviderIsNotReachedByItsTarget(t *testing.T) {
 type workerRequest struct {
 	auth string
 	body struct {
-		SandboxID string   `json:"sandbox_id"`
+		SandboxID string `json:"sandbox_id"`
+		Tenant    string `json:"tenant"`
+		Spec      *struct {
+			EgressDisabled bool  `json:"egress_disabled"`
+			CPUMillis      int64 `json:"cpu_millis"`
+			MemoryMB       int64 `json:"memory_mb"`
+		} `json:"spec"`
 		WorkDir   string   `json:"workdir"`
 		Command   []string `json:"command"`
 		TimeoutMS int64    `json:"timeout_ms"`
@@ -439,8 +448,10 @@ type workerRequest struct {
 
 type fakeWorker struct {
 	*httptest.Server
-	mu   sync.Mutex
-	reqs []workerRequest
+	mu         sync.Mutex
+	reqs       []workerRequest
+	bound      map[string]string // sandbox id -> tenant it was first seen with
+	terminated []string
 }
 
 func (w *fakeWorker) requests() []workerRequest {
@@ -452,22 +463,38 @@ func (w *fakeWorker) requests() []workerRequest {
 // newFakeWorker serves the HELM worker exec protocol v1 and runs each command
 // in the local shell.
 func newFakeWorker(t *testing.T) *fakeWorker {
-	w := &fakeWorker{}
+	w := &fakeWorker{bound: map[string]string{}}
 	w.Server = httptest.NewTLSServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/exec" || r.Method != http.MethodPost {
+		if (r.URL.Path != "/v1/exec" && r.URL.Path != "/v1/terminate") || r.Method != http.MethodPost {
 			reply(rw, 404, `{}`)
 			return
 		}
 		var req workerRequest
 		req.auth = r.Header.Get("Authorization")
 		raw, _ := io.ReadAll(r.Body)
-		if err := json.Unmarshal(raw, &req.body); err != nil || len(req.body.Command) == 0 {
+		if err := json.Unmarshal(raw, &req.body); err != nil || (r.URL.Path == "/v1/exec" && len(req.body.Command) == 0) {
 			reply(rw, 400, `{}`)
 			return
 		}
 		w.mu.Lock()
 		w.reqs = append(w.reqs, req)
+		// The worker binds a sandbox id to the tenant it first saw it with.
+		bound, seen := w.bound[req.body.SandboxID]
+		if !seen {
+			w.bound[req.body.SandboxID] = req.body.Tenant
+		}
+		if r.URL.Path == "/v1/terminate" && (!seen || bound == req.body.Tenant) {
+			w.terminated = append(w.terminated, req.body.SandboxID)
+		}
 		w.mu.Unlock()
+		if seen && bound != req.body.Tenant {
+			reply(rw, 403, `{}`)
+			return
+		}
+		if r.URL.Path == "/v1/terminate" {
+			reply(rw, 200, map[string]any{"terminated": true, "tenant": req.body.Tenant})
+			return
+		}
 		cmd := exec.Command(req.body.Command[0], req.body.Command[1:]...) // #nosec G204 -- the test worker
 		var stdout, stderr strings.Builder
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -480,7 +507,8 @@ func newFakeWorker(t *testing.T) *fakeWorker {
 				return
 			}
 		}
-		reply(rw, 200, map[string]any{"exit_code": code, "stdout": stdout.String(), "stderr": stderr.String(), "duration_ms": 1})
+		reply(rw, 200, map[string]any{"exit_code": code, "stdout": stdout.String(), "stderr": stderr.String(), "duration_ms": 1,
+			"tenant": req.body.Tenant, "spec_applied": req.body.Spec != nil})
 	}))
 	t.Cleanup(w.Close)
 	return w

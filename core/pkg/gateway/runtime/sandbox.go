@@ -19,7 +19,10 @@ import (
 const envSandboxConfigFile = "HELM_GATEWAY_SANDBOX_CONFIG_FILE"
 
 // managedSigner lets Claude Managed Agents' execution receipts be signed with
-// the gateway's own receipt key: one key, one signing envelope (R4).
+// the gateway's own receipt key (R4). It is not the gateway's receipt path: a
+// managed-agent receipt is signed through Sign over the hash of its own body,
+// not through SignReceipt over a contracts.Receipt, and the gateway's ledger
+// does not hold it.
 type managedSigner struct {
 	signer interface {
 		Sign(data []byte) (string, error)

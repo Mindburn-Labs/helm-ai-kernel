@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -356,11 +357,12 @@ func TestExecReadBackWhileTheCommandRunsAndAfterItsTimeout(t *testing.T) {
 	args := execArgsJSON(60, "", "true")
 	e := effectFor(EffectExec, "sandbox/e2b/"+id, args, tenantA, att)
 
-	// Nothing recorded: the command never started.
+	// Nothing recorded: the command may have run and removed its record, so a
+	// missing record is UNKNOWN, never a FAILED that releases the reservation.
 	o := ta.Observe(t.Context(), creds, e)
-	assert.Equal(t, adapters.OutcomeFailed, o.Outcome)
-	assert.True(t, o.Absent)
-	assert.Equal(t, "not_started", artifactOf(t, o.Observation)["state"])
+	assert.Equal(t, adapters.OutcomeUnknown, o.Outcome)
+	assert.False(t, o.Absent)
+	assert.Nil(t, o.Observation)
 
 	// Started, not finished, inside its timeout: inconclusive.
 	mem.execResult = func(argv []string) (*actuators.ExecResult, bool) {
@@ -404,8 +406,10 @@ func TestExecDispatchClassification(t *testing.T) {
 		err  error
 		want adapters.DispatchStatus
 	}{
-		"wrapper could not write its record": {hook: exitWith(125), want: adapters.DispatchNotSent},
-		"no shell in the sandbox":            {hook: exitWith(127), want: adapters.DispatchNotSent},
+		"wrapper could not write its record": {hook: wrapperExits(125), want: adapters.DispatchNotSent},
+		"no shell in the sandbox":            {hook: wrapperExits(127), want: adapters.DispatchNotSent},
+		"wrapper status with a record":       {hook: wrapperRunsThenExits(127), want: adapters.DispatchIndefinite},
+		"wrapper status, record unreadable":  {hook: exitWith(127), want: adapters.DispatchIndefinite},
 		"wrapper killed":                     {hook: exitWith(137), want: adapters.DispatchIndefinite},
 		"provider timeout":                   {hook: func([]string) (*actuators.ExecResult, bool) { return &actuators.ExecResult{TimedOut: true}, true }, want: adapters.DispatchIndefinite},
 		"provider refuses (4xx)":             {err: &actuators.CallError{Provider: "e2b", Status: 404, Refused: true, Detail: "x"}, want: adapters.DispatchNotSent},
@@ -422,6 +426,30 @@ func TestExecDispatchClassification(t *testing.T) {
 			d := ta.Dispatch(t.Context(), creds, effectFor(EffectExec, "sandbox/e2b/"+id, args, tenantA, attemptID(t)), digest(args))
 			assert.Equal(t, tc.want, d.Status, d.Detail)
 		})
+	}
+}
+
+// wrapperExits makes only the command wrapper end with code, without running
+// it; the status read-back runs for real and finds no record.
+func wrapperExits(code int) func([]string) (*actuators.ExecResult, bool) {
+	return func(argv []string) (*actuators.ExecResult, bool) {
+		if len(argv) > 3 && argv[3] == "helm-exec" {
+			return &actuators.ExecResult{ExitCode: code}, true
+		}
+		return nil, false
+	}
+}
+
+// wrapperRunsThenExits runs the wrapper for real, so the record exists, and
+// then reports code: a provider that derived 125 to 127 from stderr the
+// command wrote.
+func wrapperRunsThenExits(code int) func([]string) (*actuators.ExecResult, bool) {
+	return func(argv []string) (*actuators.ExecResult, bool) {
+		if len(argv) > 3 && argv[3] == "helm-exec" {
+			_, _ = exec.Command(argv[0], argv[1:]...).Output() // #nosec G204 -- test shell
+			return &actuators.ExecResult{ExitCode: code}, true
+		}
+		return nil, false
 	}
 }
 
@@ -660,4 +688,46 @@ func TestExecDoesNotStartTwiceForOneAttempt(t *testing.T) {
 	raw, err := os.ReadFile(counter)
 	require.NoError(t, err)
 	assert.Equal(t, "run\n", string(raw), "the command started once for the attempt, however often it was dispatched")
+}
+
+// A command that is a shell builtin must not be able to end the wrapper: with
+// "eval ...; exit 127" or "exec" the wrapper used to exit 125 to 127, which the
+// dispatch took for "not started" and released the reservation of a command
+// that had run.
+func TestExecBuiltinsCannotEndTheWrapper(t *testing.T) {
+	for name, command := range map[string][]string{
+		"eval then exit 127": {"eval", "echo ran; exit 127"},
+		"exec":               {"exec", "sh", "-c", "echo ran; exit 126"},
+		"exit":               {"exit", "125"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mem := newMem()
+			ta := newTestAdapter(t, mem)
+			creds := &staticToken{token: testKey}
+			id := createSandbox(t, ta, tenantA)
+			args := execArgsJSON(60, "", command...)
+			e := effectFor(EffectExec, "sandbox/e2b/"+id, args, tenantA, attemptID(t))
+			d := ta.Dispatch(t.Context(), creds, e, digest(args))
+			require.Equal(t, adapters.DispatchSent, d.Status, d.Detail)
+			o := ta.Observe(t.Context(), creds, e)
+			require.Equal(t, adapters.OutcomeSucceeded, o.Outcome, o.Detail)
+			assert.Equal(t, "completed", artifactOf(t, o.Observation)["state"])
+		})
+	}
+}
+
+// A record the command removed is not proof that it never ran.
+func TestExecRemovedRecordIsUnknownNotFailed(t *testing.T) {
+	mem := newMem()
+	ta := newTestAdapter(t, mem)
+	creds := &staticToken{token: testKey}
+	id := createSandbox(t, ta, tenantA)
+	att := attemptID(t)
+	args := execArgsJSON(60, "", "true")
+	e := effectFor(EffectExec, "sandbox/e2b/"+id, args, tenantA, att)
+	require.Equal(t, adapters.DispatchSent, ta.Dispatch(t.Context(), creds, e, digest(args)).Status)
+	require.NoError(t, os.RemoveAll(recordDir(att)))
+	o := ta.Observe(t.Context(), creds, e)
+	assert.Equal(t, adapters.OutcomeUnknown, o.Outcome)
+	assert.False(t, o.Absent)
 }

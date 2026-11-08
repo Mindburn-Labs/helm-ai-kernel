@@ -8,7 +8,9 @@
 package e2b
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -39,6 +41,12 @@ type Config struct {
 
 	// AllowInsecureLoopback permits http:// loopback endpoints for local tests only.
 	AllowInsecureLoopback bool `json:"allow_insecure_loopback,omitempty"`
+
+	// RefuseUnappliedPolicy makes Create refuse (actuators.ErrNotSupported) a
+	// spec that asks for a limit, an egress policy, an environment or a mount
+	// this adapter's create call does not carry (CheckSpec), instead of
+	// creating a sandbox that runs without them. helm-gateway sets it.
+	RefuseUnappliedPolicy bool `json:"refuse_unapplied_policy,omitempty"`
 }
 
 // DefaultConfig returns a config with defaults.
@@ -116,7 +124,20 @@ type e2bCreateResp struct {
 	ClientID  string `json:"clientID,omitempty"`
 }
 
+// CheckSpec refuses a spec this adapter would not apply: its create call
+// carries the template or language, the timeout and the labels, and no
+// resource limit, egress policy, environment or mount. The gateway checks it
+// at admission and Create checks it again.
+func CheckSpec(spec *actuators.SandboxSpec) error {
+	return connsandbox.UnappliedPolicy(spec, true)
+}
+
 func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*actuators.SandboxHandle, error) {
+	if a.cfg.RefuseUnappliedPolicy {
+		if err := CheckSpec(spec); err != nil {
+			return nil, fmt.Errorf("%s: create refused: %w", "e2b", err)
+		}
+	}
 	report, err := a.Preflight(ctx)
 	if err != nil {
 		return nil, err
@@ -440,9 +461,15 @@ func (a *Adapter) Find(ctx context.Context, labels map[string]string) ([]connsan
 	for i, k := range keys {
 		pairs[i] = url.QueryEscape(k) + "=" + url.QueryEscape(labels[k])
 	}
-	var list []e2bSandbox
-	if err := a.doJSON(ctx, "GET", "/sandboxes?metadata="+url.QueryEscape(strings.Join(pairs, "&")), nil, &list); err != nil {
+	var raw json.RawMessage
+	if err := a.doJSON(ctx, "GET", "/sandboxes?metadata="+url.QueryEscape(strings.Join(pairs, "&")), nil, &raw); err != nil {
 		return nil, fmt.Errorf("e2b: find failed: %w", err)
+	}
+	// A list is a JSON array. null, an object or anything else is not an empty
+	// list: reading it as one would say a sandbox that exists is absent.
+	var list []e2bSandbox
+	if t := bytes.TrimSpace(raw); len(t) == 0 || t[0] != '[' || json.Unmarshal(t, &list) != nil {
+		return nil, fmt.Errorf("e2b: find failed: %w", &connsandbox.CallError{Provider: "e2b", Drift: true, Detail: "the list answer is not a JSON array"})
 	}
 	var found []connsandbox.Info
 	for _, s := range list {

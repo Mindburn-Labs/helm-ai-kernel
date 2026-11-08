@@ -36,7 +36,16 @@ var (
 // Provider is the Docker sandbox for helm-gateway: a labelled, long-lived,
 // hardened container per sandbox, driven through the docker CLI of a
 // SandboxesRunner. The image must be pinned by digest and contain `sleep`: the
-// container runs `sleep <timeout>` and ends when its timeout ends.
+// container runs `sleep <timeout>` as its entrypoint (the image's own
+// ENTRYPOINT and CMD never run, so a create cannot execute image code and
+// bypass the higher-risk exec effect) and ends when its timeout ends.
+//
+// A sandbox has no network at all (--network none). A bridge network would
+// link the containers of different tenants, and the host, so egress is all
+// or none and "all" is refused until a network per sandbox exists.
+//
+// Exec's timeout stops the docker CLI the provider runs, not the process in
+// the container: a timed-out command may still be running.
 type Provider struct {
 	runner *SandboxesRunner
 }
@@ -130,6 +139,13 @@ func exitText(err error) string {
 	return "the docker CLI could not run"
 }
 
+// CheckSpec refuses a spec Create would refuse. The gateway asks it at
+// admission, so a create that cannot run is refused before any permit is used.
+func CheckSpec(spec *actuators.SandboxSpec) error {
+	_, err := createArgs(spec)
+	return err
+}
+
 // createArgs is the `docker run` argument vector after the name: flags, image
 // and command.
 func createArgs(spec *actuators.SandboxSpec) ([]string, error) {
@@ -142,15 +158,19 @@ func createArgs(spec *actuators.SandboxSpec) ([]string, error) {
 		return nil, errors.New("docker: environment variables are not accepted")
 	case len(spec.Mounts) > 0:
 		return nil, errors.New("docker: mounts are not accepted")
+	case !spec.Egress.Disabled:
+		return nil, errors.New("docker: a sandbox with network access is refused: the default bridge links the containers of different tenants and the host; set egress_disabled")
 	case len(spec.Egress.DefaultAllowlist) > 0:
 		return nil, errors.New("docker: an egress allowlist is not supported; egress is all or none")
+	case spec.Resources.DiskMB != 0:
+		return nil, errors.New("docker: a disk limit is not applied by this provider; set disk_mb to 0")
 	case spec.Resources.MemoryMB <= 0:
 		return nil, errors.New("docker: a memory limit is required")
 	case spec.Resources.Timeout < time.Second:
 		return nil, errors.New("docker: a timeout of at least one second is required")
 	}
 	args := []string{
-		"--read-only", "--tmpfs", "/tmp:rw,nosuid,size=64m",
+		"--entrypoint", "sleep", "--read-only", "--tmpfs", "/tmp:rw,nosuid,size=64m",
 		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
 		"--memory", fmt.Sprintf("%dm", spec.Resources.MemoryMB),
 	}
@@ -160,9 +180,7 @@ func createArgs(spec *actuators.SandboxSpec) ([]string, error) {
 	if spec.Resources.MaxProcesses > 0 {
 		args = append(args, "--pids-limit", fmt.Sprintf("%d", spec.Resources.MaxProcesses))
 	}
-	if spec.Egress.Disabled {
-		args = append(args, "--network", "none")
-	}
+	args = append(args, "--network", "none")
 	keys := make([]string, 0, len(spec.Labels))
 	for k := range spec.Labels {
 		keys = append(keys, k)
@@ -174,7 +192,7 @@ func createArgs(spec *actuators.SandboxSpec) ([]string, error) {
 		}
 		args = append(args, "--label", k+"="+spec.Labels[k])
 	}
-	args = append(args, spec.Runtime, "sleep", fmt.Sprintf("%d", int64(spec.Resources.Timeout.Seconds())))
+	args = append(args, spec.Runtime, fmt.Sprintf("%d", int64(spec.Resources.Timeout.Seconds())))
 	return args, nil
 }
 
@@ -220,6 +238,9 @@ func (p *Provider) Lookup(ctx context.Context, id string) (*connsandbox.Info, er
 	var in inspected
 	if out.truncated || json.Unmarshal(out.buf.Bytes(), &in) != nil {
 		return nil, errors.New("docker: inspect answered with something that is not a container")
+	}
+	if strings.TrimPrefix(in.Name, "/") != id {
+		return nil, &connsandbox.CallError{Provider: ProviderID, Drift: true, Detail: "inspect answered for a container that is not " + id}
 	}
 	status, err := statusOf(in.State.Status)
 	if err != nil {
@@ -313,8 +334,13 @@ func (p *Provider) Exec(ctx context.Context, id string, req *actuators.ExecReque
 		case runCtx.Err() == context.DeadlineExceeded:
 			timedOut, exitCode = true, -1
 		case errors.As(err, &ee):
+			// The docker CLI relays the command's own stderr, so "no such
+			// container" in it proves nothing: only the daemon, asked
+			// separately, says whether the container is gone.
 			if missing(errOut.buf.String()) {
-				return nil, fmt.Errorf("%w: %s", actuators.ErrSandboxNotFound, id)
+				if _, lerr := p.Lookup(ctx, id); errors.Is(lerr, actuators.ErrSandboxNotFound) {
+					return nil, fmt.Errorf("%w: %s", actuators.ErrSandboxNotFound, id)
+				}
 			}
 			if ee.ExitCode() == 125 || ee.ExitCode() < 0 {
 				return nil, fmt.Errorf("docker: exec failed: %s", exitText(err))

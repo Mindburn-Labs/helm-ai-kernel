@@ -268,3 +268,46 @@ func TestGatewayExecKeepsTheArgumentVectorIntact(t *testing.T) {
 	assertExecCommand(t, rec.all()[0].Body, argv)
 	assert.NotContains(t, rec.all()[0].Body, testKey)
 }
+
+// A list answer of the wrong shape is contract drift, never an empty list: an
+// empty list would say a sandbox that exists is absent.
+func TestGatewayFindAnswerOfTheWrongShapeIsDrift(t *testing.T) {
+	for name, body := range map[string]string{
+		"null":   `null`,
+		"object": `{}`,
+		"string": `"x"`,
+		"empty":  ``,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, _ := fake(t, reply(200, body))
+			_, err := gwAdapter(srv.URL).Find(t.Context(), map[string]string{connsandbox.LabelAttempt: "a"})
+			ce := connsandbox.AsCallError(err)
+			require.NotNil(t, ce, "%v", err)
+			assert.True(t, ce.Drift)
+		})
+	}
+}
+
+// With RefuseUnappliedPolicy the adapter does not create a sandbox for a spec
+// whose limits or egress policy its create call does not carry.
+func TestRefuseUnappliedPolicyRefusesBeforeAnyRequest(t *testing.T) {
+	srv, rec := fake(t, reply(200, createAnswer("sbx-1")))
+	cfg := gwAdapter(srv.URL).cfg
+	cfg.RefuseUnappliedPolicy = true
+	a := New(cfg)
+	for name, mut := range map[string]func(*actuators.SandboxSpec){
+		"egress disabled": func(s *actuators.SandboxSpec) { s.Egress.Disabled = true },
+		"cpu":             func(s *actuators.SandboxSpec) { s.Resources.CPUMillis = 500 },
+		"memory":          func(s *actuators.SandboxSpec) { s.Resources.MemoryMB = 256 },
+		"processes":       func(s *actuators.SandboxSpec) { s.Resources.MaxProcesses = 64 },
+	} {
+		spec := &actuators.SandboxSpec{Runtime: "default", Resources: actuators.ResourceSpec{Timeout: time.Minute}}
+		mut(spec)
+		_, err := a.Create(t.Context(), spec)
+		assert.ErrorIs(t, err, actuators.ErrNotSupported, name)
+	}
+	assert.Empty(t, rec.all())
+	// A spec that asks for nothing the adapter drops is created.
+	_, err := a.Create(t.Context(), &actuators.SandboxSpec{Runtime: "default", Resources: actuators.ResourceSpec{Timeout: time.Minute}})
+	require.NoError(t, err)
+}

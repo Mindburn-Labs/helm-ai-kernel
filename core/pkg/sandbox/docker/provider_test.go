@@ -50,7 +50,7 @@ func TestCreateArgsAreHardenedAndPinned(t *testing.T) {
 	line := argv(t, log)[0]
 	for _, want := range []string{"run -d --name helm-sbx-", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges",
 		"--network none", "--memory 128m", "--pids-limit 64", "--label helm.attempt=a1 --label helm.tenant=abc",
-		pinned + " sleep 60", "--tmpfs /tmp:rw,nosuid,size=64m"} {
+		"--entrypoint sleep", pinned + " 60", "--tmpfs /tmp:rw,nosuid,size=64m"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("argv %q lacks %q", line, want)
 		}
@@ -63,6 +63,8 @@ func TestCreateRefusesWhatItCannotHold(t *testing.T) {
 		"tag":      func(s *actuators.SandboxSpec) { s.Runtime = "busybox:latest" },
 		"env":      func(s *actuators.SandboxSpec) { s.Env = map[string]string{"A": "b"} },
 		"mount":    func(s *actuators.SandboxSpec) { s.Mounts = []actuators.MountSpec{{Source: "/", Target: "/x"}} },
+		"disk":     func(s *actuators.SandboxSpec) { s.Resources.DiskMB = 100 },
+		"network":  func(s *actuators.SandboxSpec) { s.Egress.Disabled = false },
 		"allow":    func(s *actuators.SandboxSpec) { s.Egress.DefaultAllowlist = []actuators.EgressRule{{Host: "x"}} },
 		"memory":   func(s *actuators.SandboxSpec) { s.Resources.MemoryMB = 0 },
 		"timeout":  func(s *actuators.SandboxSpec) { s.Resources.Timeout = 0 },
@@ -110,6 +112,13 @@ func TestLookupAndFind(t *testing.T) {
 	}
 }
 
+func TestLookupRefusesAnAnswerForAnotherContainer(t *testing.T) {
+	p, _ := fakeDocker(t, `echo '`+inspectJSON+`'`)
+	if _, err := p.Lookup(context.Background(), "helm-sbx-2"); err == nil || !strings.Contains(err.Error(), "not helm-sbx-2") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestLookupMissingAndUnknownState(t *testing.T) {
 	p, _ := fakeDocker(t, "echo 'Error: No such container: x' >&2; exit 1")
 	if _, err := p.Lookup(context.Background(), "x"); !errors.Is(err, actuators.ErrSandboxNotFound) {
@@ -136,6 +145,12 @@ func TestExecClassification(t *testing.T) {
 	m, _ := fakeDocker(t, "echo 'Error response from daemon: No such container: x' >&2; exit 1")
 	if _, err := m.Exec(context.Background(), "x", &actuators.ExecRequest{Command: []string{"x"}}); !errors.Is(err, actuators.ErrSandboxNotFound) {
 		t.Fatalf("err = %v", err)
+	}
+	// The command's own stderr can say "no such container": inspect decides.
+	f, _ := fakeDocker(t, `case "$1" in inspect) echo '`+inspectJSON+`';; *) echo 'Error: No such container: helm-sbx-1' >&2; exit 1;; esac`)
+	fr, err := f.Exec(context.Background(), "helm-sbx-1", &actuators.ExecRequest{Command: []string{"x"}})
+	if err != nil || fr.ExitCode != 1 {
+		t.Fatalf("forged stderr: %+v, %v", fr, err)
 	}
 	d, _ := fakeDocker(t, "echo daemon down >&2; exit 125")
 	if _, err := d.Exec(context.Background(), "x", &actuators.ExecRequest{Command: []string{"x"}}); err == nil || errors.Is(err, actuators.ErrSandboxNotFound) {

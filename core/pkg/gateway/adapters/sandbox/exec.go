@@ -46,6 +46,12 @@ func recordDir(attemptID string) string { return recordRoot + attemptID }
 // workdir "" runs in the sandbox's default directory. The command is passed as
 // positional parameters of a fixed script, so it is never parsed by a shell
 // here, and providers that take one command string receive it ShellJoin-quoted.
+//
+// The command runs in a subshell, "$@" inside ( ): a command that is a shell
+// builtin (eval, exec, exit) can then end only the subshell, never the wrapper,
+// so the wrapper's own statuses (125 to 127) mean what the dispatch reads them
+// to mean only until the record is read back: the dispatch never takes them on
+// trust (see dispatchExec).
 func execArgv(attemptID, workdir string, command []string) []string {
 	script := `umask 077
 d=` + recordDir(attemptID) + `
@@ -53,7 +59,7 @@ d=` + recordDir(attemptID) + `
 mkdir -p "$d" && date +%s >"$d/started" || exit 125
 w=$1; shift
 if cd "$w" 2>/dev/null; then
-  "$@" >"$d/out" 2>"$d/err" </dev/null
+  ("$@") >"$d/out" 2>"$d/err" </dev/null
   echo $? >"$d/rc.tmp"
 else
   : >"$d/out"; echo 'workdir not found' >"$d/err"; echo 126 >"$d/rc.tmp"

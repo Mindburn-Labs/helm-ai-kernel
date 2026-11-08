@@ -109,9 +109,24 @@ func infoFacts(infos []actuators.Info) []map[string]any {
 
 // ── sandbox.create ─────────────────────────────────────────────────────
 
+// specOf is the provider spec a create's arguments ask for.
+func specOf(args createArgs, labels map[string]string) *actuators.SandboxSpec {
+	return &actuators.SandboxSpec{
+		Runtime: args.Runtime,
+		Resources: actuators.ResourceSpec{CPUMillis: args.CPUMillis, MemoryMB: args.MemoryMB, DiskMB: args.DiskMB,
+			Timeout: time.Duration(args.TimeoutSeconds) * time.Second, MaxProcesses: int(args.MaxProcesses)},
+		Egress: actuators.EgressPolicy{Disabled: args.EgressDisabled},
+		Labels: labels,
+	}
+}
+
 func (o *op) dispatchCreate(args createArgs) adapters.DispatchResult {
 	if err := o.backend.ValidateRuntime(args.Runtime); err != nil {
 		return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "runtime: %s", describe(err)))
+	}
+	spec := specOf(args, o.labels())
+	if err := o.backend.checkSpec(spec); err != nil {
+		return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "%s", describe(err)))
 	}
 	// Nothing is written yet, so a failed read is a certain NOT_SENT.
 	found, err := o.provider.Find(o.ctx, o.labels())
@@ -123,13 +138,6 @@ func (o *op) dispatchCreate(args createArgs) adapters.DispatchResult {
 		return sent("a sandbox carrying this attempt's label already exists and was not created again; Observe decides whether it is this effect")
 	case len(found) > 1:
 		return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "%d sandboxes already carry this attempt's label", len(found)))
-	}
-	spec := &actuators.SandboxSpec{
-		Runtime: args.Runtime,
-		Resources: actuators.ResourceSpec{CPUMillis: args.CPUMillis, MemoryMB: args.MemoryMB, DiskMB: args.DiskMB,
-			Timeout: time.Duration(args.TimeoutSeconds) * time.Second, MaxProcesses: int(args.MaxProcesses)},
-		Egress: actuators.EgressPolicy{Disabled: args.EgressDisabled},
-		Labels: o.labels(),
 	}
 	h, err := o.provider.Create(o.ctx, spec)
 	if err != nil {
@@ -169,7 +177,7 @@ func (o *op) observeCreate(a *Adapter, args createArgs) adapters.ObserveResult {
 	if len(info.Runtime) > 256 {
 		return unknown(adapters.Refuse(contracts.ReasonConnectorContractDrift, "the provider reports a runtime longer than 256 bytes"))
 	}
-	obs, err := a.observation(trustProvider, createResultID, result, infoFacts(found))
+	obs, err := a.observation(o.backend.readBackTrust(), createResultID, result, infoFacts(found))
 	if err != nil {
 		return unknown(adapters.Refuse(contracts.ReasonConnectorContractDrift, "the read-back does not make a result: %s", describe(err)))
 	}
@@ -214,7 +222,16 @@ func (o *op) dispatchExec(args execArgs) adapters.DispatchResult {
 	case res.ExitCode == 0:
 		return sent("")
 	case res.ExitCode == wrapperNoRecord || res.ExitCode == wrapperNoShell || res.ExitCode == wrapperNotFound:
-		return notSent(adapters.Refuse(contracts.ReasonProviderError, "the sandbox could not start the command wrapper (status %d)", res.ExitCode))
+		// The status is what the wrapper, or the provider's own exec path,
+		// reported, and a provider derives it from stderr the sandbox can
+		// write. It is NOT_SENT only when the sandbox's record says the
+		// command never started.
+		if raw, r := o.readRecord(statusArgv(o.attempt)); r == nil {
+			if st, err := parseStatus(raw); err == nil && st.kind == "none" {
+				return notSent(adapters.Refuse(contracts.ReasonProviderError, "the sandbox could not start the command wrapper (status %d) and holds no record of the command", res.ExitCode))
+			}
+		}
+		return indefinite(contracts.ReasonProviderError, "the command wrapper ended with status %d and the sandbox's record does not show that the command never started", res.ExitCode)
 	}
 	return indefinite(contracts.ReasonProviderError, "the command wrapper ended with status %d", res.ExitCode)
 }
@@ -253,10 +270,12 @@ func (o *op) observeExec(a *Adapter, args execArgs) adapters.ObserveResult {
 	result := map[string]any{"provider": o.name, "sandbox_id": o.id, "state": "not_started", "exit_code": 0,
 		"stdout_bytes": 0, "stderr_bytes": 0, "stdout_excerpt": "", "stderr_excerpt": "", "stdout_truncated": false, "stderr_truncated": false}
 	evidence := map[string]any{"record": strings.TrimSpace(string(raw))}
-	absent, mismatch := false, ""
 	switch {
 	case st.kind == "none":
-		absent, mismatch = true, "the sandbox holds no record that this attempt's command started"
+		// The dispatch ended SENT or INDEFINITE, so the command may have run,
+		// and the record is the sandbox's own file: a command can delete it. A
+		// missing record never proves the command did not run.
+		return unknown(adapters.Refuse(contracts.ReasonProviderError, "the sandbox holds no record of this attempt's command; it may have run and removed its record"))
 	case st.kind == "running" && !st.timedOut(args.TimeoutSeconds):
 		return unknown(adapters.Refuse(contracts.ReasonProviderError, "the command has started and not finished"))
 	case st.kind == "running":
@@ -287,7 +306,7 @@ func (o *op) observeExec(a *Adapter, args execArgs) adapters.ObserveResult {
 	if err != nil {
 		return unknown(adapters.Refuse(contracts.ReasonConnectorContractDrift, "the read-back does not make a result: %s", describe(err)))
 	}
-	return settle(obs, mismatch, absent)
+	return settle(obs, "", false)
 }
 
 // ── sandbox.terminate ──────────────────────────────────────────────────
@@ -326,7 +345,7 @@ func (o *op) observeTerminate(a *Adapter) adapters.ObserveResult {
 			return unknown(adapters.Refuse(contracts.ReasonConnectorContractDrift, "the provider reports sandbox state %q", info.Status))
 		}
 	}
-	obs, oerr := a.observation(trustProvider, terminateResultID, result, evidence)
+	obs, oerr := a.observation(o.backend.readBackTrust(), terminateResultID, result, evidence)
 	if oerr != nil {
 		return unknown(adapters.Refuse(contracts.ReasonConnectorContractDrift, "the read-back does not make a result: %s", describe(oerr)))
 	}

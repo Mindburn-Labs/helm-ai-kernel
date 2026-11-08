@@ -37,8 +37,9 @@ type ProviderConfig struct {
 	BaseURL         string `json:"base_url,omitempty"`
 	DefaultLanguage string `json:"default_language,omitempty"`
 
-	// OpenSandbox. Both default to true; the adapter's preflight refuses a
-	// server that is not strict.
+	// OpenSandbox. Both default to true. tls_required: false is refused (the
+	// key is sent on every call), and a server that is not egress-strict is
+	// refused by the adapter's preflight.
 	TLSRequired      *bool `json:"tls_required,omitempty"`
 	EgressStrictMode *bool `json:"egress_strict_mode,omitempty"`
 
@@ -95,6 +96,9 @@ func (p ProviderConfig) validate() error {
 	dockerFields := p.DockerBin != "" || p.DockerSocket != ""
 	managed := len(p.ManagedAgents) != 0
 	var errs []error
+	if p.TLSRequired != nil && !*p.TLSRequired {
+		errs = append(errs, errors.New("tls_required: false is not allowed: the provider key is sent on every call"))
+	}
 	need := func(v, name string) {
 		if v == "" {
 			errs = append(errs, fmt.Errorf("%s is required", name))

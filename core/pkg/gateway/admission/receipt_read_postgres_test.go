@@ -53,13 +53,18 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 	escalated := f.escalated("export-draft")
 	approved, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(escalated, "ok"))
 	must(t, err)
-	rows := f.wantContiguousChain(tenantA, workspace, 5)
+	// Five decisions and the observed outcome of the branch the draft is
+	// over (migration 16): the export carries both binding versions.
+	rows := f.wantContiguousChain(tenantA, workspace, 6)
+	if rows[3].state != "OBSERVED" || rows[3].attemptID != rows[2].attemptID {
+		t.Fatalf("the branch's outcome receipt = %+v", rows[3])
+	}
 
 	// Known good: the whole chain exports as the stored bytes, and the export
 	// verifies offline, bindings included, under the gateway key alone.
-	export, err := f.svc.ExportReceiptChain(ctx, human, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 5})
+	export, err := f.svc.ExportReceiptChain(ctx, human, ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: 6})
 	must(t, err)
-	if export.ChainID != receiptChainID(tenantA, workspace) || export.HeadSeq != 5 || len(export.Receipts) != 5 {
+	if export.ChainID != receiptChainID(tenantA, workspace) || export.HeadSeq != 6 || len(export.Receipts) != 6 {
 		t.Fatalf("export = chain %q head %d receipts %d", export.ChainID, export.HeadSeq, len(export.Receipts))
 	}
 	for i, r := range export.Receipts {
@@ -72,7 +77,7 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 		}
 	}
 	got := receiptverify.VerifyJSON(export.Bundle, trustRootJSON(t))
-	if got.Verdict != receiptverify.VerdictVerified || got.Verification.BindingsChecked != 5 ||
+	if got.Verdict != receiptverify.VerdictVerified || got.Verification.BindingsChecked != 6 || got.Verification.GatewayReceipts != 6 ||
 		checkStatus(got.Verification, receiptverify.CheckBinding) != receiptverify.StatusPass ||
 		checkStatus(got.Verification, receiptverify.CheckClosure) != receiptverify.StatusPass {
 		t.Fatalf("the export does not verify offline: %+v", got)
@@ -140,7 +145,7 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 	// A range that runs past the head reads up to it, whole, and says so.
 	tail, err := f.svc.ExportReceiptChain(ctx, human, ExportInput{WorkspaceID: workspace, FromSeq: 4, ToSeq: 4 + MaxExportReceipts - 1})
 	must(t, err)
-	if tail.HeadSeq != 5 || len(tail.Receipts) != 2 || tail.Receipts[0].Ref.Seq != 4 || tail.Receipts[1].Ref.Seq != 5 {
+	if tail.HeadSeq != 6 || len(tail.Receipts) != 3 || tail.Receipts[0].Ref.Seq != 4 || tail.Receipts[2].Ref.Seq != 6 {
 		t.Fatalf("export 4.. = head %d, %d receipts", tail.HeadSeq, len(tail.Receipts))
 	}
 	if got := receiptverify.VerifyJSON(tail.Bundle, trustRootJSON(t)); got.Verdict != receiptverify.VerdictVerified {
@@ -155,7 +160,7 @@ func TestPostgresReceiptExportVerifiesOfflineWithBindings(t *testing.T) {
 		"from zero":              {ExportInput{WorkspaceID: workspace, FromSeq: 0, ToSeq: 1}, CodeInvalidArgument},
 		"reversed":               {ExportInput{WorkspaceID: workspace, FromSeq: 3, ToSeq: 2}, CodeInvalidArgument},
 		"over the cap":           {ExportInput{WorkspaceID: workspace, FromSeq: 1, ToSeq: MaxExportReceipts + 1}, CodeInvalidArgument},
-		"starting past the head": {ExportInput{WorkspaceID: workspace, FromSeq: 6, ToSeq: 6}, CodeNotFound},
+		"starting past the head": {ExportInput{WorkspaceID: workspace, FromSeq: 7, ToSeq: 7}, CodeNotFound},
 		"no workspace":           {ExportInput{FromSeq: 1, ToSeq: 1}, CodeInvalidArgument},
 		"other workspace":        {ExportInput{WorkspaceID: "ws-b", FromSeq: 1, ToSeq: 1}, CodePermissionDenied},
 	} {

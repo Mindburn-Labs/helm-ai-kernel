@@ -15,14 +15,6 @@ const (
 	localPreviewSignerKeyID             = "claude-managed-agents-local-preview"
 )
 
-type deterministicPreviewSigner struct{}
-
-func (deterministicPreviewSigner) Sign(data []byte) (string, error) {
-	return strings.TrimPrefix(hashBytes(append([]byte("managed-agent-preview|"), data...)), "sha256:"), nil
-}
-
-func (deterministicPreviewSigner) SignerKeyID() string { return localPreviewSignerKeyID }
-
 type ManagedAgentExecutionReceipt struct {
 	ReceiptVersion   string                     `json:"receipt_version"`
 	ReceiptID        string                     `json:"receipt_id"`

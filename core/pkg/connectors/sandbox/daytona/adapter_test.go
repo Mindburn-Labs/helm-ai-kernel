@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,12 +65,14 @@ func newMockServer() (*httptest.Server, *mockDaytona) {
 		output := ""
 		timedOut := false
 
+		// The adapter quotes every argument; the mock reads the plain words.
+		plain := strings.ReplaceAll(req.Command, "'", "")
 		// Simulate echo.
-		if len(req.Command) > 5 && req.Command[:5] == "echo " {
-			output = req.Command[5:] + "\n"
+		if len(plain) > 5 && plain[:5] == "echo " {
+			output = plain[5:] + "\n"
 		}
 		// Simulate timeout.
-		if len(req.Command) > 6 && req.Command[:6] == "sleep " && req.Timeout > 0 {
+		if len(plain) > 6 && plain[:6] == "sleep " && req.Timeout > 0 {
 			timedOut = true
 		}
 

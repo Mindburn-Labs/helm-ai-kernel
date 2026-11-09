@@ -8,16 +8,19 @@
 package opensandbox
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
+	"sort"
+	"sync"
 	"time"
 
+	connsandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
+
+var _ connsandbox.Provider = (*Adapter)(nil)
 
 // Config is the adapter configuration for OpenSandbox.
 type Config struct {
@@ -48,7 +51,9 @@ type Adapter struct {
 	cfg    Config
 	client *http.Client
 	clock  func() time.Time
-	specs  map[string]*actuators.SandboxSpec
+
+	mu    sync.Mutex
+	specs map[string]*actuators.SandboxSpec
 }
 
 // New creates a new OpenSandbox adapter with the given config.
@@ -106,6 +111,7 @@ type createRequest struct {
 	Image     string            `json:"image"`
 	Command   []string          `json:"command,omitempty"`
 	Env       map[string]string `json:"env,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 	Resources resourceRequest   `json:"resources,omitempty"`
 	Network   networkRequest    `json:"network,omitempty"`
 }
@@ -139,8 +145,9 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 	}
 
 	body := createRequest{
-		Image: spec.Runtime,
-		Env:   spec.Env,
+		Image:    spec.Runtime,
+		Env:      spec.Env,
+		Metadata: spec.Labels,
 		Resources: resourceRequest{
 			CPUMillis:    spec.Resources.CPUMillis,
 			MemoryMB:     spec.Resources.MemoryMB,
@@ -165,8 +172,14 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 	if err := a.doJSON(ctx, "POST", "/api/sandbox", body, &resp); err != nil {
 		return nil, fmt.Errorf("opensandbox: create failed: %w", err)
 	}
+	if !connsandbox.ValidID(resp.ID) {
+		return nil, fmt.Errorf("opensandbox: create failed: %w", &connsandbox.CallError{Provider: "opensandbox", Drift: true,
+			Detail: "the create answer carries no usable sandbox id"})
+	}
 
+	a.mu.Lock()
 	a.specs[resp.ID] = spec
+	a.mu.Unlock()
 	return &actuators.SandboxHandle{
 		ID:        resp.ID,
 		Provider:  "opensandbox",
@@ -177,6 +190,9 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 }
 
 func (a *Adapter) Resume(ctx context.Context, id string) (*actuators.SandboxHandle, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	var resp createResponse
 	if err := a.doJSON(ctx, "POST", fmt.Sprintf("/api/sandbox/%s/resume", id), nil, &resp); err != nil {
 		return nil, fmt.Errorf("opensandbox: resume failed: %w", err)
@@ -189,10 +205,16 @@ func (a *Adapter) Resume(ctx context.Context, id string) (*actuators.SandboxHand
 }
 
 func (a *Adapter) Pause(ctx context.Context, id string) error {
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
+	}
 	return a.doJSON(ctx, "POST", fmt.Sprintf("/api/sandbox/%s/pause", id), nil, nil)
 }
 
 func (a *Adapter) Terminate(ctx context.Context, id string) error {
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
+	}
 	return a.doJSON(ctx, "DELETE", fmt.Sprintf("/api/sandbox/%s", id), nil, nil)
 }
 
@@ -216,7 +238,12 @@ type execResponse struct {
 }
 
 func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecRequest) (*actuators.ExecResult, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
+	a.mu.Lock()
 	spec := a.specs[id]
+	a.mu.Unlock()
 	req, err := actuators.PrepareExecRequest(req, spec)
 	if err != nil {
 		return nil, err
@@ -248,42 +275,35 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 // ── Filesystem ──────────────────────────────────────────────────
 
 func (a *Adapter) ReadFile(ctx context.Context, id string, path string) ([]byte, error) {
-	url := fmt.Sprintf("%s/api/sandbox/%s/files?path=%s", a.cfg.BaseURL, id, path)
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
 	}
-	a.setAuth(httpReq)
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
+	var data []byte
+	if err := connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "opensandbox", Method: "GET",
+		URL:    fmt.Sprintf("%s/api/sandbox/%s/files?path=%s", a.cfg.BaseURL, id, url.QueryEscape(path)),
+		Auth:   a.setAuth,
+		RawOut: &data,
+	}); err != nil {
 		return nil, fmt.Errorf("opensandbox: read file: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("opensandbox: read file: status %d", resp.StatusCode)
-	}
-	return io.ReadAll(resp.Body)
+	return data, nil
 }
 
 func (a *Adapter) WriteFile(ctx context.Context, id string, path string, data []byte) error {
-	url := fmt.Sprintf("%s/api/sandbox/%s/files?path=%s", a.cfg.BaseURL, id, path)
-	httpReq, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(data))
-	if err != nil {
-		return err
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
 	}
-	a.setAuth(httpReq)
-	httpReq.Header.Set("Content-Type", "application/octet-stream")
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
+	if data == nil {
+		data = []byte{}
+	}
+	if err := connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "opensandbox", Method: "PUT",
+		URL:     fmt.Sprintf("%s/api/sandbox/%s/files?path=%s", a.cfg.BaseURL, id, url.QueryEscape(path)),
+		Auth:    a.setAuth,
+		RawBody: data,
+	}); err != nil {
 		return fmt.Errorf("opensandbox: write file: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("opensandbox: write file: status %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -301,8 +321,11 @@ type fileEntryResponse struct {
 }
 
 func (a *Adapter) ListFiles(ctx context.Context, id string, dir string) ([]actuators.FileEntry, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	var resp fileListResponse
-	if err := a.doJSON(ctx, "GET", fmt.Sprintf("/api/sandbox/%s/files/list?dir=%s", id, dir), nil, &resp); err != nil {
+	if err := a.doJSON(ctx, "GET", fmt.Sprintf("/api/sandbox/%s/files/list?dir=%s", id, url.QueryEscape(dir)), nil, &resp); err != nil {
 		return nil, err
 	}
 
@@ -323,6 +346,9 @@ func (a *Adapter) ListFiles(ctx context.Context, id string, dir string) ([]actua
 // ── Network ─────────────────────────────────────────────────────
 
 func (a *Adapter) AllowEgress(ctx context.Context, id string, rules []actuators.EgressRule) error {
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
+	}
 	apiRules := make([]string, len(rules))
 	for i, r := range rules {
 		if r.Port > 0 {
@@ -351,6 +377,9 @@ type logEntryResponse struct {
 }
 
 func (a *Adapter) Logs(ctx context.Context, id string, opts *actuators.LogOptions) ([]actuators.LogEntry, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	path := fmt.Sprintf("/api/sandbox/%s/logs", id)
 	if opts != nil && opts.Tail > 0 {
 		path = fmt.Sprintf("%s?tail=%d", path, opts.Tail)
@@ -373,46 +402,125 @@ func (a *Adapter) Logs(ctx context.Context, id string, opts *actuators.LogOption
 	return entries, nil
 }
 
+// ── Inventory ───────────────────────────────────────────────────
+
+// The inventory wire shapes below follow this adapter's REST style and are
+// unproven against a live OpenSandbox server: GET /api/sandbox/{id} answers
+// {"id","status","metadata","image"}; GET /api/sandbox?label=k%3Dv (repeated per
+// label) answers {"items":[...]} of the same objects. Find never trusts the
+// server's filter.
+
+type osSandbox struct {
+	ID       string            `json:"id"`
+	Status   string            `json:"status"`
+	Metadata map[string]string `json:"metadata"`
+	Image    string            `json:"image"`
+}
+
+func osStatus(status string) (actuators.SandboxStatus, bool) {
+	switch status {
+	case "running":
+		return actuators.StatusRunning, true
+	case "paused":
+		return actuators.StatusPaused, true
+	case "creating", "pending":
+		return actuators.StatusCreating, true
+	case "terminated", "deleted":
+		return actuators.StatusTerminated, true
+	case "error", "failed":
+		return actuators.StatusError, true
+	}
+	return "", false
+}
+
+func (s osSandbox) info() (*connsandbox.Info, error) {
+	status, ok := osStatus(s.Status)
+	if !ok || !connsandbox.ValidID(s.ID) {
+		return nil, &connsandbox.CallError{Provider: "opensandbox", Drift: true, Detail: "a sandbox answer has no usable id or status"}
+	}
+	return &connsandbox.Info{ID: s.ID, Status: status, Labels: s.Metadata, Runtime: s.Image}, nil
+}
+
+// Lookup implements connsandbox.Inventory.
+func (a *Adapter) Lookup(ctx context.Context, id string) (*connsandbox.Info, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
+	var out osSandbox
+	if err := a.doJSON(ctx, "GET", "/api/sandbox/"+id, nil, &out); err != nil {
+		if ce := connsandbox.AsCallError(err); ce != nil && ce.Status == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %w", actuators.ErrSandboxNotFound, err)
+		}
+		return nil, fmt.Errorf("opensandbox: lookup failed: %w", err)
+	}
+	info, err := out.info()
+	if err != nil {
+		return nil, fmt.Errorf("opensandbox: lookup failed: %w", err)
+	}
+	if info.ID != id {
+		return nil, fmt.Errorf("opensandbox: lookup failed: %w", &connsandbox.CallError{Provider: "opensandbox", Drift: true, Detail: "the answer names another sandbox"})
+	}
+	return info, nil
+}
+
+// Find implements connsandbox.Inventory.
+func (a *Adapter) Find(ctx context.Context, labels map[string]string) ([]connsandbox.Info, error) {
+	if len(labels) == 0 {
+		return nil, fmt.Errorf("opensandbox: find needs at least one label")
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	q := url.Values{}
+	for _, k := range keys {
+		q.Add("label", k+"="+labels[k])
+	}
+	var list struct {
+		Items *[]osSandbox `json:"items"`
+	}
+	if err := a.doJSON(ctx, "GET", "/api/sandbox?"+q.Encode(), nil, &list); err != nil {
+		return nil, fmt.Errorf("opensandbox: find failed: %w", err)
+	}
+	// {} and {"items":null} are not an empty list: reading them as one would
+	// say a sandbox that exists is absent.
+	if list.Items == nil {
+		return nil, fmt.Errorf("opensandbox: find failed: %w", &connsandbox.CallError{Provider: "opensandbox", Drift: true, Detail: "the list answer carries no items array"})
+	}
+	var found []connsandbox.Info
+	for _, s := range *list.Items {
+		if !labelsMatch(s.Metadata, labels) {
+			continue
+		}
+		info, err := s.info()
+		if err != nil {
+			return nil, fmt.Errorf("opensandbox: find failed: %w", err)
+		}
+		found = append(found, *info)
+		if len(found) > connsandbox.MaxFound {
+			return nil, fmt.Errorf("opensandbox: find matched more than %d sandboxes", connsandbox.MaxFound)
+		}
+	}
+	return found, nil
+}
+
+func labelsMatch(have, want map[string]string) bool {
+	for k, v := range want {
+		if got, ok := have[k]; !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
 // ── HTTP helpers ────────────────────────────────────────────────
 
 func (a *Adapter) doJSON(ctx context.Context, method, path string, reqBody interface{}, respBody interface{}) error {
-	url := a.cfg.BaseURL + path
-
-	var body io.Reader
-	if reqBody != nil {
-		data, err := json.Marshal(reqBody)
-		if err != nil {
-			return fmt.Errorf("opensandbox: marshal request: %w", err)
-		}
-		body = bytes.NewReader(data)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return err
-	}
-	a.setAuth(httpReq)
-	if body != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("opensandbox: %s %s: %w", method, path, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respData, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("opensandbox: %s %s: status %d: %s", method, path, resp.StatusCode, string(respData))
-	}
-
-	if respBody != nil {
-		if err := json.NewDecoder(resp.Body).Decode(respBody); err != nil {
-			return fmt.Errorf("opensandbox: decode response: %w", err)
-		}
-	}
-	return nil
+	return connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "opensandbox", Method: method, URL: a.cfg.BaseURL + path,
+		Auth: a.setAuth, Body: reqBody, Out: respBody,
+	})
 }
 
 func (a *Adapter) setAuth(req *http.Request) {

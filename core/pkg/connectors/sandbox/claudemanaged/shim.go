@@ -34,6 +34,10 @@ type ToolRequest struct {
 	Data      []byte            `json:"data,omitempty"`
 	Target    string            `json:"target,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+	// WorkDir and TimeoutMS are optional bash/code/validation parameters;
+	// zero values are ignored.
+	WorkDir   string `json:"workdir,omitempty"`
+	TimeoutMS int64  `json:"timeout_ms,omitempty"`
 }
 
 type ToolResponse struct {
@@ -64,7 +68,7 @@ func (s WorkerShim) HandleTool(ctx context.Context, req ToolRequest) (ToolRespon
 	}
 	switch req.Class {
 	case ToolBash, ToolCode, ToolValidation:
-		result, err := s.Actuator.Exec(ctx, req.SandboxID, &actuators.ExecRequest{Command: req.Command})
+		result, err := s.Actuator.Exec(ctx, req.SandboxID, &actuators.ExecRequest{Command: req.Command, WorkDir: req.WorkDir, Timeout: time.Duration(req.TimeoutMS) * time.Millisecond})
 		if err != nil {
 			return ToolResponse{}, err
 		}

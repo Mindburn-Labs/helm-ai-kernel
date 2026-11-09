@@ -12,12 +12,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
+	"sort"
+	"strings"
+	"sync"
 	"time"
 
+	connsandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
+
+var _ connsandbox.Provider = (*Adapter)(nil)
 
 // Config is the adapter configuration for E2B.
 type Config struct {
@@ -35,6 +41,12 @@ type Config struct {
 
 	// AllowInsecureLoopback permits http:// loopback endpoints for local tests only.
 	AllowInsecureLoopback bool `json:"allow_insecure_loopback,omitempty"`
+
+	// RefuseUnappliedPolicy makes Create refuse (actuators.ErrNotSupported) a
+	// spec that asks for a limit, an egress policy, an environment or a mount
+	// this adapter's create call does not carry (CheckSpec), instead of
+	// creating a sandbox that runs without them. helm-gateway sets it.
+	RefuseUnappliedPolicy bool `json:"refuse_unapplied_policy,omitempty"`
 }
 
 // DefaultConfig returns a config with defaults.
@@ -50,7 +62,9 @@ type Adapter struct {
 	cfg    Config
 	client *http.Client
 	clock  func() time.Time
-	specs  map[string]*actuators.SandboxSpec
+
+	mu    sync.Mutex
+	specs map[string]*actuators.SandboxSpec
 }
 
 // New creates a new E2B adapter.
@@ -100,8 +114,9 @@ func (a *Adapter) Preflight(_ context.Context) (*actuators.PreflightReport, erro
 // ── Lifecycle ───────────────────────────────────────────────────
 
 type e2bCreateReq struct {
-	TemplateID string `json:"templateID"`
-	Timeout    int    `json:"timeout,omitempty"`
+	TemplateID string            `json:"templateID"`
+	Timeout    int               `json:"timeout,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
 type e2bCreateResp struct {
@@ -109,7 +124,20 @@ type e2bCreateResp struct {
 	ClientID  string `json:"clientID,omitempty"`
 }
 
+// CheckSpec refuses a spec this adapter would not apply: its create call
+// carries the template or language, the timeout and the labels, and no
+// resource limit, egress policy, environment or mount. The gateway checks it
+// at admission and Create checks it again.
+func CheckSpec(spec *actuators.SandboxSpec) error {
+	return connsandbox.UnappliedPolicy(spec, true)
+}
+
 func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*actuators.SandboxHandle, error) {
+	if a.cfg.RefuseUnappliedPolicy {
+		if err := CheckSpec(spec); err != nil {
+			return nil, fmt.Errorf("%s: create refused: %w", "e2b", err)
+		}
+	}
 	report, err := a.Preflight(ctx)
 	if err != nil {
 		return nil, err
@@ -132,11 +160,16 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 	if err := a.doJSON(ctx, "POST", "/sandboxes", e2bCreateReq{
 		TemplateID: templateID,
 		Timeout:    timeout,
+		Metadata:   spec.Labels,
 	}, &resp); err != nil {
 		return nil, fmt.Errorf("e2b: create failed: %w", err)
 	}
+	if !connsandbox.ValidID(resp.SandboxID) {
+		return nil, fmt.Errorf("e2b: create failed: %w", &connsandbox.CallError{Provider: "e2b", Drift: true,
+			Detail: "the create answer carries no usable sandbox id"})
+	}
 
-	a.specs[resp.SandboxID] = spec
+	a.remember(resp.SandboxID, spec)
 	return &actuators.SandboxHandle{
 		ID:        resp.SandboxID,
 		Provider:  "e2b",
@@ -149,7 +182,22 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 	}, nil
 }
 
+func (a *Adapter) remember(id string, spec *actuators.SandboxSpec) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.specs[id] = spec
+}
+
+func (a *Adapter) specOf(id string) *actuators.SandboxSpec {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.specs[id]
+}
+
 func (a *Adapter) Resume(ctx context.Context, id string) (*actuators.SandboxHandle, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	var resp e2bCreateResp
 	if err := a.doJSON(ctx, "POST", fmt.Sprintf("/sandboxes/%s/resume", id), nil, &resp); err != nil {
 		return nil, fmt.Errorf("e2b: resume failed: %w", err)
@@ -162,10 +210,16 @@ func (a *Adapter) Resume(ctx context.Context, id string) (*actuators.SandboxHand
 }
 
 func (a *Adapter) Pause(ctx context.Context, id string) error {
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
+	}
 	return a.doJSON(ctx, "POST", fmt.Sprintf("/sandboxes/%s/pause", id), nil, nil)
 }
 
 func (a *Adapter) Terminate(ctx context.Context, id string) error {
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
+	}
 	return a.doJSON(ctx, "DELETE", fmt.Sprintf("/sandboxes/%s", id), nil, nil)
 }
 
@@ -187,20 +241,18 @@ type e2bExecResp struct {
 }
 
 func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecRequest) (*actuators.ExecResult, error) {
-	spec := a.specs[id]
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
+	spec := a.specOf(id)
 	req, err := actuators.PrepareExecRequest(req, spec)
 	if err != nil {
 		return nil, err
 	}
 
-	// E2B takes a string command, not an array.
-	cmd := ""
-	for i, c := range req.Command {
-		if i > 0 {
-			cmd += " "
-		}
-		cmd += c
-	}
+	// E2B takes a string command, not an array: quote each argument so the
+	// original argument vector runs unchanged.
+	cmd := connsandbox.ShellJoin(req.Command)
 
 	apiReq := e2bExecReq{
 		Cmd:     cmd,
@@ -227,42 +279,35 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 // ── Filesystem ──────────────────────────────────────────────────
 
 func (a *Adapter) ReadFile(ctx context.Context, id string, path string) ([]byte, error) {
-	url := fmt.Sprintf("%s/sandboxes/%s/filesystem?path=%s", a.cfg.APIURL, id, path)
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
 	}
-	a.setAuth(httpReq)
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
+	var data []byte
+	if err := connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "e2b", Method: "GET",
+		URL:    fmt.Sprintf("%s/sandboxes/%s/filesystem?path=%s", a.cfg.APIURL, id, url.QueryEscape(path)),
+		Auth:   a.setAuth,
+		RawOut: &data,
+	}); err != nil {
 		return nil, fmt.Errorf("e2b: read file: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("e2b: read file: status %d", resp.StatusCode)
-	}
-	return io.ReadAll(resp.Body)
+	return data, nil
 }
 
 func (a *Adapter) WriteFile(ctx context.Context, id string, path string, data []byte) error {
-	url := fmt.Sprintf("%s/sandboxes/%s/filesystem?path=%s", a.cfg.APIURL, id, path)
-	httpReq, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(data))
-	if err != nil {
-		return err
+	if !connsandbox.ValidID(id) {
+		return connsandbox.ErrBadID
 	}
-	a.setAuth(httpReq)
-	httpReq.Header.Set("Content-Type", "application/octet-stream")
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
+	if data == nil {
+		data = []byte{}
+	}
+	if err := connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "e2b", Method: "PUT",
+		URL:     fmt.Sprintf("%s/sandboxes/%s/filesystem?path=%s", a.cfg.APIURL, id, url.QueryEscape(path)),
+		Auth:    a.setAuth,
+		RawBody: data,
+	}); err != nil {
 		return fmt.Errorf("e2b: write file: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("e2b: write file: status %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -279,8 +324,11 @@ type e2bFileEntry struct {
 }
 
 func (a *Adapter) ListFiles(ctx context.Context, id string, dir string) ([]actuators.FileEntry, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	var resp e2bFileListResp
-	if err := a.doJSON(ctx, "GET", fmt.Sprintf("/sandboxes/%s/filesystem/list?dir=%s", id, dir), nil, &resp); err != nil {
+	if err := a.doJSON(ctx, "GET", fmt.Sprintf("/sandboxes/%s/filesystem/list?dir=%s", id, url.QueryEscape(dir)), nil, &resp); err != nil {
 		return nil, err
 	}
 
@@ -306,6 +354,9 @@ func (a *Adapter) AllowEgress(_ context.Context, _ string, _ []actuators.EgressR
 // ── Observability ───────────────────────────────────────────────
 
 func (a *Adapter) Logs(ctx context.Context, id string, opts *actuators.LogOptions) ([]actuators.LogEntry, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
 	path := fmt.Sprintf("/sandboxes/%s/logs", id)
 	if opts != nil && opts.Tail > 0 {
 		path = fmt.Sprintf("%s?limit=%d", path, opts.Tail)
@@ -335,46 +386,124 @@ func (a *Adapter) Logs(ctx context.Context, id string, opts *actuators.LogOption
 	return entries, nil
 }
 
+// ── Inventory ───────────────────────────────────────────────────
+
+// The inventory wire shapes below follow this adapter's REST style and are
+// unproven against a live E2B account: GET /sandboxes/{id} answers
+// {"sandboxID","templateID","state","metadata"}; GET /sandboxes?metadata=k%3Dv%26k2%3Dv2
+// answers a JSON array of the same objects. Find never trusts the server's
+// filter.
+
+type e2bSandbox struct {
+	SandboxID  string            `json:"sandboxID"`
+	TemplateID string            `json:"templateID"`
+	State      string            `json:"state"`
+	Metadata   map[string]string `json:"metadata"`
+}
+
+func e2bStatus(state string) (actuators.SandboxStatus, bool) {
+	switch state {
+	case "running":
+		return actuators.StatusRunning, true
+	case "paused":
+		return actuators.StatusPaused, true
+	case "creating", "starting":
+		return actuators.StatusCreating, true
+	case "terminated", "killed":
+		return actuators.StatusTerminated, true
+	case "error", "failed":
+		return actuators.StatusError, true
+	}
+	return "", false
+}
+
+func (s e2bSandbox) info() (*connsandbox.Info, error) {
+	status, ok := e2bStatus(s.State)
+	if !ok || !connsandbox.ValidID(s.SandboxID) {
+		return nil, &connsandbox.CallError{Provider: "e2b", Drift: true, Detail: "a sandbox answer has no usable id or state"}
+	}
+	return &connsandbox.Info{ID: s.SandboxID, Status: status, Labels: s.Metadata, Runtime: s.TemplateID}, nil
+}
+
+// Lookup implements connsandbox.Inventory.
+func (a *Adapter) Lookup(ctx context.Context, id string) (*connsandbox.Info, error) {
+	if !connsandbox.ValidID(id) {
+		return nil, connsandbox.ErrBadID
+	}
+	var out e2bSandbox
+	if err := a.doJSON(ctx, "GET", "/sandboxes/"+id, nil, &out); err != nil {
+		if ce := connsandbox.AsCallError(err); ce != nil && ce.Status == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %w", actuators.ErrSandboxNotFound, err)
+		}
+		return nil, fmt.Errorf("e2b: lookup failed: %w", err)
+	}
+	info, err := out.info()
+	if err != nil {
+		return nil, fmt.Errorf("e2b: lookup failed: %w", err)
+	}
+	if info.ID != id {
+		return nil, fmt.Errorf("e2b: lookup failed: %w", &connsandbox.CallError{Provider: "e2b", Drift: true, Detail: "the answer names another sandbox"})
+	}
+	return info, nil
+}
+
+// Find implements connsandbox.Inventory.
+func (a *Adapter) Find(ctx context.Context, labels map[string]string) ([]connsandbox.Info, error) {
+	if len(labels) == 0 {
+		return nil, fmt.Errorf("e2b: find needs at least one label")
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, len(keys))
+	for i, k := range keys {
+		pairs[i] = url.QueryEscape(k) + "=" + url.QueryEscape(labels[k])
+	}
+	var raw json.RawMessage
+	if err := a.doJSON(ctx, "GET", "/sandboxes?metadata="+url.QueryEscape(strings.Join(pairs, "&")), nil, &raw); err != nil {
+		return nil, fmt.Errorf("e2b: find failed: %w", err)
+	}
+	// A list is a JSON array. null, an object or anything else is not an empty
+	// list: reading it as one would say a sandbox that exists is absent.
+	var list []e2bSandbox
+	if t := bytes.TrimSpace(raw); len(t) == 0 || t[0] != '[' || json.Unmarshal(t, &list) != nil {
+		return nil, fmt.Errorf("e2b: find failed: %w", &connsandbox.CallError{Provider: "e2b", Drift: true, Detail: "the list answer is not a JSON array"})
+	}
+	var found []connsandbox.Info
+	for _, s := range list {
+		if !labelsMatch(s.Metadata, labels) {
+			continue
+		}
+		info, err := s.info()
+		if err != nil {
+			return nil, fmt.Errorf("e2b: find failed: %w", err)
+		}
+		found = append(found, *info)
+		if len(found) > connsandbox.MaxFound {
+			return nil, fmt.Errorf("e2b: find matched more than %d sandboxes", connsandbox.MaxFound)
+		}
+	}
+	return found, nil
+}
+
+func labelsMatch(have, want map[string]string) bool {
+	for k, v := range want {
+		if got, ok := have[k]; !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
 // ── HTTP helpers ────────────────────────────────────────────────
 
 func (a *Adapter) doJSON(ctx context.Context, method, path string, reqBody interface{}, respBody interface{}) error {
-	url := a.cfg.APIURL + path
-
-	var body io.Reader
-	if reqBody != nil {
-		data, err := json.Marshal(reqBody)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(data)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return err
-	}
-	a.setAuth(httpReq)
-	if body != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("e2b: %s %s: %w", method, path, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respData, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("e2b: %s %s: status %d: %s", method, path, resp.StatusCode, string(respData))
-	}
-
-	if respBody != nil {
-		if err := json.NewDecoder(resp.Body).Decode(respBody); err != nil {
-			return fmt.Errorf("e2b: decode response: %w", err)
-		}
-	}
-	return nil
+	return connsandbox.DoJSON(ctx, connsandbox.Call{
+		Client: a.client, Provider: "e2b", Method: method, URL: a.cfg.APIURL + path,
+		Auth: a.setAuth, Body: reqBody, Out: respBody,
+	})
 }
 
 func (a *Adapter) setAuth(req *http.Request) {

@@ -412,3 +412,13 @@ func TestWorkerShimEmitsManagedAgentReceiptMetadata(t *testing.T) {
 	require.Len(t, receipt.DeniedEffects, 1)
 	require.Equal(t, string(contracts.ReasonSessionRiskDeny), receipt.DeniedEffects[0].ReasonCode)
 }
+
+// deterministicPreviewSigner is the local preview signer that preflight must
+// refuse: its key id is the one checkReceiptSigner rejects.
+type deterministicPreviewSigner struct{}
+
+func (deterministicPreviewSigner) Sign(data []byte) (string, error) {
+	return strings.TrimPrefix(hashBytes(append([]byte("managed-agent-preview|"), data...)), "sha256:"), nil
+}
+
+func (deterministicPreviewSigner) SignerKeyID() string { return localPreviewSignerKeyID }

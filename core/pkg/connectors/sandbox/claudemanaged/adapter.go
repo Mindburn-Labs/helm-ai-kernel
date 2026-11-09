@@ -8,6 +8,7 @@ package claudemanaged
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	connsandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
 
@@ -95,7 +97,11 @@ type RunnerResult struct {
 
 // ExecutionContext describes the already-governed local execution context.
 type ExecutionContext struct {
-	SandboxID     string
+	SandboxID string
+	// Tenant is the sandbox's tenant label (connsandbox.LabelTenant), or ""
+	// when the sandbox carries none. A remote worker is told it and refuses a
+	// request for the sandbox from another tenant.
+	Tenant        string
 	WorkspaceRoot string
 	OutputsRoot   string
 	Spec          *actuators.SandboxSpec
@@ -166,7 +172,6 @@ type Adapter struct {
 	receiptSigner ManagedAgentReceiptSigner
 
 	mu        sync.Mutex
-	nextID    int
 	sandboxes map[string]*sandboxState
 }
 
@@ -178,6 +183,7 @@ type sandboxState struct {
 	metadata    map[string]string
 	logs        []actuators.LogEntry
 	egressRules []actuators.EgressRule
+	labels      map[string]string
 }
 
 // New creates an adapter for the customer-controlled self-hosted worker.
@@ -239,10 +245,10 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 		return nil, fmt.Errorf("claude managed agents: create outputs root: %w", err)
 	}
 
-	a.mu.Lock()
-	a.nextID++
-	id := a.sandboxID()
-	a.mu.Unlock()
+	id, err := a.sandboxID()
+	if err != nil {
+		return nil, fmt.Errorf("claude managed agents: sandbox id: %w", err)
+	}
 
 	workspace := filepath.Join(a.cfg.WorkspaceRoot, id, "workspace")
 	outputs := filepath.Join(a.cfg.OutputsRoot, id)
@@ -277,6 +283,7 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 		outputs:   outputs,
 		metadata:  metadata,
 		logs:      make([]actuators.LogEntry, 0),
+		labels:    copyStringMap(spec.Labels),
 	}
 	return handle, nil
 }
@@ -289,14 +296,36 @@ func (a *Adapter) Pause(_ context.Context, _ string) error {
 	return actuators.ErrNotSupported
 }
 
-func (a *Adapter) Terminate(_ context.Context, id string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+// Terminator is a CommandRunner that can also end a sandbox on its worker.
+// RemoteRunner is one: POST /v1/terminate.
+type Terminator interface {
+	Terminate(ctx context.Context, execCtx ExecutionContext) error
+}
 
+// Terminate ends the sandbox on its worker when the runner can (Terminator),
+// and only then marks the adapter's record terminated: a worker that refused
+// or never answered leaves the record running. A runner that is not a
+// Terminator (the local one, tests) ends only the record.
+func (a *Adapter) Terminate(ctx context.Context, id string) error {
+	a.mu.Lock()
 	state, ok := a.sandboxes[id]
 	if !ok {
+		a.mu.Unlock()
 		return actuators.ErrSandboxNotFound
 	}
+	if state.handle.Status == actuators.StatusTerminated {
+		a.mu.Unlock()
+		return nil
+	}
+	execCtx := a.executionContext(state)
+	a.mu.Unlock()
+	if t, ok := a.runner.(Terminator); ok {
+		if err := t.Terminate(ctx, execCtx); err != nil {
+			return err
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	state.handle.Status = actuators.StatusTerminated
 	return nil
 }
@@ -459,6 +488,7 @@ func (a *Adapter) runningState(id string) (*sandboxState, error) {
 func (a *Adapter) executionContext(state *sandboxState) ExecutionContext {
 	return ExecutionContext{
 		SandboxID:     state.handle.ID,
+		Tenant:        state.labels[connsandbox.LabelTenant],
 		WorkspaceRoot: state.workspace,
 		OutputsRoot:   state.outputs,
 		Spec:          state.spec,
@@ -466,14 +496,22 @@ func (a *Adapter) executionContext(state *sandboxState) ExecutionContext {
 	}
 }
 
-func (a *Adapter) sandboxID() string {
+// sandboxID is a fresh random id. A counter would hand two replicas, or two
+// restarts, the same id for two tenants, and the worker keys its workspace by
+// the id: the id must not repeat across processes.
+func (a *Adapter) sandboxID() (string, error) {
+	var rnd [16]byte
+	if _, err := rand.Read(rnd[:]); err != nil {
+		return "", err
+	}
+	suffix := hex.EncodeToString(rnd[:])
 	if a.cfg.WorkID != "" {
-		return fmt.Sprintf("claude-work-%s-%d", a.cfg.WorkID, a.nextID)
+		return fmt.Sprintf("claude-work-%s-%s", a.cfg.WorkID, suffix), nil
 	}
 	if a.cfg.SessionID != "" {
-		return fmt.Sprintf("claude-session-%s-%d", a.cfg.SessionID, a.nextID)
+		return fmt.Sprintf("claude-session-%s-%s", a.cfg.SessionID, suffix), nil
 	}
-	return fmt.Sprintf("claude-managed-%d", a.nextID)
+	return "claude-managed-" + suffix, nil
 }
 
 func (a *Adapter) metadataFor(spec *actuators.SandboxSpec, workspace, outputs string) map[string]string {
@@ -510,6 +548,13 @@ func (a *Adapter) sandboxGrantHash(spec *actuators.SandboxSpec, workspace, outpu
 	})
 }
 
+// The in-memory log of a sandbox is bounded: a long-lived sandbox must not grow
+// the gateway's memory with every command's output.
+const (
+	maxLogEntries = 256
+	maxLogBytes   = 16 << 10
+)
+
 func (a *Adapter) appendLogs(id string, ts time.Time, stdout, stderr []byte) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -518,11 +563,19 @@ func (a *Adapter) appendLogs(id string, ts time.Time, stdout, stderr []byte) {
 	if !ok {
 		return
 	}
-	if len(stdout) > 0 {
-		state.logs = append(state.logs, actuators.LogEntry{Timestamp: ts, Stream: "stdout", Line: string(stdout)})
+	add := func(stream string, b []byte) {
+		if len(b) == 0 {
+			return
+		}
+		if len(b) > maxLogBytes {
+			b = b[:maxLogBytes]
+		}
+		state.logs = append(state.logs, actuators.LogEntry{Timestamp: ts, Stream: stream, Line: strings.ToValidUTF8(string(b), "?")})
 	}
-	if len(stderr) > 0 {
-		state.logs = append(state.logs, actuators.LogEntry{Timestamp: ts, Stream: "stderr", Line: string(stderr)})
+	add("stdout", stdout)
+	add("stderr", stderr)
+	if over := len(state.logs) - maxLogEntries; over > 0 {
+		state.logs = append([]actuators.LogEntry(nil), state.logs[over:]...)
 	}
 }
 

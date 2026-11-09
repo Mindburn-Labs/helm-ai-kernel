@@ -259,6 +259,10 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		return err
 	}
 	admissionConfig.Adapters = append(admissionConfig.Adapters, reassignmentAdapter)
+	// The sandbox effects, when an operator configures a provider (P17).
+	if err := sandboxFromEnv(getenv, &admissionConfig); err != nil {
+		return err
+	}
 	for _, configure := range extensions {
 		if configure != nil {
 			if err := configure(ctx, db, &admissionConfig); err != nil {
@@ -266,7 +270,7 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 			}
 		}
 	}
-	activity, err := newActivityRuntime(db, getenv, admissionConfig.Credentials)
+	activity, err := newActivityRuntime(db, getenv, withoutSandboxRoute(admissionConfig.Credentials))
 	if err != nil {
 		return err
 	}

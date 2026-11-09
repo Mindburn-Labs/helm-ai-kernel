@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -120,14 +121,26 @@ func TestServeWiresTheGitHubAdapter(t *testing.T) {
 	}
 }
 
+// handedOut holds every address freeAddress has returned in this test
+// binary. The kernel may hand a just-closed ephemeral port out again, so two
+// calls in one test could otherwise name the same port for two listeners.
+var handedOut sync.Map
+
 func freeAddress(t *testing.T) string {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	for range 64 {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := l.Addr().String()
+		_ = l.Close()
+		if _, taken := handedOut.LoadOrStore(addr, struct{}{}); !taken {
+			return addr
+		}
 	}
-	defer l.Close()
-	return l.Addr().String()
+	t.Fatal("no unused loopback port after 64 tries")
+	return ""
 }
 
 // startServe runs serve until the test ends and waits for its health port.

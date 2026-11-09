@@ -120,7 +120,7 @@ cleanup, publication, or deployment.
 ## Historical executor guidance
 
 Use a fresh `<repo>-wt-<slug>` worktree per implementation plan, branch from
-live `origin/main`, and run the repo's protected-path and release-permit
+live `origin/main`, and run the repo's protected-path
 process. Never implement a plan in a worktree merely because it appears in the
 historical audit snapshot, and never delete a branch or worktree merely because
 its name appears here.

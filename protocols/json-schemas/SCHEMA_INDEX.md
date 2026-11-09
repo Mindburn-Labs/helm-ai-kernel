@@ -289,7 +289,7 @@ dispatch.
 | `connectors/ton/acton_receipt.schema.json`           | L2          | normative | TON Acton deterministic connector receipt |
 | `connectors/ton/acton_contract_bundle.schema.json`   | L2          | normative | TON Acton connector contract bundle      |
 | `connectors/ton/acton_script_manifest.schema.json`   | L2          | normative | TON Acton network script sidecar manifest |
-| `connectors/ton/acton_evidence.schema.json`          | L2          | normative | TON Acton EvidencePack artifact index    |
+| `connectors/ton/acton_evidence.schema.json`          | L2          | informative | TON Acton EvidencePack artifact index (no producer; the evidence-pack builder was removed) |
 
 ---
 

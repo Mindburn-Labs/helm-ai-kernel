@@ -23,36 +23,6 @@ func TestCoverageClassificationAndLibraryHelpers(t *testing.T) {
 	if _, ok := ClassifyAction(ActionURN("missing")); ok {
 		t.Fatal("unknown action classified")
 	}
-	for _, action := range []ActionURN{ActionScriptTestnet, ActionScriptMainnet, ActionLibraryPublishTN, ActionLibraryTopupMN} {
-		if !IsMoneyMoving(action) || !IsIrreversible(action) || !IsSecretRisk(action) {
-			t.Fatalf("expected money/irreversible/secret risk for %s", action)
-		}
-	}
-	if IsMoneyMoving(ActionBuild) || IsIrreversible(ActionBuild) || IsSecretRisk(ActionBuild) {
-		t.Fatal("local build should not be money-moving, irreversible, or wallet-secret risk")
-	}
-	if RiskForNetwork(NetworkMainnet, true) != RiskT2 || RiskForNetwork(NetworkMainnet, false) != RiskT3 {
-		t.Fatal("mainnet risk classification mismatch")
-	}
-	for _, network := range []NetworkProfile{NetworkTestnet, NetworkForkMainnet, NetworkForkTestnet} {
-		if RiskForNetwork(network, true) != RiskT2 {
-			t.Fatalf("expected T2 for %s", network)
-		}
-	}
-	if RiskForNetwork(NetworkLocal, false) != RiskT1 || RiskForNetwork(NetworkNone, true) != RiskT1 {
-		t.Fatal("local/default network risk mismatch")
-	}
-	for _, action := range []ActionURN{ActionLibraryInfo, ActionLibraryFetch, ActionLibraryPublishTN, ActionLibraryPublishMN, ActionLibraryTopupTN, ActionLibraryTopupMN} {
-		if !IsLibraryAction(action) {
-			t.Fatalf("expected library action for %s", action)
-		}
-	}
-	if IsLibraryAction(ActionBuild) {
-		t.Fatal("build should not be a library action")
-	}
-	if !LibraryActionIsReadOnly(ActionLibraryInfo) || !LibraryActionIsReadOnly(ActionLibraryFetch) || LibraryActionIsReadOnly(ActionLibraryPublishTN) {
-		t.Fatal("library read-only classification mismatch")
-	}
 }
 
 func TestCoverageBuildArgvMatrixAndValidationBranches(t *testing.T) {
@@ -385,49 +355,6 @@ func TestCoverageEvidenceAndReceiptBranches(t *testing.T) {
 	if denied.Status != "denied" {
 		t.Fatalf("expected denied status, got %s", denied.Status)
 	}
-	if _, err := BuildEvidencePack(EvidencePackInput{Receipt: receipt}); err == nil {
-		t.Fatal("expected evidence error for missing envelope")
-	}
-	result, err := BuildEvidencePack(EvidencePackInput{
-		Envelope:            env,
-		Receipt:             receipt,
-		P0Ceilings:          DefaultP0Ceilings(),
-		CreatedAt:           time.Unix(1700000000, 0).UTC(),
-		PlanIR:              map[string]any{"steps": []string{"build"}},
-		CPIInputs:           map[string]any{"input": true},
-		CPIOutput:           map[string]any{"output": true},
-		KernelVerdict:       map[string]any{"verdict": "allow"},
-		ApprovalCeremony:    map[string]any{"approval": "ref"},
-		SandboxGrant:        sealedGrant(t, false, true),
-		AdditionalArtifacts: map[string][]byte{"extra/data.json": []byte(`{"ok":true}`), "extra/readme.txt": []byte("ok"), "extra/blob.bin": []byte{1}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, required := range []string{"plan_ir.json", "cpi_inputs.json", "cpi_output.json", "kernel_verdict.json", "approval_ceremony.json", "sandbox_grant.json", "extra/data.json", "extra/readme.txt", "extra/blob.bin"} {
-		if _, ok := result.Contents[required]; !ok {
-			t.Fatalf("missing evidence content %s", required)
-		}
-	}
-	if result.Manifest == nil {
-		t.Fatal("manifest missing")
-	}
-	if contentTypeFor("a.json") != "application/json" || contentTypeFor("a.txt") != "text/plain" || contentTypeFor("a.bin") != "application/octet-stream" {
-		t.Fatal("content type mapping mismatch")
-	}
-	if err := WriteEvidencePackDir(t.TempDir(), result); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteEvidencePackDir(t.TempDir(), nil); err == nil {
-		t.Fatal("expected nil evidence result error")
-	}
-	blocker := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(blocker, []byte("not a dir"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteEvidencePackDir(blocker, result); err == nil {
-		t.Fatal("expected write error when evidence root is a file")
-	}
 	if data, err := receipt.CanonicalJSON(); err != nil || len(data) == 0 {
 		t.Fatalf("canonical receipt failed: len=%d err=%v", len(data), err)
 	}
@@ -596,28 +523,12 @@ func TestCoveragePolicySandboxWalletAndVerificationBranches(t *testing.T) {
 		t.Fatalf("policy default allowed versions missing: %#v", policy)
 	}
 
-	thresholdEnv := *buildEnv
-	thresholdEnv.EvidenceRequirements.RequireCoverageMin = 80
-	thresholdEnv.EvidenceRequirements.RequireMutationScoreMin = 70
-	if decision := validateThresholds(&thresholdEnv, map[string]float64{"coverage_percent": 79, "mutation_score_percent": 100}); decision.ReasonCode != ReasonCoverageThresholdFailed {
-		t.Fatalf("coverage threshold decision: %#v", decision)
-	}
-	if decision := validateThresholds(&thresholdEnv, map[string]float64{"coverage_percent": 80, "mutation_score_percent": 69}); decision.ReasonCode != ReasonMutationThresholdFailed {
-		t.Fatalf("mutation threshold decision: %#v", decision)
-	}
-	if decision := validateThresholds(&thresholdEnv, map[string]float64{"coverage_percent": 80, "mutation_score_percent": 70}); decision.ReasonCode != ReasonOK || !decision.Dispatch {
-		t.Fatalf("threshold allow decision: %#v", decision)
-	}
-
 	if err := ValidateSourceVerification(buildEnv); err != nil {
 		t.Fatalf("non-verifier source validation should pass: %v", err)
 	}
 	badVerify := &ActonCommandEnvelope{ActionURN: ActionVerifyDryRun, TolkCompilerVersion: "fixture-tolk-1.0.0", Argv: []string{"acton", "verify", "EQD", "contracts/main.tolk", "--net", "testnet"}}
 	if err := ValidateSourceVerification(badVerify); reasonFromError(err, "") != ReasonVerifyDryRunRequired {
 		t.Fatalf("expected verify dry-run required, got %v", err)
-	}
-	if !VerifyDryRunRequiredForDeploy(mainnetEnv) || VerifyDryRunRequiredForDeploy(testnetEnv) {
-		t.Fatal("verify dry-run deploy helper mismatch")
 	}
 
 	if err := ValidateSandboxGrant(buildEnv, sealedGrant(t, true, true)); reasonFromError(err, "") != ReasonNetworkGrantRequired {
@@ -673,9 +584,6 @@ func TestCoveragePolicySandboxWalletAndVerificationBranches(t *testing.T) {
 
 func TestCoverageConnectorRunnerAndDriftBranches(t *testing.T) {
 	connector := NewConnector(Config{Runner: Runner{Executor: &fakeExecutor{stdout: []byte(`{"ok":true}`)}, SandboxID: "s1"}, SandboxGrant: sealedGrant(t, false, true)})
-	if connector.ID() != ConnectorID || connector.Graph() == nil {
-		t.Fatal("connector id/graph mismatch")
-	}
 	if _, err := connector.Execute(context.Background(), nil, string(ActionBuild), nil); err == nil {
 		t.Fatal("expected nil permit error")
 	}
@@ -725,12 +633,6 @@ func TestCoverageConnectorRunnerAndDriftBranches(t *testing.T) {
 	}
 	if firstNonEmpty("", "", "x") != "x" || firstNonEmpty("", "") != "" {
 		t.Fatal("firstNonEmpty mismatch")
-	}
-	if sandboxGrantFromParams(nil) != nil || sandboxGrantFromParams(map[string]any{"sandbox_grant": func() {}}) != nil || sandboxGrantFromParams(map[string]any{"sandbox_grant": []string{"bad"}}) != nil {
-		t.Fatal("bad sandbox grant params should return nil")
-	}
-	if grant := sandboxGrantFromParams(map[string]any{"sandbox_grant": sealedGrant(t, false, true)}); grant == nil || grant.GrantID == "" {
-		t.Fatalf("sandbox grant did not parse: %#v", grant)
 	}
 
 	manifest := scriptManifest("contracts/scripts/deploy.tolk", "sha256:script", NetworkTestnet)

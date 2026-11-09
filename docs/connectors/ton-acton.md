@@ -5,9 +5,16 @@ test, scripting, source verification, and library operations. HELM wraps Acton
 so model-proposed TON work crosses PEP/CPI governance before any side effect
 can run.
 
-> Status: preview library. The connector is not linked into
-> `core/cmd/helm-ai-kernel`, so no Acton call crosses HELM in a shipped binary
-> today (`controls.yaml` CTL-045).
+> Status: linked into `core/cmd/helm-gateway` as the `ton.acton.*` effect types
+> (`controls.yaml` CTL-061), for local, fork and testnet operations only. It is
+> not linked into `core/cmd/helm-ai-kernel`.
+>
+> - Every mainnet operation and `script.testnet` are refused at admission
+>   (`ERR_TON_MAINNET_REFUSED`, `ERR_TON_TENANT_CODE_WITH_KEY_REFUSED`).
+> - Operations that run Acton over tenant files need
+>   `HELM_GATEWAY_TON_ACTON_ISOLATION_CMD`. Without it they are not declared.
+> - The mainnet, script-manifest and EvidencePack text below describes the
+>   connector package's own policy; helm-gateway does not reach it.
 
 The OSS connector is `ton.acton`. It exposes typed actions such as
 `connector.ton.acton.contract.build`, `connector.ton.acton.script.testnet`, and
@@ -53,31 +60,20 @@ Wallet references are opaque (`wallet:...`). Plaintext mnemonics, seed phrases,
 private keys, API keys, and TON Connect secrets must not appear in workspace
 files, args, receipts, EvidencePacks, logs, or UI state.
 
-## EvidencePack Contents
+## EvidencePacks
 
-T3 packs include the command envelope, connector contract bundle, P0 ceilings,
-policy/CPI/kernel artifacts when supplied, approval ceremony, sandbox grant,
-Acton and Tolk versions, source and manifest hashes, build/test/coverage/
-mutation/gas/verifier artifacts, receipts, redaction map, and replay
-instructions.
+The connector builds no EvidencePack. The builder was removed when the package
+was linked into helm-gateway, and `acton_evidence.schema.json` is non-normative.
+An Acton effect's evidence is the gateway's signed decision and outcome receipts
+and the typed `ton.acton.result.v1` result.
 
 ## Examples
 
-Allowed local build:
+Allowed local build: propose `ton.acton.contract.build` with target
+`ton-acton:<project>` and `{"schema":"helm.ton.acton.contract.build.v1"}`.
 
-```sh
-helm-ai-kernel verify pack <ton-acton-evidencepack>
-helm-ai-kernel replay --evidence <ton-acton-evidencepack> --verify
-```
-
-Denied mainnet script:
-
-```json
-{
-  "action_urn": "connector.ton.acton.script.mainnet",
-  "generic": true
-}
-```
+Refused mainnet script: proposing `ton.acton.script.mainnet` fails at Propose
+with `ERR_TON_MAINNET_REFUSED`.
 
 Escalated mainnet deployment:
 

@@ -287,7 +287,6 @@ G304 core/cmd/helm-ai-kernel/workstation_signing.go 60e78bae6b82
 G304 core/cmd/helm-ai-kernel/workstation_signing.go ec35404e84d7
 G304 core/cmd/receipt_verify/main.go ec35404e84d7
 G304 core/cmd/receipt_verify/main.go ef25ef080adc
-G304 core/cmd/release-permit-verify/main.go ac55ecf0d40a
 G304 core/pkg/agentruntime/storelock_flock.go 4454b0931305
 G304 core/pkg/boundary/profile/probe.go ad3f9cda0030
 G304 core/pkg/boundary/surface_registry.go e002b30f196c
@@ -419,7 +418,6 @@ G306 core/cmd/helm-ai-kernel/verify_cmd.go c969766683a0
 G306 core/cmd/semantic-model-gen/main.go 3a434e869278
 G306 core/cmd/semantic-model-gen/main.go 9379ef3a015b
 G306 core/pkg/connectors/sandbox/claudemanaged/adapter.go d2748c507c65
-G306 core/pkg/connectors/ton/acton/evidence.go 3151cca45c91
 G306 core/pkg/launchpad/promotion/derived.go 5cb015abcd17
 G306 core/pkg/launchpad/promotion/derived.go 5cb015abcd17
 G306 core/pkg/launchpad/promotion/derived.go f38075821ca2

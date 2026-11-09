@@ -25,6 +25,20 @@
 // into the gateway Pod only (R8); `helm-gateway receipt-key` prints the
 // public half a verifier trusts.
 //
+// With HELM_GATEWAY_TON_ACTON_BIN and HELM_GATEWAY_TON_ACTON_WORKSPACE (both
+// absolute) the gateway performs the Acton operations that do not run over
+// tenant files (version, doctor, env, doc, project new and init). Acton can
+// execute tenant-written code, so every other operation also needs
+// HELM_GATEWAY_TON_ACTON_ISOLATION_CMD, a JSON array that is the command prefix
+// running Acton under another uid or in a container with no access to the
+// gateway's credential files; without it they are not declared. The testnet
+// operations additionally need HELM_GATEWAY_TON_TESTNET_RPC_URL and
+// HELM_GATEWAY_TON_TESTNET_WALLETS_FILE (tenant, wallet_ref and an owner-only
+// file per testnet secret, outside the workspace), and take
+// HELM_GATEWAY_TON_TESTNET_MAX_SPEND as their per-action ceiling. These
+// settings are operator-provided; the chart does not mount them yet. Every
+// mainnet operation, and script.testnet, is refused at admission.
+//
 // Dispatch and Observe act on GitHub through the GitHub App whose files the
 // chart mounts into the gateway Pod only (R8): HELM_GATEWAY_GITHUB_APP_ID_FILE,
 // HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE and
@@ -617,8 +631,24 @@ func effectsFromEnv(getenv func(string) string, c *admission.Config) error {
 	}
 	if app == nil {
 		slog.Warn("no GitHub App is configured; every GitHub dispatch is NOT_SENT", "set", custody.EnvGitHubAppIDFile)
-		return nil
 	}
-	c.Credentials = app
+	ton, wallets, err := tonActonFromEnv(getenv)
+	if err != nil {
+		return err
+	}
+	if ton != nil {
+		c.Adapters = append(c.Adapters, ton)
+	}
+	// The default custody stays nil, not a typed nil, when no App is configured.
+	var github custody.Source
+	if app != nil {
+		github = app
+	}
+	switch {
+	case wallets == nil && app != nil:
+		c.Credentials = app
+	case wallets != nil:
+		c.Credentials = custody.Routed{Default: github, TON: wallets}
+	}
 	return nil
 }

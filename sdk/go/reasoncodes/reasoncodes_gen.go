@@ -307,6 +307,14 @@ const ErrTonLibraryMainnetRequiresApproval = "ERR_TON_LIBRARY_MAINNET_REQUIRES_A
 // spend ceilings
 const ErrTonLibrarySpendCeilingExceeded = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED"
 
+// ErrTonMainnetRefused DENY: TON mainnet operations are refused at admission:
+// the gateway performs local, fork and testnet Acton operations only
+const ErrTonMainnetRefused = "ERR_TON_MAINNET_REFUSED"
+
+// ErrTonTenantCodeWithKeyRefused DENY: TON Acton operation refused: it would
+// run tenant-authored code in a process that holds a signing key
+const ErrTonTenantCodeWithKeyRefused = "ERR_TON_TENANT_CODE_WITH_KEY_REFUSED"
+
 // ErrConnectorContractDrift DENY: Connector observed output shape drift and
 // failed closed
 const ErrConnectorContractDrift = "ERR_CONNECTOR_CONTRACT_DRIFT"
@@ -558,6 +566,8 @@ var all = [...]string{
 	ErrTonMutationThresholdFailed,
 	ErrTonLibraryMainnetRequiresApproval,
 	ErrTonLibrarySpendCeilingExceeded,
+	ErrTonMainnetRefused,
+	ErrTonTenantCodeWithKeyRefused,
 	ErrConnectorContractDrift,
 	ErrComputeGasExhausted,
 	ErrComputeTimeExhausted,

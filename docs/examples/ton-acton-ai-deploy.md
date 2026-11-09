@@ -1,40 +1,20 @@
 # TON Acton AI Deploy Example
 
-This sequence shows the intended OSS flow using typed HELM Acton actions.
+This sequence shows the flow helm-gateway supports for Acton: local checks, then
+a testnet publish. Effect types are `ton.acton.*`; see `controls.yaml` CTL-061.
 
-> Status: preview. The Acton connector is not linked into `core/cmd/helm-ai-kernel`,
-> so this flow does not run through a shipped binary today (`controls.yaml` CTL-045).
-
-1. An agent generates a Tolk contract.
-2. HELM runs:
-
-```sh
-connector.ton.acton.contract.build
-connector.ton.acton.contract.check
-connector.ton.acton.contract.format_check
-connector.ton.acton.contract.test
-```
-
-3. HELM records Acton receipts with source, manifest, stdout/stderr, and build
-   artifact hashes.
-4. The agent proposes testnet deployment through
-   `connector.ton.acton.script.testnet`.
-5. HELM allows only if policy permits testnet broadcast and the request has a
-   network grant, wallet ref, spend cap, sidecar script manifest, and expected
-   effects.
-6. The agent proposes mainnet deployment through
-   `connector.ton.acton.script.mainnet`.
-7. HELM returns `ESCALATE` with `ERR_TON_APPROVAL_CEREMONY_REQUIRED` until an
-   approval ceremony reference is present.
-8. After approval, HELM dispatches only the typed connector-built argv array.
-9. The resulting EvidencePack is checked with:
-
-```sh
-helm-ai-kernel verify pack <ton-acton-evidencepack>
-helm-ai-kernel replay --evidence <ton-acton-evidencepack> --verify
-```
-
-Expected receipts include `OK`, `ERR_TON_SPEND_CEILING_EXCEEDED`,
-`ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED`,
-`ERR_TON_APPROVAL_CEREMONY_REQUIRED`, and
-`ERR_CONNECTOR_CONTRACT_DRIFT` depending on the scenario.
+1. An agent writes a Tolk contract into its project in the tenant's workspace.
+2. The agent proposes, in order, `ton.acton.contract.build`,
+   `ton.acton.contract.check`, `ton.acton.contract.format_check` and
+   `ton.acton.contract.test`, each with target `ton-acton:<project>`. These run
+   only when the operator configured an isolation command, because Acton
+   executes the project's files.
+3. The gateway records a signed outcome receipt for each, with the typed
+   `ton.acton.result.v1` result (exit code, output and its hashes).
+4. The agent proposes `ton.acton.library.publish_testnet` with a `wallet_ref`, a
+   `max_ton_spend` and expected effects. The gateway publishes with its own
+   testnet wallet and reports SUCCEEDED only after the testnet RPC shows the
+   transaction.
+5. Proposing `ton.acton.script.testnet` is refused with
+   `ERR_TON_TENANT_CODE_WITH_KEY_REFUSED`, and any mainnet operation with
+   `ERR_TON_MAINNET_REFUSED`.

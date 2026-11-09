@@ -192,34 +192,6 @@ func TestOutputDriftFailsClosed(t *testing.T) {
 	}
 }
 
-func TestEvidencePackBuildsDeterministicContents(t *testing.T) {
-	env, err := NewEnvelope(map[string]any{
-		"acton_version":         "fixture-acton-1.0.0",
-		"tolk_compiler_version": "fixture-tolk-1.0.0",
-	}, ActionBuild, "sha256:intent", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	receipt, err := NewPreDispatchReceipt(env, PolicyDecision{Verdict: contracts.VerdictAllow, ReasonCode: ReasonOK, Dispatch: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := BuildEvidencePack(EvidencePackInput{
-		Envelope:   env,
-		Receipt:    receipt,
-		P0Ceilings: DefaultP0Ceilings(),
-		CreatedAt:  time.Unix(1700000000, 0).UTC(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, required := range []string{"manifest.json", "acton_command_envelope.json", "connector_contract_bundle.json", "receipts/tool_receipt.json", "replay_instructions.txt"} {
-		if _, ok := result.Contents[required]; !ok {
-			t.Fatalf("missing evidence entry %s", required)
-		}
-	}
-}
-
 func TestConnectorContractAndRegistryDescriptors(t *testing.T) {
 	bundle := ContractBundle()
 	if bundle.ConnectorID != ConnectorID || len(bundle.AllowedCommands) != len(commandSpecs) {
@@ -227,13 +199,6 @@ func TestConnectorContractAndRegistryDescriptors(t *testing.T) {
 	}
 	if !bundle.DriftDetection.FailClosed {
 		t.Fatal("drift detection must fail closed")
-	}
-	if err := ToolDescriptor().Validate(); err != nil {
-		t.Fatalf("tool descriptor invalid: %v", err)
-	}
-	release := ConnectorRelease("abc123", "sig://ton-acton")
-	if release.ConnectorID != ConnectorID || release.SandboxProfile == "" || len(release.SchemaRefs) == 0 {
-		t.Fatalf("connector release metadata incomplete: %#v", release)
 	}
 }
 

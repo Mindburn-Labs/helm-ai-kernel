@@ -23,10 +23,10 @@ build:
 test:
 	cd core && go test ./pkg/... -count=1 -covermode=atomic -coverprofile=coverage.out
 	cd core && go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $$3); printf("core/pkg coverage %.1f%%\n", $$3); if ($$3 + 0 < 40) { print "coverage below the 40.0% floor"; exit 1 } }'
-	cd core && go test ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
+	cd core && go test ./cmd/receipt_verify/... -count=1
 
 test-cli:
-	cd core && go test ./cmd/helm-ai-kernel ./cmd/release-permit-verify -count=1
+	cd core && go test ./cmd/helm-ai-kernel -count=1
 
 test-race:
 	cd core && go test ./pkg/... -count=1 -race

@@ -124,7 +124,7 @@ func TestRealActonSmokeTypedConnector(t *testing.T) {
 		"created_at_lamport":    uint64(1),
 	}
 	buildParams := cloneParams(baseParams)
-	buildReceipt := executeRealSmokeAction(ctx, t, connector, permit, ActionBuild, buildParams)
+	executeRealSmokeAction(ctx, t, connector, permit, ActionBuild, buildParams)
 
 	for _, action := range []ActionURN{ActionCheck, ActionFormatCheck, ActionTest} {
 		executeRealSmokeAction(ctx, t, connector, permit, action, cloneParams(baseParams))
@@ -133,36 +133,6 @@ func TestRealActonSmokeTypedConnector(t *testing.T) {
 	scriptParams["script_path"] = "scripts/deploy.tolk"
 	scriptParams["script_hash"] = scriptHash
 	executeRealSmokeAction(ctx, t, connector, permit, ActionScriptLocal, scriptParams)
-
-	if evidenceDir := os.Getenv("TON_ACTON_SMOKE_EVIDENCE_DIR"); evidenceDir != "" {
-		env, err := NewEnvelope(buildParams, ActionBuild, permit.IntentHash, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		env.PolicyHash = permit.PolicyHash
-		env.P0CeilingsHash = DefaultP0Ceilings().Hash()
-		env.SandboxGrantHash = grant.GrantHash
-		result, err := BuildEvidencePack(EvidencePackInput{
-			PackID:       "ton-acton-real-smoke",
-			ActorDID:     permit.IssuerID,
-			IntentID:     "intent-real-acton-smoke",
-			PolicyHash:   permit.PolicyHash,
-			Envelope:     env,
-			Receipt:      buildReceipt,
-			P0Ceilings:   DefaultP0Ceilings(),
-			SandboxGrant: grant,
-			CreatedAt:    time.Unix(1700000000, 0).UTC(),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.RemoveAll(evidenceDir); err != nil {
-			t.Fatal(err)
-		}
-		if err := WriteEvidencePackDir(evidenceDir, result); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func runActonNew(ctx context.Context, t *testing.T, actonBin, homeDir, projectRoot string) {

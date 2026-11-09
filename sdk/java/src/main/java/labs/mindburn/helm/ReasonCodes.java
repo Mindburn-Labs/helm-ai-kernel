@@ -256,6 +256,14 @@ public final class ReasonCodes {
     /** DENY: TON library publish or top-up exceeds spend ceilings */
     public static final String ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED";
 
+    /** DENY: TON mainnet operations are refused at admission: the gateway performs local, fork and
+    /** testnet Acton operations only */
+    public static final String ERR_TON_MAINNET_REFUSED = "ERR_TON_MAINNET_REFUSED";
+
+    /** DENY: TON Acton operation refused: it would run tenant-authored code in a process that holds
+    /** a signing key */
+    public static final String ERR_TON_TENANT_CODE_WITH_KEY_REFUSED = "ERR_TON_TENANT_CODE_WITH_KEY_REFUSED";
+
     /** DENY: Connector observed output shape drift and failed closed */
     public static final String ERR_CONNECTOR_CONTRACT_DRIFT = "ERR_CONNECTOR_CONTRACT_DRIFT";
 
@@ -476,6 +484,8 @@ public final class ReasonCodes {
             ERR_TON_MUTATION_THRESHOLD_FAILED,
             ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL,
             ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED,
+            ERR_TON_MAINNET_REFUSED,
+            ERR_TON_TENANT_CODE_WITH_KEY_REFUSED,
             ERR_CONNECTOR_CONTRACT_DRIFT,
             ERR_COMPUTE_GAS_EXHAUSTED,
             ERR_COMPUTE_TIME_EXHAUSTED,

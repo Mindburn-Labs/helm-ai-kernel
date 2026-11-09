@@ -1,9 +1,6 @@
 package acton
 
-import (
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tooling"
-)
+import ()
 
 const ConnectorVersion = "0.1.0"
 
@@ -79,37 +76,5 @@ func ContractBundle() ConnectorContractBundle {
 			FailClosed: true,
 		},
 		EffectClasses: effectClasses,
-	}
-}
-
-func ConnectorRelease(binaryHash, signatureRef string) connectors.ConnectorRelease {
-	return connectors.ConnectorRelease{
-		ConnectorID:    ConnectorID,
-		Name:           "TON Acton",
-		Version:        ConnectorVersion,
-		State:          connectors.ConnectorCandidate,
-		SchemaRefs:     []string{"protocols/json-schemas/connectors/ton/acton_command.schema.json", "protocols/json-schemas/connectors/ton/acton_receipt.schema.json"},
-		ExecutorKind:   connectors.ExecDigital,
-		SandboxProfile: "ton-acton",
-		DriftPolicyRef: "policy://ton-acton-drift-v1",
-		BinaryHash:     binaryHash,
-		SignatureRef:   signatureRef,
-	}
-}
-
-func ToolDescriptor() *tooling.ToolDescriptor {
-	return &tooling.ToolDescriptor{
-		ToolID:             ConnectorID,
-		Version:            ConnectorVersion,
-		Endpoint:           "helm://connectors/ton.acton",
-		AuthMethodClass:    "helm-pep-cpi-sandbox",
-		DeterministicFlags: []string{"typed-argv", "no-shell", "sandbox-grant-required", "fail-closed-drift"},
-		CostEnvelope:       tooling.CostEnvelope{MaxLatencyMs: 120000, MaxCostUnits: 1, RateLimitRPS: 1},
-		InputSchemaHash:    ContractBundle().SchemaArtifacts.CommandSchemaHash,
-		OutputSchemaHash:   ContractBundle().SchemaArtifacts.ReceiptSchemaHash,
-		Metadata: map[string]string{
-			"connector_id": ConnectorID,
-			"risk":         "T0-T3",
-		},
 	}
 }

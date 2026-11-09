@@ -39,34 +39,3 @@ func ClassifyAction(action ActionURN) (CommandSpec, bool) {
 	spec, ok := commandSpecs[action]
 	return spec, ok
 }
-
-func IsMoneyMoving(action ActionURN) bool {
-	spec, ok := ClassifyAction(action)
-	return ok && (spec.RequiresSpendCap || spec.Broadcast)
-}
-
-func IsIrreversible(action ActionURN) bool {
-	spec, ok := ClassifyAction(action)
-	return ok && spec.EffectClass == EffectIrreversible
-}
-
-func IsSecretRisk(action ActionURN) bool {
-	spec, ok := ClassifyAction(action)
-	return ok && spec.RequiresWallet
-}
-
-func RiskForNetwork(profile NetworkProfile, readOnly bool) RiskClass {
-	switch profile {
-	case NetworkMainnet:
-		if readOnly {
-			return RiskT2
-		}
-		return RiskT3
-	case NetworkTestnet:
-		return RiskT2
-	case NetworkForkMainnet, NetworkForkTestnet:
-		return RiskT2
-	default:
-		return RiskT1
-	}
-}

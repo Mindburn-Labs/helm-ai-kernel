@@ -316,12 +316,8 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts validateSkillProjecti
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts workflowStepDependencies
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators BuildExecResult
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators ClassifyEffect
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators ComputeReceiptFragment
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators ComputeSandboxSpecHash
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators ExecResult.Success
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators PrepareExecRequest
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators capExecOutput
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators computeFieldHash
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators effectiveExecTimeout
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators invalidExecEnvName
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators secretBearingEnvName

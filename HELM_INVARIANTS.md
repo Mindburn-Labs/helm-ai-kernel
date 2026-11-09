@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-85 controls: 46 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
+86 controls: 47 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -142,7 +142,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-042 | Guardian governance options not installed | observed-only | Retired (helm-tracker#266): the capability registry, task capability token, rollback-plan, session risk memory and privilege resolver Guardian options had no shipped installer and were deleted with the gates they enabled and the core/pkg/capability package. No code in this tree holds the rule. |
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter is a library that no shipped binary mounts or calls; its methods are in scripts/ci/deadcode-allowlist.txt. The Sentinel connector, Vaultak state bridge and AIP verifier were deleted (helm-tracker#266). |
 | CTL-044 | WASI sandbox containment | retired | Retired (helm-tracker#266): the WASI sandbox, sandbox broker, credential broker and policy enforcer were deleted; the shipped server never ran a pack. Only sandbox grant and backend-profile records remain in core/pkg/runtime/sandbox. |
-| CTL-045 | Connector contract pinning | observed-only | Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no caller and was deleted with its tests, so no shipped validator reports ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway instead checks each established observation against the effect type's result contract (admission.typedResult: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt UNKNOWN. The GitHub adapter linked into helm-gateway is the only shipped adapter that reports ERR_CONNECTOR_CONTRACT_DRIFT, from its own typed response checks; the preview TON Acton connector is not linked into any shipped binary. |
+| CTL-045 | Connector contract pinning | observed-only | Retired (helm-tracker#266): ValidateAndCanonicalizeToolOutput had no caller and was deleted with its tests, so no shipped validator reports ERR_CONNECTOR_CONTRACT_DRIFT from a pinned response schema. helm-gateway instead checks each established observation against the effect type's result contract (admission.typedResult: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt UNKNOWN. Two adapters linked into helm-gateway report ERR_CONNECTOR_CONTRACT_DRIFT from their own checks: the GitHub adapter, from its typed response checks, and the TON Acton adapter (CTL-061), which answers INDEFINITE when a testnet broadcast prints something other than its output contract. Neither check pins a response schema by hash, and the Acton output contract is the gateway's own expectation, not one qualified against a real Acton release. |
 | CTL-046 | Mandates only narrow on delegation | enforced | — |
 | CTL-047 | Production egress is deny-all | enforced | — |
 | CTL-048 | Kernel credentials never reach the model provider | enforced | — |
@@ -158,6 +158,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-058 | Kernel bounded retained work reassignment | enforced | — |
 | CTL-059 | Gateway signed decision and outcome receipts | enforced | — |
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
+| CTL-061 | TON Acton runs local, fork and testnet only, and never tenant code beside a key | enforced | — |
 
 ---
 

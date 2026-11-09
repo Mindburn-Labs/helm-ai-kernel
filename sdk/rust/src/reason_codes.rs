@@ -169,6 +169,12 @@ pub const ERR_TON_MUTATION_THRESHOLD_FAILED: &str = "ERR_TON_MUTATION_THRESHOLD_
 pub const ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL: &str = "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL";
 /// DENY: TON library publish or top-up exceeds spend ceilings
 pub const ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED: &str = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED";
+/// DENY: TON mainnet operations are refused at admission: the gateway performs local, fork and
+/// testnet Acton operations only
+pub const ERR_TON_MAINNET_REFUSED: &str = "ERR_TON_MAINNET_REFUSED";
+/// DENY: TON Acton operation refused: it would run tenant-authored code in a process that holds a
+/// signing key
+pub const ERR_TON_TENANT_CODE_WITH_KEY_REFUSED: &str = "ERR_TON_TENANT_CODE_WITH_KEY_REFUSED";
 /// DENY: Connector observed output shape drift and failed closed
 pub const ERR_CONNECTOR_CONTRACT_DRIFT: &str = "ERR_CONNECTOR_CONTRACT_DRIFT";
 /// DENY: Sandboxed execution exhausted configured compute or gas budget
@@ -346,6 +352,8 @@ pub const ALL: &[&str] = &[
     ERR_TON_MUTATION_THRESHOLD_FAILED,
     ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL,
     ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED,
+    ERR_TON_MAINNET_REFUSED,
+    ERR_TON_TENANT_CODE_WITH_KEY_REFUSED,
     ERR_CONNECTOR_CONTRACT_DRIFT,
     ERR_COMPUTE_GAS_EXHAUSTED,
     ERR_COMPUTE_TIME_EXHAUSTED,

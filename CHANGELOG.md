@@ -88,6 +88,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Fixed
+
+- `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+
 ## [0.12.0]
 
 ### Upgrade notes

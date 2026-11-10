@@ -15,7 +15,9 @@ Active tooling surface for the `helm-ai-kernel` project.
 ## Local Commands
 
 - `make check` runs what CI's required `ci / gate` check runs: the `merge`
-  profile from `scripts/ci/quality-gates.json` with every gate blocking.
+  profile from `scripts/ci/quality-gates.json` with every gate blocking. CI
+  splits it over four parallel jobs (`CHECK_SHARD=<i>/4`);
+  `python3 scripts/ci/quality.py shards merge 4` prints which gates each runs.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
 - `make quality-pr` runs the Make-first PR quality profile from
   `scripts/ci/quality-gates.json`.
@@ -37,7 +39,9 @@ Active tooling surface for the `helm-ai-kernel` project.
 
 `scripts/ci/quality.py` is the registry runner for HELM AI Kernel quality profiles.
 It supports profile execution, path impact filtering, Advisory gates, timeouts,
-and GitHub Actions annotations. The registry lives in
+GitHub Actions annotations and sharding: `run <profile> --shard <i>/<n>` runs
+one of `n` parts balanced by each gate's `seconds`, and the parts together run
+every gate exactly once. The registry lives in
 `scripts/ci/quality-gates.json`; validate it with `make quality-self-test`
 before changing profiles.
 

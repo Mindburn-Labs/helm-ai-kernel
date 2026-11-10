@@ -22,6 +22,17 @@ make quality-list
 make quality-explain CHECK=json-schemas
 ```
 
+CI runs `make check` as four parallel jobs. Each sets `CHECK_SHARD=<i>/4` and
+runs one part of the `merge` profile, balanced by the `seconds` recorded per
+gate in the registry; the required `ci / gate` check needs all four. Locally,
+with `CHECK_SHARD` unset, `make check` runs every gate. To see or reproduce a
+part:
+
+```bash
+python3 scripts/ci/quality.py shards merge 4   # which gates each part runs
+CHECK_SHARD=2/4 make check                     # run one part
+```
+
 Use focused gates when working on one surface:
 
 ```bash

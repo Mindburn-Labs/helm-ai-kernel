@@ -248,6 +248,7 @@
   "gates": [
     {
       "id": "core-module-closure",
+      "seconds": 18,
       "title": "Cold standalone Core module dependency closure",
       "command": "make test-core-module-closure",
       "timeout_seconds": 1200,
@@ -372,6 +373,7 @@
     },
     {
       "id": "go-lint",
+      "seconds": 25,
       "title": "Go lint and formatting",
       "command": "make lint",
       "timeout_seconds": 900,
@@ -385,6 +387,7 @@
     },
     {
       "id": "build",
+      "seconds": 6,
       "title": "Core CLI build",
       "command": "make build",
       "timeout_seconds": 900,
@@ -396,6 +399,7 @@
     },
     {
       "id": "go-test",
+      "seconds": 61,
       "title": "Core Go tests",
       "command": "make test",
       "timeout_seconds": 1200,
@@ -408,6 +412,7 @@
     },
     {
       "id": "postgres-proofs",
+      "seconds": 390,
       "title": "Postgres-gated proofs",
       "description": "Runs every proof in scripts/ci/postgres-proofs.txt against PostgreSQL 16 (HELM_TEST_POSTGRES_URL, else a disposable UTC cluster) and fails on a skip, a failure, a short count, an unlisted gated test or a missing database. Positive controls first prove the runner refuses a run without a database and an unlisted test.",
       "command": "make postgres-proofs",
@@ -424,6 +429,7 @@
     },
     {
       "id": "go-race",
+      "seconds": 187,
       "title": "Core Go race tests",
       "command": "make test-race",
       "timeout_seconds": 1800,
@@ -434,6 +440,7 @@
     },
     {
       "id": "command-tests",
+      "seconds": 43,
       "title": "CLI command tests",
       "command": "cd core && go test ./cmd/helm-ai-kernel -count=1",
       "timeout_seconds": 900,
@@ -444,6 +451,7 @@
     },
     {
       "id": "verify-fixtures",
+      "seconds": 33,
       "title": "Golden fixture verification",
       "command": "make verify-fixtures",
       "timeout_seconds": 300,
@@ -504,6 +512,7 @@
     },
     {
       "id": "crucible",
+      "seconds": 10,
       "title": "Use-case crucible",
       "command": "make crucible",
       "timeout_seconds": 1200,
@@ -525,6 +534,7 @@
     },
     {
       "id": "python-sdk",
+      "seconds": 7,
       "title": "Python SDK tests",
       "command": "make test-sdk-py",
       "timeout_seconds": 900,
@@ -547,6 +557,7 @@
     },
     {
       "id": "rust-sdk",
+      "seconds": 29,
       "title": "Rust SDK tests",
       "command": "make test-sdk-rust",
       "timeout_seconds": 900,
@@ -557,6 +568,7 @@
     },
     {
       "id": "java-sdk",
+      "seconds": 18,
       "title": "Java SDK tests",
       "command": "make test-sdk-java",
       "timeout_seconds": 900,
@@ -594,6 +606,7 @@
     },
     {
       "id": "sdk-openapi-check",
+      "seconds": 17,
       "title": "OpenAPI SDK contract drift",
       "command": "make sdk-openapi-check",
       "timeout_seconds": 1200,
@@ -606,6 +619,7 @@
     },
     {
       "id": "codegen-drift",
+      "seconds": 9,
       "title": "Generated contract drift",
       "command": "make codegen-check",
       "timeout_seconds": 1200,
@@ -742,6 +756,7 @@
     },
     {
       "id": "deployment-smoke",
+      "seconds": 158,
       "title": "Docker, Compose, and chart smoke",
       "command": "make deployment-smoke",
       "timeout_seconds": 2400,
@@ -795,6 +810,7 @@
     },
     {
       "id": "release-smoke",
+      "seconds": 180,
       "title": "Release reproducibility and evidence smoke",
       "command": "make release-smoke",
       "timeout_seconds": 2400,
@@ -878,6 +894,7 @@
     },
     {
       "id": "gosec",
+      "seconds": 30,
       "title": "gosec (golangci-lint)",
       "description": "gosec over core and sdk/go. A fixture positive control runs first; findings not in scripts/ci/gosec-allowlist.txt, and allowlisted findings that no longer occur, fail.",
       "command": "bash scripts/ci/security_gates.sh gosec",
@@ -885,6 +902,7 @@
     },
     {
       "id": "govulncheck",
+      "seconds": 26,
       "title": "govulncheck in every Go module",
       "description": "Fails on any vulnerability whose vulnerable symbol is reachable, in any tracked go.mod. A fixture that calls a known-vulnerable x/text symbol must be flagged first.",
       "command": "bash scripts/ci/security_gates.sh govulncheck",
@@ -892,6 +910,7 @@
     },
     {
       "id": "pip-audit",
+      "seconds": 6,
       "title": "pip-audit of the Python SDK runtime requirements",
       "description": "Audits the hash-pinned sdk/python/requirements-runtime.txt. A known-vulnerable pin must be flagged first.",
       "command": "bash scripts/ci/security_gates.sh pip-audit",
@@ -997,6 +1016,7 @@
     },
     {
       "id": "deadcode",
+      "seconds": 15,
       "title": "Unreachable code in shipped binaries",
       "description": "golang.org/x/tools deadcode from native deadcode-roots.txt and js/wasm deadcode-wasm-roots.txt. Target-specific positive controls run first; findings combine only across targets that compile the same declaration. New or stale frozen allowlist entries fail.",
       "command": "bash scripts/ci/deadcode_gate.sh",
@@ -1034,6 +1054,7 @@
     },
     {
       "id": "reason-code-reachability",
+      "seconds": 7,
       "title": "Reason-code reachability",
       "command": "python3 scripts/ci/check_reason_code_reachability.py",
       "timeout_seconds": 300,
@@ -1044,6 +1065,7 @@
     },
     {
       "id": "go-module-tests",
+      "seconds": 75,
       "title": "Every Go module tested without the workspace",
       "command": "bash scripts/ci/go_module_tests.sh",
       "timeout_seconds": 2400,
@@ -1094,6 +1116,7 @@
     },
     {
       "id": "sdk-drift",
+      "seconds": 22,
       "title": "SDK regenerate-and-diff",
       "command": "make sdk-gen-check",
       "timeout_seconds": 1200,
@@ -1106,6 +1129,7 @@
     },
     {
       "id": "kind-smoke",
+      "seconds": 184,
       "title": "kind install smoke",
       "command": "make kind-smoke",
       "timeout_seconds": 2400,
@@ -1118,6 +1142,7 @@
     },
     {
       "id": "docs-openapi-parity",
+      "seconds": 40,
       "title": "Public docs and OpenAPI parity",
       "command": "make docs-openapi-parity",
       "timeout_seconds": 600,
@@ -1129,6 +1154,7 @@
     },
     {
       "id": "gate-self-tests",
+      "seconds": 7,
       "title": "Gate script self-tests",
       "command": "python3 -m unittest discover -s scripts/ci -p '*_test.py' && python3 -m unittest discover -s scripts/ci -p 'test_*.py'",
       "timeout_seconds": 600,
@@ -1158,6 +1184,7 @@
     },
     {
       "id": "tcb-coverage",
+      "seconds": 8,
       "title": "TCB package coverage floors",
       "command": "make coverage-tcb",
       "timeout_seconds": 1200,
@@ -1169,6 +1196,7 @@
     },
     {
       "id": "control-registry",
+      "seconds": 263,
       "title": "Control registry and generated coverage map",
       "description": "Binding rule R1 (HELM-746). Resolves the invariant hints, self-tests on planted registry entries, then fails on an invalid controls.yaml entry, an enforced entry point unreachable from scripts/ci/deadcode-roots.txt, a named test that go test -list does not report, a removal mutation the tests survive, or a HELM_INVARIANTS.md or coverage-map.json that differs from the registry.",
       "command": "make controls-check",

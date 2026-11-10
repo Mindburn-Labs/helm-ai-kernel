@@ -305,8 +305,12 @@ prepare-version:
 # this on every pull request, merge group and push to main. It runs the merge
 # profile of scripts/ci/quality-gates.json with every gate blocking. CI installs
 # the tools it needs with scripts/ci/install_check_tools.sh.
+#
+# CI runs it in parallel jobs: each sets CHECK_SHARD=<i>/<N> and runs the i-th
+# part of the profile, and `ci / gate` needs all N. Unset, as it is locally,
+# `make check` runs every gate. `$(QUALITY) shards merge 4` prints the split.
 check:
-	$(QUALITY) run merge --strict
+	$(QUALITY) run merge --strict $(if $(CHECK_SHARD),--shard $(CHECK_SHARD))
 
 quality-pr:
 	$(QUALITY) run pr --impact

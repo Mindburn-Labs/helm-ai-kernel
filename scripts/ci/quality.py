@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -62,6 +63,11 @@ EXPECTED_PROFILES = {
     "flake",
     "impact",
 }
+
+
+# Balancing weight for a gate with no measured `seconds` in the registry.
+DEFAULT_GATE_SECONDS = 5.0
+MAX_SHARDS = 8
 
 
 @dataclass
@@ -214,6 +220,47 @@ def profile_gate_ids(registry: dict[str, Any], profile_name: str) -> list[str]:
     return [str(gate_id) for gate_id in gates]
 
 
+def gate_seconds(gate: dict[str, Any] | None) -> float:
+    """Typical duration of a gate, used only to balance shards."""
+    if gate is None:
+        return DEFAULT_GATE_SECONDS
+    return float(gate.get("seconds", DEFAULT_GATE_SECONDS))
+
+
+def parse_shard(raw: str) -> tuple[int, int]:
+    match = re.fullmatch(r"([1-9][0-9]*)/([1-9][0-9]*)", raw.strip())
+    if not match or int(match.group(1)) > int(match.group(2)):
+        raise SystemExit(f"invalid shard {raw!r}: expected <index>/<count>, for example 2/4")
+    return int(match.group(1)), int(match.group(2))
+
+
+def shard_plan(gates: dict[str, dict[str, Any]], gate_ids: list[str], count: int) -> list[list[str]]:
+    """Split a profile into `count` parts of similar duration.
+
+    Every listed gate lands in exactly one part, so running all parts runs the
+    profile. The split depends only on the registry: the longest gate goes to
+    the lightest part so far, ties go to the lower index, and each part keeps
+    the profile's order.
+    """
+    position = {gate_id: index for index, gate_id in reversed(list(enumerate(gate_ids)))}
+    loads = [0.0] * count
+    parts: list[list[str]] = [[] for _ in range(count)]
+    for index in sorted(range(len(gate_ids)), key=lambda i: (-gate_seconds(gates.get(gate_ids[i])), i)):
+        target = min(range(count), key=lambda part: (loads[part], part))
+        parts[target].append(gate_ids[index])
+        loads[target] += gate_seconds(gates.get(gate_ids[index]))
+    return [sorted(part, key=position.__getitem__) for part in parts]
+
+
+def print_shards(registry: dict[str, Any], profile_name: str, count: int) -> None:
+    gates = gates_by_id(registry)
+    for index, part in enumerate(shard_plan(gates, profile_gate_ids(registry, profile_name), count), start=1):
+        total = sum(gate_seconds(gates.get(gate_id)) for gate_id in part)
+        print(f"shard {index}/{count}: {len(part)} gates, about {total:.0f}s")
+        for gate_id in part:
+            print(f"  {gate_id:<28} {gate_seconds(gates.get(gate_id)):.0f}s")
+
+
 def run_gate(gate: dict[str, Any], strict: bool, env: dict[str, str]) -> GateResult:
     gate_id = str(gate["id"])
     command = str(gate.get("command", "")).strip()
@@ -264,6 +311,13 @@ def run_selection(registry: dict[str, Any], args: argparse.Namespace) -> int:
         selected_ids = profile_gate_ids(registry, args.selection)
         selection_name = args.selection
 
+    if args.shard:
+        index, count = parse_shard(args.shard)
+        total = len(selected_ids)
+        selected_ids = shard_plan(gates, selected_ids, count)[index - 1]
+        selection_name = f"{selection_name} shard {index}/{count}"
+        print(f"shard {index}/{count}: {len(selected_ids)} of {total} gates; the other shards run the rest")
+
     strict = strict_enabled(args)
     impact_files = changed_files() if args.impact else None
     if args.impact:
@@ -273,7 +327,7 @@ def run_selection(registry: dict[str, Any], args: argparse.Namespace) -> int:
             print(f"impact filtering: {len(impact_files)} changed path(s) detected")
 
     env = os.environ.copy()
-    env.setdefault("QUALITY_PROFILE", selection_name)
+    env.setdefault("QUALITY_PROFILE", args.selection if not args.gate else "custom")
     env["QUALITY_STRICT"] = "1" if strict else env.get("QUALITY_STRICT", "0")
 
     results: list[GateResult] = []
@@ -289,7 +343,7 @@ def run_selection(registry: dict[str, Any], args: argparse.Namespace) -> int:
             continue
         results.append(run_gate(gate, strict=strict, env=env))
 
-    print("\nQuality summary:")
+    print(f"\nQuality summary ({selection_name}):")
     for result in results:
         print(f"  {result.gate_id:<28} {result.status:<16} {result.elapsed:.1f}s")
 
@@ -339,6 +393,9 @@ def self_test(registry: dict[str, Any]) -> int:
             failures.append(f"{gate_id}: paths must be a list")
         if "advisory" in gate and not isinstance(gate["advisory"], bool):
             failures.append(f"{gate_id}: advisory must be a boolean")
+        seconds = gate.get("seconds", 1)
+        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or seconds <= 0:
+            failures.append(f"{gate_id}: seconds must be a positive number")
 
     for gate_id in sorted(EXPECTED_GATE_IDS - gate_ids):
         failures.append(f"missing required gate id: {gate_id}")
@@ -357,6 +414,16 @@ def self_test(registry: dict[str, Any]) -> int:
         for gate_id in profile_gates:
             if gate_id not in gate_ids:
                 failures.append(f"profile {profile_id} references unknown gate: {gate_id}")
+        if len(set(profile_gates)) != len(profile_gates):
+            failures.append(f"profile {profile_id} lists a gate more than once")
+        if failures:
+            continue
+        # Sharding must never drop or repeat a gate, whatever the count.
+        indexed = gates_by_id(registry)
+        for count in range(1, MAX_SHARDS + 1):
+            parts = shard_plan(indexed, [str(gate_id) for gate_id in profile_gates], count)
+            if sorted(gate_id for part in parts for gate_id in part) != sorted(map(str, profile_gates)):
+                failures.append(f"profile {profile_id}: {count} shards do not run every gate exactly once")
 
     if failures:
         print("Quality registry self-test failed:")
@@ -382,6 +449,16 @@ def main() -> int:
     run.add_argument("--gate", action="append", help="Run one gate id; may be repeated")
     run.add_argument("--impact", action="store_true", help="Skip path-scoped gates that are not impacted")
     run.add_argument("--strict", action="store_true", help="Treat advisory gates as blocking")
+    run.add_argument(
+        "--shard",
+        default="",
+        metavar="INDEX/COUNT",
+        help="Run one part of the selection; the COUNT parts together run every gate exactly once",
+    )
+
+    shards = subparsers.add_parser("shards", help="Show how a profile splits into shards")
+    shards.add_argument("profile")
+    shards.add_argument("count", type=int, choices=range(1, MAX_SHARDS + 1))
 
     subparsers.add_parser("self-test", help="Validate the quality registry")
 
@@ -403,6 +480,9 @@ def main() -> int:
         return 0
     if args.command == "run":
         return run_selection(registry, args)
+    if args.command == "shards":
+        print_shards(registry, args.profile, args.count)
+        return 0
     if args.command == "self-test":
         return self_test(registry)
     raise SystemExit(f"unknown command: {args.command}")

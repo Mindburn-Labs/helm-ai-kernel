@@ -222,3 +222,46 @@ func TestVerifyReceiptCLIJSONReportsAdmissible(t *testing.T) {
 		t.Fatalf("json receipt_id = %v, want %s", report["receipt_id"], stored.ReceiptID)
 	}
 }
+
+// TestVerifyReceiptCLIRefusesCaseVariantShadowMembers is helm-tracker#305
+// defect A on this command. The signed DENY receipt is edited, with no key, so
+// that its exactly-named verdict says ALLOW while "Verdict", further down,
+// restores the signed value for a decoder that folds letter case. `jq
+// .verdict` reads ALLOW from that file; the command must not call it
+// admissible.
+func TestVerifyReceiptCLIRefusesCaseVariantShadowMembers(t *testing.T) {
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	raw, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shadowed := strings.Replace(string(raw), `"verdict": "DENY"`, `"verdict": "ALLOW"`, 1)
+	if shadowed == string(raw) {
+		t.Fatal("receipt fixture did not contain signed DENY verdict")
+	}
+	shadowed = strings.TrimRight(shadowed, " \n")
+	shadowed = shadowed[:len(shadowed)-1] + `,"Verdict":"DENY"}`
+	var exact map[string]any
+	if err := json.Unmarshal([]byte(shadowed), &exact); err != nil {
+		t.Fatal(err)
+	}
+	if exact["verdict"] != "ALLOW" {
+		t.Fatalf("the planted file does not read ALLOW by exact name; the case proves nothing: %v", exact["verdict"])
+	}
+	shadowedPath := filepath.Join(t.TempDir(), "shadowed-verdict.json")
+	if err := os.WriteFile(shadowedPath, []byte(shadowed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "verify", "receipt",
+		"--receipt", shadowedPath,
+		"--trusted-public-key-file", keyPath,
+	}, &stdout, &stderr)
+	if code == 0 || strings.Contains(stdout.String(), "ADMISSIBLE") {
+		t.Fatalf("a file that reads ALLOW by exact name was verified: exit %d stdout=%s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "letter case") {
+		t.Fatalf("the refusal must name the letter-case collision: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+}

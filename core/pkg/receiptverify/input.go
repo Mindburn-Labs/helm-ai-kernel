@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -21,6 +22,12 @@ type rawReceiptInput struct {
 // ParseBundle accepts the three shapes a receipt reaches a counterparty in.
 // Shape selection happens once and retains each receipt's raw object until the
 // receipt.v5 signed-member contract has been checked.
+//
+// Member names are matched exactly. A member that is a receipt, bundle or
+// permit member in another letter case is refused, as are two members of one
+// object that differ only in letter case: encoding/json would bind either to
+// the struct field, and the parsed receipt would differ from what a reader
+// matching names exactly takes from the same bytes.
 func ParseBundle(raw []byte) (Bundle, error) {
 	input, err := normalizeReceiptInput(raw)
 	if err != nil {
@@ -61,6 +68,9 @@ func normalizeReceiptInput(raw []byte) (rawReceiptInput, error) {
 	var input rawReceiptInput
 	switch trimmed[0] {
 	case '[':
+		if err := validateJSON(trimmed, reflect.TypeFor[[]*contracts.Receipt]()); err != nil {
+			return rawReceiptInput{}, err
+		}
 		if err := json.Unmarshal(trimmed, &input.receipts); err != nil {
 			return rawReceiptInput{}, fmt.Errorf("parse receipt array: %w", err)
 		}
@@ -71,9 +81,15 @@ func normalizeReceiptInput(raw []byte) (rawReceiptInput, error) {
 		}
 		receipts, isBundle := object["receipts"]
 		if !isBundle {
+			if err := validateJSON(trimmed, reflect.TypeFor[contracts.Receipt]()); err != nil {
+				return rawReceiptInput{}, err
+			}
 			input.receipts = []json.RawMessage{append(json.RawMessage(nil), trimmed...)}
 			input.single = true
 			return input, nil
+		}
+		if err := validateJSON(trimmed, reflect.TypeFor[Bundle]()); err != nil {
+			return rawReceiptInput{}, err
 		}
 		if err := json.Unmarshal(receipts, &input.receipts); err != nil {
 			return rawReceiptInput{}, fmt.Errorf("parse receipts bundle: receipts: %w", err)

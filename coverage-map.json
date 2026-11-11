@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 87,
-    "enforced": 48,
+    "total": 88,
+    "enforced": 49,
     "observed_only": 25,
     "unmanaged": 14,
     "retired_invariants": 13,
@@ -5255,6 +5255,182 @@
           "file": "core/pkg/gateway/runtime/sandbox.go",
           "tests": [
             "core/pkg/gateway/runtime.TestSandboxEffectsAreWiredFromTheConfigurationFile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-064",
+      "title": "Receipt verifiers match member names exactly and do not check unversioned receipts",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A receipt verifier checks the document its reader reads, and checks a legacy receipt only when asked to (helm-tracker#305). receiptverify.ParseBundle, which receipt_verify and the WASM verifier parse every input with, refuses two members of one object whose names are equal under the case folding encoding/json matches struct fields with, at every depth, and a member that is a receipt, bundle, permit or gateway-binding member in another letter case; those member names are read from the json tags of the Go types it decodes into. A receipt with no signature_version is not checked. VerifyBundleWith answers with one error and no checks unless Options.AllowLegacyV4 is set, receipt_verify exits 2 without --allow-legacy-v4, and VerifyJSON, which the WASM verifier calls and which has no opt-in, reports UNVERIFIABLE. In core/pkg/crypto, ReceiptVerifyPayload, VerifyReceiptProfile, VerifyReceiptSignature and every VerifyReceipt method return ErrLegacyReceiptRefused unless given AllowLegacyReceiptPreimages, which no shipped caller passes: the receipt signature check of POST /api/v1/evidence/verify reports an unversioned receipt as not checked (UNVERIFIABLE). An opted-in receiptverify result counts legacy_receipts, and its identity check says a legacy signature does not cover verdict, tool_name or timestamp. The integrity check of receiptverify compares nothing and reports not_applicable, never a pass.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/receiptverify.ParseBundle",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ValidateJSONStructure",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.VerifyBundleWith",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.VerifyJSON",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.LegacyV4Refusal",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.ReceiptVerifyPayload",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.VerifyReceiptProfile",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.VerifyReceiptSignature",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.checkEvidenceReceiptSignatures",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "receipt_verify --allow-legacy-v4 (receiptverify.Options.AllowLegacyV4) and, for Go callers of core/pkg/crypto, AllowLegacyReceiptPreimages. Neither has an environment variable, and both default to refusing."
+      ],
+      "protected_operations": [
+        "receipt_verify --receipt, receiptverify.VerifyJSON in the WASM verifier, helm-ai-kernel verify receipt, and the receipt signature check of POST /api/v1/evidence/verify."
+      ],
+      "bypass_assumptions": [
+        "Under --allow-legacy-v4 the signature of a receipt.v5 receipt replayed as a legacy receipt verifies: the legacy preimage has no domain separation. The opted-in output says what a legacy signature does not cover; it cannot tell a replay from a receipt issued before receipt.v5.",
+        "Member names are matched exactly only where receiptverify decodes a Go struct. Keys of maps and free-form values (metadata, evidence, subject) are data, and a member no decoded type names is ignored as before.",
+        "helm-ai-kernel verify receipt and POST /api/v1/evidence/verify decode a receipt with encoding/json after their own checks. verify receipt refuses members that differ only in letter case through ParseReceiptDocument; a single member outside the signed envelope written in another letter case is still bound there. The evidence route relies on the bundle seal for the receipt bytes.",
+        "The dev-local MCP proof path of the EvidencePack verifier (core/pkg/verifier) still reads an unversioned receipt against the key its pack carries. That result is self-attested.",
+        "A receipt.v5 signature covers 13 members. The other members of a single receipt, or of the last receipt of a chain, are covered by nothing; the integrity check says so and does not fail."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/receiptverify.TestFrozenReceiptStillVerifies",
+          "core/pkg/receiptverify.TestFrozenGatewayChainStillVerifies",
+          "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo",
+          "core/cmd/receipt_verify.TestAllowLegacyV4ChecksALegacyReceiptAndSaysSo",
+          "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+          "core/pkg/crypto.TestReceiptPQHybridGoldenVectors"
+        ],
+        "forbidden": [
+          "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+          "core/pkg/receiptverify.TestCaseFoldedDuplicateMembersAreRejectedAtEveryDepth",
+          "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+          "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly",
+          "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+          "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+          "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified",
+          "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+          "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+          "core/pkg/crypto.TestReceiptPQHybridVectorsNeedTheLegacyOptIn",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers"
+        ],
+        "removal": [
+          "core/pkg/receiptverify.TestCaseFoldedDuplicateMembersAreRejectedAtEveryDepth",
+          "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+          "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+          "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly",
+          "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+          "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo",
+          "core/pkg/receiptverify.TestIntegrityCheckSaysOnlyWhatItChecked",
+          "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+          "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+          "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified",
+          "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+          "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+          "core/pkg/crypto.TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers"
+        ],
+        "bypass": [
+          "core/pkg/receiptverify.TestOptedInReplayIsValidAndSaysWhatItDoesNotCover",
+          "core/pkg/receiptverify.TestLegacyReceiptInAVersionedChainIsCounted",
+          "core/pkg/receiptverify.TestIntegrityDetailIsTrueOfAChain",
+          "core/pkg/receiptverify.TestFoldNameMatchesEncodingJSON",
+          "core/pkg/receiptverify.TestMemberNamesAreTheOnesEncodingJSONBinds",
+          "core/pkg/receiptverify.TestMembersOfFollowsEncodingJSONFieldRules",
+          "core/pkg/receiptverify.TestCorpusHardeningDocumentsAreWhatTheirNamesSay",
+          "core/cmd/receipt_verify.TestHumanVerdictDoesNotClaimTheWholeReceiptWasSigned"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestCaseFoldedDuplicateMembersAreRejectedAtEveryDepth",
+            "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+            "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+            "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+            "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+            "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/json.go",
+          "tests": [
+            "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt"
+          ]
+        },
+        {
+          "file": "core/cmd/receipt_verify/main.go",
+          "tests": [
+            "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+            "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+            "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical_v5.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+            "core/pkg/crypto.TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/contract_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestIntegrityCheckSaysOnlyWhatItChecked"
           ]
         }
       ]

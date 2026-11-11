@@ -21,11 +21,18 @@
 //
 // # What a verdict here does and does not mean
 //
-// Verification answers exactly one question: were these bytes signed by the
-// key you supplied, and are they internally consistent? It does not tell you
-// that the signing key belongs to anyone in particular. Binding a key to an
+// Verification answers exactly one question: was the signed envelope of each
+// receipt signed by a key you supplied, and do the receipts agree with one
+// another? The envelope is 13 members of a receipt.v5 receipt, not the whole
+// receipt, and each check says what it covers. It does not tell you that the
+// signing key belongs to anyone in particular. Binding a key to an
 // organisation is the caller's problem and deliberately stays outside this
 // package — see TrustRoot.
+//
+// Two kinds of input are refused before any check runs. A document whose
+// member names differ from the receipt's only in letter case does not parse
+// (ParseBundle), and a receipt with no signature_version, a legacy receipt, is
+// not checked unless the caller opts in (Options.AllowLegacyV4).
 package receiptverify
 
 import (
@@ -36,6 +43,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -56,8 +64,13 @@ const (
 	// preimage using a caller-supplied key. It proves the holder of that key
 	// signed these bytes. It does not prove who that holder is.
 	CheckIdentity CheckName = "identity"
-	// CheckIntegrity recomputes the canonical preimage and the chain hash and
-	// confirms neither was altered after signing.
+	// CheckIntegrity recomputes each receipt's canonical chain hash. A receipt
+	// does not carry its own hash, so the check compares the result with
+	// nothing and never passes: it fails when a receipt cannot be canonically
+	// hashed and is not_applicable otherwise. What pins a receipt is its
+	// signature, over the members of the signed envelope (CheckIdentity), and
+	// its successor's signed prev_hash, over the whole receipt (CheckClosure).
+	// A single receipt, and the last of a chain, has no successor.
 	CheckIntegrity CheckName = "integrity"
 	// CheckPolicy confirms the receipt's policy_hash and verdict are inside the
 	// signed envelope, so the governance meaning cannot be rewritten without
@@ -119,6 +132,12 @@ type Result struct {
 	KeyID    string `json:"key_id,omitempty"`
 	Receipts int    `json:"receipts"`
 	Permits  int    `json:"permits,omitempty"`
+	// LegacyReceipts counts the receipts with no signature_version, checked
+	// only under Options.AllowLegacyV4. Their signature covers the eight
+	// members of the legacy v4 preimage and nothing else: not verdict, not
+	// tool_name, not timestamp. A Valid result says nothing about those
+	// members of such a receipt.
+	LegacyReceipts int `json:"legacy_receipts,omitempty"`
 	// GatewayReceipts counts the receipts whose session_id names a gateway
 	// receipt chain (helm-gateway:...). BindingsChecked counts the receipts
 	// whose binding document the binding check verified; it is 0 unless that
@@ -193,8 +212,9 @@ func ClassicalEd25519MetadataCompatible(profile, algorithm string) bool {
 // and null values that encoding/json would otherwise coerce to Go zero values.
 //
 // A missing signature_version is the only route to the retained legacy
-// preimage. Once present, it must be the non-empty string "receipt.v5", whose
-// 13 signed members must all be present with their exact wire types.
+// preimage, which the verifier checks only under Options.AllowLegacyV4. Once
+// present, it must be the non-empty string "receipt.v5", whose 13 signed
+// members must all be present with their exact wire types.
 //
 // The decoded document is returned with semantic errors when possible so an
 // EvidencePack inventory can count a signed-but-invalid receipt as invalid
@@ -290,10 +310,25 @@ func isManagedAgentReceipt(document map[string]any) bool {
 
 // ValidateJSONStructure rejects duplicate object members and trailing JSON
 // values before encoding/json can collapse them during typed decoding.
+//
+// Two members of one object are duplicates when their names are equal under
+// the case folding encoding/json matches struct fields with (foldName), at
+// every depth: "verdict" and "Verdict" are one name written twice.
 func ValidateJSONStructure(raw []byte) error {
+	return validateJSON(raw, nil)
+}
+
+// validateJSON is ValidateJSONStructure for a document that is decoded into
+// target. Wherever a Go struct is decoded, a member whose name is a struct
+// member's name in another letter case is refused: encoding/json would bind
+// it to that field, so the verifier would act on a value that a reader
+// matching names exactly does not see. Member names inside maps, interface
+// values and self-decoding types are data and are left alone. A nil target
+// checks structure only.
+func validateJSON(raw []byte, target reflect.Type) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	if err := scanJSONValue(decoder, "$"); err != nil {
+	if err := scanJSONValue(decoder, "$", target); err != nil {
 		return err
 	}
 	if token, err := decoder.Token(); err == nil {
@@ -304,7 +339,7 @@ func ValidateJSONStructure(raw []byte) error {
 	return nil
 }
 
-func scanJSONValue(decoder *json.Decoder, path string) error {
+func scanJSONValue(decoder *json.Decoder, path string, target reflect.Type) error {
 	token, err := decoder.Token()
 	if err != nil {
 		return fmt.Errorf("invalid receipt JSON at %s: %w", path, err)
@@ -313,9 +348,20 @@ func scanJSONValue(decoder *json.Decoder, path string) error {
 	if !ok {
 		return nil
 	}
+	target = decodeTarget(target)
 	switch delim {
 	case '{':
-		seen := map[string]struct{}{}
+		var members *memberSet
+		var value reflect.Type
+		if target != nil {
+			switch target.Kind() {
+			case reflect.Struct:
+				members = membersOf(target)
+			case reflect.Map:
+				value = target.Elem()
+			}
+		}
+		seen := map[string]string{}
 		for decoder.More() {
 			keyToken, err := decoder.Token()
 			if err != nil {
@@ -325,11 +371,23 @@ func scanJSONValue(decoder *json.Decoder, path string) error {
 			if !ok {
 				return fmt.Errorf("invalid receipt object member at %s", path)
 			}
-			if _, duplicate := seen[key]; duplicate {
-				return fmt.Errorf("duplicate object member %q at %s", key, path)
+			folded := foldName(key)
+			if first, duplicate := seen[folded]; duplicate {
+				if first == key {
+					return fmt.Errorf("duplicate object member %q at %s", key, path)
+				}
+				return fmt.Errorf("duplicate object member %q at %s: it differs from %q only in letter case", key, path, first)
 			}
-			seen[key] = struct{}{}
-			if err := scanJSONValue(decoder, path+"."+key); err != nil {
+			seen[folded] = key
+			if members != nil {
+				var exact bool
+				if value, exact = members.exact[key]; !exact {
+					if known, variant := members.folded[folded]; variant {
+						return fmt.Errorf("member %q at %s is the member %q in another letter case; member names are matched exactly", key, path, known)
+					}
+				}
+			}
+			if err := scanJSONValue(decoder, path+"."+key, value); err != nil {
 				return err
 			}
 		}
@@ -338,8 +396,12 @@ func scanJSONValue(decoder *json.Decoder, path string) error {
 			return fmt.Errorf("invalid receipt object at %s", path)
 		}
 	case '[':
+		var element reflect.Type
+		if target != nil && (target.Kind() == reflect.Slice || target.Kind() == reflect.Array) {
+			element = target.Elem()
+		}
 		for index := 0; decoder.More(); index++ {
-			if err := scanJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index)); err != nil {
+			if err := scanJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index), element); err != nil {
 				return err
 			}
 		}
@@ -399,9 +461,45 @@ func canonicalizeV5(r *contracts.Receipt) ([]byte, error) {
 	})
 }
 
+// legacyV4Members names what canonicalizeV4 joins, for the messages that tell a
+// reader what a legacy signature covers.
+const legacyV4Members = "receipt_id, decision_id, effect_id, status, output_hash, prev_hash, lamport_clock and args_hash"
+
+// LegacyV4Refusal returns the refusal for the first receipt with no
+// signature_version, or nil when every receipt declares one.
+//
+// Such a receipt is a legacy v4 receipt. Its preimage is eight fields joined
+// with ":" with no escaping and no domain separation, so the bytes a
+// receipt.v5 signature covers can be read back as those eight fields: the
+// signature of a genuine receipt verifies for a legacy receipt its signer
+// never issued, with any verdict. A verifier therefore checks a legacy receipt
+// only when its caller has opted in (Options.AllowLegacyV4), and
+// VerifyBundleWith answers with this refusal otherwise. A caller that must
+// report "not checked" apart from "failed" calls it first, as receipt_verify
+// does for its exit code.
+func LegacyV4Refusal(receipts []*contracts.Receipt) error {
+	legacy, first := 0, -1
+	for i, r := range receipts {
+		if r != nil && r.SignatureVersion == "" {
+			if legacy++; first < 0 {
+				first = i
+			}
+		}
+	}
+	if legacy == 0 {
+		return nil
+	}
+	return fmt.Errorf("receipt[%d] %q has no signature_version (%d of %d receipt(s) have none): it is a legacy v4 receipt and was not checked. "+
+		"A legacy signature covers only %s, joined with \":\" and no escaping; it does not cover verdict, tool_name or timestamp, "+
+		"and the signature of a receipt.v5 receipt can be replayed as a legacy receipt that says something else. "+
+		"To check it as a legacy receipt regardless, opt in: receipt_verify --allow-legacy-v4 (receiptverify.Options.AllowLegacyV4)",
+		first, receipts[first].ReceiptID, legacy, len(receipts), legacyV4Members)
+}
+
 // canonicalizeV4 reproduces crypto.CanonicalizeReceipt, the legacy colon-joined
 // preimage. Retained solely so receipts issued before receipt.v5 stay
-// verifiable. Never used to verify a receipt that declares a version.
+// verifiable by a caller that opts in. Never used to verify a receipt that
+// declares a version.
 func canonicalizeV4(r *contracts.Receipt) []byte {
 	return []byte(fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s%s%d%s%s",
 		r.ReceiptID, sigSeparator, r.DecisionID, sigSeparator, r.EffectID,
@@ -481,7 +579,8 @@ func candidateKeys(r *contracts.Receipt, trust TrustRoot, embedded map[string]st
 	return nil, ErrNoTrustedKey
 }
 
-// Verify checks a receipt chain against a trust root.
+// Verify checks a receipt chain against a trust root. A receipt with no
+// signature_version is refused, not checked: see Options.AllowLegacyV4.
 //
 // receipts must be in causal order. Verification is pure: it reads no clock, no
 // environment and no file, so the same inputs give the same verdict on any
@@ -498,6 +597,11 @@ type Options struct {
 	// session_id names a gateway receipt chain has no binding document, so a
 	// pass covers the gateway facts of every gateway receipt.
 	RequireGatewayBindings bool
+	// AllowLegacyV4 checks receipts with no signature_version against the
+	// legacy v4 preimage instead of refusing them (see LegacyV4Refusal). The
+	// result counts them as LegacyReceipts and the identity check says what
+	// their signature does not cover.
+	AllowLegacyV4 bool
 }
 
 // VerifyBundle checks a receipts-plus-permits bundle against a trust root.
@@ -511,31 +615,62 @@ func VerifyBundle(b Bundle, trust TrustRoot) Result {
 
 // VerifyBundleWith is VerifyBundle under the caller's options.
 func VerifyBundleWith(b Bundle, trust TrustRoot, opts Options) Result {
+	res, _ := verifyBundle(b, trust, opts)
+	return res
+}
+
+// refusal is why verifyBundle answered without running a check.
+type refusal int
+
+const (
+	notRefused refusal = iota
+	// refusedInput: the bundle holds nothing to check.
+	refusedInput
+	// refusedLegacyV4: a receipt has no signature_version and the caller has
+	// not opted in to the legacy preimage.
+	refusedLegacyV4
+	// refusedNoTrustedKey: the caller supplied no key and has not opted in to
+	// the bundle's own.
+	refusedNoTrustedKey
+)
+
+// verifyBundle is VerifyBundleWith, and says why when it ran no check, so
+// VerifyJSON can report "not checked" without matching on an error's text.
+func verifyBundle(b Bundle, trust TrustRoot, opts Options) (Result, refusal) {
 	receipts := b.Receipts
 	res := Result{Receipts: len(receipts), Permits: len(b.Permits)}
 
 	if len(receipts) == 0 {
 		res.Errors = append(res.Errors, "no receipts supplied")
-		return res
+		return res, refusedInput
 	}
 	for i, r := range receipts {
 		if r == nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("receipt[%d] is nil", i))
-			return res
+			return res, refusedInput
 		}
 	}
 	for i, p := range b.Permits {
 		if p == nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("permit[%d] is nil", i))
-			return res
+			return res, refusedInput
 		}
+	}
+	if legacy := LegacyV4Refusal(receipts); legacy != nil && !opts.AllowLegacyV4 {
+		res.Errors = append(res.Errors, legacy.Error())
+		return res, refusedLegacyV4
 	}
 	if len(trust.Keys) == 0 && !trust.AllowSelfAttested {
 		res.Errors = append(res.Errors, ErrNoTrustedKey.Error())
-		return res
+		return res, refusedNoTrustedKey
 	}
 
 	res.KeyID = receipts[0].KeyID
+	for _, r := range receipts {
+		if r.SignatureVersion == "" {
+			res.LegacyReceipts++
+		}
+	}
 	embedded := b.embeddedKeys()
 
 	identity := checkIdentity(receipts, trust, embedded, &res)
@@ -553,7 +688,7 @@ func VerifyBundleWith(b Bundle, trust TrustRoot, opts Options) Result {
 			res.Valid = false
 		}
 	}
-	return res
+	return res, notRefused
 }
 
 func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[string]string, res *Result) Check {
@@ -601,10 +736,24 @@ func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[
 	if len(trust.Keys) == 0 && trust.AllowSelfAttested {
 		src = "the receipt's OWN embedded key — this is self-attestation and proves only internal consistency"
 	}
-	return Check{CheckIdentity, StatusPass, fmt.Sprintf(
-		"%d/%d signatures verify against %s", verified, len(receipts), src)}
+	detail := fmt.Sprintf("%d/%d signatures verify against %s", verified, len(receipts), src)
+	if res.LegacyReceipts > 0 {
+		detail += fmt.Sprintf("; of these, %d legacy v4 receipt(s) (no signature_version) were checked because the caller opted in: "+
+			"a legacy signature covers only %s, and does not cover verdict, tool_name, timestamp or any other member, "+
+			"so this pass says nothing about those members of a legacy receipt", res.LegacyReceipts, legacyV4Members)
+	}
+	return Check{CheckIdentity, StatusPass, detail}
 }
 
+// unsignedMemberExamples names members of a receipt that the receipt.v5
+// envelope leaves out and a reader is likely to rely on.
+// TestUnsignedMemberExamplesAreOutsideTheSignedEnvelope keeps the list true.
+const unsignedMemberExamples = "timestamp, tool_name, executor_id, metadata, key_id"
+
+// checkIntegrity recomputes each receipt's chain hash and compares it with
+// nothing: a receipt does not carry its own hash. It is therefore never a
+// pass. Its detail says which receipt nothing else pins either, because a
+// reader takes "integrity" to mean the receipt is as it was signed.
 func checkIntegrity(receipts []*contracts.Receipt) Check {
 	for i, r := range receipts {
 		if _, err := contracts.ReceiptChainHash(r); err != nil {
@@ -612,8 +761,23 @@ func checkIntegrity(receipts []*contracts.Receipt) Check {
 				"receipt[%d] %q: cannot recompute canonical hash: %v", i, r.ReceiptID, err)}
 		}
 	}
-	return Check{CheckIntegrity, StatusPass, fmt.Sprintf(
-		"%d receipt(s) recanonicalize; the signed bytes are the bytes on disk", len(receipts))}
+	last := len(receipts) - 1
+	outside := fmt.Sprintf("in receipt.v5: %s and the rest outside the signed envelope", unsignedMemberExamples)
+	if receipts[last].SignatureVersion == "" {
+		outside = "in a legacy receipt: verdict, tool_name, timestamp and every member but the eight it signs"
+	}
+	unpinned := fmt.Sprintf("the members its signature does not cover (%s) can be rewritten without failing this check", outside)
+	if last == 0 {
+		return Check{CheckIntegrity, StatusNotApplicable, fmt.Sprintf(
+			"1 canonical chain hash was recomputed and compared with nothing: a receipt does not carry its own hash, "+
+				"and receipt[0] %q has no successor here whose signed prev_hash would name it. So %s",
+			receipts[0].ReceiptID, unpinned)}
+	}
+	return Check{CheckIntegrity, StatusNotApplicable, fmt.Sprintf(
+		"%d canonical chain hashes were recomputed and compared with nothing by this check: a receipt does not carry its own hash. "+
+			"The closure check compares each with the successor's signed prev_hash, which covers every member of the predecessor "+
+			"except transparency, log_id and leaf_index. receipt[%d] %q has no successor here, so %s or the closure check",
+		len(receipts), last, receipts[last].ReceiptID, unpinned)}
 }
 
 func checkPolicy(receipts []*contracts.Receipt) Check {

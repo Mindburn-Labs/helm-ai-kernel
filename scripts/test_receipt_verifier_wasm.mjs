@@ -70,6 +70,26 @@ for (const c of corpus.cases) {
   results.push({ case: c.name, verdict: got.verdict, result: "PASS" });
   passed++;
 }
+// What this host reads from a document and what the verifier checked must be
+// one thing. JSON.parse reads ALLOW from the shadowed denial; the verifier
+// refuses the text. The legacy replay carries a genuine signature and claims
+// ALLOW; the verifier does not check it and says so.
+const shadowed = corpus.documents.gateway_shadowed_verdict;
+assert.equal(JSON.parse(shadowed).verdict, "ALLOW", "the shadowed denial must read ALLOW by exact member name");
+const shadowRefusal = verifier.verifyJSON(shadowed, corpus.trust_roots.gateway);
+assert.equal(shadowRefusal.verdict, "FAILED");
+assert(shadowRefusal.verification.errors.some((x) => x.includes("letter case")), "the refusal must name the letter case");
+const legacy = corpus.documents.gateway_legacy_replay;
+assert.equal(JSON.parse(legacy).signature_version, undefined);
+assert.equal(JSON.parse(legacy).verdict, "ALLOW");
+const legacyRefusal = verifier.verifyJSON(legacy, corpus.trust_roots.gateway);
+assert.equal(legacyRefusal.verdict, "UNVERIFIABLE");
+assert.equal(legacyRefusal.verification.checks, null, "a legacy receipt must be refused before any check runs");
+assert(legacyRefusal.verification.errors.length === 1 && legacyRefusal.verification.errors[0].includes("signature_version") &&
+  legacyRefusal.verification.errors[0].includes("legacy"), "the refusal must say the receipt is legacy");
+results.push({ case: "exact-name-reader-sees-what-the-verifier-refused", verdict: "FAILED", result: "PASS" },
+  { case: "legacy-receipt-not-checked", verdict: "UNVERIFIABLE", result: "PASS" });
+passed += 2;
 for (const [index, args] of [[], [{}], ["{}", {}], ["{}", "{}", "unexpected"]].entries()) {
   assert.equal(verifier.verifyJSON(...args).verdict, "FAILED", "invalid JS argument shape");
   results.push({ case: `invalid-js-arguments-${index + 1}`, verdict: "FAILED", result: "PASS" });

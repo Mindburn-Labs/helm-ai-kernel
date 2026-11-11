@@ -88,9 +88,49 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- A receipt with no `signature_version` (a legacy receipt, signed before
+  `receipt.v5`) is no longer checked by default. `receipt_verify` exits 2 for a
+  file that holds one; pass `--allow-legacy-v4` to check it as before. Go
+  callers of `core/pkg/receiptverify` set `Options.AllowLegacyV4`. The
+  JavaScript and WebAssembly verifier has no opt-in and returns
+  `UNVERIFIABLE`.
+- `POST /api/v1/evidence/verify` reports a receipt with no `signature_version`
+  as not checked: its `receipt_signatures` check is `UNVERIFIABLE`, where it
+  used to be `VERIFIED` when the legacy signature matched.
+- In `core/pkg/crypto`, `ReceiptVerifyPayload`, `VerifyReceiptProfile`,
+  `VerifyReceiptRequiredProfile`, `VerifyReceiptSignature` and every
+  `VerifyReceipt` method return `ErrLegacyReceiptRefused` for a receipt with no
+  `signature_version`. The first four take `AllowLegacyReceiptPreimages` to
+  check one.
+- `receipt_verify` and the JavaScript verifier refuse a file in which a
+  receipt, bundle, permit or binding member is spelled in another letter case,
+  or in which two members of one object differ only in letter case. Write
+  member names exactly as the schema spells them.
+- The `integrity` check of `receipt_verify` is now `not_applicable` where it
+  was `pass`. It never compared anything; `closure` is the check that compares
+  the hashes of a chain. Exit codes and the `valid` member are unchanged.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- A signed receipt could be edited, with no key, so that `jq` and JavaScript
+  read one verdict from it while `receipt_verify` verified another: Go's JSON
+  decoder matches member names without regard to letter case, and the
+  verifier's duplicate-member check did not. Member names are now matched
+  exactly.
+- The signature of a `receipt.v5` receipt could be replayed as a legacy
+  receipt with a different verdict, and `receipt_verify`, the JavaScript
+  verifier and `POST /api/v1/evidence/verify` accepted it. The legacy preimage
+  is eight fields joined with `:` with no escaping, so the signed bytes of a
+  `receipt.v5` receipt can be read as those eight fields. Legacy receipts are
+  now refused unless the caller opts in, and an opted-in result says that a
+  legacy signature does not cover `verdict`, `tool_name` or `timestamp`.
+- The `integrity` check of `receipt_verify` no longer says "the signed bytes
+  are the bytes on disk". It says what it does, and names the receipt whose
+  members outside the signature nothing covers: a single receipt, or the last
+  of a chain.
 
 ## [0.12.0]
 

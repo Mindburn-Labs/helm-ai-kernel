@@ -192,6 +192,39 @@ chmod +x receipt_verify-linux-amd64
 It opens no sockets and reads no configuration. Exit code `0` means the chain
 verified under the supplied key, `1` means it did not, and `2` means no verdict
 was reported: a missing or unknown flag, no key supplied, a receipt file or
-`--key-file` that cannot be read, or a receipt file that does not parse as a
-receipt, receipt array or bundle. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
+`--key-file` that cannot be read, a receipt file that does not parse as a
+receipt, receipt array or bundle, or a legacy receipt without
+`--allow-legacy-v4`. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
 result does and does not establish.
+
+Two rules decide whether a file is checked at all:
+
+- **Member names are matched exactly.** A file in which a receipt, bundle,
+  permit or binding member is spelled in another letter case (`"Verdict"` for
+  `verdict`), or in which two members of one object differ only in letter
+  case, does not parse (exit `2`). Go's JSON decoder would bind `"Verdict"` to
+  the verdict; `jq` and JavaScript would not, so the same file would say one
+  thing to the verifier and another to its reader.
+- **A legacy receipt needs `--allow-legacy-v4`.** A receipt with no
+  `signature_version` was signed before `receipt.v5`, over eight fields joined
+  with `:` and no escaping. That signature does not cover `verdict`,
+  `tool_name` or `timestamp`, and the signature of a `receipt.v5` receipt can
+  be replayed as a legacy receipt that says something else. Such a file is not
+  checked (exit `2`) unless you pass the flag:
+
+  ```bash
+  ./receipt_verify-linux-amd64 --receipt old-chain.json --key-file signer-public-key.hex --allow-legacy-v4
+  ```
+
+  The output then counts the legacy receipts (`legacy_receipts` in `--json`)
+  and says that their signature does not cover `verdict`, `tool_name` or
+  `timestamp`. Pass the flag only for receipts you know were issued before
+  `receipt.v5`.
+
+A `receipt.v5` signature covers 13 members, not the whole receipt. The
+`integrity` check is always `not_applicable`: it recomputes each receipt's
+chain hash and compares it with nothing, and it names the receipt whose other
+members (`timestamp`, `tool_name`, `executor_id`, `metadata`, `key_id` among
+them) nothing covers. That is a single receipt, or the last receipt of a
+chain. The `closure` check compares each earlier receipt with its successor's
+signed `prev_hash`.

@@ -46,6 +46,14 @@ receipt objects until signed-member validation finishes. Do not parse and
 re-serialize untrusted JSON before handing it to the verifier: that can erase
 duplicate members or invalid number spellings.
 
+Member names are matched exactly, the way `JSON.parse` matches them. A
+document in which a receipt, bundle, permit or binding member is spelled in
+another letter case (`"Verdict"` for `verdict`), or in which two members of
+one object differ only in letter case, is `FAILED` with an error that names
+the letter case. Without that rule a document could carry `"verdict":"ALLOW"`
+for the host and `"Verdict":"DENY"`, the signed value, for the verifier. Read
+a receipt's members from the same text the verifier accepted.
+
 Supply `trustRootJSON` independently of the artifact, as
 `{"keys":{"key-id":"32-byte-Ed25519-public-key-as-hex"}}`. No production key
 is bundled. Omitting the argument, supplying `{}`, or relying only on the
@@ -59,8 +67,22 @@ The result has schema `helm.receipt-verification.v1`, a `verdict` and the full
 - `VERIFIED`: the existing verifier accepted the signatures and applicable
   consistency checks under caller-supplied trust.
 - `FAILED`: input validation or a verifier check failed.
-- `UNVERIFIABLE`: the existing verifier refused because no trusted key was
-  supplied. No successful identity check is invented.
+- `UNVERIFIABLE`: the receipts were not checked, and `verification.errors`
+  says why. Either no trusted key was supplied, or a receipt has no
+  `signature_version`. No successful identity check is invented.
+
+A receipt with no `signature_version` is a legacy receipt. Its signature
+covers eight colon-joined fields with no escaping. It does not cover
+`verdict`, `tool_name` or `timestamp`, and the signature of a `receipt.v5`
+receipt can be replayed as a legacy receipt that says something else. The
+bridge does not check such a receipt and has no option to: the result is
+`UNVERIFIABLE` with no checks. The native `receipt_verify --allow-legacy-v4`
+checks one and says what its signature does not cover.
+
+The `integrity` check is `not_applicable` for every input. It recomputes each
+receipt's chain hash and compares it with nothing, and its detail names the
+receipt whose unsigned members nothing pins. The `closure` check is the one
+that compares the hashes of a chain.
 
 Inputs are limited to 8 MiB of receipt JSON, 64 KiB of trust-root JSON and 128
 trusted keys. Iterative preflight also limits input to 64 nested containers,
@@ -72,7 +94,9 @@ The existing native CLI retains its flags and explicit inspection behavior.
 The shared corpus reuses frozen public receipt/permit fixtures, including a
 frozen gateway receipt chain with its bindings, without private keys. It tests native/WASM result parity, artifact-only trust refusal, wrong
 roots, signed-field and permit tampering, strict wire parsing and argument/size
-refusals. It also covers initialization races and parsing-work refusals followed
+refusals. It holds the frozen gateway denial edited to read `ALLOW` by exact
+member name, and its signature replayed as a legacy receipt; the JavaScript
+harness reads the first with `JSON.parse` before the verifier refuses it. It also covers initialization races and parsing-work refusals followed
 by successful reuse. The JavaScript harness runs the actual WASM module in Node
 with WASM linear memory capped at 128 MiB and records its exact binary hash and named
 results in `conformance.json`.

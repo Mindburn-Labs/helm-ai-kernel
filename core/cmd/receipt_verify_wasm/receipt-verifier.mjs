@@ -1,6 +1,19 @@
 // The caller loads the matching wasm_exec.js and supplies its Go class plus
 // the pinned WASM bytes. Loading assets and choosing trust remain host actions.
 // Verification itself performs no fetch and never discovers a trust root.
+//
+// verifyJSON(receiptJSON, trustRootJSON) returns the report as an object. Two
+// refusals concern how a host reads the receipt it passed in:
+//
+//   - Member names are matched exactly, as JSON.parse matches them. A document
+//     in which a receipt, bundle or permit member is spelled in another letter
+//     case, or in which two members of one object differ only in letter case,
+//     is FAILED with an error naming "letter case". Read a member from a
+//     document only after the verifier accepted that same text.
+//   - A receipt with no signature_version is a legacy receipt. Its signature
+//     does not cover verdict, tool_name or timestamp, and a receipt.v5
+//     signature can be replayed as one. It is not checked: the verdict is
+//     UNVERIFIABLE with no checks, and this bridge has no option to check it.
 const initialization = Symbol.for("helm.receipt-verifier.initialization");
 
 export async function loadReceiptVerifier(wasmBytes, Go) {

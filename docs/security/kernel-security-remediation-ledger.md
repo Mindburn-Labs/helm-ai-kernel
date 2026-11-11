@@ -413,6 +413,39 @@ outside the durable V5 envelope, including post-sign transparency anchoring,
 remain separately verified or recorded claims. It is source/test evidence only;
 it does not establish deployment or production-runtime proof.
 
+### helm-tracker#305: unversioned receipts are refused unless the caller opts in
+
+The entry above left unversioned history on its legacy verification path, and
+that path was the default. The legacy preimage is eight fields joined with `:`
+with no escaping and no domain separation, so the JCS bytes of a signed
+`receipt.v5` envelope can be read back as those eight fields: the signature of
+a genuine `receipt.v5` DENY verified for an unversioned receipt saying ALLOW,
+through `receipt_verify`, the JavaScript verifier and the receipt signature
+check of `POST /api/v1/evidence/verify`. No key was needed.
+
+Every receipt verifier now refuses a receipt with no `signature_version` unless
+its caller opts in: `receiptverify.Options.AllowLegacyV4` (`receipt_verify
+--allow-legacy-v4`) and `crypto.AllowLegacyReceiptPreimages`. No shipped caller
+opts in except the `receipt_verify` flag. An opted-in result counts the legacy
+receipts and says that their signature does not cover `verdict`, `tool_name`
+or `timestamp`.
+
+In the same change, `receiptverify` matches member names exactly. Go's JSON
+decoder binds `"Verdict"` to the `verdict` field and the duplicate-member scan
+compared names exactly, so a signed DENY receipt could carry `"verdict":"ALLOW"`
+for `jq` and JavaScript and `"Verdict":"DENY"` for the verifier. The
+`integrity` check, which compares nothing, reports `not_applicable` and no
+longer says the signed bytes are the bytes on disk.
+
+Regressions: `TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt`,
+`TestCaseVariantMembersCannotShadowSignedFields` and
+`TestIntegrityCheckSaysOnlyWhatItChecked` in `core/pkg/receiptverify`,
+`TestReceiptV5SignatureDoesNotReplayAsLegacy` in `core/pkg/crypto`, and
+`TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt` in
+`core/cmd/helm-ai-kernel`. The dev-local MCP proof path of the EvidencePack
+verifier (`core/pkg/verifier`) still reads an unversioned receipt against the
+key its pack carries; that result is self-attested and is not changed here.
+
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 
 | ID | Sev | Finding | Status |

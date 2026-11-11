@@ -78,6 +78,50 @@ func TestManagedPolicyPDPFailClosedPrecedence(t *testing.T) {
 	}
 }
 
+// When the transport bound the kernel catalog's class over a lower or
+// non-class declaration, the declaration stays visible to rules that restrict
+// and invisible to rules that allow: it can add a restriction, never lift one.
+func TestManagedPolicyPDPDeclarationRestrictsButNeverAllows(t *testing.T) {
+	bundle := managedTestBundle(t, func(b *ManagedPolicyBundle) {
+		b.KernelRuntime.Rules = append(b.KernelRuntime.Rules,
+			ManagedPolicyRule{ID: "p0-payment-label", Layer: ManagedPolicyLayerP0, Pattern: `"effect_class":"payment\.`, Verdict: contracts.VerdictDeny, Reason: "payment labels are denied"},
+			ManagedPolicyRule{ID: "p1-e2", Layer: ManagedPolicyLayerP1, EffectClass: "E2", Verdict: contracts.VerdictAllow, Reason: "bounded effects are allowed"},
+			ManagedPolicyRule{ID: "p2-e1", Layer: ManagedPolicyLayerP2, EffectClass: "E1", Verdict: contracts.VerdictDeny, Reason: "workspace overlay denies E1"},
+		)
+	})
+	p, err := NewManagedPolicyPDP(bundle, []string{managedTestSourceHash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := func(class, declared string) map[string]any {
+		return map[string]any{"effect_class": class, "effect_class_source": "effect_catalog", "effect_class_declared": declared}
+	}
+	tests := []struct {
+		name   string
+		req    *DecisionRequest
+		allow  bool
+		reason string
+	}{
+		{name: "allow rule for the declared class does not match the bound class", req: &DecisionRequest{Action: "INFRA_DESTROY", Context: bound("E4", "E0")}, reason: string(contracts.ReasonPDPDeny)},
+		{name: "bound E3 escalates although E0 was declared", req: &DecisionRequest{Action: "SPEND_AUTHORIZE", Context: bound("E3", "E0")}, reason: string(contracts.ReasonApprovalRequired)},
+		{name: "pattern deny on the declared label still applies", req: &DecisionRequest{Action: "SEND_EMAIL", Context: bound("E2", "payment.write")}, reason: string(contracts.ReasonPDPDeny)},
+		{name: "class deny on the declared class still applies", req: &DecisionRequest{Action: "SEND_EMAIL", Context: bound("E2", "E1")}, reason: string(contracts.ReasonPDPDeny)},
+		{name: "bound class allowed when nothing restricts the declaration", req: &DecisionRequest{Action: "SEND_EMAIL", Context: bound("E2", "ticket.write")}, allow: true},
+		{name: "a label bound as it is matches the pattern as before", req: &DecisionRequest{Action: "urn:tool:pay", Context: map[string]any{"effect_class": "payment.write", "effect_class_source": "caller_declared"}}, reason: string(contracts.ReasonPDPDeny)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := p.Evaluate(context.Background(), tt.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.Allow != tt.allow || resp.ReasonCode != tt.reason {
+				t.Fatalf("response = %+v, want allow=%v reason=%q", resp, tt.allow, tt.reason)
+			}
+		})
+	}
+}
+
 func TestNewManagedPolicyPDPRejectsInvalidContracts(t *testing.T) {
 	tests := []struct {
 		name   string

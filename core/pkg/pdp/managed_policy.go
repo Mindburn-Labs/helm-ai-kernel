@@ -230,18 +230,26 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	if err := ctx.Err(); err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
-	candidate, err := canonicalize.JCS(struct {
-		Action   string         `json:"action"`
-		Resource string         `json:"resource"`
-		Context  map[string]any `json:"context,omitempty"`
-	}{Action: req.Action, Resource: req.Resource, Context: req.Context})
+	candidate, err := managedPolicyCandidate(req)
+	if err != nil {
+		return p.denyResponse(string(contracts.ReasonPDPError))
+	}
+	// When the transport bound a higher class than the caller declared, a
+	// restricting rule is also matched against the request as the caller
+	// described it. A declaration can add a restriction but never remove one;
+	// allow rules see only what was bound.
+	declared, declaredCandidate, err := managedPolicyDeclaredView(req)
 	if err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
 	matchedAllow := false
 	matchedEscalate := false
 	for _, rule := range p.rules {
-		if !rule.matches(req, candidate) {
+		matched := rule.matches(req, candidate)
+		if !matched && declared != nil && rule.Verdict != contracts.VerdictAllow {
+			matched = rule.matches(declared, declaredCandidate)
+		}
+		if !matched {
 			continue
 		}
 		switch rule.Verdict {
@@ -264,6 +272,39 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 		return denyForHashFailure(p.policyRef(), err)
 	}
 	return resp, nil
+}
+
+// managedPolicyCandidate is the canonical text pattern rules match.
+func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
+	return canonicalize.JCS(struct {
+		Action   string         `json:"action"`
+		Resource string         `json:"resource"`
+		Context  map[string]any `json:"context,omitempty"`
+	}{Action: req.Action, Resource: req.Resource, Context: req.Context})
+}
+
+// managedPolicyDeclaredView returns the request as its caller described it:
+// effect_class holds the caller's own value, which the transport keeps under
+// effect_class_declared when it bound the kernel catalog's higher class
+// instead. It returns nil when the bound class is the declaration.
+func managedPolicyDeclaredView(req *DecisionRequest) (*DecisionRequest, []byte, error) {
+	declaredClass, ok := req.Context["effect_class_declared"].(string)
+	if !ok || declaredClass == "" {
+		return nil, nil, nil
+	}
+	view := *req
+	view.Context = make(map[string]any, len(req.Context))
+	for key, value := range req.Context {
+		view.Context[key] = value
+	}
+	view.Context["effect_class"] = declaredClass
+	delete(view.Context, "effect_class_declared")
+	delete(view.Context, "effect_class_source")
+	candidate, err := managedPolicyCandidate(&view)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &view, candidate, nil
 }
 
 func (r compiledManagedPolicyRule) matches(req *DecisionRequest, candidate []byte) bool {

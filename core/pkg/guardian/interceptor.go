@@ -29,7 +29,11 @@ const (
 	// EffectClassSource values. A class the caller declared is not attested,
 	// and the signed effect says so.
 	ContextEffectClassSource = "effect_class_source"
-	ContextDestination       = "destination"
+	// ContextEffectClassDeclared is the caller's own value, kept when the
+	// kernel bound a different effect_class, so a rule that restricts on the
+	// declaration still sees it.
+	ContextEffectClassDeclared = "effect_class_declared"
+	ContextDestination         = "destination"
 	// ContextEgressDestinationRequired is set only by a trusted adapter or
 	// catalog boundary when the operation can transmit data over the network.
 	// Risk class is deliberately not used as an egress proxy: local mutations
@@ -50,6 +54,9 @@ const (
 	EffectClassSourceEffectCatalog = "effect_catalog"
 	// EffectClassSourceToolCatalog: the operator's PEP tool catalog names it.
 	EffectClassSourceToolCatalog = "tool_catalog"
+	// EffectClassSourceKernelRoute: the route evaluates one fixed kind of
+	// effect and assigns its class itself.
+	EffectClassSourceKernelRoute = "kernel_route"
 	// EffectClassSourceCallerDeclared: the authenticated caller declared it and
 	// the kernel has no record of the action to check it against.
 	EffectClassSourceCallerDeclared = "caller_declared"
@@ -59,7 +66,7 @@ const (
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextEffectClassSource, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextEffectClassSource, ContextEffectClassDeclared, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -213,7 +220,6 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 				Params:     evalCtx.Request.Context,
 				Taint:      contracts.TaintLabelsFromContext(evalCtx.Request.Context),
 			}
-			bindRequestTool(effect, evalCtx.Request.Resource)
 			effectDigest, err := canonicalEffectDigest(effect)
 			if err != nil {
 				return nil, fmt.Errorf("canonicalize effect digest: %w", err)

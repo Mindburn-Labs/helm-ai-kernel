@@ -96,15 +96,23 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   Guardian binds it from the request resource. `POST /api/v1/evaluate` and the
   governed OpenAI proxy previously evaluated the rule named by a caller's
   `tool_name` and signed an ALLOW for a different tool.
-- The trusted `effect_class` on `POST /api/v1/evaluate` and ext-authz is bound
-  only when the request's value is one of `E0`..`E4`, and never below the class
-  the kernel's effect type catalog gives the action: a catalogued `E4` effect
-  declared as `E0` is evaluated as `E4`. A value that is not a class (the
-  contract lets `effect_level` carry a policy resource) no longer becomes a
-  trusted `effect_class`. The signed effect now carries `effect_class_source`
-  (`effect_catalog`, `tool_catalog` or `caller_declared`), so a declaration is
-  never presented as attested. Effect digests of decisions on these routes and
-  on MCP change because of the added member.
+- On `POST /api/v1/evaluate`, the organization-runtime evaluate route and
+  ext-authz, the request's effect class is recorded as a declaration and can
+  no longer talk a catalogued effect under a policy ceiling. When the kernel's
+  effect type catalog knows the action or the resource, the bound
+  `effect_class` is never below the catalog's class: `INFRA_DESTROY` declared
+  as `E0`, or named as the tool of an `EXECUTE_TOOL` request, is evaluated as
+  `E4`, and the activation ceiling is checked against that class. The signed
+  effect carries `effect_class_source` (`effect_catalog`, `tool_catalog`,
+  `kernel_route` or `caller_declared`) and, when the kernel bound a different
+  class, the caller's own value as `effect_class_declared`. Managed policy
+  matches deny and escalate rules against the declaration as well, and allow
+  rules against the bound class only. A CEL or PRG expression that restricted
+  on a caller's label for a catalogued effect must read
+  `effect_class_declared`. Effect digests of decisions on these routes, the
+  governed proxy and MCP change because of the added members.
+- A `CALL_TOOL` request is evaluated as `CALL_TOOL`: it has no typed tool
+  field, so a `tool_name` in its context is removed before policy reads it.
 
 ### Fixed
 

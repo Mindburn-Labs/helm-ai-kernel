@@ -126,13 +126,14 @@ func registerReceiptRoutes(mux routeMux, svc *Services) {
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
-		effectClass, effectClassSource := resolveEffectClass(req.Tool, req.EffectLevel)
+		effectClass, effectClassSource, effectClassDeclared := resolveEffectClass(req.Tool, resource, req.EffectLevel)
 		if err := bindAuthenticatedGuardianContext(r.Context(), req.Context, guardianTransportBinding{
-			EffectClass:       effectClass,
-			EffectClassSource: effectClassSource,
-			SessionID:         req.SessionID,
-			SourceChannel:     contracts.SourceChannelAPIRequest,
-			TrustLevel:        contracts.InputTrustExternalUntrusted,
+			EffectClass:         effectClass,
+			EffectClassSource:   effectClassSource,
+			EffectClassDeclared: effectClassDeclared,
+			SessionID:           req.SessionID,
+			SourceChannel:       contracts.SourceChannelAPIRequest,
+			TrustLevel:          contracts.InputTrustExternalUntrusted,
 		}); err != nil {
 			api.WriteInternalR(w, r, fmt.Errorf("bind evaluate transport evidence: %w", err))
 			return

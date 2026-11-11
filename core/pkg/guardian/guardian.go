@@ -599,7 +599,7 @@ const (
 // decision was not evaluated for. tool_name is read only for the effect types
 // whose contract carries the tool in params; every other effect is named by
 // its type. On the evaluated-request path Params is the caller's context, and
-// bindRequestTool overwrites tool_name there before this runs.
+// bindRequestTool has already replaced or removed tool_name there.
 func boundActionID(effect *contracts.Effect) string {
 	if namesToolInParams(effect.EffectType) {
 		if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
@@ -615,18 +615,24 @@ func namesToolInParams(effectType string) bool {
 	return effectType == "EXECUTE_TOOL" || effectType == contracts.EffectTypeCallTool
 }
 
-// bindRequestTool makes the request resource the tool of a tool-call effect
-// built from an evaluated request. Params came from the caller, so a
-// tool_name already in it is replaced: the tool is the typed resource the
-// decision record signs, never a context value.
-func bindRequestTool(effect *contracts.Effect, resource string) {
-	if !namesToolInParams(effect.EffectType) {
-		return
+// bindRequestTool leaves a request context holding only a tool_name Guardian
+// put there, and returns it. The context came from the caller. For
+// EXECUTE_TOOL the tool is the typed request resource, which the decision
+// record signs, so it replaces whatever the caller sent. Any other tool-call
+// type names no tool in a typed request field: a tool_name in its context is
+// the caller's, so it is removed and the request is evaluated as its type.
+// Every interceptor and the policy decision point read the context after this.
+func bindRequestTool(action, resource string, params map[string]interface{}) map[string]interface{} {
+	switch {
+	case action == "EXECUTE_TOOL":
+		if params == nil {
+			params = make(map[string]interface{})
+		}
+		params["tool_name"] = resource
+	case namesToolInParams(action):
+		delete(params, "tool_name")
 	}
-	if effect.Params == nil {
-		effect.Params = make(map[string]interface{})
-	}
-	effect.Params["tool_name"] = resource
+	return params
 }
 
 // executionIntentExpiresAt keeps the default short dispatch authority for
@@ -795,6 +801,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 	if req.Context != nil {
 		delete(req.Context, contextKeyCapabilityToken)
 	}
+	// Bind the tool before any gate or the policy decision point reads the
+	// context, so none of them sees a caller's tool_name as the tool.
+	req.Context = bindRequestTool(req.Action, req.Resource, req.Context)
 
 	span.SetAttributes(
 		attribute.String("action", req.Action),
@@ -935,7 +944,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			Params:     req.Context,
 			Taint:      contracts.TaintLabelsFromContext(req.Context),
 		}
-		bindRequestTool(effect, req.Resource)
 
 		// 2. Prepare Decision Record
 		effectDigest, err := canonicalEffectDigest(effect)

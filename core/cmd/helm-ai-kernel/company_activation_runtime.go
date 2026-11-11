@@ -18,6 +18,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
 const (
@@ -103,12 +104,19 @@ func organizationRuntimeActivationDenial(svc *Services, req *api.EvaluateRequest
 	}
 	autonomyLevel, _ := req.Context["autonomy_level"].(string)
 	autonomyLevel = strings.TrimSpace(autonomyLevel)
+	// The class checked against the activation ceiling is the one the
+	// transport bound, which is never below the kernel catalog's class for the
+	// action; the request's own value may be lower.
+	effectClass, _ := req.Context[guardian.ContextEffectClass].(string)
+	if effectClass == "" {
+		effectClass = req.EffectLevel
+	}
 	rawRecord, ok := req.Context["company_activation_record"]
 	evidence := &organizationRuntimeActivationEvidence{
 		IdentityKind:          contracts.OrganizationRuntimeActivationIdentityPresented,
 		PresentedIdentityHash: presentedCompanyActivationIdentityHash(ok, rawRecord),
 		CompanyID:             tenantID,
-		EffectClass:           req.EffectLevel,
+		EffectClass:           effectClass,
 		AutonomyLevel:         autonomyLevel,
 	}
 	if svc != nil {
@@ -138,7 +146,7 @@ func organizationRuntimeActivationDenial(svc *Services, req *api.EvaluateRequest
 	}
 	err = contracts.VerifyCompanyActivationRecord(record, svc.CompanyActivationPublicKey, contracts.CompanyActivationBinding{
 		TenantID: tenantID, WorkspaceID: workspaceID, EnvironmentID: svc.CompanyActivationEnvironmentID,
-		EffectClass: req.EffectLevel, AutonomyLevel: autonomyLevel, Now: now,
+		EffectClass: effectClass, AutonomyLevel: autonomyLevel, Now: now,
 	})
 	if err == nil || errors.Is(err, contracts.ErrCompanyActivationCeilingExceeded) {
 		evidence.IdentityKind = contracts.OrganizationRuntimeActivationIdentityVerified
@@ -156,7 +164,7 @@ func organizationRuntimeActivationDenial(svc *Services, req *api.EvaluateRequest
 		req.Context["activation_record_hash"] = record.RecordHash
 		req.Context["company_id"] = record.CompanyID
 		req.Context["environment_id"] = record.EnvironmentID
-		req.Context["effect_class"] = req.EffectLevel
+		req.Context["effect_class"] = effectClass
 		req.Context["autonomy_level"] = autonomyLevel
 		return "", "", evidence
 	case errors.Is(err, contracts.ErrCompanyActivationBindingMismatch):

@@ -35,10 +35,19 @@ func TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime
 		name          string
 		prepare       func(*contracts.CompanyActivationRecord, *string)
 		autonomyLevel string
+		resource      string
 		withoutKey    bool
 		wantReason    contracts.ReasonCode
 	}{
 		{name: "valid"},
+		{
+			// The request declares E0, which the record allows, for a tool
+			// the kernel's catalog classes E4: the ceiling is checked against
+			// the catalog class, not the declaration.
+			name:       "catalogued effect declared under its class",
+			resource:   contracts.EffectTypeExecutePayment,
+			wantReason: contracts.ReasonActivationCeilingExceeded,
+		},
 		{
 			name: "tampered",
 			prepare: func(record *contracts.CompanyActivationRecord, _ *string) {
@@ -141,6 +150,10 @@ func TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime
 			if test.prepare != nil {
 				test.prepare(&record, &effectClass)
 			}
+			resource := "connector://crm/contact-123"
+			if test.resource != "" {
+				resource = test.resource
+			}
 			capturing := &evaluateRouteCapturingPDP{}
 			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
 			svc.CompanyActivationEnvironmentID = "managed"
@@ -151,7 +164,7 @@ func TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime
 			registerReceiptRoutes(mux, svc)
 
 			body, err := json.Marshal(api.EvaluateRequest{
-				Tool: "EXECUTE_TOOL", Resource: "connector://crm/contact-123", EffectLevel: effectClass,
+				Tool: "EXECUTE_TOOL", Resource: resource, EffectLevel: effectClass,
 				SessionID: "activation-session-" + strings.ReplaceAll(test.name, " ", "-"),
 				Originator: &contracts.OrganizationRuntimeOriginatorAssertion{
 					PrincipalID: "human-originator-1", AssertionSource: contracts.OrganizationRuntimeOriginatorAssertionSourceControlPlane,

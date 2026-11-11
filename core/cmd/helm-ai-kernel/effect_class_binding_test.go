@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/extauthz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
@@ -15,35 +18,61 @@ import (
 )
 
 // The effect class a policy ceiling selects on is authority. A request can
-// only declare one: the declaration is bound when it is one of E0..E4, never
-// below the class the kernel's own catalog gives the action, and always with
-// who asserted it.
+// only declare one. The declaration is bound as it is and marked
+// caller_declared, unless the kernel's catalog knows the action or the
+// resource: then the bound class is never below the catalog's, and the
+// replaced declaration is kept beside it.
 func TestResolveEffectClass(t *testing.T) {
+	const (
+		declaredByCaller = guardian.EffectClassSourceCallerDeclared
+		fromCatalog      = guardian.EffectClassSourceEffectCatalog
+	)
 	for _, tc := range []struct {
-		name, action, declared, class, source string
+		name, action, resource, declared string
+		class, source, replaced          string
 	}{
-		{"declared class for an action the kernel has no record of", "local.echo", "E1", "E1", guardian.EffectClassSourceCallerDeclared},
-		{"declared class is trimmed", "local.echo", " E2 ", "E2", guardian.EffectClassSourceCallerDeclared},
-		{"a policy resource is not a class", "local.echo", "ticket:123", "", ""},
-		{"a value outside the closed set is not a class", "local.echo", "E9", "", ""},
-		{"lower case is not a class", "local.echo", "e4", "", ""},
-		{"catalogued action declared below its class", contracts.EffectTypeInfraDestroy, "E0", "E4", guardian.EffectClassSourceEffectCatalog},
-		{"catalogued action with a resource in place of a class", contracts.EffectTypeExecutePayment, "invoice:42", "E4", guardian.EffectClassSourceEffectCatalog},
-		{"catalogued action declared at its class", contracts.EffectTypeSendChatMessage, "E1", "E1", guardian.EffectClassSourceEffectCatalog},
-		{"catalogued action declared above its class", contracts.EffectTypeSendChatMessage, "E3", "E3", guardian.EffectClassSourceCallerDeclared},
+		{"declared class, action unknown to the kernel", "local.echo", "E1", "E1", "E1", declaredByCaller, ""},
+		{"declared class is trimmed", "local.echo", "", " E2 ", "E2", declaredByCaller, ""},
+		{"a policy label is bound as it is", "local.echo", "ticket:123", "ticket:123", "ticket:123", declaredByCaller, ""},
+		{"a value outside the closed set is a label", "urn:tool:pay", "urn:tool:pay", "E9", "E9", declaredByCaller, ""},
+		{"nothing declared, nothing catalogued", "local.echo", "", "", "", "", ""},
+		{"catalogued action declared below its class", contracts.EffectTypeInfraDestroy, "E0", "E0", "E4", fromCatalog, "E0"},
+		{"catalogued action with a label in place of a class", contracts.EffectTypeExecutePayment, "invoice:42", "invoice:42", "E4", fromCatalog, "invoice:42"},
+		{"catalogued action with nothing declared", contracts.EffectTypeInfraDestroy, "", "", "E4", fromCatalog, ""},
+		{"catalogued action declared at its class", contracts.EffectTypeSendChatMessage, "E1", "E1", "E1", fromCatalog, ""},
+		{"catalogued action declared above its class", contracts.EffectTypeSendChatMessage, "E3", "E3", "E3", declaredByCaller, ""},
+		{"catalogued effect named as the resource of EXECUTE_TOOL", "EXECUTE_TOOL", contracts.EffectTypeExecutePayment, "E0", "E4", fromCatalog, "E0"},
+		{"catalogued effect named as the resource of CALL_TOOL", contracts.EffectTypeCallTool, contracts.EffectTypeInfraDestroy, "E0", "E4", fromCatalog, "E0"},
+		{"the higher of action and resource wins", contracts.EffectTypeSendChatMessage, contracts.EffectTypeExecutePayment, "E1", "E4", fromCatalog, "E1"},
+		{"a reserved preview effect is known to the kernel", contracts.EffectTypeProviderTeardown, "E0", "E0", "E4", fromCatalog, "E0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			class, source := resolveEffectClass(tc.action, tc.declared)
-			if class != tc.class || source != tc.source {
-				t.Fatalf("resolveEffectClass(%q, %q) = %q from %q, want %q from %q", tc.action, tc.declared, class, source, tc.class, tc.source)
+			class, source, replaced := resolveEffectClass(tc.action, tc.resource, tc.declared)
+			if class != tc.class || source != tc.source || replaced != tc.replaced {
+				t.Fatalf("resolveEffectClass(%q, %q, %q) = %q from %q replacing %q, want %q from %q replacing %q",
+					tc.action, tc.resource, tc.declared, class, source, replaced, tc.class, tc.source, tc.replaced)
 			}
 		})
 	}
 }
 
-// evaluateEffectClassContext sends one evaluate request and returns the
-// effect class and its source as the policy decision point received them.
-func evaluateEffectClassContext(t *testing.T, body map[string]any) (class, source any, bound bool) {
+func allowGraphForEffectClassTest(t *testing.T, actions ...string) *prg.Graph {
+	t.Helper()
+	graph := prg.NewGraph()
+	for _, action := range actions {
+		if err := graph.AddRule(action, prg.RequirementSet{
+			ID: "allow-" + action, Logic: prg.AND,
+			Requirements: []prg.Requirement{{ID: "allow", Expression: "true"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return graph
+}
+
+// evaluateRouteDecisionContext sends one evaluate request and returns the
+// context the policy decision point received.
+func evaluateRouteDecisionContext(t *testing.T, body map[string]any) map[string]any {
 	t.Helper()
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
@@ -52,18 +81,11 @@ func evaluateEffectClassContext(t *testing.T, body map[string]any) (class, sourc
 	if err != nil {
 		t.Fatal(err)
 	}
-	graph := prg.NewGraph()
-	for _, action := range []string{"local.echo", contracts.EffectTypeInfraDestroy} {
-		if err := graph.AddRule(action, prg.RequirementSet{
-			ID: "allow-" + action, Logic: prg.AND,
-			Requirements: []prg.Requirement{{ID: "allow", Expression: "true"}},
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	capturing := &evaluateRouteCapturingPDP{}
 	svc := &Services{
-		Guardian:      guardian.NewGuardian(signer, graph, artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
+		Guardian: guardian.NewGuardian(signer,
+			allowGraphForEffectClassTest(t, "local.echo", contracts.EffectTypeInfraDestroy),
+			artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
 		ReceiptStore:  &captureReceiptStore{},
 		ReceiptSigner: signer,
 	}
@@ -86,40 +108,137 @@ func evaluateEffectClassContext(t *testing.T, body map[string]any) (class, sourc
 	if capturing.request == nil {
 		t.Fatal("the request did not reach the policy decision point; the case proves nothing")
 	}
-	class, bound = capturing.request.Context[guardian.ContextEffectClass]
-	return class, capturing.request.Context[guardian.ContextEffectClassSource], bound
+	return capturing.request.Context
+}
+
+func requireEffectClassBinding(t *testing.T, decisionContext map[string]any, class, source string, declared any) {
+	t.Helper()
+	if decisionContext[guardian.ContextEffectClass] != class || decisionContext[guardian.ContextEffectClassSource] != source ||
+		decisionContext[guardian.ContextEffectClassDeclared] != declared {
+		t.Fatalf("policy received effect_class=%v source=%v declared=%v, want %q from %q declared %v",
+			decisionContext[guardian.ContextEffectClass], decisionContext[guardian.ContextEffectClassSource],
+			decisionContext[guardian.ContextEffectClassDeclared], class, source, declared)
+	}
 }
 
 func TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration(t *testing.T) {
-	class, source, _ := evaluateEffectClassContext(t, map[string]any{
+	decisionContext := evaluateRouteDecisionContext(t, map[string]any{
 		"tool": contracts.EffectTypeInfraDestroy, "effect_level": "E0", "session_id": "s-1",
 	})
-	if class != "E4" || source != guardian.EffectClassSourceEffectCatalog {
-		t.Fatalf("a catalogued E4 effect declared as E0 reached policy as %v from %v", class, source)
-	}
+	requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceEffectCatalog, "E0")
+}
+
+// Naming the catalogued effect as the tool of an EXECUTE_TOOL request selects
+// its policy rule, so it must select its class too.
+func TestEvaluateRouteBindsCatalogEffectClassForAToolCallEnvelope(t *testing.T) {
+	decisionContext := evaluateRouteDecisionContext(t, map[string]any{
+		"tool": "EXECUTE_TOOL", "effect_level": contracts.EffectTypeInfraDestroy, "session_id": "s-1",
+	})
+	requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceEffectCatalog, contracts.EffectTypeInfraDestroy)
 }
 
 func TestEvaluateRouteMarksDeclaredEffectClassAsCallerDeclared(t *testing.T) {
-	class, source, _ := evaluateEffectClassContext(t, map[string]any{
-		"tool": "local.echo", "effect_level": "E1", "session_id": "s-1",
-		// A caller cannot attest its own declaration.
-		"context": map[string]any{"effect_class_source": guardian.EffectClassSourceEffectCatalog, "effect_class": "E0"},
-	})
-	if class != "E1" || source != guardian.EffectClassSourceCallerDeclared {
-		t.Fatalf("declared class reached policy as %v from %v, want E1 marked caller_declared", class, source)
+	for _, level := range []string{"E1", "ticket:123", "E9"} {
+		t.Run(level, func(t *testing.T) {
+			decisionContext := evaluateRouteDecisionContext(t, map[string]any{
+				"tool": "local.echo", "effect_level": level, "session_id": "s-1",
+				// A caller cannot attest its own declaration, or plant another.
+				"context": map[string]any{
+					"effect_class":          "E0",
+					"effect_class_source":   guardian.EffectClassSourceEffectCatalog,
+					"effect_class_declared": "E0",
+				},
+			})
+			requireEffectClassBinding(t, decisionContext, level, guardian.EffectClassSourceCallerDeclared, nil)
+		})
 	}
 }
 
-func TestEvaluateRouteBindsNoEffectClassForAPolicyResource(t *testing.T) {
-	for _, level := range []string{"ticket:123", "E9", "e4", "critical"} {
-		t.Run(level, func(t *testing.T) {
-			class, source, bound := evaluateEffectClassContext(t, map[string]any{
-				"tool": "local.echo", "effect_level": level, "session_id": "s-1",
-				"context": map[string]any{"effect_class": "E0"},
-			})
-			if bound || source != nil {
-				t.Fatalf("effect_level %q was bound as trusted effect_class %v from %v", level, class, source)
-			}
-		})
+// The policy decision point reads the tool Guardian bound from the typed
+// request, not the caller's context value.
+func TestEvaluateRoutePolicySeesTheBoundToolName(t *testing.T) {
+	decisionContext := evaluateRouteDecisionContext(t, map[string]any{
+		"tool": "EXECUTE_TOOL", "effect_level": "local.echo", "session_id": "s-1",
+		"context": map[string]any{"tool_name": "db.drop_database"},
+	})
+	if decisionContext["tool_name"] != "local.echo" {
+		t.Fatalf("policy received tool_name=%v, want the request resource", decisionContext["tool_name"])
 	}
+}
+
+// extAuthzDecisionContext authorizes one ext-authz request and returns the
+// context the policy decision point received.
+func extAuthzDecisionContext(t *testing.T, mutate func(*extauthz.AuthorizationRequest)) map[string]any {
+	t.Helper()
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-effect-class-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturing := &evaluateRouteCapturingPDP{}
+	svc := &Services{
+		Guardian: guardian.NewGuardian(signer,
+			allowGraphForEffectClassTest(t, "local.echo", contracts.EffectTypeExecutePayment, contracts.EffectTypeCallTool),
+			artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
+		ReceiptSigner: signer,
+	}
+	fixture := extAuthzRouteFixture("req-effect-class", "tenant-a", "epoch-1")
+	mutate(&fixture)
+	ctx := auth.WithAuthenticatedCredential(t.Context(), "extauthz-credential")
+	if _, err := authorizeExtAuthzRequest(ctx, svc, fixture, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if capturing.request == nil {
+		t.Fatal("the request did not reach the policy decision point; the case proves nothing")
+	}
+	return capturing.request.Context
+}
+
+func TestExtAuthzBindsEffectClassLikeTheEvaluateRoute(t *testing.T) {
+	t.Run("a label is bound as it is and marked caller_declared", func(t *testing.T) {
+		decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) { req.EffectClass = "ticket.write" })
+		requireEffectClassBinding(t, decisionContext, "ticket.write", guardian.EffectClassSourceCallerDeclared, nil)
+	})
+	t.Run("a catalogued effect named as the tool of a tool call takes its catalog class", func(t *testing.T) {
+		for _, action := range []string{"EXECUTE_TOOL", contracts.EffectTypeCallTool} {
+			decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) {
+				req.ActionURN, req.ToolURN, req.EffectClass = action, contracts.EffectTypeExecutePayment, "E0"
+			})
+			requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceEffectCatalog, "E0")
+		}
+	})
+}
+
+// The governed proxy evaluates one fixed kind of effect and assigns its class
+// itself; the record says so.
+func TestGovernedOpenAIProxyMarksItsEffectClassAsRouteAssigned(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
+	signer, err := helmcrypto.NewEd25519Signer("openai-effect-class-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturing := &evaluateRouteCapturingPDP{}
+	svc := &Services{
+		Guardian: guardian.NewGuardian(signer, allowGraphForEffectClassTest(t, "LLM_INFERENCE"),
+			artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
+		ReceiptStore:  &captureReceiptStore{},
+		ReceiptSigner: signer,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(
+		`{"model":"gpt-test","messages":[],"effect_class":"E0","effect_class_source":"caller_declared"}`,
+	))
+	req.Header.Set("Authorization", "Bearer provider-secret")
+	req.Header.Set(workspaceHeader, "workspace-a")
+	ctx := auth.WithPrincipal(req.Context(), &auth.BasePrincipal{ID: "proxy-agent", TenantID: "tenant-a"})
+	ctx = auth.WithAuthenticatedCredential(ctx, "proxy-credential")
+	handleGovernedOpenAIProxy(httptest.NewRecorder(), req.WithContext(ctx), svc)
+	if capturing.request == nil {
+		t.Fatal("the request did not reach the policy decision point; the case proves nothing")
+	}
+	requireEffectClassBinding(t, capturing.request.Context,
+		contracts.EffectRiskClass(contracts.EffectTypeDataEgress), guardian.EffectClassSourceKernelRoute, nil)
 }

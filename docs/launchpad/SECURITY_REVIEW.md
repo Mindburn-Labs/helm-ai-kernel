@@ -1,5 +1,7 @@
 # Launchpad Security Review
 
+<!-- quantum_posture: this review names the existing cosign signatures on promoted images and adds no post-quantum cryptographic control. -->
+
 Status: Launchpad v1 local-container review passes for OpenClaw and Hermes from
 workflow `26198407296`. OpenCode and Kilo Code are `verify_only`; `--version`
 smoke checks do not count as live-agent F2 coverage. The `v0.5.9`
@@ -100,8 +102,9 @@ clean-install gate remains the package/install release gate.
   key elimination until the token/proxy broker lands.
 - [REBUILD] License spoofing needs tests against forged SPDX/license metadata
   and upstream-source mismatch.
-- [REBUILD] Public-key cryptographic Skill Pack signatures are not implemented;
-  current first-party verification is keyring/ref/content-hash based.
+- [REBUILD] Public-key cryptographic Skill Pack signatures are not implemented.
+  First-party packs are pinned by a content digest compiled into the binary;
+  every other pack is unsigned and does not install (helm-tracker#311).
 - [DEFER] Cloud ambiguous-outcome duplicate provision is tested at
   reconciliation logic level only, not against real providers.
 - [DEFER] Network egress bypass and container escape need continued live

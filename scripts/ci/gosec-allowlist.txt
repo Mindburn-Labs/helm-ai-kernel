@@ -89,7 +89,6 @@ G122 core/cmd/helm-ai-kernel/pack_cmd.go dbfffc239169
 G122 core/pkg/conform/engine.go dbfffc239169
 G122 core/pkg/launchpad/importer/fetcher.go 63904c6e10a8
 G122 core/pkg/launchpad/receipts/evidence_pack.go dbfffc239169
-G122 core/pkg/skillpacks/scanner.go dbfffc239169
 G122 core/pkg/spendproxy/savings.go dbfffc239169
 G122 core/pkg/verifier/eu_ai_act.go 661d7f65d05f
 G122 core/pkg/verifier/verifier.go 661d7f65d05f
@@ -345,8 +344,6 @@ G304 core/pkg/skillpacks/loader.go 8f256b8ef0f4
 G304 core/pkg/skillpacks/loader.go aa9837404799
 G304 core/pkg/skillpacks/plugin.go 1776bdcd5325
 G304 core/pkg/skillpacks/plugin.go 6d3ab38598d3
-G304 core/pkg/skillpacks/scanner.go dbfffc239169
-G304 core/pkg/skillpacks/validation.go dbfffc239169
 G304 core/pkg/spendproxy/config.go 84f8ae84aaaf
 G304 core/pkg/spendproxy/issuer.go 84f8ae84aaaf
 G304 core/pkg/spendproxy/savings.go dbfffc239169

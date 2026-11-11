@@ -925,7 +925,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks cloneProjectionState
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks cloneProjectionTrustVerifierKey
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks containsString
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks currentProjectionGeneration
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks decodeStrictProjectionJSON
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks equalStrings
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks expectedProjectionLive
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks findProjectionAttempt

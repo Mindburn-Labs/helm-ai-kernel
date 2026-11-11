@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	Register(Subcommand{Name: "skills", Usage: "Scan, install, export, and revoke HELM Skill Packs", RunFn: runSkillsCmd})
+	Register(Subcommand{Name: "skills", Usage: "Verify, install, export, and revoke HELM Skill Packs", RunFn: runSkillsCmd})
 }
 
 func runSkillsCmd(args []string, stdout, stderr io.Writer) int {
@@ -27,7 +27,7 @@ func runSkillsCmd(args []string, stdout, stderr io.Writer) int {
 	case "inspect":
 		return runSkillsInspect(args[1:], stdout, stderr)
 	case "verify", "scan":
-		return runSkillsScan(args[1:], stdout, stderr)
+		return runSkillsScan(args[0], args[1:], stdout, stderr)
 	case "install":
 		return runSkillsInstall(args[1:], stdout, stderr)
 	case "export":
@@ -69,8 +69,10 @@ func runSkillsSearch(args []string, stdout, stderr io.Writer) int {
 	if *jsonOut {
 		return writeSkillsJSON(stdout, map[string]any{"skills": skills, "count": len(skills)})
 	}
+	// The second column is the publisher state computed for the pack. The
+	// status a manifest declares is the pack's own claim and is not listed.
 	for _, skill := range skills {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", skill.ID, skill.Status, skill.ScopeDefault, skill.Risk)
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", skill.Manifest.ID, skill.PublisherVerification.State, skill.Manifest.ScopeDefault, skill.Manifest.Risk)
 	}
 	return 0
 }
@@ -95,20 +97,26 @@ func runSkillsInspect(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skills inspect error: %v\n", err)
 		return 1
 	}
+	publisher := skillpacks.CheckPublisher(pack)
 	payload := map[string]any{
-		"manifest":           pack.Manifest,
-		"authority_boundary": "This skill does not grant tool permissions.",
-		"projection_targets": pack.Manifest.AgentTargets,
+		"manifest":               pack.Manifest,
+		"publisher_verification": publisher,
+		"authority_boundary":     "This skill does not grant tool permissions.",
+		"projection_targets":     pack.Manifest.AgentTargets,
 	}
 	if *jsonOut {
 		return writeSkillsJSON(stdout, payload)
 	}
-	fmt.Fprintf(stdout, "%s %s\n%s\nThis skill does not grant tool permissions.\n", pack.Manifest.ID, pack.Manifest.Version, pack.Manifest.Description)
+	fmt.Fprintf(stdout, "%s %s\n%s\npublisher: %s (%s)\nThis skill does not grant tool permissions.\n",
+		pack.Manifest.ID, pack.Manifest.Version, pack.Manifest.Description, publisher.State, publisher.Reason)
 	return 0
 }
 
-func runSkillsScan(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("skills scan", flag.ContinueOnError)
+// runSkillsScan serves `skills verify` and `skills scan`. It exits 0 only for
+// ALLOW, which a pack gets only when its files are the ones this binary pins:
+// an unsigned pack is ESCALATE or DENY and exits 1 in text and JSON alike.
+func runSkillsScan(command string, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("skills "+command, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	ref, parseArgs := leadingRef(args)
@@ -119,26 +127,24 @@ func runSkillsScan(args []string, stdout, stderr io.Writer) int {
 		ref = fs.Arg(0)
 	}
 	if ref == "" {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel skills scan <path_or_ref> --json")
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel skills %s <path_or_ref> --json\n", command)
 		return 2
 	}
 	result, err := skillpacks.ScanPath(ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills scan error: %v\n", err)
+		fmt.Fprintf(stderr, "skills %s error: %v\n", command, err)
 		return 1
 	}
 	if *jsonOut {
-		code := writeSkillsJSON(stdout, result)
-		if code != 0 {
+		if code := writeSkillsJSON(stdout, result); code != 0 {
 			return code
 		}
-		if result.Verdict != skillpacks.VerdictAllow {
-			return 1
-		}
-		return 0
+	} else {
+		fmt.Fprintf(stdout, "%s %s %s\n", result.SkillID, result.Verdict, result.ReasonCode)
+		fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)
+		fmt.Fprintf(stdout, "policy: %s %s %s\n", result.Policy.Source, result.Policy.Ref, result.Policy.Hash)
 	}
-	fmt.Fprintf(stdout, "%s %s %s\n", result.SkillID, result.Verdict, result.ReasonCode)
-	if result.Verdict == skillpacks.VerdictDeny {
+	if result.Verdict != skillpacks.VerdictAllow {
 		return 1
 	}
 	return 0
@@ -182,7 +188,8 @@ func runSkillsInstall(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintf(stdout, "Skill %s %s (%s)\n", result.SkillID, result.Status, result.Verdict)
+	fmt.Fprintf(stdout, "Skill %s %s (%s %s)\n", result.SkillID, result.Status, result.Verdict, result.ReasonCode)
+	fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.Scan.PublisherVerification.State, result.Scan.PublisherVerification.Reason)
 	if result.Verdict != skillpacks.VerdictAllow {
 		return 1
 	}
@@ -220,6 +227,10 @@ func runSkillsExport(args []string, stdout, stderr io.Writer) int {
 		return writeSkillsJSON(stdout, result)
 	}
 	fmt.Fprintf(stdout, "Exported %s to %s\n", ref, *output)
+	// Export refuses only a DENY, so say what the scan found about the pack.
+	if scan, ok := result["scan"].(skillpacks.ScanResult); ok {
+		fmt.Fprintf(stdout, "scan: %s %s\npublisher: %s (%s)\n", scan.Verdict, scan.ReasonCode, scan.PublisherVerification.State, scan.PublisherVerification.Reason)
+	}
 	return 0
 }
 

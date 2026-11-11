@@ -52,11 +52,11 @@ Date: 2026-05-18
 Historical audit heading. "Full coverage" here means inventory completeness for
 this skill-pack survey, not a product completeness or GA claim.
 
-[REFACTOR] Add signature verification backed by actual public keys instead of first-party repo references.
+[REFACTOR] Add signature verification backed by actual public keys. Since helm-tracker#311 the first-party packs are pinned by a content digest compiled into the binary and every other pack is unsigned; the string comparison this audit found is removed.
 
 [REFACTOR] Add full JSON Schema validation in the loader, not only typed manifest checks.
 
-[REFACTOR] Add policy TOML parser validation for `policies/skills/*.toml`.
+[REFACTOR] Add policy TOML parser validation for `policies/skills/*.toml`. Since helm-tracker#311 the scan reads no policy file: its rules are compiled in, and a test parses `policies/skills/first-party.safe.toml` and binds each key to behaviour.
 
 [DEFER] Add GitHub remote skill fetch and pinned source verification.
 

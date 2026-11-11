@@ -15,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -325,8 +326,12 @@ func validateTrustInitConfig(cfg evidencepkg.EvidencePackTrustConfig) error {
 }
 
 type evidenceInspectReport struct {
-	Bundle             string                 `json:"bundle"`
-	Verified           bool                   `json:"verified"`
+	Bundle   string `json:"bundle"`
+	Verified bool   `json:"verified"`
+	// Outcome and CheckCounts mirror `verify --json`: Verified alone does not
+	// say how many checks ran.
+	Outcome            receiptverify.Verdict  `json:"outcome"`
+	CheckCounts        verifier.CheckCounts   `json:"check_counts"`
 	Summary            string                 `json:"summary"`
 	IssueCount         int                    `json:"issue_count"`
 	MerkleRoot         string                 `json:"merkle_root,omitempty"`
@@ -455,6 +460,8 @@ func inspectEvidenceBundle(bundle string, allowSelfAttested bool) (evidenceInspe
 		out = evidenceInspectReport{
 			Bundle:          bundle,
 			Verified:        report.Verified,
+			Outcome:         report.Outcome,
+			CheckCounts:     report.CheckCounts,
 			Summary:         report.Summary,
 			IssueCount:      report.IssueCount,
 			MerkleRoot:      report.MerkleRoot,

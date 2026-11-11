@@ -241,6 +241,12 @@ removal_proofs:
     replace: "\t\t\tactualHash := sha256Hex(content)\n\t\t\tif false && actualHash != expectedHash {\n"
     tests:
       - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+  - control: CTL-009
+    file: core/pkg/verifier/verifier.go
+    find: "\tif path == \"\" {\n\t\treturn notRun(\"connector_evidence\", \"pack has no connector_evidence.json\")\n"
+    replace: "\tif path == \"\" {\n\t\treturn verified(\"connector_evidence\", \"no connector evidence record\")\n"
+    tests:
+      - "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
   - control: CTL-010
     file: core/pkg/mcp/server.go
     find: "\t\t\tDecisionLatencyMs: decisionLatency,\n\t\t}))\n\n\t\tswitch decision.Verdict {\n"
@@ -2456,7 +2462,8 @@ controls:
     owner: Mindburn Labs core team (conformance)
     claim: >-
       Receipts and evidence bundles verify, and a tampered, truncated or
-      untrusted bundle fails verification.
+      untrusted bundle fails verification. A check the bundle gives no input
+      to is reported as not run and is never counted as passed.
     status: enforced
     entry_points:
       - "core/pkg/verifier.VerifyBundleWithOptions"
@@ -2466,6 +2473,8 @@ controls:
     bypass_assumptions:
       - "A self-attested seal is rejected by default; a caller that opts into accepting one gets weaker evidence."
       - "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check."
+      - "A bundle that omits optional evidence (a receipt chain, manifest file hashes, connector evidence, an EU AI Act profile, host evidence, a replay gate, signed receipts) still verifies: those checks are NOT_RUN, and VERIFIED covers only the checks that ran. A caller that needs one of them must name it with `--require-check`."
+      - "The field-presence checks (policy_decision_hashes, connector_evidence, eu_ai_act_profile, replay_determinism) recompute nothing; their details say so."
     tests:
       allowed:
         - "core/pkg/verifier.TestVerifyBundle_Valid"
@@ -2475,8 +2484,10 @@ controls:
         - "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures"
       removal:
         - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+        - "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
       bypass:
         - "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault"
+        - "core/pkg/verifier.TestVerifyBundle_RequireChecksFailsACheckThatDidNotRun"
 
   - id: CTL-010
     title: "MCP tool-call mediation"

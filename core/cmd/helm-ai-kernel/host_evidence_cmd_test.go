@@ -35,6 +35,41 @@ func TestVerifyExternalReceiptCmdJSON(t *testing.T) {
 	}
 }
 
+// A host receipt check with nothing to read (no hardware root claim, no
+// declared chain hash) is not a failure and not a pass. The text output must
+// list it apart from the checks that failed and count it apart from the passes.
+func TestVerifyExternalReceiptCmdSeparatesNotRunFromFailed(t *testing.T) {
+	dir := t.TempDir()
+	chainPath, pubHex := writeCLIHostChain(t, dir, "workload-1", "203.0.113.10")
+
+	var stdout, stderr bytes.Buffer
+	if code := runVerifyExternalReceiptCmd([]string{"--chain", chainPath, "--public-key", pubHex}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	text := stdout.String()
+	if !strings.HasPrefix(text, "VERIFIED external host receipt chain") || !strings.Contains(text, " not run") || strings.Contains(text, "0 not run") {
+		t.Fatalf("verified output does not count the checks that did not run:\n%s", text)
+	}
+
+	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := runVerifyExternalReceiptCmd([]string{"--chain", chainPath, "--public-key", hex.EncodeToString(otherPub)}, &stdout, &stderr); code != 1 {
+		t.Fatalf("wrong key exit=%d, want 1; stdout=%s", code, stdout.String())
+	}
+	text = stdout.String()
+	if !strings.Contains(text, "  - external_host:signature:") {
+		t.Fatalf("failed output does not list the signature failure:\n%s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "  - ") && strings.Contains(line, "hardware root claim") {
+			t.Fatalf("a check that did not run is listed as a failure: %q", line)
+		}
+	}
+}
+
 func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	root := t.TempDir()
 	chainPath, pubHex := writeCLIHostChain(t, root, "workload-1", "203.0.113.10")

@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: these commands verify and attach external host receipt
+// chains signed with classical Ed25519 or ECDSA-P256 keys; no post-quantum
+// assurance is claimed for this path.
+
 import (
 	"context"
 	"encoding/json"
@@ -48,16 +52,32 @@ func runVerifyExternalReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(report)
-	} else if report.Verified {
-		fmt.Fprintf(stdout, "VERIFIED external host receipt chain (%d receipts)\n", report.ReceiptCount)
-		fmt.Fprintf(stdout, "Chain hash: %s\n", report.ChainHash)
 	} else {
-		fmt.Fprintf(stdout, "FAILED external host receipt chain (%d receipts)\n", report.ReceiptCount)
+		// A check that did not run has pass=false too; only the status tells it
+		// from a failure, so the listing and the counts go by status.
+		passed, failed, notRun := 0, 0, 0
 		for _, check := range report.Checks {
-			if !check.Pass {
-				fmt.Fprintf(stdout, "  - %s: %s\n", check.Name, check.Reason)
+			switch check.Status {
+			case externalhost.StatusVerified:
+				passed++
+			case externalhost.StatusNotRun:
+				notRun++
+			default:
+				failed++
 			}
 		}
+		if report.Verified {
+			fmt.Fprintf(stdout, "VERIFIED external host receipt chain (%d receipts)\n", report.ReceiptCount)
+			fmt.Fprintf(stdout, "Chain hash: %s\n", report.ChainHash)
+		} else {
+			fmt.Fprintf(stdout, "FAILED external host receipt chain (%d receipts)\n", report.ReceiptCount)
+			for _, check := range report.Checks {
+				if check.Status != externalhost.StatusVerified && check.Status != externalhost.StatusNotRun {
+					fmt.Fprintf(stdout, "  - %s: %s\n", check.Name, check.Reason)
+				}
+			}
+		}
+		fmt.Fprintf(stdout, "checks: %d passed, %d failed, %d not run\n", passed, failed, notRun)
 	}
 	if !report.Verified {
 		return 1

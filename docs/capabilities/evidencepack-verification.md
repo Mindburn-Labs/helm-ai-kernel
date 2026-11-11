@@ -14,6 +14,13 @@ offline.
 helm-ai-kernel verify evidence-pack.tar
 ```
 
+Each check ends `VERIFIED`, `FAILED`, `UNVERIFIABLE` or `NOT_RUN`. A check the
+pack gives no input to is `NOT_RUN`, never passed, and the result states the
+passed, failed and not-run counts separately. Exit 0 means no check failed and
+every required check held; it does not mean every check ran. The checks and
+what requires each are listed in
+[Receipts](../VERIFICATION.md#what-the-result-covers).
+
 ## API Routes
 
 ```text
@@ -30,7 +37,10 @@ that ran: `bundle_format`, `bundle_seal`, `manifest_hashes`,
 `receipt_signatures` and `receipt_chain`. Each check and the outcome is
 `VERIFIED`, `FAILED` or `UNVERIFIABLE`. A seal or receipt signed by any other
 key, including one the bundle carries about itself, is `UNVERIFIABLE` when
-intact and never `VERIFIED`. The route evaluates no policy.
+intact and never `VERIFIED`. The route evaluates no policy. The route and the
+CLI derive their outcome with one rule: any failed check fails the result, an
+unverifiable or missing required check leaves it `UNVERIFIABLE`, and a result
+in which no check ran is never a pass.
 
 ## When To Use This
 

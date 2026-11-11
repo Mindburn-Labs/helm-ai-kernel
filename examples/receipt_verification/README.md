@@ -43,6 +43,12 @@ bundle:
 | `--profile` | `dev-local`, `team`, `customer`, `high-assurance` |
 | `--require-eidas` | requires eIDAS-labelled anchor metadata and declared-time freshness; it does not cryptographically verify RFC 3161 or EU Trusted List qualification |
 | `--require-tee` | requires declared TEE attestation metadata for the selected platform |
+| `--require-check` | names checks that must have run; a named check the pack gives no input to fails instead of being reported as not run |
+
+The accepted pack above prints `checks: 5 passed, 0 failed, 8 not run`: a
+check the pack gives no input to (no receipt chain, no connector evidence, no
+replay gate) is `NOT_RUN` and is never counted as passed. Exit 0 means no
+check failed and every required check held, not that every check ran.
 
 `--entry <path> --proof <file>` verifies a single redacted entry, so a
 counterparty can check one claim without receiving the organization's private

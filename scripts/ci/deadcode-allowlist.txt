@@ -1015,7 +1015,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger PostgresLedger.Lis
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger PostgresLedger.UpdateState
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger sha256Sum
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape NewRecorder
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape NewReplayer
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.BuildManifest
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.Count
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.Entries
@@ -1028,10 +1027,8 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.RecordToolOutput
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.Ref
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Recorder.WithClock
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Replayer.BlockNetwork
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Replayer.Count
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Replayer.Lookup
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Replayer.LookupByKey
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape Replayer.Next
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape WriteManifest
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan EnsembleScanner.Scan
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan EnsembleScanner.computeConsensus

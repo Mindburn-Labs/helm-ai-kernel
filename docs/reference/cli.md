@@ -121,6 +121,29 @@ evaluate file. Exit 0 only when integrity and the caller-supplied
 helm-ai-kernel#859, not `--allow-self-attested`, and not
 `workstation verify-decision`. Hop fixtures are DENY / no permit.
 
+## EvidencePack Verification And Tape Replay
+
+```bash
+helm-ai-kernel verify <pack> --config <trust-config.yaml>
+helm-ai-kernel verify <pack> --config <trust-config.yaml> --require-check chain_integrity
+helm-ai-kernel verify <pack> --config <trust-config.yaml> --json
+helm-ai-kernel replay --evidence <pack-dir>
+```
+
+`verify` reports every check as `VERIFIED`, `FAILED`, `UNVERIFIABLE` or
+`NOT_RUN`, and prints the passed, failed and not-run counts separately. A
+check the pack gives no input to is `NOT_RUN` and is never counted as passed.
+Exit 0 means `VERIFIED`: no check failed and every required check ran and
+held; checks that did not run are listed with the reason. Exit 1 means
+`FAILED` or `UNVERIFIABLE`; exit 2 means no verdict. `--require-check` takes a
+comma-separated list of check names and fails the pack when a named check did
+not run. See [Receipts](../VERIFICATION.md#what-the-result-covers) for each
+check and what requires it.
+
+`replay` serves an EvidencePack's recorded tape (`08_TAPES`) back through the
+tape replayer and reports `COMPLETE`, `DIVERGED` or `NOT_RUN`. Exit 0 only
+for `COMPLETE`. It replays recorded inputs; it does not re-execute the run.
+
 ## Doctor
 
 ```bash

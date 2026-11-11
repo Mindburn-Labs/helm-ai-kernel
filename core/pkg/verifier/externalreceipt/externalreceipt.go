@@ -44,6 +44,7 @@ func VerifyBundleWithOptions(bundleRoot string, opts VerifyOptions) BundleReport
 			report.Checks = append(report.Checks, externalhost.CheckResult{
 				Name:   "external_host:chain_file",
 				Pass:   false,
+				Status: externalhost.StatusFailed,
 				Reason: fmt.Sprintf("%s: %v", rel(bundleRoot, file), err),
 			})
 			continue

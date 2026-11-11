@@ -71,18 +71,23 @@ func TestVerifyBundle_WithTapesDirectory(t *testing.T) {
 	}
 }
 
-func TestVerifyBundle_ReplayDeterminismNAWhenG2OutOfScope(t *testing.T) {
+// A pack whose gates omit G2 claims no replay evidence. The check then has
+// nothing to read: it is NOT_RUN with the reason, and it is not a pass.
+func TestVerifyBundle_ReplayDeterminismNotRunWhenG2OutOfScope(t *testing.T) {
 	dir := createValidBundleFixture(t)
 	r, _ := VerifyBundle(dir)
+	if !r.Verified {
+		t.Fatalf("a pack that declares no replay gate should still verify: %s", r.Summary)
+	}
 	for _, c := range r.Checks {
 		if c.Name != "replay_determinism" {
 			continue
 		}
-		if !c.Pass {
-			t.Fatalf("replay_determinism should be N/A when G2 is omitted: %+v", c)
+		if c.Pass || c.Status != CheckNotRun {
+			t.Fatalf("replay_determinism should be NOT_RUN when G2 is omitted: %+v", c)
 		}
-		if c.Detail != "n/a: 00_INDEX.json gates omit G2 replay determinism" {
-			t.Fatalf("unexpected replay_determinism detail: %q", c.Detail)
+		if c.Reason != "00_INDEX.json gates do not declare G2, so the pack claims no replay evidence" {
+			t.Fatalf("unexpected replay_determinism reason: %q", c.Reason)
 		}
 		return
 	}
@@ -134,6 +139,12 @@ func TestVerifyBundle_ReportIssueCount(t *testing.T) {
 	if r.IssueCount != len(filterFailed(r.Checks)) {
 		t.Fatalf("IssueCount %d does not match failed checks %d", r.IssueCount, len(filterFailed(r.Checks)))
 	}
+	if r.IssueCount != r.CheckCounts.Failed+r.CheckCounts.Unverifiable {
+		t.Fatalf("IssueCount %d does not match check_counts %+v", r.IssueCount, r.CheckCounts)
+	}
+	if r.CheckCounts.NotRun == 0 {
+		t.Fatal("an empty dir gives most checks nothing to read; none was reported as not run")
+	}
 }
 
 func TestSha256Hex_Deterministic(t *testing.T) {
@@ -166,10 +177,12 @@ func TestDirExists_False(t *testing.T) {
 	}
 }
 
+// filterFailed returns the checks that ran and did not pass. A check that did
+// not run is not an issue.
 func filterFailed(checks []CheckResult) []CheckResult {
 	var out []CheckResult
 	for _, c := range checks {
-		if !c.Pass {
+		if c.Status == CheckFailed || c.Status == CheckUnverifiable {
 			out = append(out, c)
 		}
 	}

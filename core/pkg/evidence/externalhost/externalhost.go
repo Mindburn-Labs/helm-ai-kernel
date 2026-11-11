@@ -29,11 +29,31 @@ type VerifyOptions struct {
 	RequireKey   bool
 }
 
+// Check statuses. They carry the same strings as the pack verifier's
+// (core/pkg/verifier CheckStatus), which reports these checks as its own; this
+// package sits below it in the import graph and cannot name its type.
+const (
+	// StatusVerified means the check read its input and the property held.
+	StatusVerified = "VERIFIED"
+	// StatusFailed means the check read its input and the property did not hold.
+	StatusFailed = "FAILED"
+	// StatusNotRun means the receipt or chain carries nothing for the check to
+	// read. It is never counted as passed.
+	StatusNotRun = "NOT_RUN"
+)
+
 type CheckResult struct {
-	Name   string `json:"name"`
+	Name string `json:"name"`
+	// Pass is true only for a check that ran and held (Status VERIFIED).
 	Pass   bool   `json:"pass"`
+	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+	// Reason says why a check failed or did not run.
 	Reason string `json:"reason,omitempty"`
+}
+
+func notRun(name, reason string) CheckResult {
+	return CheckResult{Name: name, Status: StatusNotRun, Reason: reason}
 }
 
 type VerificationReport struct {
@@ -180,7 +200,9 @@ func VerifyChain(chain *contracts.ExternalReceiptChain, opts VerifyOptions) (*Ve
 			report.add(CheckResult{Name: "external_host:chain_hash", Pass: true, Detail: chainHash})
 		}
 	} else {
-		report.add(CheckResult{Name: "external_host:chain_hash", Pass: true, Detail: chainHash})
+		// The hash is computed and reported, but the chain states none to
+		// compare it with.
+		report.add(notRun("external_host:chain_hash", fmt.Sprintf("chain declares no receipt_chain_hash to compare with the computed %s", chainHash)))
 	}
 
 	report.finalize()
@@ -354,7 +376,7 @@ func RegisterBindingChecker(sourceProfile string, fn BindingChecker) {
 func verifyBindingCheck(receipt contracts.ExternalHostReceipt) CheckResult {
 	const name = "external_host:binding"
 	if strings.TrimSpace(receipt.SignedPayloadB64) == "" {
-		return CheckResult{Name: name, Pass: true, Detail: fmt.Sprintf("%s native; normalized fields covered by receipt signature", receipt.ReceiptID)}
+		return notRun(name, fmt.Sprintf("%s is a native receipt with no signed_payload_b64 to bind; its fields are covered by the receipt signature check", receipt.ReceiptID))
 	}
 	payload, err := base64.StdEncoding.DecodeString(strings.TrimSpace(receipt.SignedPayloadB64))
 	if err != nil {
@@ -375,7 +397,7 @@ func verifySignatureCheck(receipt contracts.ExternalHostReceipt, keyHex string, 
 		if require {
 			return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s missing signature", receipt.ReceiptID)}
 		}
-		return CheckResult{Name: "external_host:signature", Pass: true, Detail: fmt.Sprintf("%s unsigned; signature verification skipped", receipt.ReceiptID)}
+		return notRun("external_host:signature", fmt.Sprintf("%s is unsigned and no key was supplied or required, so no signature was checked", receipt.ReceiptID))
 	}
 	if keyHex == "" {
 		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s has signature but no public key", receipt.ReceiptID)}
@@ -417,7 +439,7 @@ func verifySignatureCheck(receipt contracts.ExternalHostReceipt, keyHex string, 
 
 func verifyHardwareRootCheck(receipt contracts.ExternalHostReceipt) CheckResult {
 	if receipt.HardwareRoot == nil || strings.TrimSpace(receipt.HardwareRoot.HardwareRootType) == "" {
-		return CheckResult{Name: "external_host:hardware_root", Pass: true, Detail: fmt.Sprintf("%s no hardware root claim", receipt.ReceiptID)}
+		return notRun("external_host:hardware_root", fmt.Sprintf("%s makes no hardware root claim", receipt.ReceiptID))
 	}
 	rootType := strings.ToUpper(strings.TrimSpace(receipt.HardwareRoot.HardwareRootType))
 	switch rootType {
@@ -515,16 +537,35 @@ func verifyECDSAP256(keyHex string, data, sig []byte) (bool, error) {
 	return false, nil
 }
 
+// add records a check with Status and Pass in agreement. A result built from
+// Pass alone becomes VERIFIED or FAILED; only an explicit NOT_RUN is kept as
+// such, and it is never a pass.
 func (r *VerificationReport) add(check CheckResult) {
+	switch {
+	case check.Status == StatusNotRun:
+		check.Pass = false
+	case check.Pass && (check.Status == "" || check.Status == StatusVerified):
+		check.Status = StatusVerified
+	default:
+		check.Pass = false
+		check.Status = StatusFailed
+	}
 	r.Checks = append(r.Checks, check)
 }
 
+// finalize sets Verified: no check failed and at least one check ran and
+// held. Checks that did not run neither fail the chain nor verify it.
 func (r *VerificationReport) finalize() {
-	r.Verified = true
+	passed := 0
 	for _, check := range r.Checks {
-		if !check.Pass {
+		switch check.Status {
+		case StatusVerified:
+			passed++
+		case StatusNotRun:
+		default:
 			r.Verified = false
 			return
 		}
 	}
+	r.Verified = passed > 0
 }

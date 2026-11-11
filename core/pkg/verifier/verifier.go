@@ -22,6 +22,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,12 +37,21 @@ import (
 // VerifyReport is the structured output of offline verification.
 // Designed for auditor consumption — every field is evidence-grade.
 type VerifyReport struct {
-	Bundle              string                                    `json:"bundle"`
-	Verified            bool                                      `json:"verified"`
-	Timestamp           time.Time                                 `json:"timestamp"`
-	Roots               VerifyRoots                               `json:"roots,omitempty"`
-	Checks              []CheckResult                             `json:"checks"`
-	Summary             string                                    `json:"summary"`
+	Bundle string `json:"bundle"`
+	// Verified is true exactly when Outcome is VERIFIED: no check failed and
+	// every check the pack is required to give input to ran and held. Checks
+	// that did not run are counted in CheckCounts.NotRun, never as passed.
+	Verified bool `json:"verified"`
+	// Outcome is VERIFIED, FAILED or UNVERIFIABLE (AGENTS.md R2).
+	Outcome   receiptverify.Verdict `json:"outcome"`
+	Timestamp time.Time             `json:"timestamp"`
+	Roots     VerifyRoots           `json:"roots,omitempty"`
+	Checks    []CheckResult         `json:"checks"`
+	// CheckCounts counts Checks by the state each ended in.
+	CheckCounts CheckCounts `json:"check_counts"`
+	Summary     string      `json:"summary"`
+	// IssueCount counts the checks that ran and did not pass (FAILED or
+	// UNVERIFIABLE). A check that did not run is not an issue.
 	IssueCount          int                                       `json:"issue_count"`
 	VerifierVer         string                                    `json:"verifier_version"`
 	EnvelopeID          string                                    `json:"envelope_id,omitempty"`
@@ -69,13 +79,20 @@ type VerifyRoots struct {
 
 // CheckResult represents a single verification check.
 type CheckResult struct {
-	Name   string `json:"name"`
-	Pass   bool   `json:"pass"`
+	Name string `json:"name"`
+	// Pass is true only for a check that ran and held (Status VERIFIED).
+	Pass   bool        `json:"pass"`
+	Status CheckStatus `json:"status"`
+	// Detail says what a passed check established.
 	Detail string `json:"detail,omitempty"`
-	Reason string `json:"reason,omitempty"` // failure reason
+	// Reason says why a check failed, was unverifiable or did not run.
+	Reason string `json:"reason,omitempty"`
 }
 
-const VerifierVersion = "0.2.0"
+// VerifierVersion identifies the report format. 0.3.0 added the per-check
+// status, outcome and check_counts, and stopped counting checks without input
+// as passed.
+const VerifierVersion = "0.3.0"
 
 type VerifyOptions struct {
 	Profile            evidencepkg.EvidenceTrustProfile
@@ -102,6 +119,10 @@ type VerifyOptions struct {
 	// verified it against an external trusted key. Standalone library callers
 	// should leave this false so the seal verifier remains fail-closed.
 	AllowVerifiedConformanceSignature bool
+	// RequireChecks names registered checks (see CheckNames) the caller needs
+	// to have run. A named check that would report NOT_RUN is FAILED instead,
+	// so a pack that omits the evidence cannot verify.
+	RequireChecks []string
 	// AllowSelfAttested accepts a dev-local seal whose verification key comes
 	// from inside the pack. Only set this when verifying a pack this process
 	// just produced; never when verifying one that arrived from elsewhere.
@@ -131,113 +152,185 @@ func VerifyLocallyProducedBundle(bundlePath string) (*VerifyReport, error) {
 	})
 }
 
+// checkRun is what a registered check reads: the pack, the caller's options
+// and the report so far. The seal check resolves the trust profile the later
+// checks are judged under, so opts changes as the registry runs.
+type checkRun struct {
+	bundlePath string
+	opts       VerifyOptions
+	report     *VerifyReport
+}
+
+type registeredCheck struct {
+	name string
+	run  func(*checkRun) []CheckResult
+}
+
+// checkRegistry is every check VerifyBundleWithOptions runs, in report order.
+//
+// Each entry reports at least one result on every pack. A check with nothing
+// to read reports NOT_RUN with the reason; it neither stays silent nor passes.
+// A check whose input the pack is required to carry (by the pack format, by
+// the gates 00_INDEX.json declares, or by VerifyOptions.RequireChecks) reports
+// FAILED when that input is missing.
+// TestCheckRegistry_NoCheckPassesWithoutInput holds every entry to this.
+var checkRegistry = []registeredCheck{
+	{"structure", func(run *checkRun) []CheckResult { return []CheckResult{checkStructure(run.bundlePath)} }},
+	{"index_integrity", func(run *checkRun) []CheckResult { return []CheckResult{checkIndex(run.bundlePath)} }},
+	{"roots", func(run *checkRun) []CheckResult { return []CheckResult{checkRoots(run.bundlePath, run.report)} }},
+	{"evidence_pack_seal", func(run *checkRun) []CheckResult {
+		result := checkEvidencePackSeal(run.bundlePath, run.report, run.opts)
+		// Embedded receipts are judged under the profile the seal resolved (the
+		// flag, else the trust config's active_profile, else dev-local). Using
+		// the raw flag here let an empty --profile trust pack-carried receipt
+		// keys inside a team or customer pack.
+		if run.report.Seal != nil && run.report.Seal.TrustLevel != "" {
+			run.opts.Profile = run.report.Seal.TrustLevel
+		}
+		return []CheckResult{result}
+	}},
+	{"file_hashes", func(run *checkRun) []CheckResult { return checkFileHashes(run.bundlePath) }},
+	{"eu_ai_act_profile", func(run *checkRun) []CheckResult {
+		return []CheckResult{checkEUAIActEvidenceProfile(run.bundlePath)}
+	}},
+	{"connector_evidence", func(run *checkRun) []CheckResult { return []CheckResult{checkConnectorEvidence(run.bundlePath)} }},
+	{"chain_integrity", func(run *checkRun) []CheckResult { return []CheckResult{checkChainIntegrity(run.bundlePath)} }},
+	{"lamport_monotonicity", func(run *checkRun) []CheckResult {
+		return []CheckResult{checkLamportMonotonicity(run.bundlePath)}
+	}},
+	{"policy_decision_hashes", func(run *checkRun) []CheckResult {
+		return []CheckResult{checkPolicyDecisionHashes(run.bundlePath)}
+	}},
+	{"replay_determinism", func(run *checkRun) []CheckResult { return []CheckResult{checkReplayDeterminism(run.bundlePath)} }},
+	{"host_evidence", func(run *checkRun) []CheckResult { return checkHostEvidence(run.bundlePath, run.opts) }},
+	{"embedded_signature_trust", func(run *checkRun) []CheckResult {
+		result := checkEmbeddedSignatureTrust(run.bundlePath, run.opts).normalized()
+		// With no trust root for the seal, nothing vouches for the keys these
+		// signatures would be checked against either. That is unproven, not
+		// tampered, so it must not turn an UNVERIFIABLE pack into a FAILED one.
+		if result.Status == CheckFailed && run.report.SealState == evidencepkg.EvidencePackSealStateUnverifiable {
+			result.Status = CheckUnverifiable
+		}
+		return []CheckResult{result}
+	}},
+}
+
+// results runs the check and normalizes what it returns, so every result
+// carries a status that agrees with Pass.
+func (check registeredCheck) results(run *checkRun) []CheckResult {
+	results := check.run(run)
+	for i := range results {
+		results[i] = results[i].normalized()
+	}
+	return results
+}
+
+// CheckNames lists the registered checks in report order. These are the names
+// VerifyOptions.RequireChecks accepts.
+func CheckNames() []string {
+	names := make([]string, len(checkRegistry))
+	for i, check := range checkRegistry {
+		names[i] = check.name
+	}
+	return names
+}
+
+// packChecksRequiredForVerified are the checks every EvidencePack must give
+// input to. Each of them fails, rather than reports NOT_RUN, when its input is
+// missing; Conclude withholds VERIFIED if one is ever absent from a report.
+var packChecksRequiredForVerified = []string{"structure", "evidence_pack_seal", "policy_decision_hashes"}
+
 // VerifyBundleWithOptions performs offline verification with an explicit trust profile.
 func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyReport, error) {
+	callerRequired := make(map[string]bool, len(opts.RequireChecks))
+	for _, name := range opts.RequireChecks {
+		if !slices.Contains(CheckNames(), name) {
+			return nil, fmt.Errorf("unknown check %q in RequireChecks (known checks: %s)", name, strings.Join(CheckNames(), ", "))
+		}
+		callerRequired[name] = true
+	}
+
 	report := &VerifyReport{
 		Bundle:      bundlePath,
-		Verified:    true,
+		Outcome:     receiptverify.VerdictFailed,
 		Timestamp:   time.Now().UTC(),
 		Checks:      make([]CheckResult, 0),
 		VerifierVer: VerifierVersion,
 	}
-
-	// 1. Structure check
-	report.addCheck(checkStructure(bundlePath))
-
-	// 2. Index integrity
-	report.addCheck(checkIndex(bundlePath))
-	roots, err := computeIndexRoots(bundlePath)
-	if err != nil {
-		report.addCheck(CheckResult{Name: "roots", Pass: false, Reason: err.Error()})
-	} else if roots.ManifestRootHash != "" {
-		report.Roots = roots
-		report.MerkleRoot = roots.MerkleRoot
-		report.addCheck(CheckResult{
-			Name:   "roots",
-			Pass:   true,
-			Detail: fmt.Sprintf("%d indexed entries; manifest_root_hash=%s; merkle_root=%s", roots.EntryCount, roots.ManifestRootHash, roots.MerkleRoot),
-		})
-	}
-
-	// 3. Native EvidencePack seal.
-	report.addCheck(checkEvidencePackSeal(bundlePath, report, opts))
-	// Embedded receipts are judged under the profile the seal resolved (the
-	// flag, else the trust config's active_profile, else dev-local). Using the
-	// raw flag here let an empty --profile trust pack-carried receipt keys
-	// inside a team or customer pack.
-	if report.Seal != nil && report.Seal.TrustLevel != "" {
-		opts.Profile = report.Seal.TrustLevel
-	}
-
-	// 4. File hash integrity
-	report.addChecks(checkFileHashes(bundlePath))
-
-	// 4b. Optional EU AI Act profile integrity. Absence remains valid for
-	// legacy EvidencePacks; presence must be complete and redaction-safe.
-	report.addCheck(checkEUAIActEvidenceProfile(bundlePath))
-
-	// 4c. Optional external connector evidence integrity. Absence remains valid
-	// for legacy EvidencePacks; presence must bind production proof fields.
-	report.addCheck(checkConnectorEvidence(bundlePath))
-
-	// 5. Chain integrity (receipt ordering)
-	report.addCheck(checkChainIntegrity(bundlePath))
-
-	// 6. Lamport monotonicity
-	report.addCheck(checkLamportMonotonicity(bundlePath))
-
-	// 7. Policy decision hashes
-	report.addCheck(checkPolicyDecisionHashes(bundlePath))
-
-	// 8. Replay determinism verdict
-	report.addCheck(checkReplayDeterminism(bundlePath))
-
-	// 9. Optional external host evidence verification.
-	hostEvidence := externalreceipt.VerifyBundleWithOptions(bundlePath, externalreceipt.VerifyOptions{PublicKeyHex: opts.ExternalHostKeyHex})
-	if hostEvidence.Found {
-		for _, check := range hostEvidence.Checks {
-			report.addCheck(CheckResult{
-				Name:   check.Name,
-				Pass:   check.Pass,
-				Detail: check.Detail,
-				Reason: check.Reason,
-			})
+	run := &checkRun{bundlePath: bundlePath, opts: opts, report: report}
+	for _, check := range checkRegistry {
+		results := check.results(run)
+		if callerRequired[check.name] {
+			results = failIfNothingRan(results)
 		}
+		report.addChecks(results)
 	}
-	report.addCheck(checkEmbeddedSignatureTrust(bundlePath, opts))
 
-	enrichReportMetadata(bundlePath, report, opts)
+	enrichReportMetadata(bundlePath, report, run.opts)
 	report.Finalize()
 	return report, nil
 }
 
-// Finalize counts failed checks and sets Verified, IssueCount and Summary.
-// A report whose only failures come from a missing trust root is
-// UNVERIFIABLE: the content is intact but nothing configured vouches for the
-// signer. It is never a pass.
-func (report *VerifyReport) Finalize() {
-	failed := 0
-	trustRootOnly := report.SealState == evidencepkg.EvidencePackSealStateUnverifiable
-	for _, c := range report.Checks {
-		if c.Pass {
-			continue
-		}
-		failed++
-		if c.Name != "evidence_pack_seal" && c.Name != "embedded_signature_trust" {
-			trustRootOnly = false
+// failIfNothingRan turns the results of a check the caller requires into
+// failures when none of them ran. A check that did run keeps its results as
+// they are: requiring host_evidence asks for a host receipt chain, not for
+// every receipt in it to make a hardware root claim.
+func failIfNothingRan(results []CheckResult) []CheckResult {
+	for _, result := range results {
+		if result.Status != CheckNotRun {
+			return results
 		}
 	}
-	report.IssueCount = failed
-	switch {
-	case failed == 0:
-		report.Verified = true
-		report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
-	case trustRootOnly:
-		report.Verified = false
-		report.Summary = fmt.Sprintf("UNVERIFIABLE: no trust root for the seal signer; %d/%d checks could not be verified (pass --config, set HELM_EVIDENCE_TRUST_CONFIG or HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX)", failed, len(report.Checks))
+	for i, result := range results {
+		results[i] = failed(result.Name, "required by the caller, but it did not run: "+result.Reason).normalized()
+	}
+	return results
+}
+
+// Finalize normalizes the checks and sets Outcome, Verified, CheckCounts,
+// IssueCount and Summary from them. It is safe to call again after appending
+// checks.
+//
+// A report whose only non-passing checks lack a trust root is UNVERIFIABLE:
+// the content is intact but nothing configured vouches for the signer. It is
+// never a pass.
+func (report *VerifyReport) Finalize() {
+	outcomes := make([]CheckOutcome, len(report.Checks))
+	for i := range report.Checks {
+		report.Checks[i] = report.Checks[i].normalized()
+		outcomes[i] = CheckOutcome{Name: report.Checks[i].Name, Status: report.Checks[i].Status}
+	}
+	conclusion := Conclude(outcomes, packChecksRequiredForVerified)
+	report.Outcome = conclusion.Outcome
+	report.Verified = conclusion.Outcome == receiptverify.VerdictVerified
+	report.CheckCounts = conclusion.Counts
+	report.IssueCount = conclusion.Counts.Failed + conclusion.Counts.Unverifiable
+	report.Summary = summarize(conclusion)
+}
+
+// summarize states the verdict with the passed, failed and not-run counts
+// apart, and says when a VERIFIED result covers only part of the registry.
+func summarize(conclusion Conclusion) string {
+	counts := conclusion.Counts
+	tally := fmt.Sprintf("%d passed, %d failed, ", counts.Passed, counts.Failed)
+	if counts.Unverifiable > 0 {
+		tally += fmt.Sprintf("%d unverifiable, ", counts.Unverifiable)
+	}
+	tally += fmt.Sprintf("%d not run", counts.NotRun)
+
+	switch conclusion.Outcome {
+	case receiptverify.VerdictVerified:
+		if counts.NotRun > 0 {
+			return fmt.Sprintf("VERIFIED: %s; this result covers only the %d checks that ran", tally, counts.Ran())
+		}
+		return "VERIFIED: " + tally
+	case receiptverify.VerdictUnverifiable:
+		if counts.Unverifiable == 0 {
+			return fmt.Sprintf("UNVERIFIABLE: required checks did not run (%s); %s", strings.Join(conclusion.RequiredNotRun, ", "), tally)
+		}
+		return fmt.Sprintf("UNVERIFIABLE: no trust root for the seal signer; %s (pass --config, set HELM_EVIDENCE_TRUST_CONFIG or HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX)", tally)
 	default:
-		report.Verified = false
-		report.Summary = fmt.Sprintf("FAIL: %d/%d checks failed", failed, len(report.Checks))
+		return "FAILED: " + tally
 	}
 }
 
@@ -272,20 +365,16 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 		report.SignatureTotalCount++
 	}
 	if seal.State == "valid" {
-		return CheckResult{
-			Name:   "evidence_pack_seal",
-			Pass:   true,
-			Detail: fmt.Sprintf("seal valid; trust=%s; anchor=%s; storage=%s", seal.TrustLevel, seal.AnchorStatus, seal.StorageStatus),
-		}
+		return verified("evidence_pack_seal", fmt.Sprintf("seal valid; trust=%s; anchor=%s; storage=%s", seal.TrustLevel, seal.AnchorStatus, seal.StorageStatus))
 	}
 	reason := strings.Join(seal.Errors, "; ")
 	if reason == "" {
 		reason = "native EvidencePack seal is invalid"
 	}
 	if seal.State == evidencepkg.EvidencePackSealStateUnverifiable {
-		reason = "UNVERIFIABLE (no trust root): " + reason
+		return CheckResult{Name: "evidence_pack_seal", Status: CheckUnverifiable, Reason: "UNVERIFIABLE (no trust root): " + reason}
 	}
-	return CheckResult{Name: "evidence_pack_seal", Pass: false, Reason: reason}
+	return failed("evidence_pack_seal", reason)
 }
 
 func enrichReportMetadata(bundlePath string, report *VerifyReport, opts VerifyOptions) {
@@ -366,7 +455,7 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
 	valid, selfAttested, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	if total == 0 {
-		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
+		return notRun("embedded_signature_trust", "no receipt or attestation in the pack declares a signature, and no configured witness key matches a witness signature")
 	}
 	if valid == total {
 		detail := fmt.Sprintf("%d embedded receipt or witness signatures verified against configured trust roots", valid)
@@ -762,10 +851,6 @@ func shortHash(value string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-func (r *VerifyReport) addCheck(c CheckResult) {
-	r.Checks = append(r.Checks, c)
-}
-
 func (r *VerifyReport) addChecks(cs []CheckResult) {
 	r.Checks = append(r.Checks, cs...)
 }
@@ -789,53 +874,75 @@ func checkStructure(bundlePath string) CheckResult {
 		return CheckResult{Name: "structure", Pass: false, Reason: "missing manifest.json or 00_INDEX.json"}
 	}
 
-	return CheckResult{Name: "structure", Pass: true, Detail: "bundle structure valid"}
+	// Only the presence of an index or manifest file is established here; what
+	// they list is checked by index_integrity, file_hashes and the seal.
+	present := "00_INDEX.json"
+	switch {
+	case hasManifest && hasIndex:
+		present = "00_INDEX.json and manifest.json"
+	case hasManifest:
+		present = "manifest.json"
+	}
+	return verified("structure", "pack is a directory that holds "+present)
 }
 
 func checkIndex(bundlePath string) CheckResult {
+	const name = "index_integrity"
 	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
 	if !fileExists(indexPath) {
-		// Try manifest.json as alternative
-		manifestPath := filepath.Join(bundlePath, "manifest.json")
-		if !fileExists(manifestPath) {
-			return CheckResult{Name: "index_integrity", Pass: true, Detail: "no index file (legacy bundle)"}
-		}
-		data, err := os.ReadFile(manifestPath)
-		if err != nil {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("cannot read manifest: %v", err)}
-		}
-		var manifest map[string]any
-		if err := json.Unmarshal(data, &manifest); err != nil {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("invalid manifest JSON: %v", err)}
-		}
-		return CheckResult{Name: "index_integrity", Pass: true, Detail: "manifest.json valid JSON"}
+		// A manifest.json pack lists its hashes in the manifest; file_hashes
+		// reads those. Parsing the manifest here used to count as index
+		// integrity although no index was compared.
+		return notRun(name, "pack has no 00_INDEX.json, so there are no indexed hashes to compare")
 	}
 
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
-		return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("cannot read index: %v", err)}
+		return failed(name, fmt.Sprintf("cannot read index: %v", err))
 	}
 	var index indexFile
 	if err := json.Unmarshal(data, &index); err != nil {
-		return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("invalid index JSON: %v", err)}
+		return failed(name, fmt.Sprintf("invalid index JSON: %v", err))
+	}
+	if len(index.Entries) == 0 {
+		return notRun(name, "00_INDEX.json lists no entries, so there are no indexed hashes to compare")
 	}
 	for _, entry := range index.Entries {
 		if entry.Path == "" {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: "index entry path is required"}
+			return failed(name, "index entry path is required")
 		}
 		clean := filepath.Clean(entry.Path)
 		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("index entry escapes bundle: %s", entry.Path)}
+			return failed(name, fmt.Sprintf("index entry escapes bundle: %s", entry.Path))
 		}
 		data, err := os.ReadFile(filepath.Join(bundlePath, clean))
 		if err != nil {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("indexed file missing %s: %v", entry.Path, err)}
+			return failed(name, fmt.Sprintf("indexed file missing %s: %v", entry.Path, err))
 		}
 		if actual := sha256Hex(data); actual != entry.SHA256 {
-			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("indexed hash mismatch for %s: expected %s, got %s", entry.Path, entry.SHA256, actual)}
+			return failed(name, fmt.Sprintf("indexed hash mismatch for %s: expected %s, got %s", entry.Path, entry.SHA256, actual))
 		}
 	}
-	return CheckResult{Name: "index_integrity", Pass: true, Detail: "00_INDEX.json entries verified"}
+	return verified(name, fmt.Sprintf("%d files listed in 00_INDEX.json are present and match their SHA-256", len(index.Entries)))
+}
+
+// checkRoots derives the manifest root hash and Merkle root from the hashes
+// 00_INDEX.json lists. It compares them with nothing: the seal check does that.
+func checkRoots(bundlePath string, report *VerifyReport) CheckResult {
+	const name = "roots"
+	if !fileExists(filepath.Join(bundlePath, "00_INDEX.json")) {
+		return notRun(name, "pack has no 00_INDEX.json to derive roots from")
+	}
+	roots, err := computeIndexRoots(bundlePath)
+	if err != nil {
+		return failed(name, err.Error())
+	}
+	if roots.ManifestRootHash == "" {
+		return failed(name, "00_INDEX.json yielded no manifest root hash")
+	}
+	report.Roots = roots
+	report.MerkleRoot = roots.MerkleRoot
+	return verified(name, fmt.Sprintf("derived from 00_INDEX.json: %d indexed entries; manifest_root_hash=%s; merkle_root=%s", roots.EntryCount, roots.ManifestRootHash, roots.MerkleRoot))
 }
 
 type indexEntry struct {
@@ -876,8 +983,13 @@ func checkFileHashes(bundlePath string) []CheckResult {
 		var manifest struct {
 			FileHashes map[string]string `json:"file_hashes"`
 		}
-		if err := json.Unmarshal(data, &manifest); err != nil || manifest.FileHashes == nil {
-			return []CheckResult{{Name: "file_hashes", Pass: true, Detail: "no file hashes in manifest"}}
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			// A manifest that does not parse is input this check could not
+			// read, not a manifest without hashes.
+			return []CheckResult{failed("file_hashes", fmt.Sprintf("invalid manifest JSON: %v", err))}
+		}
+		if len(manifest.FileHashes) == 0 {
+			return []CheckResult{notRun("file_hashes", "manifest.json declares no file_hashes")}
 		}
 
 		// Sort keys for deterministic output
@@ -908,14 +1020,14 @@ func checkFileHashes(bundlePath string) []CheckResult {
 				results = append(results, CheckResult{
 					Name:   fmt.Sprintf("hash:%s", name),
 					Pass:   true,
-					Detail: "hash verified",
+					Detail: "SHA-256 matches manifest.json",
 				})
 			}
 		}
 	}
 
 	if len(results) == 0 {
-		results = append(results, CheckResult{Name: "file_hashes", Pass: true, Detail: "no hash manifest (legacy bundle)"})
+		results = append(results, notRun("file_hashes", "pack has no manifest.json, so there are no manifest hashes to compare"))
 	}
 
 	return results
@@ -934,7 +1046,7 @@ func checkConnectorEvidence(bundlePath string) CheckResult {
 		}
 	}
 	if path == "" {
-		return CheckResult{Name: "connector_evidence", Pass: true, Detail: "no connector evidence record"}
+		return notRun("connector_evidence", "pack has no connector_evidence.json")
 	}
 
 	data, err := os.ReadFile(path)
@@ -958,7 +1070,9 @@ func checkConnectorEvidence(bundlePath string) CheckResult {
 	if len(failures) > 0 {
 		return CheckResult{Name: "connector_evidence", Pass: false, Reason: strings.Join(failures, "; ")}
 	}
-	return CheckResult{Name: "connector_evidence", Pass: true, Detail: fmt.Sprintf("%d connector evidence records verified", len(records))}
+	// ValidateConnectorEvidenceRecord checks that the fields are present and
+	// well-formed. It has nothing to recompute the hashes from.
+	return verified("connector_evidence", fmt.Sprintf("%d connector evidence records declare the required sha256 hashes and references; the hashes are not recomputed", len(records)))
 }
 
 func parseConnectorEvidenceRecords(data []byte) ([]evidencepkg.ConnectorEvidenceRecord, error) {
@@ -1381,7 +1495,8 @@ func packClaimsAChain(receiptsDir string) bool {
 	return receipts == 0
 }
 
-// unchainedPackResult describes a pack that makes no chaining claim.
+// unchainedPackResult describes a pack that makes no chaining claim. There is
+// no chain to walk, so the check did not run; it used to be counted as passed.
 func unchainedPackResult(checkName, receiptsDir string) CheckResult {
 	entries, _ := os.ReadDir(receiptsDir)
 	n := 0
@@ -1390,11 +1505,8 @@ func unchainedPackResult(checkName, receiptsDir string) CheckResult {
 			n++
 		}
 	}
-	return CheckResult{
-		Name: checkName, Pass: true,
-		Detail: fmt.Sprintf("%d receipts carry no prev_hash — this pack asserts no chain of custody, "+
-			"so none was verified", n),
-	}
+	return notRun(checkName, fmt.Sprintf("%d receipts carry no prev_hash: this pack asserts no chain of custody, "+
+		"so there is no chain to check", n))
 }
 
 func checkPolicyDecisionHashes(bundlePath string) CheckResult {
@@ -1405,17 +1517,18 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 	receiptsDir := receiptPath(bundlePath)
 	if !dirExists(receiptsDir) {
 		// Already caught by lamport check, but note here too
-		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — cannot verify decision hashes"}
+		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — no policy decision binding to look for"}
 	}
 
 	entries, err := os.ReadDir(receiptsDir)
 	if err != nil || len(entries) == 0 {
-		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipt files to verify decision hashes"}
+		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipt files to look for a policy decision binding in"}
 	}
 
 	// Structural check: parse each receipt and verify either the legacy field or
 	// the current signed MCP policy-receipt binding exists.
 	legacyVerified := 0
+	legacyTotal := 0
 	mcpPolicyTotal := 0
 	mcpPolicyVerified := 0
 	for _, entry := range entries {
@@ -1440,6 +1553,7 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 			}
 			continue
 		}
+		legacyTotal++
 		if firstString(receipt, "decision_hash") != "" {
 			legacyVerified++
 		}
@@ -1447,22 +1561,32 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 
 	if mcpPolicyTotal > 0 {
 		if mcpPolicyTotal != mcpPolicyVerified {
-			return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: fmt.Sprintf("%d/%d MCP policy receipts lack signed authorization bindings", mcpPolicyTotal-mcpPolicyVerified, mcpPolicyTotal)}
+			return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: fmt.Sprintf("%d/%d MCP policy receipts lack an output_hash, args_hash or signature", mcpPolicyTotal-mcpPolicyVerified, mcpPolicyTotal)}
 		}
-		return CheckResult{Name: "policy_decision_hashes", Pass: true, Detail: fmt.Sprintf("%d MCP policy receipts with signed authorization bindings", mcpPolicyVerified)}
+		// Presence only. The signature over these fields is checked by
+		// embedded_signature_trust; neither hash is recomputed here.
+		return verified("policy_decision_hashes", fmt.Sprintf("%d MCP policy receipts carry output_hash, args_hash and signature fields; presence only, the hashes are not recomputed", mcpPolicyVerified))
 	}
 
 	if legacyVerified == 0 {
 		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts contain a policy decision binding"}
 	}
 
-	return CheckResult{Name: "policy_decision_hashes", Pass: true, Detail: fmt.Sprintf("%d receipts with legacy decision hashes", legacyVerified)}
+	return verified("policy_decision_hashes", fmt.Sprintf("%d of %d receipts carry a decision_hash field; presence only, the hash is not recomputed", legacyVerified, legacyTotal))
 }
 
+// checkReplayDeterminism runs when 00_INDEX.json declares gate G2. It checks
+// that the replay evidence the gate names is present and consistent with
+// itself. It replays nothing: live_hash and replay_hash are the pack's own
+// statements, and the tape is not served back.
 func checkReplayDeterminism(bundlePath string) CheckResult {
-	required, detail := replayDeterminismRequired(bundlePath)
+	const name = "replay_determinism"
+	required, reason, err := replayDeterminismRequired(bundlePath)
+	if err != nil {
+		return failed(name, err.Error())
+	}
 	if !required {
-		return CheckResult{Name: "replay_determinism", Pass: true, Detail: detail}
+		return notRun(name, reason)
 	}
 
 	tapesDir := filepath.Join(bundlePath, "08_TAPES")
@@ -1516,41 +1640,66 @@ func checkReplayDeterminism(bundlePath string) CheckResult {
 		entryCount = len(entries)
 	}
 
-	return CheckResult{
-		Name:   "replay_determinism",
-		Pass:   true,
-		Detail: fmt.Sprintf("replay evidence verified: tape_manifest.json present, determinism hashes match, tape entries=%d", entryCount),
-	}
+	return verified(name, fmt.Sprintf("gate G2 evidence is present: tape_manifest.json parses and lists %d entries (not replayed); "+
+		"determinism_manifest.json states equal live_hash and replay_hash (declared by the pack, not recomputed); 05_DIFFS holds no files", entryCount))
 }
 
-func replayDeterminismRequired(bundlePath string) (bool, string) {
+// replayDeterminismRequired reports whether 00_INDEX.json declares gate G2,
+// which is how a pack states that it carries replay evidence. When it does
+// not, the returned reason says why the check has nothing to read. An index
+// that cannot be read or parsed declares nothing either way, so that is an
+// error and not "not required".
+func replayDeterminismRequired(bundlePath string) (bool, string, error) {
 	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
 	if !fileExists(indexPath) {
-		return false, "n/a: 00_INDEX.json missing; index integrity handles bundle validity"
+		return false, "pack has no 00_INDEX.json, so it declares no gates and claims no replay evidence", nil
 	}
 
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
-		return false, "n/a: cannot read 00_INDEX.json gate scope"
+		return false, "", fmt.Errorf("cannot read the gates 00_INDEX.json declares: %v", err)
 	}
 
 	var document map[string]any
 	if err := json.Unmarshal(data, &document); err != nil {
-		return false, "n/a: invalid 00_INDEX.json gate scope"
+		return false, "", fmt.Errorf("cannot parse the gates 00_INDEX.json declares: %v", err)
 	}
 
 	gates, ok := document["gates"].([]any)
 	if !ok {
-		return false, "n/a: 00_INDEX.json has no gates declaration"
+		return false, "00_INDEX.json declares no gates, so the pack claims no replay evidence", nil
 	}
 
 	for _, gate := range gates {
 		if value, ok := gate.(string); ok && value == "G2" {
-			return true, "replay evidence required by 00_INDEX.json gates"
+			return true, "", nil
 		}
 	}
 
-	return false, "n/a: 00_INDEX.json gates omit G2 replay determinism"
+	return false, "00_INDEX.json gates do not declare G2, so the pack claims no replay evidence", nil
+}
+
+// checkHostEvidence verifies external host receipt chains when the pack
+// carries any. Each chain reports its own checks under the chain file's path.
+func checkHostEvidence(bundlePath string, opts VerifyOptions) []CheckResult {
+	hostEvidence := externalreceipt.VerifyBundleWithOptions(bundlePath, externalreceipt.VerifyOptions{PublicKeyHex: opts.ExternalHostKeyHex})
+	if !hostEvidence.Found {
+		return []CheckResult{notRun("host_evidence", "pack has no receipt chain files under host_evidence/ or 11_HOST_EVIDENCE/")}
+	}
+	results := make([]CheckResult, 0, len(hostEvidence.Checks))
+	for _, check := range hostEvidence.Checks {
+		results = append(results, CheckResult{
+			Name:   check.Name,
+			Pass:   check.Pass,
+			Status: CheckStatus(check.Status),
+			Detail: check.Detail,
+			Reason: check.Reason,
+		})
+	}
+	if len(results) == 0 {
+		return []CheckResult{failed("host_evidence", "host evidence chain files produced no checks")}
+	}
+	return results
 }
 
 // --- Helpers ---

@@ -18,12 +18,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -32,11 +34,17 @@ import (
 // Validates a signed EvidencePack bundle: structure, hashes, and signature.
 // Supports auditor mode via --json-out for structured verification reports.
 //
+// Every check ends VERIFIED, FAILED, UNVERIFIABLE or NOT_RUN. A check with
+// nothing to read is NOT_RUN and is never counted as passed.
+//
 // Exit codes:
 //
-//	0 = verification passed
-//	1 = verification failed
-//	2 = runtime error
+//	0 = VERIFIED: no check failed and every check the pack, its declared gates,
+//	    the trust profile and the --require-* flags require ran and held.
+//	    Checks the pack gave no input to are listed as not run; name them with
+//	    --require-check to make their absence a failure.
+//	1 = FAILED or UNVERIFIABLE
+//	2 = runtime or usage error; no verdict was reached
 func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "external-receipt" {
 		return runVerifyExternalReceiptCmd(args[1:], stdout, stderr)
@@ -73,6 +81,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		requireEIDAS      bool
 		eidasMaxAgeHours  int
 		requireTEE        string
+		requireChecks     string
 	)
 
 	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
@@ -92,6 +101,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require eIDAS-labelled anchor metadata (backend=eidas-qtsp with a parseable integrated_time); metadata-only, not RFC 3161 or EU Trusted List cryptographic verification")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of the declared integrated_time checked by --require-eidas; this does not verify the timestamp token")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
+	cmd.StringVar(&requireChecks, "require-check", "", "Comma-separated checks that must have run, for example chain_integrity,connector_evidence. A named check the pack gives no input to is FAILED instead of not run. Checks: "+strings.Join(verifier.CheckNames(), ", "))
 
 	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
 	if normalizeErr != nil {
@@ -112,6 +122,18 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if bundle == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: evidence pack path is required")
 		return 2
+	}
+	var requiredChecks []string
+	for _, name := range strings.Split(requireChecks, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if !slices.Contains(verifier.CheckNames(), name) {
+			_, _ = fmt.Fprintf(stderr, "Error: --require-check names an unknown check %q (checks: %s)\n", name, strings.Join(verifier.CheckNames(), ", "))
+			return 2
+		}
+		requiredChecks = append(requiredChecks, name)
 	}
 
 	verifyTarget := bundle
@@ -158,6 +180,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ManagedAgentReceiptPublicKeyHex:   managedAgentKey,
 		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
 		AllowSelfAttested:                 allowSelfAttested,
+		RequireChecks:                     requiredChecks,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
@@ -244,9 +267,10 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	finalizeVerifyReport(report)
 
 	recordVerification(context.Background(), helmotel.VerificationEvent{
-		EnvelopeID:  report.EnvelopeID,
-		Verified:    report.Verified,
-		CheckCount:  len(report.Checks),
+		EnvelopeID: report.EnvelopeID,
+		Verified:   report.Verified,
+		// Checks that did not run are not part of what was verified.
+		CheckCount:  report.CheckCounts.Ran(),
 		EvidenceRef: bundle,
 	})
 
@@ -268,25 +292,54 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		if report.Verified {
 			printCompactVerifyReport(stdout, report)
 		} else {
-			headline := "FAILED"
-			if strings.HasPrefix(report.Summary, "UNVERIFIABLE") {
-				// Content intact, but no trust root names the signer.
-				headline = "UNVERIFIABLE"
-			}
-			_, _ = fmt.Fprintf(stdout, "%s · envelope %s\n", headline, displayEnvelopeID(report))
+			// UNVERIFIABLE: content intact, but no trust root names the signer.
+			_, _ = fmt.Fprintf(stdout, "%s · envelope %s\n", report.Outcome, displayEnvelopeID(report))
 			_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", bundle)
 			for _, c := range report.Checks {
-				if !c.Pass {
+				if c.Status == verifier.CheckFailed || c.Status == verifier.CheckUnverifiable {
 					_, _ = fmt.Fprintf(stdout, "  - %s: %s\n", c.Name, c.Reason)
 				}
 			}
 		}
+		printVerifyCheckCounts(stdout, report)
 	}
 
-	if !report.Verified {
+	if report.Outcome != receiptverify.VerdictVerified {
 		return 1
 	}
 	return 0
+}
+
+// maxNotRunLines bounds the not-run listing in text output. A pack with many
+// host receipts reports several not-run checks per receipt; --json has them all.
+const maxNotRunLines = 20
+
+// printVerifyCheckCounts prints how many checks passed, failed and did not
+// run, and names each check that did not run with its reason, so a VERIFIED
+// headline cannot be read as covering checks that had nothing to read.
+func printVerifyCheckCounts(stdout io.Writer, report *verifier.VerifyReport) {
+	counts := report.CheckCounts
+	line := fmt.Sprintf("checks: %d passed, %d failed, ", counts.Passed, counts.Failed)
+	if counts.Unverifiable > 0 {
+		line += fmt.Sprintf("%d unverifiable, ", counts.Unverifiable)
+	}
+	line += fmt.Sprintf("%d not run", counts.NotRun)
+	if counts.NotRun > 0 && report.Verified {
+		line += "; this result covers only the checks that ran"
+	}
+	_, _ = fmt.Fprintln(stdout, line)
+	printed := 0
+	for _, c := range report.Checks {
+		if c.Status != verifier.CheckNotRun {
+			continue
+		}
+		if printed == maxNotRunLines {
+			_, _ = fmt.Fprintf(stdout, "  ... and %d more not run (use --json for all of them)\n", counts.NotRun-printed)
+			break
+		}
+		_, _ = fmt.Fprintf(stdout, "  not run: %s: %s\n", c.Name, c.Reason)
+		printed++
+	}
 }
 
 func extractEvidenceArchive(bundlePath, dstDir string) error {
@@ -427,6 +480,8 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 		"-managed-agent-receipt-public-key":  true,
 		"--eidas-max-age-hours":              true,
 		"-eidas-max-age-hours":               true,
+		"--require-check":                    true,
+		"-require-check":                     true,
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -779,5 +834,5 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 }
 
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas, --require-tee), a Kernel receipt.v5 file (receipt --receipt --trusted-public-key-file), a single redacted entry (--entry <path> --proof <file>), or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-check, --require-eidas, --require-tee), a Kernel receipt.v5 file (receipt --receipt --trusted-public-key-file), a single redacted entry (--entry <path> --proof <file>), or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
 }

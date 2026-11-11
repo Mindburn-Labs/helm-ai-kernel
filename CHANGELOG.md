@@ -88,9 +88,60 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- `helm-ai-kernel verify` no longer counts a check as passed when the pack
+  gave it nothing to read. The summary is now, for example,
+  `VERIFIED: 5 passed, 0 failed, 8 not run; this result covers only the 5
+  checks that ran`, where it used to be `PASS: 12/12 checks passed`; a failed
+  result starts with `FAILED:` instead of `FAIL:`. In `--json`, such a check
+  has `"pass": false` and `"status": "NOT_RUN"`. Clients that count
+  `pass: false` entries as failures must read `status`, `outcome` or
+  `check_counts` instead. `verified` and the exit code are unchanged for packs
+  that verified before, except a pack whose `manifest.json` does not parse
+  (see Fixed). `verifier_version` is `0.3.0`.
+- `helm-ai-kernel replay` now exits 1 for a tape with a missing entry, a
+  changed value, a manifest that disagrees with the tape, or no entries. It
+  used to exit 0 for all of these unless `--verify` was passed. The hash and
+  sequence checks always run; `--verify` now only adds the `data_class`
+  requirement. `--json` gains `entries_replayed`, and `replay_status` can be
+  `NOT_RUN`.
+
+### Added
+
+- `helm-ai-kernel verify --require-check <names>` fails the pack when a named
+  check did not run, for example `--require-check chain_integrity` for a pack
+  that must carry a receipt chain.
+- `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
+  `check_counts` and a `status` on every check. `evidence inspect --json`
+  carries `outcome` and `check_counts` too.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- `helm-ai-kernel verify` reported checks that never ran as passed: a pack
+  with no hash manifest, no connector evidence, no EU AI Act profile, no
+  receipt chain, no replay gate and no signed receipts printed
+  `PASS: 12/12 checks passed`. Every check now ends `VERIFIED`, `FAILED`,
+  `UNVERIFIABLE` or `NOT_RUN`, the counts are stated separately, and a
+  `VERIFIED` result names the checks it does not cover. Evidence the pack is
+  required to carry still fails when missing. The CLI and
+  `POST /api/v1/evidence/verify` now derive their outcome with one rule.
+- `verify` passed a `manifest.json` that does not parse as "no file hashes in
+  manifest". It is now a failed `file_hashes` check.
+- Check details no longer say "verified" for field-presence checks:
+  `eu_ai_act_profile`, `connector_evidence`, `policy_decision_hashes` and
+  `replay_determinism` state what was read and what was not recomputed.
+- External host receipt checks with nothing to read (no hardware root claim,
+  no declared chain hash, no foreign payload to bind, an unsigned receipt with
+  no key required) are `NOT_RUN` instead of passed, in `verify` and in
+  `verify external-receipt`, whose text output now prints the passed, failed
+  and not-run counts and whose `--json` checks carry a `status`.
+- `helm-ai-kernel replay` printed `Replay complete: N entries verified`
+  without replaying anything. It now serves every recorded entry back through
+  the tape replayer and reports tape misses, values that do not match their
+  recorded hash and manifest mismatches. It states that it replays recorded
+  inputs and does not re-execute the run.
 
 ## [0.12.0]
 

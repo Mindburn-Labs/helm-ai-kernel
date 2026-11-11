@@ -11,7 +11,11 @@ import (
 )
 
 type guardianTransportBinding struct {
-	EffectClass               string
+	EffectClass string
+	// EffectClassSource is who asserted EffectClass, one of the
+	// guardian.EffectClassSource values. It is bound with the class so the
+	// signed effect never presents a caller's declaration as attested.
+	EffectClassSource         string
 	Destination               string
 	EgressDestinationRequired bool
 	SessionID                 string
@@ -39,6 +43,9 @@ func bindAuthenticatedGuardianContext(ctx context.Context, values map[string]any
 	values[guardian.ContextCredentialHash] = credentialHash
 	if value := strings.TrimSpace(binding.EffectClass); value != "" {
 		values[guardian.ContextEffectClass] = value
+		if binding.EffectClassSource != "" {
+			values[guardian.ContextEffectClassSource] = binding.EffectClassSource
+		}
 	}
 	if value := strings.TrimSpace(binding.Destination); value != "" {
 		values[guardian.ContextDestination] = value
@@ -56,4 +63,30 @@ func bindAuthenticatedGuardianContext(ctx context.Context, values map[string]any
 		values[guardian.ContextTrustLevel] = string(binding.TrustLevel)
 	}
 	return nil
+}
+
+// resolveEffectClass returns the effect class to bind for an evaluated action
+// and who asserted it. The request's value is a caller declaration: it is
+// bound only when it is one of E0..E4, and never below the class the kernel's
+// effect type catalog gives the action, so a caller cannot talk a catalogued
+// effect under a policy ceiling. A value that is not a class (the public
+// contract lets effect_level carry a policy resource) binds no class at all.
+func resolveEffectClass(action, declared string) (class, source string) {
+	declared = strings.TrimSpace(declared)
+	if !contracts.ValidEffectClass(declared) {
+		declared = ""
+	}
+	catalogued := ""
+	if contracts.LookupEffectType(action) != nil {
+		catalogued = contracts.EffectRiskClass(action)
+	}
+	switch {
+	case catalogued != "" && declared <= catalogued:
+		// E0..E4 order as strings; an undeclared class is the empty string.
+		return catalogued, guardian.EffectClassSourceEffectCatalog
+	case declared != "":
+		return declared, guardian.EffectClassSourceCallerDeclared
+	default:
+		return "", ""
+	}
 }

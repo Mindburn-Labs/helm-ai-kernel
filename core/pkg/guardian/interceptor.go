@@ -25,7 +25,11 @@ const (
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
 	ContextEffectClass     = "effect_class"
-	ContextDestination     = "destination"
+	// ContextEffectClassSource says who asserted effect_class: one of the
+	// EffectClassSource values. A class the caller declared is not attested,
+	// and the signed effect says so.
+	ContextEffectClassSource = "effect_class_source"
+	ContextDestination       = "destination"
 	// ContextEgressDestinationRequired is set only by a trusted adapter or
 	// catalog boundary when the operation can transmit data over the network.
 	// Risk class is deliberately not used as an egress proxy: local mutations
@@ -39,11 +43,23 @@ const (
 	semanticScannerMissing    = "SCANNER_UNAVAILABLE"
 )
 
+// Values of ContextEffectClassSource.
+const (
+	// EffectClassSourceEffectCatalog: the kernel's effect type catalog names
+	// the class for the evaluated action.
+	EffectClassSourceEffectCatalog = "effect_catalog"
+	// EffectClassSourceToolCatalog: the operator's PEP tool catalog names it.
+	EffectClassSourceToolCatalog = "tool_catalog"
+	// EffectClassSourceCallerDeclared: the authenticated caller declared it and
+	// the kernel has no record of the action to check it against.
+	EffectClassSourceCallerDeclared = "caller_declared"
+)
+
 // IsReservedSecurityContextKey identifies context keys whose values must be
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextEffectClassSource, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -197,12 +213,7 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 				Params:     evalCtx.Request.Context,
 				Taint:      contracts.TaintLabelsFromContext(evalCtx.Request.Context),
 			}
-			if evalCtx.Request.Action == "EXECUTE_TOOL" {
-				if effect.Params == nil {
-					effect.Params = make(map[string]interface{})
-				}
-				effect.Params["tool_name"] = evalCtx.Request.Resource
-			}
+			bindRequestTool(effect, evalCtx.Request.Resource)
 			effectDigest, err := canonicalEffectDigest(effect)
 			if err != nil {
 				return nil, fmt.Errorf("canonicalize effect digest: %w", err)

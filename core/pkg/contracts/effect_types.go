@@ -364,6 +364,18 @@ func EffectRiskClass(effectTypeID string) string {
 	}
 }
 
+// ValidEffectClass reports whether value is one of the effect classes E0..E4.
+// It is the one definition of the closed set: policy rules, the tool catalog
+// and the transport boundary all decide with it.
+func ValidEffectClass(value string) bool {
+	switch value {
+	case "E0", "E1", "E2", "E3", "E4":
+		return true
+	default:
+		return false
+	}
+}
+
 // IsReservedPreviewEffect reports whether typeID is a reserved preview
 // identifier. Reserved identifiers are never executable: plan validation,
 // graph evaluation and the effect boundary refuse them before policy

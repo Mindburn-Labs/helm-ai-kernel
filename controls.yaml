@@ -1317,6 +1317,19 @@ removal_proofs:
     replace: "\tif false && (rpc == \"\") != (wallets == nil) {\n"
     tests:
       - "core/pkg/gateway/runtime.TestTONActonIsOptionalAndAllOrNothing"
+  - control: CTL-063
+    file: core/pkg/guardian/guardian.go
+    find: "\tif namesToolInParams(effect.EffectType) {\n\t\tif toolName, ok := effect.Params[\"tool_name\"].(string); ok && toolName != \"\" {\n"
+    replace: "\tif effect.EffectType != \"\" {\n\t\tif toolName, ok := effect.Params[\"tool_name\"].(string); ok && toolName != \"\" {\n"
+    tests:
+      - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
+      - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+  - control: CTL-063
+    file: core/cmd/helm-ai-kernel/guardian_transport.go
+    find: "\tcase catalogued != \"\" && declared <= catalogued:\n"
+    replace: "\tcase catalogued != \"\" && declared > catalogued:\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration"
 
 controls:
 
@@ -4816,3 +4829,51 @@ controls:
         - "core/pkg/connectors/sandbox.TestValidIDRefusesWhatCouldEscapeAPathOrACommandLine"
         - "core/pkg/connectors/sandbox/e2b.TestGatewayFindFiltersOnTheClientAndNeverTruncates"
         - "core/pkg/connectors/sandbox/claudemanaged.TestRemoteRunnerDoesNotFollowRedirects"
+
+  - id: CTL-063
+    title: "The evaluated action and its effect class come from the request tuple and the catalog"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Guardian selects the policy rule, and names an execution intent's allowed
+      tool, from the typed request it signs (helm-tracker#304). A tool_name in
+      the request context is read only for the tool-call effect types
+      (EXECUTE_TOOL, CALL_TOOL), where Guardian overwrites it with the request
+      resource first; every other effect is evaluated as its type. One helper
+      (boundActionID) serves the rule lookup and the intent, so they cannot
+      name different tools. On the evaluate, ext-authz and governed proxy
+      routes the trusted effect_class is bound only when it is one of E0..E4,
+      is never below the class the kernel's effect type catalog gives the
+      action, and is bound together with effect_class_source, which says
+      whether the catalog or the caller asserted it; both keys are reserved
+      and stripped from caller input (CTL-022). A value that is not a class
+      binds none.
+    status: enforced
+    entry_points:
+      - "core/pkg/guardian.boundActionID"
+      - "core/pkg/guardian.bindRequestTool"
+      - "core/cmd/helm-ai-kernel.resolveEffectClass"
+    config: []
+    protected_operations:
+      - "Policy rule selection and execution intent issuance for every Guardian decision."
+      - "The effect class bound for POST /api/v1/evaluate, ext-authz and the governed OpenAI proxy."
+    bypass_assumptions:
+      - "For an action the kernel's effect type catalog does not list (any tool name), the class is the caller's declaration. It is recorded as caller_declared and still selects class-keyed policy rules; a server-owned class for arbitrary tool names does not exist yet (helm-tracker#319)."
+      - "On the evaluate route the tool itself is caller-declared: the kernel decides and signs for the tool the request names and does not dispatch it."
+      - "An in-process caller that builds an Effect of a tool-call type sets params.tool_name itself and is trusted to; only the evaluated-request paths overwrite it."
+    tests:
+      allowed:
+        - "core/pkg/guardian.TestEvaluateDecisionSelectsPolicyByGuardianBoundAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteMarksDeclaredEffectClassAsCallerDeclared"
+      forbidden:
+        - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/pkg/guardian.TestEvaluateDecisionBindsCallToolToTheRequestResource"
+        - "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/cmd/helm-ai-kernel.TestGovernedOpenAIProxyIgnoresRequestBodyToolNameForPolicyAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsNoEffectClassForAPolicyResource"
+      removal:
+        - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestResolveEffectClass"

@@ -88,6 +88,24 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Security
+
+- Guardian selects the policy rule, and names an execution intent's allowed
+  tool, from the evaluated request. A `tool_name` in request context is read
+  only for the tool-call effect types (`EXECUTE_TOOL`, `CALL_TOOL`), where
+  Guardian binds it from the request resource. `POST /api/v1/evaluate` and the
+  governed OpenAI proxy previously evaluated the rule named by a caller's
+  `tool_name` and signed an ALLOW for a different tool.
+- The trusted `effect_class` on `POST /api/v1/evaluate` and ext-authz is bound
+  only when the request's value is one of `E0`..`E4`, and never below the class
+  the kernel's effect type catalog gives the action: a catalogued `E4` effect
+  declared as `E0` is evaluated as `E4`. A value that is not a class (the
+  contract lets `effect_level` carry a policy resource) no longer becomes a
+  trusted `effect_class`. The signed effect now carries `effect_class_source`
+  (`effect_catalog`, `tool_catalog` or `caller_declared`), so a declaration is
+  never presented as attested. Effect digests of decisions on these routes and
+  on MCP change because of the added member.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.

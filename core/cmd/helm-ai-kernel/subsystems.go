@@ -352,6 +352,7 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		}
 		if err := bindAuthenticatedGuardianContext(r.Context(), body, guardianTransportBinding{
 			EffectClass:               contracts.EffectRiskClass(contracts.EffectTypeDataEgress),
+			EffectClassSource:         guardian.EffectClassSourceEffectCatalog,
 			Destination:               upstream.Hostname(),
 			EgressDestinationRequired: true,
 			SourceChannel:             contracts.SourceChannelAPIRequest,

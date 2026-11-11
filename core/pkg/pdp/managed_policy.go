@@ -179,9 +179,7 @@ func compileManagedPolicyRules(input []ManagedPolicyRule) ([]compiledManagedPoli
 		selectors := 0
 		if rule.EffectClass != "" {
 			selectors++
-			switch rule.EffectClass {
-			case "E0", "E1", "E2", "E3", "E4":
-			default:
+			if !contracts.ValidEffectClass(rule.EffectClass) {
 				return nil, fmt.Errorf("pdp/managed: rule %q has invalid effect_class %q", rule.ID, rule.EffectClass)
 			}
 		}

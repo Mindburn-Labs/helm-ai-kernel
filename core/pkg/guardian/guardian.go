@@ -378,12 +378,7 @@ func (g *Guardian) signDecisionWithPolicy(ctx context.Context, decision *contrac
 		artifacts = append(artifacts, env)
 	}
 
-	var actionID string
-	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
-		actionID = toolName
-	} else {
-		actionID = effect.EffectType
-	}
+	actionID := boundActionID(effect)
 
 	// Temporal intervention has priority over PRG validation.
 	if intervention != nil && intervention.Type != contracts.InterventionNone {
@@ -543,7 +538,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		return nil, fmt.Errorf("effect digest mismatch: decision=%s requested=%s", decision.EffectDigest, effectDigest)
 	}
 
-	allowedTool := executionIntentAllowedTool(effect)
+	allowedTool := boundActionID(effect)
 	effectBinding, err := contracts.NewEffectDigestBinding(effect)
 	if err != nil {
 		return nil, fmt.Errorf("bind execution intent effect: %w", err)
@@ -598,20 +593,46 @@ const (
 	sandboxIntentMinimumDispatchTime = time.Second
 )
 
-// executionIntentExpiresAt keeps the default short dispatch authority for
-// ordinary effects. A sandbox intent must also cover its signed runtime so the
-// default 5-30 minute profiles can execute; it receives at most five minutes
-// of dispatch slack and can never outlive the exact signed lease.
-func executionIntentAllowedTool(effect *contracts.Effect) string {
-	if effect.EffectType == contracts.EffectTypeRunSandboxedCode {
-		return effect.EffectType
-	}
-	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
-		return toolName
+// boundActionID names the action an effect is evaluated and dispatched as. It
+// selects the policy rule and becomes the execution intent's allowed tool, so
+// one definition serves both and an intent cannot name a tool the policy
+// decision was not evaluated for. tool_name is read only for the effect types
+// whose contract carries the tool in params; every other effect is named by
+// its type. On the evaluated-request path Params is the caller's context, and
+// bindRequestTool overwrites tool_name there before this runs.
+func boundActionID(effect *contracts.Effect) string {
+	if namesToolInParams(effect.EffectType) {
+		if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
+			return toolName
+		}
 	}
 	return effect.EffectType
 }
 
+// namesToolInParams reports the effect types that are a tool call, where
+// params.tool_name is the tool and not free-form content.
+func namesToolInParams(effectType string) bool {
+	return effectType == "EXECUTE_TOOL" || effectType == contracts.EffectTypeCallTool
+}
+
+// bindRequestTool makes the request resource the tool of a tool-call effect
+// built from an evaluated request. Params came from the caller, so a
+// tool_name already in it is replaced: the tool is the typed resource the
+// decision record signs, never a context value.
+func bindRequestTool(effect *contracts.Effect, resource string) {
+	if !namesToolInParams(effect.EffectType) {
+		return
+	}
+	if effect.Params == nil {
+		effect.Params = make(map[string]interface{})
+	}
+	effect.Params["tool_name"] = resource
+}
+
+// executionIntentExpiresAt keeps the default short dispatch authority for
+// ordinary effects. A sandbox intent must also cover its signed runtime so the
+// default 5-30 minute profiles can execute; it receives at most five minutes
+// of dispatch slack and can never outlive the exact signed lease.
 func executionIntentExpiresAt(effect *contracts.Effect, now time.Time) (time.Time, error) {
 	if effect == nil {
 		return time.Time{}, fmt.Errorf("execution intent requires an effect")
@@ -914,12 +935,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			Params:     req.Context,
 			Taint:      contracts.TaintLabelsFromContext(req.Context),
 		}
-		if req.Action == "EXECUTE_TOOL" {
-			if effect.Params == nil {
-				effect.Params = make(map[string]interface{})
-			}
-			effect.Params["tool_name"] = req.Resource
-		}
+		bindRequestTool(effect, req.Resource)
 
 		// 2. Prepare Decision Record
 		effectDigest, err := canonicalEffectDigest(effect)

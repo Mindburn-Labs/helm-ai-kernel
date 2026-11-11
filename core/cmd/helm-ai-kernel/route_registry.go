@@ -260,7 +260,9 @@ const (
 	RouteAuthMetricsToken RouteAuth = "metrics_token"
 	// RouteAuthListenerCredential is the subcommand's own credential: mcp serve
 	// --auth static-header|oauth, or the proxy's HELM_PROXY_TOKEN. Without one,
-	// requireListenerAuth refuses a non-loopback bind.
+	// requireListenerAuth refuses a non-loopback bind. The spend-proxy has no
+	// credential, so its routes are RouteAuthPublic and requireListenerAuth
+	// refuses every non-loopback --addr.
 	RouteAuthListenerCredential RouteAuth = "listener_credential"
 )
 
@@ -280,7 +282,7 @@ func ListenerRouteSpecs() []ListenerRouteSpec {
 		processWide   = "process-wide metrics across every tenant"
 		localMCP      = "the local MCP catalog, policy and data directory; no tenant"
 		proxyTenant   = "the proxy's single --tenant-id"
-		spendEnvelope = "the spend-proxy's configured envelopes; no caller credential, bound to --addr (127.0.0.1 by default)"
+		spendEnvelope = "the spend-proxy's configured envelopes; no caller credential, so --addr binds loopback only (127.0.0.1 by default)"
 	)
 	return []ListenerRouteSpec{
 		{Listener: listenerHealth, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: liveness},

@@ -1,5 +1,10 @@
 package evidence
 
+// quantum_posture: envelope export builds unsigned wrapper payloads and
+// compares SHA-256 canonical hashes. It signs and verifies no signature: the
+// JWS wrapper names EdDSA in its header and carries an empty signature. No
+// post-quantum primitives are used in this file.
+
 import (
 	"fmt"
 	"strings"
@@ -121,37 +126,71 @@ func BuildEnvelopePayload(manifest contracts.EvidenceEnvelopeManifest) (contract
 	}, nil
 }
 
-func VerifyEnvelopePayload(manifest contracts.EvidenceEnvelopeManifest, payload contracts.EvidenceEnvelopePayload) contracts.EvidenceEnvelopeVerification {
+// Statuses in EvidenceEnvelopeVerification.Checks. A SKIPPED check did not run
+// because it had nothing to compare; a result that holds one is not verified.
+const (
+	EnvelopeCheckPass    = "PASS"
+	EnvelopeCheckFail    = "FAIL"
+	EnvelopeCheckSkipped = "SKIPPED"
+)
+
+// envelopeManifestChecks runs the checks a manifest supports on its own.
+func envelopeManifestChecks(manifest contracts.EvidenceEnvelopeManifest) (map[string]string, []string) {
 	checks := map[string]string{
-		"native_authority": "PASS",
-		"manifest_hash":    "PASS",
-		"payload_hash":     "PASS",
-		"envelope_role":    "PASS",
+		"native_authority": EnvelopeCheckPass,
+		"manifest_hash":    EnvelopeCheckPass,
 	}
 	var errs []string
 	if !manifest.NativeAuthority || manifest.NativeEvidenceHash == "" {
-		checks["native_authority"] = "FAIL"
+		checks["native_authority"] = EnvelopeCheckFail
 		errs = append(errs, "native EvidencePack authority is missing")
 	}
 	expectedManifest := manifest
 	expectedManifest.ManifestHash = ""
 	manifestHash, err := canonicalize.CanonicalHash(expectedManifest)
 	if err != nil || "sha256:"+manifestHash != manifest.ManifestHash {
-		checks["manifest_hash"] = "FAIL"
+		checks["manifest_hash"] = EnvelopeCheckFail
 		errs = append(errs, "manifest hash mismatch")
 	}
+	return checks, errs
+}
+
+// VerifyEnvelopeManifest reports what a manifest proves when no payload was
+// recorded for it. The payload checks are SKIPPED and the result is never
+// verified: a payload rebuilt from the manifest would only be compared with
+// itself.
+func VerifyEnvelopeManifest(manifest contracts.EvidenceEnvelopeManifest) contracts.EvidenceEnvelopeVerification {
+	checks, errs := envelopeManifestChecks(manifest)
+	checks["payload_hash"] = EnvelopeCheckSkipped
+	checks["envelope_role"] = EnvelopeCheckSkipped
+	errs = append(errs, "no payload is recorded for this manifest: payload_hash and envelope_role were not checked")
+	return contracts.EvidenceEnvelopeVerification{
+		ManifestID:   manifest.ManifestID,
+		ManifestHash: manifest.ManifestHash,
+		Envelope:     manifest.Envelope,
+		NativeRoot:   manifest.NativeEvidenceHash,
+		Checks:       checks,
+		Errors:       errs,
+		VerifiedAt:   time.Now().UTC(),
+	}
+}
+
+func VerifyEnvelopePayload(manifest contracts.EvidenceEnvelopeManifest, payload contracts.EvidenceEnvelopePayload) contracts.EvidenceEnvelopeVerification {
+	checks, errs := envelopeManifestChecks(manifest)
+	checks["payload_hash"] = EnvelopeCheckPass
+	checks["envelope_role"] = EnvelopeCheckPass
 	expectedPayload, err := BuildEnvelopePayload(manifest)
 	if err != nil || expectedPayload.PayloadHash != payload.PayloadHash {
-		checks["payload_hash"] = "FAIL"
+		checks["payload_hash"] = EnvelopeCheckFail
 		errs = append(errs, "payload hash mismatch")
 	}
 	actualPayloadHash, err := canonicalize.CanonicalHash(payload.Payload)
 	if err != nil || "sha256:"+actualPayloadHash != payload.PayloadHash {
-		checks["payload_hash"] = "FAIL"
+		checks["payload_hash"] = EnvelopeCheckFail
 		errs = append(errs, "payload content hash mismatch")
 	}
 	if payload.Authoritative {
-		checks["envelope_role"] = "FAIL"
+		checks["envelope_role"] = EnvelopeCheckFail
 		errs = append(errs, "external envelope cannot be authoritative")
 	}
 	return contracts.EvidenceEnvelopeVerification{

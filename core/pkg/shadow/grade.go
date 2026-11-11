@@ -39,6 +39,9 @@ type Grade struct {
 //	C — boundary present; HIGH-severity exposures remain
 //	D — agent surface detected with no boundary (no HIGH findings)
 //	F — agent surface with no boundary and HIGH-severity exposure
+//
+// The letter covers only what the scan read: when paths were unreadable, the
+// reason ends with their count.
 func ComputeGrade(r *Report) Grade {
 	g := Grade{BoundaryPresent: r.HelmCoverage.Present}
 
@@ -84,6 +87,11 @@ func ComputeGrade(r *Report) Grade {
 	default:
 		g.Letter = "F"
 		g.Reason = fmt.Sprintf("%d agent signal(s) with no execution boundary and %d HIGH-severity exposure(s)", agentSurface, high)
+	}
+	if r.PathsUnreadable > 0 {
+		// The letter covers only what was read, so the reason says what was not.
+		// A strict scan never gets here: it fails on the first unreadable path.
+		g.Reason += fmt.Sprintf("; %d path(s) could not be read", r.PathsUnreadable)
 	}
 	return g
 }

@@ -88,9 +88,41 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Added
+
+- `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
+  unless every in-scope path was read in full.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
+  proxy has no caller credential and spends the upstream provider key for any
+  caller that reaches it; `proxy` and `mcp serve` already refused an
+  unauthenticated non-loopback bind. `controls.yaml` CTL-026 now covers all
+  three listeners and is `enforced`, with removal proofs for the bind check and
+  the proxy bearer check.
+- `helm-ai-kernel evidence envelope verify` reports `verified` only when it
+  loaded the manifest and its payload from the local registry and every check
+  ran and passed. Before, any `--manifest-hash` and `--native-root` printed
+  `verified: true` for an unknown manifest id, the supplied values were never
+  compared with a recorded manifest, and a missing payload was rebuilt from the
+  manifest and passed against itself. A check with nothing to compare is now
+  `SKIPPED`, which is not a pass: the result is `verified: false` and the exit
+  code 1. Clients reading `checks` must accept `SKIPPED` beside `PASS` and
+  `FAIL`. The text output lists every check with its status.
+- `helm-ai-kernel shadow scan` no longer grades a tree it could not read. A
+  `--path` that is missing or unreadable, or a scan that read no file and met
+  unreadable paths, is an error with exit code 2; it was grade A with exit code
+  0. Unreadable entries below a readable root are counted in the new
+  `paths_unreadable` report field, shown in the text report and named in the
+  grade reason. `setup`, `onboard` and `autoconfigure` reuse this scan, so they
+  no longer record a grade for a workspace that could not be read.
+- Lifecycle events that carry `args_hash` are published. The publisher's
+  substring screen rejected that allowlisted field, so every
+  dispatch-completed event built from a receipt was dropped. The exact
+  allowlist now decides, and a test holds every allowlisted name to the
+  denied-term list.
 
 ## [0.12.0]
 

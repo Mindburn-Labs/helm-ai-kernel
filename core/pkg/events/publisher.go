@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 
@@ -84,7 +85,10 @@ func validatePublishedEvent(event LifecycleEvent) error {
 		return ErrInvalidLifecycleEvent
 	}
 	for key, value := range event.Fields {
-		if unsafeFieldName(key) || !allowedFieldName(key) || !safeFieldValue(key, value) {
+		// The exact allowlist decides: a name outside it is rejected whatever it
+		// contains, and a name on it (args_hash is a digest) is not second-guessed
+		// by substring. The denied-term screen runs over the allowlist itself.
+		if !allowedFieldName(key) || !safeFieldValue(key, value) {
 			return fmt.Errorf("%w: %q", ErrUnsafeEventField, key)
 		}
 	}
@@ -100,37 +104,22 @@ func isLifecycleEventType(eventType string) bool {
 	return false
 }
 
-func allowedFieldName(key string) bool {
-	switch key {
-	case "actor_ref", "surface", "tool", "action", "resource", "effect_context", "classification_source",
-		"effect_class", "risk_tier", "decision_id", "policy_backend", "policy_version", "policy_content_hash",
-		"policy_epoch", "rules_fired", "decision_latency_ms", "verdict", "reason_code",
-		"subject_id", "policy_decision_hash", "approval_ref", "approver_ref",
-		"approval_expiry_ms", "receipt_id", "status", "intent_hash", "args_hash", "effect_id",
-		"effect_type", "retry_number", "failure_class", "attempt_id", "attempt",
-		"execution_id", "retry_count", "duration_ms", "tokens_in", "tokens_out", "outcome":
-		return true
-	default:
-		return false
-	}
+// allowedFieldNames is the exact set of field names an exported lifecycle event
+// may carry. It is a list so that TestAllowedFieldNamesContainNoDeniedTerm can
+// hold every name in it to the denied-term list: a name that would carry free
+// text or a request-scoped value cannot be added without a recorded exception.
+var allowedFieldNames = []string{
+	"actor_ref", "surface", "tool", "action", "resource", "effect_context", "classification_source",
+	"effect_class", "risk_tier", "decision_id", "policy_backend", "policy_version", "policy_content_hash",
+	"policy_epoch", "rules_fired", "decision_latency_ms", "verdict", "reason_code",
+	"subject_id", "policy_decision_hash", "approval_ref", "approver_ref",
+	"approval_expiry_ms", "receipt_id", "status", "intent_hash", "args_hash", "effect_id",
+	"effect_type", "retry_number", "failure_class", "attempt_id", "attempt",
+	"execution_id", "retry_count", "duration_ms", "tokens_in", "tokens_out", "outcome",
 }
 
-func unsafeFieldName(key string) bool {
-	key = strings.ToLower(strings.TrimSpace(key))
-	if key == "" {
-		return true
-	}
-	for _, prohibited := range []string{"reason", "message", "detail", "error", "failure_reason"} {
-		if key == prohibited {
-			return true
-		}
-	}
-	for _, prohibited := range []string{"payload", "arguments", "argument", "args", "secret", "session", "principal", "response", "raw"} {
-		if strings.Contains(key, prohibited) {
-			return true
-		}
-	}
-	return false
+func allowedFieldName(key string) bool {
+	return slices.Contains(allowedFieldNames, key)
 }
 
 func safeFieldValue(key string, value any) bool {

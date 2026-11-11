@@ -11,7 +11,7 @@ Agents propose tool calls; something has to decide which of them may run. HELM A
 
 Each proposal passes through the guardian pipeline and receives exactly one canonical verdict: ALLOW, DENY, or ESCALATE. Unknown tools and unmatched policy default to deny. ESCALATE stops the action instead of guessing. The kernel does not route it to an approver; the caller takes it to its own review.
 
-Every verdict is recorded as an Ed25519-signed receipt over a JCS (RFC 8785) canonical form, so the decision, the policy hash, and the requesting identity can be replayed and verified offline long after the agent session ends. Orchestration decides what to attempt; HELM decides what may execute.
+Every verdict that `serve` and `mcp serve` record is an Ed25519-signed receipt over a JCS (RFC 8785) canonical form, so the verdict, its reason code and the policy hash can be verified offline long after the agent session ends. The requesting identity is recorded on the receipt but is not among the signed fields ([what the signature covers](llm-audit-receipts.md)). Orchestration decides what to attempt; HELM decides what may execute.
 
 ## Governance Path
 
@@ -21,7 +21,7 @@ flowchart LR
     Boundary --> Policy["Policy evaluation"]
     Policy --> Verdict["ALLOW, DENY, or ESCALATE"]
     Verdict --> Receipt["Signed receipt"]
-    Receipt --> Audit["Audit and replay"]
+    Receipt --> Audit["Audit and offline verification"]
 ```
 
 ```bash

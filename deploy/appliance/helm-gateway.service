@@ -25,7 +25,8 @@ ExecStart=/usr/local/bin/helm-ai-kernel server
 Restart=on-failure
 RestartSec=5
 
-# Fully unprivileged: no capabilities, hardened filesystem view.
+# No capabilities and a hardened filesystem view. This unit sets no User=, so
+# the process runs as root with an empty capability bounding set.
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

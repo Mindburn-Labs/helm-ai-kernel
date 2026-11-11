@@ -88,7 +88,7 @@ point in the execution lifecycle. No single layer is sufficient on its own.
 HELM AI Kernel does:
 
 - enforce deny-by-default policy at MCP and OpenAI-compatible dispatch boundaries;
-- emit signed receipts for `ALLOW`, `DENY`, and `ESCALATE` decisions;
+- sign a receipt for every `ALLOW`, `DENY`, and `ESCALATE` decision that `serve` and `mcp serve` record (CTL-012); the standalone `proxy` hash-chains its receipts and signs them only when started with `--sign <seed>`;
 - quarantine unknown MCP servers and tools (no shipped path approves them yet, so a quarantined server stays quarantined; CTL-025);
 - produce offline-verifiable EvidencePacks for source-backed receipt material.
 
@@ -110,22 +110,22 @@ HELM AI Kernel does not:
           ┌────────────────────────▼────────────────────────┐
           │  Layer A — Surface Containment (design-time)    │
           │  Reduces WHAT can be called                     │
-          │  capability manifests · tool bundles · profiles │
-          │  connector allowlists · destination scoping     │
+          │  capability manifests · policy packs · mandates │
+          │  effect classes · destination scoping           │
           └────────────────────────┬────────────────────────┘
                                    │
           ┌────────────────────────▼────────────────────────┐
           │  Layer B — Dispatch Enforcement (dispatch-time)  │
           │  Gates EACH call at PEP boundary                │
-          │  schema PEP · contract pinning                  │
+          │  schema PEP · result contracts                  │
           │  PDP/CPI verdict · deny-by-default              │
           └────────────────────────┬────────────────────────┘
                                    │
           ┌────────────────────────▼────────────────────────┐
           │  Layer C — Verifiable Receipts (post-execution)  │
           │  Proves WHAT happened                           │
-          │  Ed25519 receipts · ProofGraph DAG · replay     │
-          │  EvidencePack · Merkle condensation              │
+          │  Ed25519 receipts · ProofGraph DAG · hash chain │
+          │  EvidencePack · offline verification             │
           └─────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -149,13 +149,13 @@ an agent can reach.
 
 | Mechanism | Description |
 | :--- | :--- |
-| **Capability manifests** | Explicit declaration of permitted tools per agent/profile |
-| **Domain-scoped tool bundles** | Tools grouped by domain with independent governance |
-| **Side-effect class profiles** | Read-only, write-limited, or full profiles per tool class |
-| **Connector allowlists** | Per-tenant/app/profile restrictions on which connectors are reachable |
-| **Destination scoping** | Explicit target domain/URL/resource allowlists |
+| **Capability manifests** | The kernel MCP server serves a fixed tool catalog and lists it at `/mcp/v1/capabilities`. `helm-gateway` lists to an agent only the effect types of its live mandates (CTL-057) |
+| **Policy packs** | A serve policy file names one reference pack. The pack's `runtime_actions` are the actions `serve`, `proxy --policy` and `mcp serve --policy` can allow from that file; an action with no policy is denied (CTL-001) |
+| **Side-effect classes** | Each MCP catalog tool and kernel effect type carries an effect class, `E0` to `E4`, and `plan` maps the class of a plan step to a backend and profile label. `helm-gateway` resolves a risk class per effect and escalates a high-risk one for approval (CTL-052) |
+| **Mandates** | `helm-gateway` admits an effect only under a live mandate of the caller's principal that names the effect type (CTL-052), and mints a GitHub credential only for a repository the tenant's installation entry allows (CTL-051) |
+| **Destination scoping** | The Guardian in `serve`, `proxy` and `mcp serve` denies every evaluation that names an egress destination; no configuration adds an allowlist (CTL-047). The egress proxy of a Launchpad local container denies destinations outside its catalog entry (CTL-033) |
 | **Filesystem/network deny-by-default** | Sandbox grants declare deny-by-default I/O. Records only: the kernel runs no pack and has no sandbox runtime (`controls.yaml` CTL-044, retired) |
-| **Sandbox profile requirement** | Each tool class requires a declared sandbox profile before execution |
+| **Sandbox profiles** | `sandbox profiles` and `sandbox grant` list and seal backend profiles as records, and `sandbox exec` refuses every request. `helm-gateway` runs `sandbox.create`, `sandbox.exec` and `sandbox.terminate` through the provider an operator configures (CTL-062) |
 
 ### Architectural Property
 
@@ -197,7 +197,7 @@ never cross HELM are not governed (INV-024).
 | **Contract pinning** | The connector output validator had no caller and was removed (CTL-045, retired), so no shipped validator reports drift from a pinned response schema. `helm-gateway` checks each established observation against the effect type's result contract (`admission.typedResult`: a fixed typed result, or a declared schema where an adapter declares one) and leaves a violating attempt `UNKNOWN`. The GitHub adapter in `helm-gateway`, the only shipped adapter that reports it, checks provider answers against its typed results and returns `ERR_CONNECTOR_CONTRACT_DRIFT` on a mismatch: before its write the dispatch is not sent, and after it the dispatch stays indefinite until reconciliation reads the provider back |
 | **PRG evaluation** | Proof Requirement Graph checks cryptographic prerequisites |
 | **Deny-by-default** | An action with no policy → `NO_POLICY_DEFINED`. A policy that cannot be evaluated → `PRG_EVALUATION_ERROR` (CTL-001, INV-005) |
-| **Delegation session enforcement** | Session capabilities ⊆ delegator's policy; expired/invalid sessions → `DELEGATION_INVALID` |
+| **Delegation session gate** | A request that names a `delegation_session_id` is denied with `DELEGATION_INVALID`. The shipped binaries wire an empty delegation store that nothing writes, so the checks of a session's capabilities, scope and principal against its delegator never run on a real session (CTL-034, observed-only) |
 | **Threat scan** | TCB scanner denies untrusted input with high-risk findings → `PROMPT_INJECTION_DETECTED`, `TAINTED_INPUT_HIGH_RISK_DENY` and related codes (CTL-019) |
 
 Hardware-backed attestation and zero-knowledge execution research are not
@@ -223,7 +223,7 @@ determination that a specific tool call is permitted:
       (3) budget sufficient (not checked by a shipped binary; CTL-011)
       (4) PRG requirements satisfied
       (5) identity authorized for resource boundary
-      (6) delegation session valid and in scope
+      (6) no delegation session named (one always fails; CTL-034)
       (7) no threat signals detected
       (8) all P0 ceilings respected
 
@@ -255,13 +255,13 @@ boundary operated correctly.
 
 | Mechanism | Description |
 | :--- | :--- |
-| **Ed25519 signed receipts** | Every verdict (ALLOW and DENY) produces a signed record |
-| **ProofGraph DAG** | Append-only directed acyclic graph with Lamport causal ordering |
-| **Causal hash chain** | Each receipt signs over the previous receipt's signature (`PrevHash`) |
+| **Ed25519 signed receipts** | `serve` and `mcp serve` sign a `receipt.v5` record for every verdict they persist: ALLOW, DENY and ESCALATE (CTL-012). The standalone `proxy` signs its receipts only when started with `--sign <seed>`; without it they are hash-chained and unsigned, and the key that signs the Guardian's decision records lasts only as long as the process |
+| **ProofGraph DAG** | Append-only directed acyclic graph with Lamport causal ordering (`core/pkg/proofgraph`). `proxy` persists one as `proofgraph.json`. The `/api/v1/proofgraph/*` routes on `serve` return the per-session receipt chain, not a graph |
+| **Causal hash chain** | The signed fields of a receipt include `prev_hash`, the canonical SHA-256 of the previous receipt in its session, and its Lamport clock |
 | **EvidencePack** | Deterministic `.tar` export — same inputs produce identical output bytes |
 | **Merkle condensation** | Risk-tiered checkpoints; low-risk receipts replaceable by inclusion proofs. Not wired: the condenser has no shipped caller |
-| **Offline replay** | Replay from genesis without network access |
-| **Deny receipts** | Denied calls produce signed receipts with reason codes — not just silently dropped |
+| **Offline verification** | `helm-ai-kernel verify`, `verify receipt` and the standalone `receipt_verify` re-check signatures, hashes and chain links from the files alone. `verify` contacts a network service only with `--online`, or to look up a Rekor anchor under the `customer` and `high-assurance` profiles. `replay` serves the recorded tape of a pack that carries one back through the tape replayer and checks each entry against its recorded hash and the tape manifest; no shipped command records tapes or re-executes a run |
+| **Deny receipts** | A denied call gets a receipt with its reason code, signed wherever receipts are signed (first row) — not just silently dropped |
 
 ### Architectural Property
 
@@ -315,18 +315,15 @@ Each layer protects against failures in the other two.
 
 ## Conformance Mapping
 
-| Conformance Gate | Layer |
+`helm-ai-kernel conform` runs one gate, G0 (build identity), which tests no
+layer of this model; gates G1–G15 and GX were retired
+([CONFORMANCE.md](CONFORMANCE.md)). The checks that exercise the layers are:
+
+| Check | Layer |
 | :--- | :--- |
-| JCS Canonicalization | B |
-| PEP Boundary | B |
-| Approval Ceremony | B |
-| ProofGraph DAG | C |
-| EvidencePack | C |
-| Offline Replay | C |
-| Output Drift | B |
-| Idempotency | B + C |
-| Island Mode | A + C |
-| Conformance Gates | All |
+| `controls.yaml` entries with status `enforced`, whose tests `make controls-check` runs | A, B and C, one control at a time |
+| Bound negative vectors (`go test ./pkg/conformance/negative`, in `core`) | B |
+| `helm-ai-kernel verify` over an EvidencePack (CTL-009) | C |
 
 ---
 
@@ -334,11 +331,10 @@ Each layer protects against failures in the other two.
 
 | Document | Relevance |
 | :--- | :--- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System-level model, VPL, TCB |
-| [core/pkg/receipts](../core/pkg/receipts/) | Execution pipeline and receipt chain implementation |
-| [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | Adversary classes and defenses |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System-level model |
+| [core/pkg/store](../core/pkg/store/) | Receipt store and causal hash chain |
 | [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | OWASP MCP alignment |
-| [core/pkg/manifest](../core/pkg/manifest/) | Layer A configuration primitives |
-| [CONFORMANCE.md](CONFORMANCE.md) | Gate definitions, levels |
+| [core/pkg/manifest](../core/pkg/manifest/) | Tool argument validation (schema PEP) |
+| [CONFORMANCE.md](CONFORMANCE.md) | What `conform` runs, and the retired levels |
 
 _Canonical revision: 2026-05-21 · HELM UCS v1.5_

@@ -88,9 +88,29 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Changed
+
+- CLI and served text now state what the code does. `helm-ai-kernel proxy`
+  prints `Signing: none` when started without `--sign`; `bundle` help describes
+  `bundle build` as compiling Rego or Cedar and printing the bundle identity,
+  with no signature and no CEL; the `helm.evaluate` skill on the A2A agent card
+  no longer offers envelope signature verification; and the packed MCP bundle
+  manifest and `mcp-bundle.json` list only the governance features a shipped
+  command performs.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- Documentation no longer states behaviour the shipped binaries do not have.
+  The execution security model, kernel scope, proxy guides, use-case pages and
+  operations notes now say that the standalone proxy signs receipts only with
+  `--sign`, that a named delegation session is always denied, that `conform`
+  runs gate G0 only, that no command re-executes a run, that only CEL expressions
+  in a serve policy pack decide an action, and that the effect reservation and
+  close write paths were removed. SDK README examples compile against their
+  SDKs and use the authenticated typed evaluation route. Documented commands
+  that did not run are corrected, including the EvidencePack export, the MCP
+  proof verification, `bundle build` and the provider starter smoke scripts.
 
 ## [0.12.0]
 

@@ -92,7 +92,8 @@ Runtime diagnostics may call `LoadCurrent`. Non-effecting planning may call
 `LoadCurrentCertified`, which verifies validity against the database clock
 rather than caller-supplied time. Neither method authorizes connector start.
 `LockCurrentCertifiedForEffectAdmission` is the transaction-composition seam
-used only by the durable effect reservation boundary: it takes the shared
+the effect reservation boundary used before that boundary's write path was
+deleted (`controls.yaml` CTL-015); nothing calls it now. It takes the shared
 exact-release lock, verifies the current head and database time, and leaves the
 caller responsible for appending `ADMITTED` before commit. It does not run a
 callback or start a connector. See
@@ -119,6 +120,6 @@ includes two signed statements and thirteen negative mutations.
 - a source-owned signing/import path with audited trust-root rotation;
 - a production approval `BindingProvider` that derives approval connector
   authority only from the verified current certified release;
-- deployment wiring for the implemented durable effect reservation boundary;
+- a durable effect reservation boundary, whose write path the tree no longer has, and its deployment wiring;
 - active-work disposition beyond listing, source connector ACK, signed close
   evidence, and controlled deployment proof.

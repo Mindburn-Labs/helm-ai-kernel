@@ -21,9 +21,9 @@ import { NativeGatewayClient } from "@mindburn/helm-ai-kernel";
 const gateway = new NativeGatewayClient({ mcpUrl, episodeToken: getEpisodeToken });
 const tools = await gateway.listTools();
 const result = await gateway.callEffect({
-  toolName: "github_pull_request_create",
-  arguments: { title: "Review me", head: "work", base: "main" },
-  target,
+  toolName: "github_repository_get",
+  arguments: { schema: "helm.github.repository.get.v1", branch: "main" },
+  target: "github.com/owner/repository",
 });
 if (result.structuredContent.status === "reconciling") {
   await gateway.getAttempt(result.structuredContent.attempt_id!);

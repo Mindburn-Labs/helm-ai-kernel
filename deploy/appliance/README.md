@@ -22,7 +22,7 @@ plus the attest-oneshot start dependency and the compiled per-profile drop-in.
 
 | File | Role |
 | --- | --- |
-| `helm-gateway.service` | Unprivileged gateway unit. Hard-`Requires=` a successful attestation before start. |
+| `helm-gateway.service` | Gateway unit with an empty capability bounding set; it sets no `User=`, so it runs as root. Hard-`Requires=` a successful attestation before start. |
 | `helm-boundary-attest.service` | Short-lived privileged oneshot (`CAP_NET_ADMIN`, needed for `nft list`) that runs `boundary profile attest --enforce`. Non-zero exit blocks gateway start — the OS does the refusing. |
 | `helm-boundary-attest.timer` | Optional periodic re-attestation. Emits MATCH/DRIFT receipts; does **not** stop a running gateway (start-time gating is the enforced path). |
 | `examples/profile_input.example.json` | A complete `boundary_profile_input.v1` document (the golden-vector input from `reference_packs/boundary-profile-v1/`). |

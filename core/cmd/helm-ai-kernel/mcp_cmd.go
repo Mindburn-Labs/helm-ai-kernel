@@ -304,6 +304,27 @@ func runMCPPack(args []string, stdout, stderr io.Writer) int {
 	return generateMCPBundle(out, stdout, stderr)
 }
 
+// mcpBundleGovernanceFeatures is the feature list written to the bundle
+// manifest. Every entry names behaviour that a shipped command reaches; add one
+// only together with the code that performs it. The root mcp-bundle.json
+// repeats the list, and TestMCPBundleManifestMatchesRootManifest keeps the two
+// equal.
+var mcpBundleGovernanceFeatures = []string{
+	// mcp serve: newProductionGuardian installs the freeze, context,
+	// isolation, egress, threat and delegation gates.
+	"guardian-6-gate-pipeline",
+	// loadOrGenerateSignerWithDataDir: the classical profile by default, the
+	// hybrid profile when HELM_RECEIPT_PROFILE selects it.
+	"profile-aware-signed-receipts",
+	// mcp serve: ValidateToolArguments runs before the executor.
+	"schema-pep-validation",
+	// mcp proof writes 02_PROOFGRAPH/proofgraph.json; proxy appends to
+	// proofgraph.json. mcp serve writes no ProofGraph.
+	"proofgraph-audit-trail",
+	// mcp scan: scanTyposquat. Inspection only; it authorizes nothing.
+	"typosquat-detection",
+}
+
 func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 	// Create bundle directory structure
 	bundleDir := outPath + ".tmp"
@@ -399,19 +420,9 @@ func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 		},
 		"tools": manifestTools,
 		"governance": map[string]any{
-			"engine": "helm:pep:v1",
-			"model":  "fail-closed",
-			"features": []string{
-				"guardian-6-gate-pipeline",
-				"ed25519-signed-receipts",
-				"schema-pep-validation",
-				"proofgraph-audit-trail",
-				"rug-pull-detection",
-				"typosquat-detection",
-				"trust-scoring",
-				"delegation-scope-enforcement",
-				"elicitation-support",
-			},
+			"engine":   "helm:pep:v1",
+			"model":    "fail-closed",
+			"features": mcpBundleGovernanceFeatures,
 			"verdicts": []string{"ALLOW", "DENY", "ESCALATE"},
 		},
 		"platform_overrides": map[string]any{

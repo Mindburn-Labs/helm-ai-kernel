@@ -5,7 +5,7 @@ set -euo pipefail
 # Verifies: helm binary exists, init works, doctor passes, config is valid
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 HELM_BIN="${REPO_ROOT}/bin/helm-ai-kernel"
 TMPDIR_CI=$(mktemp -d)
 
@@ -25,7 +25,7 @@ echo "✓ helm binary found"
 echo "✓ helm-ai-kernel init openai succeeded"
 
 # 3. Check generated files
-for f in helm.yaml .env; do
+for f in helm.yaml .env.helm.example; do
   if [[ ! -f "$TMPDIR_CI/test-project/$f" ]]; then
     echo "FAIL: expected file $f not found after init"
     exit 1
@@ -34,7 +34,7 @@ done
 echo "✓ generated files present"
 
 # 4. Doctor
-"$HELM_BIN" doctor --dir "$TMPDIR_CI/test-project" 2>&1 || true
+(cd "$TMPDIR_CI/test-project" && "$HELM_BIN" doctor) 2>&1 || true
 echo "✓ helm-ai-kernel doctor completed"
 
 echo "=== PASS ==="

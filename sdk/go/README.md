@@ -42,6 +42,7 @@ package main
 import (
     "fmt"
     "log"
+    "os"
 
     helm "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client"
 )
@@ -49,25 +50,34 @@ import (
 func main() {
     c := helm.New(
         "http://127.0.0.1:7714",
+        helm.WithAPIKey(os.Getenv("HELM_ADMIN_API_KEY")),
         helm.WithTenantID("tenant-a"),
         helm.WithPrincipalID("operator-a"),
     )
 
-    // Chat completions via the HELM boundary.
-    res, err := c.ChatCompletions(helm.ChatCompletionRequest{
-        Model:    "gpt-6-sol",
-        Messages: []helm.ChatMessage{{Role: "user", Content: "List files in /tmp"}},
-    })
+    req := helm.NewEvaluateRequest()
+    req.SetTool("read-ticket")
+    req.SetEffectLevel("ticket:123")
+    req.SetSessionId("example-session")
+
+    decision, err := c.EvaluateDecisionV5(*req)
     if err != nil {
         if apiErr, ok := err.(*helm.HelmApiError); ok {
-            fmt.Println("Denied:", apiErr.ReasonCode)
-            return
+            log.Fatalf("refused: %d %s", apiErr.Status, apiErr.ReasonCode)
         }
         log.Fatal(err)
     }
-    fmt.Println(res.Choices[0].Message.Content)
+    fmt.Println(decision.Verdict, decision.ReceiptId) // ALLOW, DENY or ESCALATE
 }
 ```
+
+`/api/v1/evaluate` needs the API key and the tenant and principal the server is
+configured for; without them the call returns 401.
+
+`ChatCompletions` posts to `/v1/chat/completions`. `helm-ai-kernel serve`
+answers that route with 403 before any upstream is called, because its Guardian
+allows no egress destination (`controls.yaml` CTL-047). Send OpenAI-shaped
+traffic through `helm-ai-kernel proxy` instead.
 
 ## API
 

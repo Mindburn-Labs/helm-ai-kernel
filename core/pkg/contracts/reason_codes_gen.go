@@ -130,6 +130,8 @@ var registeredReasonCodes = [...]ReasonCode{
 	"STEP_UP_REQUIRED",
 	"AUTHORITY_CHANGED",
 	"PERMIT_EXPIRED",
+	"STAGE_CEILING_EXCEEDED",
+	"STAGE_RAISE_REQUIRES_PROVISION",
 }
 
 // CoreReasonCodes returns the full normative core reason-code registry.

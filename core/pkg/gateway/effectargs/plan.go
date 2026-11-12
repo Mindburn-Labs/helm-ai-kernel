@@ -30,6 +30,24 @@ const (
 	AuthorityNarrow    = "helm.authority.narrow.v1"
 )
 
+// The stages of a plan, lowest first (helm-tracker#334). The stage is a ceiling
+// the gateway enforces on what the plan's mandates grant
+// (provision.CheckStage): draft grants no write but an internal one,
+// approval-required puts every granted write behind an approval, and
+// constrained-live and certified-live grant by mandate terms only; certified-
+// live grants nothing constrained-live does not. Raising the stage is a
+// provision plan, never a narrowing one.
+const (
+	StageDraft            = "draft"
+	StageApprovalRequired = "approval-required"
+	StageConstrainedLive  = "constrained-live"
+	StageCertifiedLive    = "certified-live"
+)
+
+// StageRank is the stage's place in the ladder, 0 for draft, and -1 for a
+// string that is not a stage.
+func StageRank(stage string) int { return slices.Index(stages, stage) }
+
 // MaxPlanBytes bounds a plan: the effect API's 64 KiB argument cap is for
 // every other effect.
 const MaxPlanBytes = 524288
@@ -134,7 +152,7 @@ var (
 	unitPattern       = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 	systemPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{0,63}$`)
 
-	stages  = []string{"draft", "approval-required", "constrained-live", "certified-live"}
+	stages  = []string{StageDraft, StageApprovalRequired, StageConstrainedLive, StageCertifiedLive}
 	kinds   = []string{"human", "agent", "service"}
 	risks   = []string{"low", "medium", "high", "irreversible"}
 	measure = []string{"sum", "count", "distinct"}

@@ -32,7 +32,7 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     },
     "stage": {
-      "description": "The activation stage the plan was compiled for. Recorded, never interpreted.",
+      "description": "The activation stage the plan was compiled for, and a ceiling the gateway enforces on what its mandates grant, as for helm.authority.provision.v1. A narrowing plan never ranks above the applied plan's stage (draft, approval-required, constrained-live, certified-live): raising the stage is a provision plan, which a distinct human approves; a higher stage is refused with STAGE_RAISE_REQUIRES_PROVISION.",
       "enum": [
         "draft",
         "approval-required",

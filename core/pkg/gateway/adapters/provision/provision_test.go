@@ -259,7 +259,7 @@ func TestPrecheckNarrow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applied := &Applied{OrgRef: c.Plan.OrgRef, Digest: c.Plan.BaseDigest, Provisioner: "svc:helm-org"}
+	applied := &Applied{OrgRef: c.Plan.OrgRef, Digest: c.Plan.BaseDigest, Stage: c.Plan.Stage, Provisioner: "svc:helm-org"}
 	if applied.Digest == "" {
 		applied.Digest = strings.Repeat("3", 64)
 	}

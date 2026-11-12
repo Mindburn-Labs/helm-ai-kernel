@@ -184,9 +184,12 @@ type Config struct {
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db              *sql.DB
-	cfg             Config
-	adapters        map[string]adapters.Adapter
+	db       *sql.DB
+	cfg      Config
+	adapters map[string]adapters.Adapter
+	// catalog is every configured adapter's declarations, by effect type: what
+	// a plan's stage is judged from (provision.CheckStage).
+	catalog         adapters.Catalog
 	fixedQuotes     map[string][]adapters.Amount
 	argumentSchemas map[string]*adapters.ArgumentSchema
 	resultSchemas   map[string]*adapters.ResultSchema
@@ -221,6 +224,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 		cfg.MaxTransaction = MaxTransaction
 	}
 	byType := map[string]adapters.Adapter{}
+	catalog := adapters.Catalog{}
 	fixedQuotes := map[string][]adapters.Amount{}
 	argumentSchemas := map[string]*adapters.ArgumentSchema{}
 	resultSchemas := map[string]*adapters.ResultSchema{}
@@ -230,6 +234,7 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			catalog[d.EffectType] = d
 			argumentSchema, err := adapters.CompileArgumentSchema(d)
 			if err != nil {
 				return nil, fmt.Errorf("%s argument contract: %w", d.EffectType, err)
@@ -253,7 +258,15 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType, fixedQuotes: fixedQuotes, argumentSchemas: argumentSchemas, resultSchemas: resultSchemas}, nil
+	// An adapter that judges effects against the others' declarations (the
+	// authority plan adapter: a plan's stage) is handed them now, once every
+	// adapter is known.
+	for _, a := range cfg.Adapters {
+		if binder, ok := a.(adapters.CatalogBinder); ok {
+			binder.BindCatalog(catalog)
+		}
+	}
+	return &Service{db: db, cfg: cfg, adapters: byType, catalog: catalog, fixedQuotes: fixedQuotes, argumentSchemas: argumentSchemas, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
@@ -547,7 +560,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		var refusal *adapters.Refusal
 		var err error
 		if plan {
-			refusal, err = precheckPlan(ctx, tx, caller, in)
+			refusal, err = precheckPlan(ctx, tx, caller, in, s.catalog)
 		} else if grant {
 			refusal, err = precheckReassignmentGrant(ctx, tx, caller, in)
 		}
@@ -1223,9 +1236,11 @@ func nonNil(q []Amount) []Amount {
 }
 
 // precheckPlan runs provision.Precheck for an authority plan effect against the
-// organization's applied plan. The read is not locked: Propose only spares an
-// approver a plan that cannot apply, and Apply checks again on the locked row.
-func precheckPlan(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput) (*adapters.Refusal, error) {
+// organization's applied plan, then provision.CheckStage against the
+// declarations of the effect types this gateway performs. The read is not
+// locked: Propose only spares an approver a plan that cannot apply, and Apply
+// checks both again on the locked row.
+func precheckPlan(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput, catalog adapters.Catalog) (*adapters.Refusal, error) {
 	parsed, err := effectargs.ParsePlan(in.EffectType, in.Arguments)
 	if err != nil {
 		return nil, err
@@ -1234,5 +1249,11 @@ func precheckPlan(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInpu
 	if err != nil {
 		return nil, err
 	}
-	return provision.Precheck(&provision.Compiled{Plan: parsed}, applied, caller.PrincipalID), nil
+	if r := provision.Precheck(&provision.Compiled{Plan: parsed}, applied, caller.PrincipalID); r != nil {
+		return r, nil
+	}
+	if applied != nil && applied.Digest == parsed.Digest {
+		return nil, nil // the applied plan again changes nothing
+	}
+	return provision.CheckStage(parsed, catalog), nil
 }

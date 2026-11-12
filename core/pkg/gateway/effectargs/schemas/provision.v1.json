@@ -32,7 +32,7 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     },
     "stage": {
-      "description": "The activation stage the plan was compiled for. Recorded, never interpreted.",
+      "description": "The activation stage the plan was compiled for, and a ceiling the gateway enforces on what its mandates grant, judged from the gateway's own effect-type declarations (a write is an effect type whose reversible is not \"not applicable\"; one the gateway does not declare counts as a write): draft grants no write but one its declaration marks internal; approval-required lists every write a mandate grants in that mandate's approval_required and sets no approval_threshold on it; constrained-live and certified-live grant by mandate terms only, and certified-live grants nothing constrained-live does not. A plan that exceeds its stage is refused with STAGE_CEILING_EXCEEDED at Propose and again when it is applied.",
       "enum": [
         "draft",
         "approval-required",

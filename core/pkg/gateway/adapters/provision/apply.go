@@ -101,6 +101,11 @@ func (a *Adapter) apply(ctx context.Context, tx *authorityrows.Tx, in applyInput
 	if applied != nil && applied.Digest == plan.Digest {
 		return nil // applied already: a lost response is safe to retry
 	}
+	// The stage ceiling, on the declarations admission holds: a plan admitted
+	// by a gateway that did not check it applies nothing.
+	if r := CheckStage(plan, a.boundCatalog()); r != nil {
+		return r
+	}
 
 	// 1. Principals, then the ones the plan disables.
 	for _, p := range plan.Principals {

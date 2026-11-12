@@ -109,7 +109,9 @@ func newAdminWire(t *testing.T) *adminWire {
 	must(t, err)
 	catalog, err := BuildCatalog([]adapters.Adapter{github.New(), adapter})
 	must(t, err)
-	svc, err := admission.New(db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter}})
+	// Admission holds the GitHub declarations as serve does: a plan's stage is
+	// judged from them (github.repository.get is a read).
+	svc, err := admission.New(db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter, github.New()}})
 	must(t, err)
 	iss := newIssuer(t)
 	auth := &Authenticator{Validator: iss.validator(), Actor: testActor}

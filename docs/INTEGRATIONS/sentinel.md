@@ -1,38 +1,12 @@
-# BGT Labs Sentinel Interoperability Adapter
+# BGT Labs Sentinel Proposal Types
 
-<!-- quantum_posture: this page references signed receipts but does not implement cryptographic controls. -->
+<!-- quantum_posture: this page describes type declarations only; nothing here signs, verifies or implements a cryptographic control. -->
 
-> Status: source-backed adapter candidate. This page documents the source-owned adapter path for BGT Labs Sentinel universal auth proposals within the HELM AI Kernel gateway; it is not release or runtime evidence.
+> Status: type declarations only. There is no Sentinel handler, endpoint or adapter in this repository, and this page is not release or runtime evidence.
 
-The `SentinelConnector` is written to ingest BGT Labs Sentinel execution proposals and yield offline-verifiable execution receipts. It is a library handler that no shipped binary mounts (`controls.yaml` CTL-043). By serving as an authorization gateway, HELM bridges universal intent formats with fine-grained local Cedar policy enforcement.
+The Sentinel connector was removed (`controls.yaml` CTL-043). `core/pkg/mcp/sentinel.go` still declares two types:
 
-## Gateway Middleware & Intent Mapping
+- `SentinelIntent`: the fields the kernel expected in a BGT Labs Sentinel authorization proposal (`principal`, `action`, `resource`, `context`).
+- `SentinelConnector`: a struct that holds a Guardian reference. It has no constructor and no methods.
 
-The integration is driven by `SentinelConnector` under `core/pkg/mcp/sentinel.go`, which implements `http.Handler`:
-
-1. **HTTP Endpoint Hosting**:
-   The connector hosts a POST endpoint that parses BGT Labs Sentinel universal authorization proposals.
-   
-2. **Intent Parsing & Mapping**:
-   Inbound proposals contain universal execution intent attributes (`principal`, `action`, `resource`, `context`). The connector maps these elements directly to a HELM `DecisionRequest`.
-
-3. **Fine-Grained Policy Evaluation**:
-   HELM's core `Guardian` evaluates the request against loaded active policies.
-
-4. **Cryptographic Execution Receipts**:
-   Decisions are cryptographically signed using HELM's offline-verifiable keys (Ed25519) and returned as a JSON-encoded decision record. This receipt serves as tamper-proof evidence that the execution was authorized in compliance with local organizational posture.
-
-## Verification
-
-To run integration smoke tests on the HTTP gateway:
-
-```bash
-cd core
-go test ./pkg/mcp -run TestSentinelConnectorEvaluation -v
-```
-
-## Security Best Practices
-
-- Always front the `SentinelConnector` HTTP endpoint with mutual TLS (mTLS) in production environments.
-- Validate that Sentinel intent contexts include required ambient session metadata to prevent replay attacks.
-- Ensure the gateway signer keys are securely loaded and managed via HSM or KMS.
+Nothing parses a proposal, maps a `SentinelIntent` to a `DecisionRequest`, evaluates it, or signs a result. No shipped binary references either type, and no test covers them or checks the field set against a Sentinel payload.

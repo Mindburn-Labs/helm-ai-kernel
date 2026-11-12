@@ -328,6 +328,18 @@ removal_proofs:
     replace: "\tif false && !hasAllScopes(req.GrantedScopes, tool.RequiredScopes) {\n\t\trecord.Verdict = contracts.VerdictDeny\n\t\trecord.ReasonCode = contracts.ReasonInsufficientPrivilege\n"
     tests:
       - "core/pkg/mcp.TestExecutionFirewallDeniesScopeMismatch"
+  - control: CTL-026
+    file: core/cmd/helm-ai-kernel/listener_auth.go
+    find: "\tif authenticated || isLoopbackBindAddr(bindAddr) {\n"
+    replace: "\tif true || authenticated || isLoopbackBindAddr(bindAddr) {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+  - control: CTL-026
+    file: core/cmd/helm-ai-kernel/listener_auth.go
+    find: "\t\tif !ok || !secretEqual(provided, token) {\n\t\t\tw.Header().Set(\"WWW-Authenticate\", `Bearer realm=\"helm-proxy\"`)\n"
+    replace: "\t\tif false && (!ok || !secretEqual(provided, token)) {\n\t\t\tw.Header().Set(\"WWW-Authenticate\", `Bearer realm=\"helm-proxy\"`)\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
   - control: CTL-027
     file: core/pkg/boundary/profile/updatebundle/verify.go
     find: "\t\tif got := \"sha256:\" + hex.EncodeToString(hasher.Sum(nil)); got != entry.SHA256 {\n"
@@ -2752,12 +2764,12 @@ controls:
       - "core/pkg/api.GovernedGateway.handleInference"
       - "core/pkg/inferencegateway.Engine.Quote"
     config:
-      - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is not refused)"
+      - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
     protected_operations:
       - "Inference requests through the spend proxy."
     bypass_assumptions:
       - "The ledger is a JSONL file, not Postgres (R5)."
-      - "The spend-proxy listener has no auth; the tenant comes from configuration."
+      - "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration."
       - "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
     tests:
       allowed:
@@ -3025,29 +3037,33 @@ controls:
     title: "Non-loopback listeners require auth"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      The proxy and MCP listeners refuse to start on a non-loopback address
-      without authentication, and the proxy requires its token as a bearer.
-    status: observed-only
-    reason: >-
-      Reachable and tested, but deleting the check makes the listener start and
-      block, so the refusal tests hang rather than fail. A removal proof needs a
-      test that asserts the refusal without serving; none exists yet.
+      The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback
+      address without authentication, and the proxy requires its token as a
+      bearer. The spend-proxy has no caller credential, so it never binds
+      beyond loopback.
+    status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.requireListenerAuth"
       - "core/cmd/helm-ai-kernel.wrapProxyAuth"
     config:
       - "helm-ai-kernel proxy and mcp serve bind flags and tokens"
+      - "helm-ai-kernel spend-proxy --addr"
     protected_operations:
-      - "Starting the proxy or MCP listener on a non-loopback address."
+      - "Starting the proxy, MCP or spend-proxy listener on a non-loopback address."
+      - "Calling the proxy when its token is configured."
     bypass_assumptions:
       - "A loopback bind needs no authentication; anything on the host can reach it."
+      - "Removal of the bind check is proven through the spend-proxy refusal, which fails without serving. The proxy and MCP refusal tests would start a listener and block instead of failing, so they are forbidden tests only."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       forbidden:
         - "core/cmd/helm-ai-kernel.TestProxyRefusesNonLoopbackBindWithoutToken"
         - "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth"
-      removal: []
+        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+        - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       bypass:
         - "core/cmd/helm-ai-kernel.TestMetricsLoopbackOnlyOrAuthenticated"
 
@@ -3183,7 +3199,7 @@ controls:
     bypass_assumptions:
       - "The proxy forwards the request upstream and governs the tool calls in the response; the request itself is not held."
       - "A stream without tools passes through with no receipt."
-      - "The proxy's Guardian is built without the emergency-stop fence."
+      - "The proxy's Guardian reads the emergency-stop fence only while HELM_EMERGENCY_STOP_FENCE_ENABLED is on, for the configured tenant and workspace (CTL-005)."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestProxyStreamWithoutToolsPassesThroughHonestly"
@@ -3893,7 +3909,7 @@ controls:
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which the gateway's authority adapter and EnsurePrincipals call (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
-      - "helm-gateway has no container image or chart yet; it is enforced where it runs, and nothing deploys it."
+      - "helm-gateway ships in the kernel container image, and the chart deploys it only when gateway.enabled is set (off by default); where no gateway runs, nothing here is enforced."
       - "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
     tests:
       allowed:

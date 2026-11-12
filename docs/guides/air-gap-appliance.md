@@ -54,9 +54,11 @@ export OPENAI_BASE_URL=http://127.0.0.1:9090/v1
 ```
 
 Every tool call is checked against policy and allowed, denied, or escalated;
-each decision writes a hash-chained receipt. The Local Inference Gateway can
-additionally pin the engine by model hash, so a receipt records *which* model
-answered. See [Use The OpenAI-Compatible Proxy](use-openai-compatible-proxy.md).
+each decision writes a hash-chained receipt, signed because `--sign` is set.
+`helm-ai-kernel local up` checks that a local provider profile (provider, base
+URL, model and an optional model hash) is reachable and prints it; it serves no
+traffic and writes no receipt. See
+[Use The OpenAI-Compatible Proxy](use-openai-compatible-proxy.md).
 
 ## Make the egress policy the host firewall source
 
@@ -85,8 +87,8 @@ helm-ai-kernel verify evidence-pack.tar
 
 `verify` runs its offline checks (Ed25519 signatures, the SHA-256 hash chain,
 and the JCS canonical form) before any network step; the `--online` ledger
-check is opt-in and off by default. Replay from genesis works without a route
-to the internet. For the full export-and-check walkthrough see
+check is opt-in and off by default. These checks need no route to the
+internet. For the full export-and-check walkthrough see
 [Export And Verify EvidencePacks](export-verify-evidencepacks.md).
 
 ## Run it as a system service
@@ -100,15 +102,16 @@ the isolation, HELM produces the evidence.
 
 "Air-gapped" here means *disconnected between maintenance windows*, not magic.
 Policy-pack and binary updates reach a disconnected host as a signed bundle that
-the operator applies on-site; the kernel checks the identity and integrity of
-what it loads, not the intent of a model's weights. Reference policy packs —
+the operator applies on-site. `helm-ai-kernel boundary profile bundle-verify`
+checks the bundle against its signed manifest offline; the kernel has no update
+mechanism of its own, and it does not judge the intent of a model's weights. Reference policy packs —
 including the HIPAA reference policy pack — are governance starting points that
 you review and bind to your own obligations; they do not replace your own audit.
 
 ## Source Truth
 
 - `core/cmd/helm-ai-kernel/proxy_cmd.go` — the governed proxy
-- `core/pkg/llm/gateway/` — the Local Inference Gateway and engine pin
+- `core/pkg/llm/gateway/` — the local provider profile check behind `local up`
 - `core/pkg/firewall/egress.go` — fail-closed egress policy
 - `core/cmd/helm-ai-kernel/autoconfigure_cmd.go` — first-boot inventory and default-deny draft
 - `core/cmd/helm-ai-kernel/verify_cmd.go` — offline pack verification

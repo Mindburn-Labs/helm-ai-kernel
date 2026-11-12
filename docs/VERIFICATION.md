@@ -127,14 +127,19 @@ Use an EvidencePack when you need to move proof material between machines or
 review it later:
 
 ```bash
-helm-ai-kernel evidence export \
-  --receipts ~/.helm-ai-kernel/receipts \
+helm-ai-kernel export \
+  --evidence <evidence-pack-dir> \
   --out evidence-pack.tar
 
 helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml>
 ```
 
-EvidencePacks are portable proof bundles for local review and offline replay.
+`export` copies an existing EvidencePack directory into a deterministic tar;
+it does not build a pack from loose receipt files. `mcp proof` writes such a
+directory under `<out>/<run-id>/evidencepacks/<run-id>`.
+
+EvidencePacks are portable proof bundles for local review and offline
+verification.
 
 ## Release Evidence
 
@@ -156,7 +161,7 @@ Download the release assets into one directory, then check their keyless
 signatures against the exact release identity:
 
 ```bash
-KERNEL_RELEASE_TAG=v0.8.5 make verify-cosign COSIGN_ARTIFACT_DIR=<download-dir>
+KERNEL_RELEASE_TAG=v0.12.0 make verify-cosign COSIGN_ARTIFACT_DIR=<download-dir>
 ```
 
 `make verify-cosign` runs `scripts/release/verify_cosign.sh`. It accepts only

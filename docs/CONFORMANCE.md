@@ -49,7 +49,7 @@ points to `conform vectors --json`. `L1`, `L2` and `L3` remain test-level labels
 ```bash
 cd core
 go test ./cmd/helm-ai-kernel -run 'TestConformLevelsAreRetired|TestConformRejectsRetiredProfilesAndGates' -count=1
-go test ./pkg/conformance -run 'TestCoreSuiteRegistrationAndRun|TestOWASP_LLM_Top10' -count=1
+go test ./pkg/conformance -run 'TestSuiteRunResultBranches|TestDefaultNegativeBoundaryVectors' -count=1
 ```
 
 ## Interpreting Failures

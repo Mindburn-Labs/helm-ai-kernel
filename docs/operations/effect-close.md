@@ -8,15 +8,21 @@ last_reviewed: 2026-09-06
 
 # Signed connector effect close
 
-The v1 Kernel close implementation can atomically close a durable connector effect reservation from
-`STARTED` or `UNCERTAIN` when it receives a verified connector acknowledgement
-and a verified, sealed EvidencePack. The close appends `COMPLETED`, but the
-outcome remains explicit as `APPLIED` or `NOT_APPLIED`.
+Status: retired (helm-tracker#266). `EffectCloser`'s close and recovery path,
+the PostgreSQL closure writes and their tests were deleted: no shipped binary
+called them (`controls.yaml` CTL-040, retired). The tree keeps the contract
+types and schemas, the `approval_effect_closures` table, the receipt signing
+payloads with the v2 and v3 receipt signature checks, and the reference
+vectors. No shipped binary writes a closure, so the authority, transaction,
+persistence and recovery sections below describe the design, not running code.
 
-This is source-owned contract, persistence, and real-PostgreSQL evidence. It is
-internal and pre-production. There is no deployed Data Plane close endpoint,
-connector acknowledgement publisher, deployed cross-plane disposition
-controller, or controlled-live effect proof in this slice.
+In that design the v1 Kernel close atomically closes a durable connector effect
+reservation from `STARTED` or `UNCERTAIN` when it receives a verified connector
+acknowledgement and a verified, sealed EvidencePack. The close appends
+`COMPLETED`, but the outcome remains explicit as `APPLIED` or `NOT_APPLIED`.
+
+There is no Data Plane close endpoint, connector acknowledgement publisher,
+cross-plane disposition controller, or controlled-live effect proof.
 
 Versions 2 and 3 add contracts and reference vectors only. The authority,
 transaction, persistence, and recovery sections below describe v1; they are not
@@ -147,26 +153,27 @@ EvidencePack ref, or EvidencePack hash conflicts.
 
 The source-owned `reference_packs/effect-close-v1` pack contains canonical
 acknowledgement, envelope, signing payload, receipt, signing payload, positive
-vectors, and negative mutations. Go and independent Python implementations
-verify exact hashes, signature domains, pinned identities, outcome semantics,
-clock rules, latest-disposition binding, and cross-artifact bindings.
+vectors, and negative mutations. An independent Python implementation
+verifies exact hashes, signature domains, pinned identities, outcome semantics,
+clock rules, latest-disposition binding, and cross-artifact bindings. The Go
+tests that checked the same vectors were deleted with the close path; the
+remaining Go tests validate the schemas.
 
 Run:
 
 ```bash
 make verify-effect-close-vectors
-HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
 make docs-coverage
 make docs-truth
 ```
 
-The PostgreSQL proof includes direct and reconciled close, exact replay,
+The PostgreSQL proof and its `make` target were deleted with the close path.
+That proof included direct and reconciled close, exact replay,
 conflicting replay, verified recovery, concurrent single-winner close, forced
 RLS isolation, append-only rejection, schema idempotence, and database refusal
 of `COMPLETED` without a matching closure. It also rejects close under FENCE
 without a disposition, with a pre-rotation disposition, under `HOLD`, or from a
-structurally valid but cryptographically forged disposition row. These are
-local and CI proofs, not deployed or controlled-live evidence.
+structurally valid but cryptographically forged disposition row.
 
 ## Version 2: contracts and reference vectors only
 

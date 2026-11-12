@@ -88,6 +88,28 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Security
+
+- The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
+  build images and the workflows. Go 1.26.10 carries GO-2026-6859 (an HTTP/1
+  server crash in `net/http`), which `govulncheck` reports as reachable. Every
+  module now declares `go 1.26.11`, so consumers need Go 1.26.11 or newer.
+
+### Added
+
+- `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
+  unless every in-scope path was read in full.
+
+### Changed
+
+- CLI and served text now state what the code does. `helm-ai-kernel proxy`
+  prints `Signing: none` when started without `--sign`; `bundle` help describes
+  `bundle build` as compiling Rego or Cedar and printing the bundle identity,
+  with no signature and no CEL; the `helm.evaluate` skill on the A2A agent card
+  no longer offers envelope signature verification; and the packed MCP bundle
+  manifest and `mcp-bundle.json` list only the governance features a shipped
+  command performs.
+
 ### Upgrade notes
 
 - The request context gained members that managed policy patterns never
@@ -205,6 +227,43 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
+  proxy has no caller credential and spends the upstream provider key for any
+  caller that reaches it; `proxy` and `mcp serve` already refused an
+  unauthenticated non-loopback bind. `controls.yaml` CTL-026 now covers all
+  three listeners and is `enforced`, with removal proofs for the bind check and
+  the proxy bearer check.
+- `helm-ai-kernel evidence envelope verify` reports `verified` only when it
+  loaded the manifest and its payload from the local registry and every check
+  ran and passed. Before, any `--manifest-hash` and `--native-root` printed
+  `verified: true` for an unknown manifest id, the supplied values were never
+  compared with a recorded manifest, and a missing payload was rebuilt from the
+  manifest and passed against itself. A check with nothing to compare is now
+  `SKIPPED`, which is not a pass: the result is `verified: false` and the exit
+  code 1. Clients reading `checks` must accept `SKIPPED` beside `PASS` and
+  `FAIL`. The text output lists every check with its status.
+- `helm-ai-kernel shadow scan` no longer grades a tree it could not read. A
+  `--path` that is missing or unreadable, or a scan that read no file and met
+  unreadable paths, is an error with exit code 2; it was grade A with exit code
+  0. Unreadable entries below a readable root are counted in the new
+  `paths_unreadable` report field, shown in the text report and named in the
+  grade reason. `setup`, `onboard` and `autoconfigure` reuse this scan, so they
+  no longer record a grade for a workspace that could not be read.
+- Lifecycle events that carry `args_hash` are published. The publisher's
+  substring screen rejected that allowlisted field, so every
+  dispatch-completed event built from a receipt was dropped. The exact
+  allowlist now decides, and a test holds every allowlisted name to the
+  denied-term list.
+- Documentation no longer states behaviour the shipped binaries do not have.
+  The execution security model, kernel scope, proxy guides, use-case pages and
+  operations notes now say that the standalone proxy signs receipts only with
+  `--sign`, that a named delegation session is always denied, that `conform`
+  runs gate G0 only, that no command re-executes a run, that only CEL expressions
+  in a serve policy pack decide an action, and that the effect reservation and
+  close write paths were removed. SDK README examples compile against their
+  SDKs and use the authenticated typed evaluation route. Documented commands
+  that did not run are corrected, including the EvidencePack export, the MCP
+  proof verification, `bundle build` and the provider starter smoke scripts.
 
 ## [0.12.0]
 

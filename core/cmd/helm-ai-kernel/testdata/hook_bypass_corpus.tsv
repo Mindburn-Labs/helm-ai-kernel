@@ -13,9 +13,14 @@
 #   input   \n is a newline. {{HOME}} is the test home directory, whose
 #           .helm-ai-kernel is the hook data directory; {{LINK}} is a symlink
 #           to the key directory; {{POLICY}} is the policy profile in use.
-#           {{HOME}}/proj holds a .env file and {{HOME}}/copies/backup a copy
-#           of the seed. The call's working directory is /repo, which does
-#           not exist.
+#           {{HOME}}/proj holds a .env file, {{HOME}}/copies/backup a copy
+#           of the seed and {{HOME}}/repo only main.go. {{HOME_STARS}},
+#           {{HOME_WILD}}, {{HOME_BRACE}} and {{HOME_CLASS}} spell the home
+#           directory with every segment "*", with "*" after the first
+#           letter of its first segment, with that segment in a brace group
+#           and with its first letter in a bracket; {{HOME_NAME}} is its last
+#           segment. The call's working directory is /repo, which does not
+#           exist.
 # Add a new form as one line. Blank lines and # lines are ignored.
 
 # Egress an allowlist of https://api.github.com must still permit.
@@ -288,8 +293,8 @@ allow@builtin	-	Read	{"file_path":"/home/agent/.ssh/id_ed25519.pub"}
 deny	TRUST_MATERIAL_ACCESS_DENIED	apply_patch	{"command":"*** Begin Patch\u000a*** Update File: {{HOME}}/.helm-ai-kernel/keys/workstation-ed25519.pub\u000a@@\u000a-old\u000a+new\u000a*** End Patch"}
 deny	TRUST_MATERIAL_ACCESS_DENIED	patch	{"patch":"*** Begin Patch\u000a*** Add File: {{HOME}}/.helm-ai-kernel/keys/extra.pub\u000a+x\u000a*** End Patch"}
 
-# Search globs are decided in a small grammar the search tools all read alike:
-# literal names, "*", "?", a whole-segment "**" and brace groups. A glob with
+# Search globs are read in a small grammar: literal names, "*", "?", a
+# whole-segment "**" and brace groups. A glob with
 # anything else (a bracket, a backslash, a leading "/", "!") is refused when
 # the search starts at, inside or above the data directory, and is a secret
 # read when the search can reach a credential file. {{HOME}}/proj holds a .env
@@ -324,8 +329,8 @@ deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"*/../.
 deny	TRUST_MATERIAL_ACCESS_DENIED	Grep	{"path":"{{HOME}}","glob":"{a,{b,{c,{d,{e,f}}}}}.go","pattern":"."}
 # Hermes search_files reads pattern as a glob only for a file search.
 deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}","target":"files","pattern":"*.seed"}
-# What the grammar decides exactly is not refused for being above the data
-# directory: these filters name nothing the key directory holds.
+# A glob in the grammar is not refused for being above the data directory
+# when it names nothing the key directory holds.
 allow@builtin	-	Grep	{"path":"{{HOME}}","glob":"src/**/*.go","pattern":"TODO"}
 allow@builtin	-	Grep	{"path":"{{HOME}}","glob":"docs/*.md","pattern":"TODO"}
 allow@builtin	-	Glob	{"path":"{{HOME}}","pattern":"*/package.json"}
@@ -335,5 +340,57 @@ allow@builtin	-	search_files	{"path":"{{HOME}}","pattern":"(([0-9a-fA-F]{1,4}:){
 allow@builtin	-	search_files	{"path":"{{HOME}}/proj","target":"content","pattern":"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))"}
 # Outside the grammar, a search that can reach neither the data directory nor
 # a credential file or a copy of the seed is not refused.
-allow@builtin	-	Grep	{"path":"/repo","glob":"[!.]*.go","pattern":"TODO"}
-allow@builtin	-	Grep	{"path":"/repo","glob":"!**/node_modules/**","pattern":"TODO"}
+allow@builtin	-	Grep	{"path":"{{HOME}}/repo","glob":"[!.]*.go","pattern":"TODO"}
+allow@builtin	-	Grep	{"path":"{{HOME}}/repo","glob":"!**/node_modules/**","pattern":"TODO"}
+
+# An absolute path pattern whose first segment has a wildcard, a brace group
+# or a bracket is read from "/", as Claude Code's Glob roots it, whatever
+# search root the call names.
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"{{HOME_STARS}}/.h*/k*/*"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"{{HOME_WILD}}/.h*/k*/*"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"/**/{{HOME_NAME}}/.h*/k*/*"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"{{HOME_BRACE}}/.h*/k*/*"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"path":"{{HOME}}/proj","pattern":"{{HOME_CLASS}}/.h*/k*/*"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Glob	{"pattern":"{{HOME_WILD}}/.h*/k*/*.s*"}
+
+# A search path that does not exist is decided as "/": Hermes then splits it
+# on commas or white space and searches every part that exists.
+deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/proj,{{HOME}}","target":"content","pattern":".","file_glob":"{**/.h*,**/.h*/k*/*}"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/proj {{HOME}}","target":"content","pattern":".","file_glob":"{**/.h*,**/.h*/k*/*}"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/repo,{{HOME}}","target":"files","pattern":"*"}
+
+# A shell word's braces are expanded, up to 256 words in one call, and each
+# word is matched; past that, a word whose braces start at, inside or above
+# the data directory is refused.
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{.helm-ai-kernel,zz}/keys/*
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat $HOME/{.helm-ai-kernel,zz}/keys/*
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{".helm-ai-kernel",zz}/k*/*.s*
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cp -r ~/{.helm-ai-kernel,zz} /tmp/r5-out
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	tar czf /tmp/r5.tgz ~/{.helm-ai-kernel,zz}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}{o,p}{q,r}/x
+allow	-	Bash	cp ~/.bashrc{,.bak}
+allow	-	Bash	mkdir -p src/{api,web}/{lib,test}
+
+# A credential file inside a directory is selected only by a glob that names
+# the directory or whose "**" can stand for it: *.json, *.db and *config do
+# not select .docker/config.json, .config/gcloud/credentials.db or
+# .ssh/config.
+allow@builtin	-	Grep	{"path":"{{HOME}}/repo","glob":"*.json","pattern":"name"}
+allow@builtin	-	Glob	{"path":"{{HOME}}/repo","pattern":"*.db"}
+allow@builtin	-	Grep	{"path":"{{HOME}}/repo","glob":"*config","pattern":"name"}
+deny@builtin	OPERATE_PERMISSIONS_EMPTY	Grep	{"path":"{{HOME}}/repo","glob":".docker/*.json","pattern":"auth"}
+deny@builtin	OPERATE_PERMISSIONS_EMPTY	Grep	{"path":"{{HOME}}/repo","glob":"**/*.json","pattern":"auth"}
+
+# Claude Code splits Grep's glob on white space, and on commas when it has no
+# braces; each part is decided as a glob of its own.
+allow@builtin	-	Grep	{"path":"{{HOME}}","glob":"*.ts,*.tsx","pattern":"TODO"}
+allow@builtin	-	Grep	{"path":"{{HOME}}","glob":"*.ts *.tsx","pattern":"TODO"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Grep	{"path":"{{HOME}}/repo","glob":"*.go *.seed","pattern":"."}
+deny	TRUST_MATERIAL_ACCESS_DENIED	Grep	{"path":"{{HOME}}/repo","glob":"*.go,*.seed","pattern":"."}
+
+# An MCP tool's pattern is a path pattern in the grammar; outside it, it is a
+# regular expression, refused only where the search starts at, inside or
+# above the data directory.
+deny	TRUST_MATERIAL_ACCESS_DENIED	mcp__fs__search	{"path":"{{HOME}}/repo","pattern":"**/*.seed"}
+deny	TRUST_MATERIAL_ACCESS_DENIED	mcp__fs__search	{"path":"{{HOME}}","pattern":"foo|bar"}
+allow	-	mcp__fs__search	{"path":"{{HOME}}/copies","pattern":"foo|bar"}

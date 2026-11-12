@@ -163,23 +163,37 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   where it was passed. A search glob is decided too: one aimed at the hook's
   key files (`**/*.seed`, `file_glob: workstation-ed25519.*`) is denied with
   `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and one that selects
-  credential files (`glob: .env`, `**/*.pem`) is a secret read. A public key
+  credential files (`glob: .env`, `**/*.pem`) is a secret read. Upgrade note:
+  a glob selects a credential file inside a directory (`.docker/config.json`,
+  `.ssh/config`, `.kube/config`, `.config/gcloud/`) when it names that
+  directory or its `**` can stand for it, so `Grep` or `Glob` with
+  `**/*.json`, `**/config` or `.docker/*` is a denied secret read under the
+  built-in profile; `*.json`, `*.db` and `*config` are not. A public key
   and an example env file (`.env.example`, `.env.sample`, `.env.template`)
   are not credentials: reading one passes, through `Read` and through a shell
   alike. A search glob for every public key (`Grep` `glob: *.pub`, `Glob`
   `**/*.pub`) is denied with `TRUST_MATERIAL_ACCESS_DENIED` under every
   profile wherever it runs, because it names the hook's trusted public key
   `workstation-ed25519.pub`; search for a key by its name (`id_ed25519.pub`).
-- Search and shell globs are decided in a small grammar every supported tool
-  reads alike, not by imitating each tool: `/`-separated segments of letters,
-  digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*` and `?`, a
-  whole-segment `**`, and in a search glob brace groups of two or more
-  alternatives, nested at most 4 deep. Inside the grammar the decision is
-  exact. A search reaches the hook's key files only when it starts at the
-  data directory, inside it or above it (`/` is above everything, a missing
-  `path` means the working directory, and a start that cannot be resolved is
-  taken as `/`), and then only through a glob that can name what the key
+- Search and shell globs are read in a small grammar, not by imitating each
+  tool's dialect: `/`-separated segments of letters, digits, `.`, `_`, `-`,
+  `+`, `@`, `=`, `%`, `:`, `*` and `?`, a whole-segment `**`, and in a search
+  glob brace groups of two or more alternatives, nested at most 4 deep.
+  Inside the grammar a glob is matched against what the key directory holds
+  as a search tool may anchor it. A search reaches the hook's key files only
+  when it starts at the data directory, inside it or above it (`/` is above
+  everything, a missing `path` means the working directory, and a start that
+  cannot be resolved, or a `path` that does not exist, is taken as `/`, since
+  Hermes searches every comma- or white-space-separated part of such a
+  `path`), and then only through a glob that can name what the key
   directory holds; `src/**/*.go` and `docs/*.md` from the home directory pass.
+  An absolute `Glob` pattern starts at the directory its literal leading
+  segments name, and at `/` when its first segment has a wildcard, a brace
+  group or a bracket (`/*/*/.h*/k*/*` is denied whatever `path`
+  the call gives). Claude Code `Grep`'s `glob` is split on white space, and on
+  commas when a part has no brace group, as Claude Code splits it, so
+  `*.ts,*.tsx` is two globs in the grammar and is not refused in a large
+  repository, and `*.go *.seed` is denied.
   A glob outside the grammar is not read: a bracket class, a backslash, a
   leading `/`, `!`, white space, a character outside ASCII, a brace group that
   is unbalanced, has one alternative or nests deeper than 4, a `.` or `..`
@@ -193,8 +207,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   a credential file (`glob: .en[v]` in a project holding `.env`). Rewrite such
   a glob in the grammar (`*.c` and `*.h` for `*.[ch]`) or start the search
   below the home directory. A shell word with a bracket class
-  (`cat ~/.helm-ai-kernel/k[]e]ys/*`) is denied when the directory it starts
-  in is at, inside or above the data directory. So a search from `/`, an
+  (`cat ~/.helm-ai-kernel/k[]e]ys/*`) or a segment longer than 1024 bytes is
+  denied when the directory it starts in is at, inside or above the data
+  directory. A shell word's brace groups are expanded as bash expands them,
+  up to 256 words per command, and each word is matched, so
+  `cat ~/{.helm-ai-kernel,x}/keys/*` is denied; past the budget a word is
+  denied when its first brace group starts at, inside or above the data
+  directory, or the word starts with one. In a repository of more than
+  65,536 entries a filter outside the grammar (`!node_modules/**`,
+  `*.[jt]s`) is denied because the walk cannot finish. So a search from `/`, an
   escaped spelling of a key file name (`*.see\d`, `*.see[d\]`) and a filter
   that starts with `/`, which ripgrep anchors at its working directory, are
   denied.
@@ -205,11 +226,19 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   its globs are too large to expand; a call of many globs, each under what one
   glob was allowed, used to be expanded glob by glob, and close to 4 MiB of
   them held the hook past the client's timeout. The hook also stops
-  classifying a call after 10 seconds and denies it the same way.
+  classifying a call after 10 seconds, denies it the same way and stops the
+  classification.
 - Hermes `search_files` `pattern` is read as a glob only when `target` is
   `files`; for a content search it is a regular expression and is not
   decided as a glob, so a regular expression with many `{m,n}` quantifiers is
   no longer refused as a glob too large to expand.
+- Upgrade note: an MCP tool's `pattern` is decided as a path pattern when it
+  is in the glob grammar, so `mcp__fs__search` with `pattern: **/*.seed` is
+  denied with `TRUST_MATERIAL_ACCESS_DENIED` under every profile wherever it
+  runs. Outside the grammar it is taken as a regular expression: it is denied
+  with `TRUST_MATERIAL_ACCESS_DENIED` under every profile when the search
+  starts at, inside or above the data directory (`pattern: foo|bar` with
+  `path` set to the home directory), and is otherwise not decided as a glob.
 - Through a shell, a credential path is read with a backslash taken as
   quoting the next character, so `rg -g '.en\v'` and
   `grep --include='.en\v'` are secret reads. A shell word whose wildcard or

@@ -3375,10 +3375,10 @@ controls:
       tools, it decides network egress on every destination the call names,
       and under an allowlist profile it denies a call whose destinations it
       cannot all name, which includes an option the client's table does not
-      know. It denies, under every profile, a call that
-      reaches its own signing key, trusted public key or policy profile, or
-      that runs the kernel command which signs with that key or installs the
-      hook. A read or fetch tool is decided like the same effect through a
+      know. It denies, under every profile, a call whose paths, shell words
+      or search globs name its own signing key, trusted public key or policy
+      profile as read below, or that runs the kernel command which signs with
+      that key or installs the hook. A read or fetch tool is decided like the same effect through a
       shell, a tool that runs code or a shell call whose command it cannot
       read is a shell operation, and a tool it has no class for is decided,
       not passed. It decides every effect of a call before it writes a
@@ -3389,21 +3389,31 @@ controls:
       decision. A payload over 4 MiB is denied without being classified, with
       a receipt that binds the digest of the bytes read and names the tool
       when the payload named it first, and the hook decides on the first JSON
-      value of its input without waiting for the input to end. It decides a
-      glob exactly inside a small grammar (literal names, "*", "?", a
-      whole-segment "**" and brace groups nested at most 4 deep): a search
-      reaches the key files only when it starts at, inside or above the data
-      directory ("/" and an unresolvable start are above everything) and a
-      glob can name what the key directory holds, and a glob aimed at a key
-      file name reaches them wherever the search runs. A glob outside the
-      grammar is refused as trust material when the search starts at, inside
-      or above the data directory, or when a bounded walk of the search root
-      finds a file with a key file name or cannot finish; a shell word with a
-      bracket class is refused when the directory it starts in is at, inside
-      or above the data directory. The globs of one call share one expansion
-      budget (256 alternatives, 64 KiB), past which the call is refused as
-      trust material without being expanded, and a call not classified
-      within 10 seconds is refused the same way.
+      value of its input without waiting for the input to end. It reads a
+      glob in a small grammar (literal names, "*", "?", a whole-segment "**"
+      and, in a search glob, brace groups nested at most 4 deep) and matches
+      it against what the key directory holds as any supported tool may
+      anchor it: a search reaches the key files only when it starts at, inside
+      or above the data directory ("/", an unresolvable start and a `path`
+      that does not exist are above everything) and a glob can name what the
+      key directory holds, an absolute path pattern starts at the directory
+      its literal leading segments name ("/" when its first segment has a
+      wildcard, a brace group or a bracket), and a glob aimed at a key file
+      name reaches them wherever the search runs. Claude Code Grep's glob is
+      split on white space, and on commas when it has no brace group, as
+      Claude Code splits it. A glob outside the grammar is refused as trust
+      material when the search starts at, inside or above the data directory,
+      or when a bounded walk of the search root finds a file with a key file
+      name or cannot finish; an MCP tool's pattern outside the grammar is
+      taken as a regular expression and refused only in the first case. A
+      shell word's brace groups are expanded as bash expands them, up to 256
+      words per call, and each word is matched; past that budget, and for a
+      word with a bracket class or a segment longer than 1024 bytes, the word
+      is refused when the directory it starts in is at, inside or above the
+      data directory. The globs of one call share one expansion budget (256
+      alternatives, 64 KiB), past which the call is refused as trust material
+      without being expanded, and a call not classified within 10 seconds is
+      refused the same way and its classification is stopped.
     status: observed-only
     reason: >-
       The client decides which calls reach the hook, and classifying command
@@ -3430,10 +3440,13 @@ controls:
       - "A script file is not read for what it does: `python3 script.py` is decided on its arguments, and on its text only for a literal reference to the signing material. A path computed at run time, a renamed copy of the kernel binary, a `PATH` override and a recursive read of a directory above the data directory are not detected."
       - "A profile that grants `shell.operate` allows opaque shell forms, which can open connections the allowlist does not see."
       - "A program outside the client table is not classified as egress: package managers, language toolchains, DNS tools and HTTP clients the table does not list connect without a network decision."
-      - "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected. A search with no glob, or with a glob that cannot name what the key directory holds, below a directory above the data directory is a recursive read of it and is not refused. The search root is the `path` argument or the working directory: a tool that takes its root from another argument is decided from the working directory."
-      - "The glob grammar is a subset every supported tool reads alike, and inside it a glob is matched as any of them may anchor it: from the search root or a directory above it, after leading segments that can name `..`, or at any depth below the root. A glob outside it is not read. A symbolic link inside the searched tree is not followed, as ripgrep does not follow one by default; the walk made for a glob outside the grammar covers 65,536 entries of at most four roots per call, and a walk that cannot finish is refused."
-      - "The work of a classification is bounded by the 4 MiB input limit, the per-call glob budget and the 10 second classification deadline; the shapes the tests and the reviews measured (20,000 destinations, 150,000 credential paths, close to 4 MiB of distinct brace globs and 4 MiB paths) finish in under a second."
-      - "A search glob for every public key (`*.pub`) names the trusted public key and is refused wherever it runs. A shell word whose wildcard or bracket would expand to a credential file (`cat .en?`, `cat .en[v]`) is decided on its text, not on what it expands to."
+      - "The guard is defense in depth, not what keeps receipts trustworthy. It decides what a call names in the forms it reads; the hook and the agent run as the same operating-system user, so the signing seed is readable by any program the agent runs that does not name it, until the seed moves to a signer the agent's user cannot read."
+      - "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected. A search with no glob, or with a glob that cannot name what the key directory holds, below a directory above the data directory is a recursive read of it and is not refused. The search root is the `path` argument or the working directory: a tool that takes its root from another argument is decided from the working directory. A `path` that does not exist is decided as `/`, because Hermes then searches every part of it split on commas or white space that exists; the working directory is taken as given."
+      - "The glob grammar is the part of glob syntax the guard reads, not an emulation of each tool's dialect. Inside it a glob is matched as a tool may anchor it: from the search root or a directory above it, after leading segments that can name `..`, or at any depth below the root. Where a tool reads a glob in the grammar another way, the guard does not follow it: Hermes `search_files` with `target: files` reads a pattern that holds `/` by its last segment and adds a leading `*`, which lists names (not content) the guard's reading does not consider. Claude Code Grep's glob is split as Claude Code 2.1.321 splits it; another client's `glob` is one glob. A glob outside the grammar is not read. A symbolic link inside the searched tree is not followed, as ripgrep does not follow one by default; the walk made for a glob outside the grammar covers 65,536 entries of at most four roots per call, and a walk that cannot finish is refused, so in a larger repository a filter outside the grammar (`!node_modules/**`, `*.[jt]s`) is refused as trust material."
+      - "An MCP tool's `pattern` may be a glob or a regular expression. In the grammar it is decided as a path pattern; outside it, it is taken as a regular expression: refused where the search starts at, inside or above the data directory, and otherwise not walked for, so an MCP server that reads such a pattern as a glob (`*.see[d]`) can list a copy of a key file outside those directories."
+      - "A shell word's brace groups are expanded as bash expands them, 256 words per call. Past that budget a word is refused when the directory its first brace group starts naming in (one level up for every `..` after it, `/` when the word starts with a brace group) is at, inside or above the data directory, and passes otherwise. A shell glob segment longer than 1024 bytes is not matched name by name and is decided the same way. zsh brace forms bash does not have are not expanded."
+      - "The work of a classification is bounded by the 4 MiB input limit, the per-call glob and brace budgets and the 10 second classification deadline, at which the guard is stopped and the classifier ends its work on the call. On an idle machine the shapes the tests and the reviews measured (20,000 destinations, 150,000 credential paths, close to 4 MiB of distinct brace globs, 4 MiB paths and a 4 MiB shell word of unclosed brackets) finish in under a second; under heavy load the reviews measured up to 3.6 s."
+      - "A search glob for every public key (`*.pub`) names the trusted public key and is refused wherever it runs. A shell word whose wildcard or bracket would expand to a credential file (`cat .en?`, `cat .en[v]`) is decided on its text, not on what it expands to. A search glob is a secret read when it can name a credential file; one inside a directory (`.docker/config.json`, `.ssh/config`, `.kube/config`, `.config/gcloud/`) only through a glob that names the directory or whose `**` can stand for it, so `*.json`, `*.db` and `*config`, which ripgrep matches at any depth, read such a file without a secret-read decision."
       - "setup status reads a Claude Code matcher as Claude Code's documentation describes (plain names exact, anything else a regular expression matched anywhere in the name) and the other clients' matchers as regular expressions matched anywhere in the name. A client that reads its matcher another way may route fewer tools than setup status reports."
     tests:
       allowed:
@@ -3466,6 +3479,8 @@ controls:
         - "core/cmd/helm-ai-kernel.TestHookDecidesEveryGlobOfACallUnderOneBudget"
         - "core/cmd/helm-ai-kernel.TestHookSearchFromTheWorkingDirectory"
         - "core/cmd/helm-ai-kernel.TestHookDeniesACallItCannotClassifyInTime"
+        - "core/cmd/helm-ai-kernel.TestHookStopsTheClassifierAtItsDeadline"
+        - "core/cmd/helm-ai-kernel.TestHookReadsSearchInputsAsTheirToolDoes"
         - "core/pkg/shellscan.TestClassifyReadsClientOptionsWhereverTheClientDoes"
         - "core/pkg/shellscan.TestClassifyRefusesWhatAClientTableDoesNotKnow"
         - "core/pkg/shellscan.TestPathGuardDecidesGlobsInTheGrammar"
@@ -3477,6 +3492,10 @@ controls:
         - "core/pkg/shellscan.TestPathGuardReadsDoubleStarAsZeroOrMoreDirectories"
         - "core/pkg/shellscan.TestPathGuardDecidesALongPatternByItsLastSegments"
         - "core/pkg/shellscan.TestPathGuardListsTheProtectedDirectory"
+        - "core/pkg/shellscan.TestPathGuardRootsAnAbsolutePatternAtItsLiteralHead"
+        - "core/pkg/shellscan.TestClassifyDecidesALongShellWordInBoundedTime"
+        - "core/pkg/shellscan.TestPathGuardStopEndsEveryDecisionAsARefusal"
+        - "core/pkg/shellscan.TestSearchCallReadsAPatternOutsideTheGrammarAsARegex"
       removal: []
       bypass:
         - "core/cmd/helm-ai-kernel.TestHookBypassCorpus"

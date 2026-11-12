@@ -42,6 +42,44 @@ func TestHookDeniesACallItCannotClassifyInTime(t *testing.T) {
 	}
 }
 
+// Past its deadline the hook stops the classifier: the guard it classifies
+// with refuses everything from then on, so the work ends instead of running
+// on beside the decision the hook has already made.
+func TestHookStopsTheClassifierAtItsDeadline(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	originalDeadline, originalClassify := hookClassificationDeadline, hookClassify
+	stopped, quit := make(chan struct{}), make(chan struct{})
+	hookClassificationDeadline = 50 * time.Millisecond
+	hookClassify = func(payload preToolPayload, guard *shellscan.PathGuard) []hookClassification {
+		defer close(stopped)
+		for {
+			// A path far from the signer's files matches only once the
+			// guard has been stopped.
+			if _, matched := guard.Match("/nonexistent/src/main.go", "/"); matched {
+				return nil
+			}
+			select {
+			case <-quit:
+				return nil
+			default:
+			}
+		}
+	}
+	t.Cleanup(func() {
+		close(quit)
+		hookClassificationDeadline, hookClassify = originalDeadline, originalClassify
+	})
+	denied, stdout, receipts := env.runAt(t, "/repo", "Grep", map[string]any{"glob": "*.go", "pattern": "TODO"})
+	if !denied || !hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED") {
+		t.Fatalf("denied=%v receipts=[%s] stdout=%s, want the call refused at the deadline", denied, describeReceipts(receipts), stdout)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the classifier was still running two seconds after the hook answered")
+	}
+}
+
 // enforce creates each receipt file new: a receipt already on disk is never
 // replaced, whatever its name.
 func TestEnforceReceiptWriteNeverReplacesAFile(t *testing.T) {

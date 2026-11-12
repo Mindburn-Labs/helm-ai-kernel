@@ -312,8 +312,9 @@ var writeContentKeys = map[string]bool{
 
 // searchGlobKind says how a tool reads the string under key: "filter", a glob
 // applied to names (glob, include, file_glob); "path", a path pattern as a
-// Glob tool's pattern is; "regex", a pattern that is a regular expression
-// (Grep's, and Hermes search_files' unless its target is "files"); or "".
+// Glob tool's pattern is; "path-or-regex", an MCP tool's pattern, which may be
+// either; "regex", a pattern that is a regular expression (Grep's, and Hermes
+// search_files' unless its target is "files"); or "".
 func searchGlobKind(payload preToolPayload, key string) string {
 	switch tool := payload.ToolName; {
 	case key == "glob" || key == "include" || key == "file_glob":
@@ -322,8 +323,19 @@ func searchGlobKind(payload preToolPayload, key string) string {
 		return ""
 	case strings.EqualFold(tool, "grep"), strings.EqualFold(tool, "search_files") && !strings.EqualFold(inputString(payload.ToolInput, "target"), "files"):
 		return "regex"
+	case hookToolKindOf(strings.TrimSpace(tool)) == hookToolMCP:
+		return "path-or-regex"
 	}
 	return "path"
+}
+
+// searchGlobKey reports a key whose string the search call decides.
+func searchGlobKey(payload preToolPayload, key string) bool {
+	switch searchGlobKind(payload, key) {
+	case "filter", "path", "path-or-regex":
+		return true
+	}
+	return false
 }
 
 // newSearchCall collects the search globs of a tool input, read from the
@@ -333,27 +345,86 @@ func newSearchCall(payload preToolPayload) *shellscan.SearchCall {
 	hookToolStrings(payload.ToolInput, "", func(key, text string) {
 		switch searchGlobKind(payload, key) {
 		case "filter":
-			search.AddFilter(text)
+			for _, glob := range searchFilters(payload.ToolName, key, text) {
+				search.AddFilter(glob)
+			}
 		case "path":
 			search.AddPathPattern(text)
+		case "path-or-regex":
+			search.AddPatternOrRegex(text)
 		}
 	})
 	return search
 }
 
+// searchFilters splits a filter as its tool does. Claude Code's Grep splits
+// its glob on white space, as JavaScript's \s reads it, and each part on
+// commas unless the part holds a brace group, and gives ripgrep every part as
+// a glob of its own. Every other filter is one glob.
+func searchFilters(tool, key, text string) []string {
+	if tool != "Grep" || key != "glob" {
+		return []string{text}
+	}
+	var globs []string
+	for _, part := range strings.FieldsFunc(text, javaScriptSpace) {
+		if strings.Contains(part, "{") && strings.Contains(part, "}") {
+			globs = append(globs, part)
+			continue
+		}
+		for _, glob := range strings.Split(part, ",") {
+			if glob != "" {
+				globs = append(globs, glob)
+			}
+		}
+	}
+	return globs
+}
+
+// javaScriptSpace reports the characters JavaScript's \s matches.
+func javaScriptSpace(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', '\u00a0', '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000', '\ufeff':
+		return true
+	}
+	return '\u2000' <= r && r <= '\u200a'
+}
+
 // searchRoot is the absolute directory a search tool starts in: its "path"
 // argument, resolved against the working directory, or the working
-// directory itself. It is "" when neither says.
+// directory itself. It is "", which the search call takes as "/", when
+// neither says and when the "path" given does not exist: Hermes then splits
+// it on commas or white space and searches every part that exists.
 func searchRoot(base, cwd string) string {
+	root := ""
 	switch {
 	case base == "":
 		return cwd
 	case filepath.IsAbs(base) || strings.HasPrefix(base, "~") || strings.HasPrefix(base, "$HOME"):
-		return base
+		root = base
 	case cwd != "":
-		return filepath.Join(cwd, base)
+		root = filepath.Join(cwd, base)
 	}
-	return ""
+	if expanded := expandSearchHome(root); !filepath.IsAbs(expanded) {
+		return ""
+	} else if _, err := os.Stat(expanded); err != nil {
+		return ""
+	}
+	return root
+}
+
+// expandSearchHome replaces a leading ~, $HOME or ${HOME} with the home
+// directory; it gives "" when the home directory is not known.
+func expandSearchHome(value string) string {
+	for _, spelling := range []string{"~", "$HOME", "${HOME}"} {
+		if value == spelling || strings.HasPrefix(value, spelling+"/") {
+			home := homeDirOrEmpty()
+			if home == "" {
+				return ""
+			}
+			return home + value[len(spelling):]
+		}
+	}
+	return value
 }
 
 // guardedToolTarget reports the first reference to signing or trust material
@@ -370,7 +441,7 @@ func guardedToolTarget(guard *shellscan.PathGuard, kind hookToolKind, payload pr
 					target = rule
 				}
 			}
-		case searchGlobKind(payload, key) == "filter" || searchGlobKind(payload, key) == "path":
+		case searchGlobKey(payload, key):
 		default:
 			target, _ = guard.Match(text, payload.CWD)
 		}

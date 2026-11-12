@@ -221,6 +221,18 @@ func TestClassifyReportsProtectedPaths(t *testing.T) {
 		"bash -c 'python3 dump.py'",
 		"shopt -s dotglob; cat ~/*/keys/*",
 		"cat " + f.policy,
+		// Braces are expanded and each word they make is matched; past the
+		// budget, a word whose braces start at, inside or above protected
+		// material is refused.
+		"cat ~/{.signer,zz}/keys/*",
+		"cat $HOME/{.signer,zz}/keys/signer.seed",
+		`cat ~/{".signer",zz}/keys/*`,
+		"cp -r ~/{.signer,zz} /tmp/out",
+		"tar czf /tmp/k.tgz ~/{.signer,zz}",
+		"cat ~/{.signer,{a,b}}/k*/*",
+		"cat ~/proj{/../.sig,/x}ner/k*/*",
+		"cat ~/" + strings.Repeat("{a,b}", 9) + "/x",
+		"cat ~/x/{1..300}/../../.sig{ner,x}/ke{ys,x}/y",
 		// A bracket class is outside the grammar: it is refused where it
 		// starts at, inside or above protected material.
 		"cat ~/.signer/k[]e]ys/*",
@@ -249,6 +261,12 @@ func TestClassifyReportsProtectedPaths(t *testing.T) {
 		"cat \"/Users/$USER/project/file\"",
 		"cat src/[ab]*.go",
 		"cat '~/.signer/k[e]ys/x'",
+		"cp ~/.bashrc{,.bak}",
+		"mkdir -p src/{api,web}/{lib,test}",
+		"echo {a,b}",
+		"cat ~/.signer/{receipts,logs}/*",
+		"touch src/f{1..1000}.go",
+		"F=~/{.signer,zz}/keys; echo done",
 	}
 	for _, command := range miss {
 		if res := ClassifyAt(command, work, WithPathGuard(f.guard)); res.ProtectedPath != "" {
@@ -324,10 +342,10 @@ func braceAlternatives(count int, last string) string {
 	return b.String()
 }
 
-// Inside the grammar a glob is decided exactly: it reaches protected material
-// when it can name it from where the search starts, at any depth and from any
-// anchoring, or names a protected file name anywhere. A filter that names
-// nothing the key directory holds is not refused for starting above it.
+// Inside the grammar a glob reaches protected material when it can name it
+// from where the search starts, at any depth and from any anchoring, or names
+// a protected file name anywhere. A filter that names nothing the key
+// directory holds is not refused for starting above it.
 func TestPathGuardDecidesGlobsInTheGrammar(t *testing.T) {
 	f := newGuardFixture(t)
 	elsewhere := t.TempDir()
@@ -383,6 +401,37 @@ func TestPathGuardDecidesGlobsInTheGrammar(t *testing.T) {
 		search.AddPathPattern(tc.pattern)
 		if rule, reason, got := f.guard.MatchSearch(search); got != tc.want {
 			t.Errorf("MatchSearch(path %q from %q) = %q (%s), %v; want %v", tc.pattern, tc.root, rule, reason, got, tc.want)
+		}
+	}
+}
+
+// An absolute path pattern is read from the directory its literal head names,
+// and from "/" when its first segment already has a wildcard, a brace or a
+// bracket, as Claude Code's Glob roots it: the search root it was given does
+// not change where such a pattern starts.
+func TestPathGuardRootsAnAbsolutePatternAtItsLiteralHead(t *testing.T) {
+	f := newGuardFixture(t)
+	elsewhere := t.TempDir()
+	parts := strings.Split(strings.Trim(filepath.ToSlash(f.home), "/"), "/")
+	first, rest := parts[0], strings.Join(parts[1:], "/")
+	for _, pattern := range []string{
+		"/" + strings.TrimSuffix(strings.Repeat("*/", len(parts)), "/") + "/.sig*/k*/*",
+		"/" + first[:1] + "*/" + rest + "/.sig*/k*/*",
+		"/**/" + parts[len(parts)-1] + "/.sig*/k*/*",
+		"/{" + first + ",x}/" + rest + "/.sig*/k*/*",
+		"/[" + first[:1] + "]" + first[1:] + "/" + rest + "/.sig*/k*/*",
+	} {
+		search := NewSearchCall(elsewhere, f.home)
+		search.AddPathPattern(pattern)
+		if rule, reason, got := f.guard.MatchSearch(search); !got {
+			t.Errorf("MatchSearch(path %q from %q) = %q (%s), %v; want it refused", pattern, elsewhere, rule, reason, got)
+		}
+	}
+	for _, pattern := range []string{"/*/" + rest + "/src/**/*.go", "/" + first[:1] + "*/" + rest + "/docs/*.md"} {
+		search := NewSearchCall(elsewhere, f.home)
+		search.AddPathPattern(pattern)
+		if rule, reason, got := f.guard.MatchSearch(search); got {
+			t.Errorf("MatchSearch(path %q from %q) = %q (%s); want it passed", pattern, elsewhere, rule, reason)
 		}
 	}
 }
@@ -451,7 +500,19 @@ func TestSearchCallSecretReadDecidesByReach(t *testing.T) {
 		{project, ".en[]v]", true},
 		{project, `.en\v`, true},
 		{project, "{.e[n]v,[}]}", true},
+		// A credential file inside a directory is selected by a glob that
+		// names the directory, or one whose "**" can stand for it.
+		{empty, "**/*.json", true},
+		{empty, ".docker/*.json", true},
+		{empty, "*/config", true},
+		{empty, "**/gcloud/*.db", true},
+		{empty, ".ssh/*", true},
 
+		{empty, "*.json", false},
+		{empty, "*.db", false},
+		{empty, "*config", false},
+		{empty, "config.json", false},
+		{empty, "gcloud/*.db", false},
 		{empty, ".env.example", false},
 		{empty, "*.pub", false},
 		{empty, "**/*.go", false},
@@ -496,6 +557,14 @@ func TestSearchCallSharesOneBudgetAcrossItsGlobs(t *testing.T) {
 	}
 }
 
+// generousBound is the most time a decision the tests time may take. The
+// allocation bounds are what pin the work down; the time bound only has to
+// catch a decision that has gone super-linear again (those took 30 s and more
+// under the reviews' load), while leaving a wide margin for a loaded machine,
+// where 250 ms has been exceeded by work that is linear. The hook's own
+// deadline is 10 s.
+const generousBound = 3 * time.Second
+
 // A budget-sized call is decided at once, in bounded memory. Past the budget
 // it is refused as reaching trust material and as a secret read; a glob
 // nested past the grammar is refused above the data directory.
@@ -531,8 +600,8 @@ func TestPathGuardDecidesALargeSearchInBoundedTimeAndMemory(t *testing.T) {
 			if !matched || (rule == UnexpandableSearchGlob) != tc.overBudget || secret != tc.overBudget {
 				t.Fatalf("MatchSearch = %q, %v; SecretRead = %v; want refused, over budget %v", rule, matched, secret, tc.overBudget)
 			}
-			if elapsed > 250*time.Millisecond {
-				t.Fatalf("deciding the search took %s, want well under a second", elapsed)
+			if elapsed > generousBound {
+				t.Fatalf("deciding the search took %s, want under %s", elapsed, generousBound)
 			}
 			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 16<<20 {
 				t.Fatalf("deciding the search allocated %d bytes, want at most 16 MiB", allocated)
@@ -564,8 +633,8 @@ func TestPathGuardDecidesALongPatternByItsLastSegments(t *testing.T) {
 	if _, _, got := f.guard.MatchSearch(searchOf(f.home, f.home, strings.Repeat("x/", 4000)+".signer/keys/*")); !got {
 		t.Fatal("a filter of many leading directories did not reach the key directory")
 	}
-	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
-		t.Fatalf("long patterns took %s", elapsed)
+	if elapsed := time.Since(start); elapsed > generousBound {
+		t.Fatalf("long patterns took %s, want under %s", elapsed, generousBound)
 	}
 }
 
@@ -614,5 +683,112 @@ func TestSearchCallRefusesWhatItCannotWalk(t *testing.T) {
 	}
 	if rule, reason, got := f.guard.MatchSearch(many); !got || rule != UnexpandableSearchGlob {
 		t.Fatalf("MatchSearch over %d roots = %q (%s), %v; want it refused", maxReachWalks+1, rule, reason, got)
+	}
+}
+
+// A shell word is decided in time linear in its length. A segment longer
+// than any file name is not matched name by name: the word is refused when it
+// starts at, inside or above protected material, and passes otherwise. The
+// guard may cost a small multiple of what classifying the same command
+// without it costs, measured at the same moment so that load on the machine
+// slows both; before this bound it cost a thousand times more.
+func TestClassifyDecidesALongShellWordInBoundedTime(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, tc := range []struct {
+		name, command string
+		protected     bool
+	}{
+		{"unclosed brackets elsewhere", "cat /tmp/*" + strings.Repeat("[", 1<<20), false},
+		{"unclosed brackets above protected material", "cat ~/*" + strings.Repeat("[", 1<<20), true},
+		{"a long segment elsewhere", "cat /tmp/*" + strings.Repeat("a", 1<<20), false},
+		{"a long segment inside the data directory", "cat ~/.signer/*" + strings.Repeat("a", 1<<20), true},
+		{"many double stars", "cat /tmp/" + strings.Repeat("**/", 1<<19) + "x", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			ClassifyAt(tc.command, work)
+			unguarded := time.Since(start)
+			bound := 10*unguarded + time.Second
+			done := make(chan Result, 1)
+			start = time.Now()
+			go func() { done <- ClassifyAt(tc.command, work, WithPathGuard(f.guard)) }()
+			select {
+			case res := <-done:
+				if (res.ProtectedPath != "") != tc.protected {
+					t.Fatalf("ProtectedPath = %q, want protected %v", res.ProtectedPath, tc.protected)
+				}
+				if elapsed := time.Since(start); elapsed > bound {
+					t.Fatalf("deciding the word took %s with the guard and %s without it, want under %s", elapsed, unguarded, bound)
+				}
+			case <-time.After(2 * bound):
+				t.Fatalf("the word was not decided within %s; without the guard it took %s", 2*bound, unguarded)
+			}
+		})
+	}
+}
+
+// A stopped guard ends every decision at once as a refusal, a walk of a
+// search root included, so a classifier past its deadline stops instead of
+// running on.
+func TestPathGuardStopEndsEveryDecisionAsARefusal(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	search := searchOf(f.home, work, "[a]*.go")
+	if _, _, got := f.guard.MatchSearch(search); got {
+		t.Fatal("a search that reaches nothing was refused before the guard was stopped")
+	}
+	f.guard.Stop()
+	if rule, got := f.guard.Match(filepath.Join(work, "main.go"), work); !got || rule != stoppedRule {
+		t.Fatalf("Match after Stop = %q, %v; want %q", rule, got, stoppedRule)
+	}
+	if rule, _, got := f.guard.MatchSearch(searchOf(f.home, work, "*.go")); !got || rule != stoppedRule {
+		t.Fatalf("MatchSearch after Stop = %q, %v; want %q", rule, got, stoppedRule)
+	}
+	if res := ClassifyAt("cat README.md", work, WithPathGuard(f.guard)); res.ProtectedPath != stoppedRule {
+		t.Fatalf("ClassifyAt after Stop reported %q, want %q", res.ProtectedPath, stoppedRule)
+	}
+	// The walk a glob outside the grammar needs stops too, and a walk that
+	// did not finish is refused.
+	fresh := searchOf(f.home, work, "[a]*.go")
+	_, _, _ = f.guard.MatchSearch(fresh)
+	if _, reason, got := fresh.SecretRead(); !got || !strings.Contains(reason, reachTooLarge) {
+		t.Fatalf("SecretRead after Stop = %v (%s); want the unfinished walk refused", got, reason)
+	}
+}
+
+// An MCP tool's pattern may be a path pattern or a regular expression. In
+// the grammar it is decided as a path pattern; outside it, it is a regular
+// expression: refused where the search starts at, inside or above protected
+// material, and otherwise neither walked for nor refused.
+func TestSearchCallReadsAPatternOutsideTheGrammarAsARegex(t *testing.T) {
+	f := newGuardFixture(t)
+	copies := t.TempDir()
+	if err := os.WriteFile(filepath.Join(copies, "signer.seed"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := t.TempDir()
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o700) })
+	for _, tc := range []struct {
+		root, pattern string
+		want          bool
+	}{
+		{f.home, "foo|bar", true},
+		{f.home, "**/*.seed", true},
+		{copies, "**/*.seed", true},
+		{unreadable, "foo|bar", false},
+		{unreadable, `\bTODO\b`, false},
+		{copies, "sig.*seed", false},
+	} {
+		search := NewSearchCall(tc.root, f.home)
+		search.AddPatternOrRegex(tc.pattern)
+		rule, reason, got := f.guard.MatchSearch(search)
+		_, _, secret := search.SecretRead()
+		if got != tc.want || secret {
+			t.Errorf("MatchSearch(pattern %q from %q) = %q (%s), %v, secret read %v; want %v and no secret read", tc.pattern, tc.root, rule, reason, got, secret, tc.want)
+		}
 	}
 }

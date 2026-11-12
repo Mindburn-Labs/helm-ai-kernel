@@ -61,7 +61,19 @@ func newHookBypassEnv(t *testing.T, policyFixture string) hookBypassEnv {
 }
 
 func (env hookBypassEnv) expand(text string) string {
-	return strings.NewReplacer("{{HOME}}", env.home, "{{LINK}}", env.link, "{{POLICY}}", env.policy).Replace(text)
+	// The home directory spelled with a wildcard, a brace group or a bracket
+	// in its first segment, for the absolute patterns a search tool roots at
+	// "/".
+	parts := strings.Split(strings.Trim(filepath.ToSlash(env.home), "/"), "/")
+	first, rest := parts[0], strings.Join(parts[1:], "/")
+	return strings.NewReplacer(
+		"{{HOME_STARS}}", "/"+strings.TrimSuffix(strings.Repeat("*/", len(parts)), "/"),
+		"{{HOME_WILD}}", "/"+first[:1]+"*/"+rest,
+		"{{HOME_BRACE}}", "/{"+first+",x}/"+rest,
+		"{{HOME_CLASS}}", "/["+first[:1]+"]"+first[1:]+"/"+rest,
+		"{{HOME_NAME}}", parts[len(parts)-1],
+		"{{HOME}}", env.home, "{{LINK}}", env.link, "{{POLICY}}", env.policy,
+	).Replace(text)
 }
 
 // run sends one tool call through the real hook entry point and returns
@@ -119,12 +131,14 @@ func hasDenial(receipts []*contracts.WorkstationPolicyDecisionReceipt, reasonCod
 // form is one line in that file.
 func TestHookBypassCorpus(t *testing.T) {
 	granted := newHookBypassEnv(t, "observe_draft.v1.allow.json")
-	// {{HOME}}/proj is a project that holds a credential file, and
-	// {{HOME}}/copies a directory that holds a copy of the seed, for the forms
-	// a search decides by what it can reach.
+	// {{HOME}}/proj is a project that holds a credential file,
+	// {{HOME}}/copies a directory that holds a copy of the seed and
+	// {{HOME}}/repo a project that holds neither, for the forms a search
+	// decides by what it can reach.
 	for path, content := range map[string]string{
 		filepath.Join(granted.home, "proj", ".env"):                                 "TOKEN=x\n",
 		filepath.Join(granted.home, "copies", "backup", workstationSigningSeedName): "00\n",
+		filepath.Join(granted.home, "repo", "main.go"):                              "package main\n",
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)

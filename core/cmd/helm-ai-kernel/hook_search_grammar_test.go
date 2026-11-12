@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -107,7 +108,8 @@ func TestHookDecidesEveryGlobOfACallUnderOneBudget(t *testing.T) {
 // A search with no path starts in the working directory: "/" is above
 // everything, a working directory above the data directory reaches it, and a
 // search whose start cannot be resolved is taken to start above everything.
-// What the grammar decides exactly is not refused for that.
+// A glob in the grammar that names nothing the key directory holds is not
+// refused for that.
 func TestHookSearchFromTheWorkingDirectory(t *testing.T) {
 	builtin := newHookBypassEnv(t, "")
 	for _, tc := range []struct {
@@ -142,5 +144,59 @@ func TestHookSearchFromTheWorkingDirectory(t *testing.T) {
 	_, stdout, _ := builtin.runAt(t, builtin.home, "Grep", map[string]any{"glob": "*.[ch]", "pattern": "."})
 	if !strings.Contains(stdout, `a search glob with \"[\", which the hook does not read`) {
 		t.Fatalf("the denial does not name the bracket: %s", stdout)
+	}
+}
+
+// Claude Code splits Grep's glob on white space, and on commas when it has no
+// braces, and gives ripgrep each part: each part is decided as a glob of its
+// own. An MCP tool's pattern outside the grammar is taken as a regular
+// expression: the search root is not walked for it, and it is refused only
+// where the search starts at, inside or above the data directory. A root the
+// hook cannot walk stands for a repository too large to walk.
+func TestHookReadsSearchInputsAsTheirToolDoes(t *testing.T) {
+	granted := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	builtin := granted
+	builtin.args = []string{"--client", "claude-code", "--data-dir", granted.dataDir}
+	unreadable, project := t.TempDir(), t.TempDir()
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o700) })
+	if _, err := os.ReadDir(unreadable); err == nil {
+		t.Skip("running with permissions that read any directory")
+	}
+	const (
+		noDecision = iota
+		noTrustDenial
+		trustDenial
+	)
+	for _, tc := range []struct {
+		name  string
+		env   hookBypassEnv
+		tool  string
+		input map[string]any
+		want  int
+	}{
+		{"comma-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts,*.tsx", "pattern": "TODO"}, noDecision},
+		{"space-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts *.tsx", "pattern": "TODO"}, noDecision},
+		{"comma-separated filters from home", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.go,*.md", "pattern": "TODO"}, noDecision},
+		{"a brace group keeps its commas", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.{ts,tsx} *.go", "pattern": "TODO"}, noDecision},
+		{"a space-separated part names a key file", granted, "Grep", map[string]any{"path": project, "glob": "*.go *.seed", "pattern": "."}, trustDenial},
+		{"a comma-separated part names a key file", granted, "Grep", map[string]any{"path": project, "glob": "*.go,*.seed", "pattern": "."}, trustDenial},
+		{"MCP regex, repository too large to walk", granted, "mcp__fs__search", map[string]any{"path": unreadable, "pattern": "foo|bar"}, noTrustDenial},
+		{"MCP regex with escapes, repository too large to walk", granted, "mcp__fs__search", map[string]any{"path": unreadable, "pattern": `\bTODO\b`}, noTrustDenial},
+		{"MCP regex from home", granted, "mcp__fs__search", map[string]any{"path": granted.home, "pattern": "foo|bar"}, trustDenial},
+		{"MCP glob for a key file", granted, "mcp__fs__search", map[string]any{"path": project, "pattern": "**/*.seed"}, trustDenial},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied, stdout, receipts := tc.env.runAt(t, "/repo", tc.tool, tc.input)
+			trust := hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED")
+			switch {
+			case tc.want == noDecision && (denied || len(receipts) != 0),
+				tc.want == noTrustDenial && trust,
+				tc.want == trustDenial && (!denied || !trust):
+				t.Fatalf("%s %v: denied=%v receipts=[%s] stdout=%s, want outcome %d", tc.tool, tc.input, denied, describeReceipts(receipts), stdout, tc.want)
+			}
+		})
 	}
 }

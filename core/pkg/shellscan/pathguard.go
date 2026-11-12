@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -39,6 +40,26 @@ type PathGuard struct {
 	resolved map[string]string
 	targets  []globTarget
 	listed   bool
+
+	// stop is set when the caller has stopped waiting for the guard.
+	stop atomic.Bool
+}
+
+// stoppedRule is what every decision of a stopped guard reports.
+const stoppedRule = "classification stopped at its deadline"
+
+// Stop ends the guard's work: every decision it makes from now on, and every
+// one still running, ends at once as a match. A classifier its caller has
+// given up on stops instead of running on, and nothing it could not finish
+// passes.
+func (g *PathGuard) Stop() {
+	if g != nil {
+		g.stop.Store(true)
+	}
+}
+
+func (g *PathGuard) stopped() bool {
+	return g != nil && g.stop.Load()
 }
 
 // guardedPath is one protected location, as written and as it resolves. The
@@ -141,6 +162,9 @@ func (g *PathGuard) MatchText(text string) (string, bool) {
 	if g == nil || len(g.needles) == 0 {
 		return "", false
 	}
+	if g.stopped() {
+		return stoppedRule, true
+	}
 	text = strings.ToLower(slashPath(text))
 	for strings.Contains(text, "//") {
 		text = strings.ReplaceAll(text, "//", "/")
@@ -183,6 +207,9 @@ func (g *PathGuard) Match(target, cwd string) (string, bool) {
 func (g *PathGuard) matchPattern(pattern string, dynamicAt int, cwd string, dotGlob bool) (string, bool) {
 	if g == nil || pattern == "" {
 		return "", false
+	}
+	if g.stopped() {
+		return stoppedRule, true
 	}
 	if needle, ok := g.MatchText(unescapeLit(pattern)); ok {
 		return needle, true
@@ -258,15 +285,17 @@ func (g *PathGuard) firstForm(accepts func(kind int, form string) bool) (string,
 	return "", false
 }
 
-// Globs are decided exactly in a small grammar every supported tool reads
-// alike ("/"-separated segments of literal characters, "*" and "?", a whole
-// "**", and in a search glob brace groups); a glob outside it is not read.
+// Globs are read in a small grammar ("/"-separated segments of literal
+// characters, "*" and "?", a whole "**", and in a search glob brace groups);
+// inside it a glob is matched as any supported tool may anchor it, and a glob
+// outside it is not read.
 
 // globTarget is a path a glob may name, in lower-case parts (the first below
 // of them the search root's), and the protected location it belongs to. open:
 // a directory not all listed. explicitDot: a container, which a wildcard names
 // only when the pattern writes its leading dot. anyAbove: leading segments may
-// name any directories above it.
+// name any directories above it, and the rest must name it from its first
+// part, so "*.json" does not name ".docker/config.json".
 type globTarget struct {
 	parts                       []string
 	form                        string
@@ -299,7 +328,7 @@ func (g *PathGuard) protectedTargets() []globTarget {
 	add(g.files, nil, false, false)
 	add(g.containers, nil, false, true)
 	for _, tree := range g.trees {
-		listed, complete := listTree(tree.dir, maxTreeEntries)
+		listed, complete := listTree(tree.dir, maxTreeEntries, g.stopped)
 		var entries [][]string
 		for _, entry := range append(listed, g.names...) {
 			entries = append(entries, strings.Split(entry, "/"))
@@ -310,16 +339,16 @@ func (g *PathGuard) protectedTargets() []globTarget {
 }
 
 // listTree lists up to limit entries below dir, as lower-case slash paths
-// relative to it. complete is false when it stopped short or dir could not be
-// read; a directory below dir that cannot be read is left out.
-func listTree(dir string, limit int) (entries []string, complete bool) {
+// relative to it. complete is false when it stopped short, was stopped or dir
+// could not be read; a directory below dir that cannot be read is left out.
+func listTree(dir string, limit int, stop func() bool) (entries []string, complete bool) {
 	dir, complete = filepath.FromSlash(dir), true
 	_ = filepath.WalkDir(dir, func(name string, _ fs.DirEntry, err error) error {
 		rel, relErr := filepath.Rel(dir, name)
 		switch {
 		case err != nil:
 			complete = complete && (name != dir || errors.Is(err, fs.ErrNotExist))
-		case relErr != nil || len(entries) == limit:
+		case relErr != nil || len(entries) == limit || stop != nil && stop():
 			complete = false
 			return fs.SkipAll
 		case rel != ".":
@@ -330,10 +359,16 @@ func listTree(dir string, limit int) (entries []string, complete bool) {
 	return entries, complete
 }
 
+// maxShellGlobSegment is the longest shell glob segment the guard matches
+// name by name. No file name is longer than 255 bytes, and a segment that
+// names one is not four times as long.
+const maxShellGlobSegment = 1024
+
 // matchShellGlob reports whether an absolute shell glob can expand to
 // protected material. Links in its literal leading directories are followed.
-// A glob with a bracket class is outside the grammar: it matches when the
-// directory it starts in reaches protected material (searchGate).
+// A glob with a bracket class is outside the grammar, and a segment longer
+// than maxShellGlobSegment is not matched: either matches when the directory
+// the glob starts in reaches protected material (searchGate).
 func (g *PathGuard) matchShellGlob(pattern string, dotGlob bool) (string, bool) {
 	segments := pathParts(strings.ToLower(path.Clean(strings.ReplaceAll(pattern, `\/`, "/"))))
 	literal := 0
@@ -341,27 +376,46 @@ func (g *PathGuard) matchShellGlob(pattern string, dotGlob bool) (string, bool) 
 		literal++
 	}
 	start := "/" + unescapeLit(strings.Join(segments[:literal], "/"))
+	// A run of "**" names what one does.
+	glob := make([]string, 0, len(segments)-literal)
 	for _, segment := range segments[literal:] {
-		for i := 0; i < len(segment); i++ {
-			if segment[i] == '\\' {
-				i++
-			} else if segment[i] == '[' && strings.IndexByte(segment[i+1:], ']') >= 0 {
-				return g.searchGate(start)
-			}
+		if len(segment) > maxShellGlobSegment || bracketClass(segment) {
+			return g.searchGate(start)
+		}
+		if segment != "**" || len(glob) == 0 || glob[len(glob)-1] != "**" {
+			glob = append(glob, segment)
 		}
 	}
-	candidates := [][]string{segments}
+	candidates := [][]string{append(segments[:literal:literal], glob...)}
 	if resolved := strings.ToLower(g.resolve(start)); resolved != start {
-		candidates = append(candidates, append(pathParts(globEscape(resolved)), segments[literal:]...))
+		candidates = append(candidates, append(pathParts(globEscape(resolved)), glob...))
 	}
 	for _, candidate := range candidates {
 		for _, target := range g.protectedTargets() {
+			if g.stopped() {
+				return stoppedRule, true
+			}
 			if fits(candidate, target, true, dotGlob && !target.explicitDot) {
 				return target.form, true
 			}
 		}
 	}
 	return "", false
+}
+
+// bracketClass reports a "[" that a "]" follows, which the grammar leaves
+// out. The last "]" is found once, so a segment of many "[" costs one pass.
+func bracketClass(segment string) bool {
+	last := strings.LastIndexByte(segment, ']')
+	for i := 0; i < last; i++ {
+		switch segment[i] {
+		case '\\':
+			i++
+		case '[':
+			return true
+		}
+	}
+	return false
 }
 
 // fits reports whether pattern can name target. Anchored, it names target in
@@ -407,7 +461,14 @@ func fits(pattern []string, target globTarget, anchored, dotGlob bool) bool {
 			}
 		}
 		for j := 0; !anchored && start+i <= dots && j < len(cur); j++ {
-			if cur[j] && (j <= target.below || start+i == 0 || target.anyAbove) && (j < len(t) || target.open) {
+			// p[i:] names t[j:]. That reaches the target when it starts
+			// naming at or above the root, or the whole pattern does at any
+			// depth below it; with anyAbove only from the target's first part.
+			reaches := j <= target.below || start+i == 0
+			if target.anyAbove {
+				reaches = j == 0
+			}
+			if cur[j] && reaches && (j < len(t) || target.open) {
 				return true
 			}
 		}
@@ -528,14 +589,19 @@ type SearchCall struct {
 	alternatives, bytes int
 	overBudget          bool
 	walks               map[string]*searchReach
+	// mayBeRegex is set while a pattern that may be a regular expression is
+	// added; stop is the deciding guard's, so a stopped guard ends a walk.
+	mayBeRegex bool
+	stop       func() bool
 }
 
 // searchGlob is one glob: its alternatives in lower-case segments, or the
-// construct outside the grammar. A concrete one is a plain path.
+// construct outside the grammar. A concrete one is a plain path. mayBeRegex:
+// outside the grammar it is taken as a regular expression, not walked for.
 type searchGlob struct {
-	text, root, outside string
-	alts                [][]string
-	concrete            bool
+	text, root, outside  string
+	alts                 [][]string
+	concrete, mayBeRegex bool
 }
 
 // NewSearchCall starts a search at root, an absolute directory or one under
@@ -577,8 +643,10 @@ func (s *SearchCall) AddFilter(glob string) {
 
 // AddPathPattern adds a path pattern, as a Glob tool's pattern is. One that
 // names its own directory (absolute, under home, through "." or "..") is read
-// from there, an absolute one also as anchored where the search runs, and each
-// ".." past a wildcard moves its start one directory up.
+// from the directory its literal leading segments name, "/" when the first
+// segment of an absolute one has a wildcard, an absolute one also as anchored
+// where the search runs, and each ".." past a wildcard moves its start one
+// directory up.
 func (s *SearchCall) AddPathPattern(pattern string) {
 	if expanded, ok := expandHome(pattern, s.home); expanded != "" {
 		pattern = expanded
@@ -598,7 +666,12 @@ func (s *SearchCall) AddPathPattern(pattern string) {
 		return
 	}
 	head, rest := strings.Join(segments[:literal], "/"), strings.Join(segments[literal:], "/")
-	if !path.IsAbs(head) && s.root != "" {
+	switch {
+	case head == "" && path.IsAbs(pattern):
+		// The first segment already has a wildcard: the pattern starts at
+		// "/", whatever root the search was given.
+		head = "/"
+	case !path.IsAbs(head) && s.root != "":
 		head = path.Join(s.root, head)
 	}
 	if rest != "" {
@@ -606,6 +679,17 @@ func (s *SearchCall) AddPathPattern(pattern string) {
 	} else if s.charge(1, len(head)) {
 		s.globs = append(s.globs, searchGlob{text: head, concrete: true})
 	}
+}
+
+// AddPatternOrRegex adds a pattern that may be a path pattern or a regular
+// expression, as an MCP tool's "pattern" may be: in the grammar it is added
+// as AddPathPattern adds it; outside it, it is taken as a regular expression,
+// which reaches protected material only when the search starts at, inside or
+// above it, and the search root is not walked for it.
+func (s *SearchCall) AddPatternOrRegex(pattern string) {
+	s.mayBeRegex = true
+	s.AddPathPattern(pattern)
+	s.mayBeRegex = false
 }
 
 // climb is the directory as many levels above root as pattern holds "..".
@@ -620,7 +704,14 @@ func (s *SearchCall) add(glob, root string) {
 	if glob == "" || s.overBudget {
 		return
 	}
-	entry := searchGlob{text: glob, root: root, outside: outsideGrammar(glob)}
+	// Every byte of a glob other than its brace syntax is in at least one of
+	// its expansions, so a glob with more of them than the budget has left is
+	// over it without being read.
+	if len(glob)-strings.Count(glob, "{")-strings.Count(glob, ",")-strings.Count(glob, "}") > MaxSearchGlobBytes-s.bytes {
+		s.overBudget = true
+		return
+	}
+	entry := searchGlob{text: glob, root: root, outside: outsideGrammar(glob), mayBeRegex: s.mayBeRegex}
 	if entry.outside == "" {
 		parser := globParser{text: glob, countLeft: MaxSearchGlobAlternatives - s.alternatives, bytesLeft: MaxSearchGlobBytes - s.bytes}
 		texts, size, outside, over := parser.sequence(0)
@@ -761,10 +852,14 @@ func (g *PathGuard) MatchSearch(s *SearchCall) (rule, reason string, ok bool) {
 	if g == nil || s == nil {
 		return "", "", false
 	}
+	s.stop = g.stopped
 	if s.overBudget {
 		return UnexpandableSearchGlob, fmt.Sprintf("search globs too large to expand (over %d alternatives or %d bytes in one call), taken as reaching HELM signing or trust material", MaxSearchGlobAlternatives, MaxSearchGlobBytes), true
 	}
 	for _, glob := range s.globs {
+		if g.stopped() {
+			return stoppedRule, stoppedRule, true
+		}
 		if glob.concrete {
 			if rule, ok := g.Match(glob.text, ""); ok {
 				return rule, "", true
@@ -791,13 +886,16 @@ func (g *PathGuard) MatchSearch(s *SearchCall) (rule, reason string, ok bool) {
 			return location, unreadGlob(glob, "starts at, inside or above HELM signing or trust material"), true
 		case gated:
 			for _, target := range g.searchTargets(glob.root) {
+				if g.stopped() {
+					return stoppedRule, stoppedRule, true
+				}
 				for _, alternative := range glob.alts {
 					if fits(alternative, target, false, true) {
 						return target.form, "", true
 					}
 				}
 			}
-		case glob.outside != "":
+		case glob.outside != "" && !glob.mayBeRegex:
 			reach := s.reachable(glob.root)
 			for _, name := range g.names {
 				if copy, found := reach.names[name]; found {
@@ -815,6 +913,9 @@ func (g *PathGuard) MatchSearch(s *SearchCall) (rule, reason string, ok bool) {
 const reachTooLarge = "the hook could not walk in full"
 
 func unreadGlob(glob searchGlob, search string) string {
+	if glob.mayBeRegex {
+		return fmt.Sprintf("a search pattern with %s, which the hook does not read as a glob, in a search that %s", glob.outside, search)
+	}
 	return fmt.Sprintf("a search glob with %s, which the hook does not read, in a search that %s", glob.outside, search)
 }
 
@@ -842,6 +943,7 @@ func (s *SearchCall) SecretRead() (glob, reason string, ok bool) {
 					return entry.text, "", true
 				}
 			}
+		case entry.mayBeRegex:
 		case s.reachable(entry.root).secret != "":
 			return entry.text, unreadGlob(entry, "can reach the credential file "+s.reachable(entry.root).secret), true
 		case !s.reachable(entry.root).complete:
@@ -886,7 +988,7 @@ func (s *SearchCall) reachable(root string) *searchReach {
 		s.walks = map[string]*searchReach{}
 	}
 	s.walks[root] = found
-	entries, complete := listTree(resolveExisting(root), maxReachEntries)
+	entries, complete := listTree(resolveExisting(root), maxReachEntries, s.stop)
 	found.complete = complete
 	for _, rel := range entries {
 		if found.secret == "" && isLocalSecretPath(rel) {
@@ -897,6 +999,26 @@ func (s *SearchCall) reachable(root string) *searchReach {
 		}
 	}
 	return found
+}
+
+// braceGate reports whether a shell word whose braces were not all expanded
+// can reach protected material: whether the directory its first brace group
+// starts naming in is at, inside or above it. That directory is the one the
+// known text before the group (pattern, up to dynamicAt when that is not
+// negative) is in, one level up for every ".." in rest, the text from the
+// group on, and "/" when nothing is known before the group, since its
+// alternatives may be absolute paths.
+func (g *PathGuard) braceGate(pattern string, dynamicAt int, rest, cwd string) (string, bool) {
+	if dynamicAt >= 0 {
+		pattern = pattern[:dynamicAt]
+	}
+	start := ""
+	if pattern != "" {
+		if absolute, ok := g.absolute(pattern, cwd); ok {
+			start = climb(path.Dir(unescapeLit(absolute)+"x"), rest)
+		}
+	}
+	return g.searchGate(start)
 }
 
 // reachesInto reports whether a known prefix, followed by text computed at

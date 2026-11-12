@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -378,14 +379,92 @@ func (c *collector) guardWord(word *syntax.Word) {
 	if c.guard == nil || c.protectedPath != "" {
 		return
 	}
-	pattern, dynamicAt := guardWordPattern(word, c.home)
 	cwd := c.cwd
 	if c.cwdUnknown {
 		cwd = ""
 	}
-	if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
-		c.protectedPath = rule
+	words := []*syntax.Word{word}
+	if !c.literalWords[word] {
+		expanded, prefix, rest, ok := c.braceWords(word)
+		if !ok {
+			// Past the budget, the word is refused when its braces start at,
+			// inside or above protected material.
+			pattern, dynamicAt := guardWordPattern(prefix, c.home)
+			if rule, gated := c.guard.braceGate(pattern, dynamicAt, rest, cwd); gated {
+				c.protectedPath = rule
+			}
+			return
+		}
+		words = expanded
 	}
+	for _, w := range words {
+		pattern, dynamicAt := guardWordPattern(w, c.home)
+		if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
+			c.protectedPath = rule
+			return
+		}
+	}
+}
+
+// The words the brace expansions of one command may make for the guard to
+// match, and the brace groups one word may hold before it is past that.
+const (
+	maxGuardBraceWords  = 256
+	maxGuardBraceGroups = 64
+)
+
+// braceWords expands a word's braces as bash does, into no more words than
+// the command has left of maxGuardBraceWords. A word without braces is
+// itself. Past the budget ok is false, and prefix is the part of the word
+// before its first brace group and rest the text from it on.
+func (c *collector) braceWords(word *syntax.Word) (words []*syntax.Word, prefix *syntax.Word, rest string, ok bool) {
+	split := *word
+	if !syntax.SplitBraces(&split) {
+		return []*syntax.Word{word}, nil, "", true
+	}
+	first := slices.IndexFunc(split.Parts, func(part syntax.WordPart) bool {
+		_, brace := part.(*syntax.BraceExp)
+		return brace
+	})
+	if first < 0 {
+		return []*syntax.Word{&split}, nil, "", true
+	}
+	if braceGroups(split.Parts, maxGuardBraceGroups+1) <= maxGuardBraceGroups {
+		for expanded, err := range expand.BracesSeq(nil, &split) {
+			if err != nil || c.guardBraceWords == maxGuardBraceWords {
+				words = nil
+				break
+			}
+			c.guardBraceWords++
+			words = append(words, expanded)
+		}
+		if words != nil {
+			return words, nil, "", true
+		}
+	}
+	var text strings.Builder
+	syntax.NewPrinter().Print(&text, &syntax.Word{Parts: split.Parts[first:]})
+	return nil, &syntax.Word{Parts: split.Parts[:first]}, text.String(), false
+}
+
+// braceGroups counts the brace groups in parts, at every depth, up to limit.
+func braceGroups(parts []syntax.WordPart, limit int) int {
+	count := 0
+	for _, part := range parts {
+		brace, ok := part.(*syntax.BraceExp)
+		if !ok {
+			continue
+		}
+		if count++; count >= limit {
+			return count
+		}
+		for _, elem := range brace.Elems {
+			if count += braceGroups(elem.Parts, limit-count); count >= limit {
+				return count
+			}
+		}
+	}
+	return count
 }
 
 var transferReadCommands = map[string]bool{
@@ -731,10 +810,12 @@ type collector struct {
 
 	// guard, when set, names paths whose mention is recorded in
 	// protectedPath. home lets "cd" and "~" resolve the way the shell would.
-	guard         *PathGuard
-	home          string
-	dotGlob       bool
-	protectedPath string
+	// guardBraceWords counts the brace-expanded words the guard has matched.
+	guard           *PathGuard
+	home            string
+	dotGlob         bool
+	protectedPath   string
+	guardBraceWords int
 
 	// facts are effects found in syntax that no command carries, such as a
 	// redirect; env holds the variables the command line sets that change

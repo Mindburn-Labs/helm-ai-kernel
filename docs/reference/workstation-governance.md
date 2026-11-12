@@ -85,23 +85,24 @@ A path is compared after `~` and `$HOME` expansion, resolution against the
 working directory and any `cd` inside the command, removal of `.`, `..` and
 repeated slashes, and resolution of symbolic links, ignoring case.
 
-Globs are decided in a small grammar that the shell, ripgrep, Claude Code,
-Hermes and the DeepSeek harness all read alike: path segments separated by
-`/`, each made of letters, digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*`
-and `?`, a whole-segment `**` (any number of directories), and in a search
-glob brace groups `{a,b}` of two or more alternatives in the grammar, nested
-at most 4 deep. Inside the grammar the hook decides exactly, ignoring case,
-whether a glob can name the material:
+Globs are read in a small grammar: path segments separated by `/`, each made
+of letters, digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*` and `?`, a
+whole-segment `**` (any number of directories), and in a search glob brace
+groups `{a,b}` of two or more alternatives in the grammar, nested at most 4
+deep. The grammar is what the hook reads, not an emulation of each tool's
+dialect. Inside it the hook matches a glob, ignoring case, against what the
+key directory holds as a search tool may anchor it:
 
 - A search (`Grep`, `Glob`, Hermes `search_files`, an MCP tool given `glob`,
   `include`, `file_glob` or a `pattern`) reaches the material only when it
   starts at the data directory, inside it, or above it. The start is the
   `path` argument, else the working directory; `/` is above everything, and a
-  start that cannot be resolved is taken as `/`. From there a glob is matched
-  against what the key directory holds, as the search tool may anchor it:
-  from the start or any directory above it, or at any depth below the start.
-  So `keys/*` and `**/*.seed` from the home directory are refused, while
-  `src/**/*.go` and `docs/*.md` are not.
+  start that cannot be resolved, or a `path` that does not exist, is taken as
+  `/`. (Hermes searches every part of a `path` that does not exist, split on
+  commas or white space.) From there a glob is matched against what the key
+  directory holds: from the start or any directory above it, or at any depth
+  below the start. So `keys/*` and `**/*.seed` from the home directory are
+  refused, while `src/**/*.go` and `docs/*.md` are not.
 - Wherever a search starts, a glob whose last segment is aimed at a key file
   name (`*.seed`, `workstation-ed25519.*`, and `*.pub`, which names the
   trusted public key `workstation-ed25519.pub`) is refused: a copy of that file
@@ -109,10 +110,28 @@ whether a glob can name the material:
   `*.go`) is not aimed at it. Search for a specific public key by name
   (`id_ed25519.pub`) rather than `*.pub`.
 - A path pattern (a `Glob` `pattern`) that is absolute, starts with `~`, or
-  starts with `.` or `..` is read from the directory it names, and each `..`
-  after a wildcard moves its start one directory up.
+  starts with `.` or `..` is read from the directory its literal leading
+  segments name, and from `/` when the first segment of an absolute pattern
+  already has a wildcard, a brace group or a bracket (`/*/ivan/.h*/k*/*`,
+  `/{Users,x}/...`). Each `..` after a wildcard moves its start one
+  directory up. Hermes `search_files` with `target: files` reads a `pattern`
+  that holds `/` by its last segment and adds a leading `*`; the hook does
+  not follow that, so the names such a search lists can differ from what the
+  hook matched.
+- Claude Code's `Grep` splits its `glob` on white space, and each part on
+  commas unless the part holds a brace group, and gives ripgrep each part:
+  the hook decides each part as a glob of its own, so `*.ts,*.tsx` and
+  `*.ts *.tsx` are two globs in the grammar. Another client's `glob` is one
+  glob.
+- An MCP tool's `pattern` may be a glob or a regular expression. In the
+  grammar it is decided as a path pattern; outside it (`foo|bar`,
+  `\bTODO\b`) it is taken as a regular expression, refused only when the
+  search starts at, inside or above the data directory.
 - A shell word is expanded as the shell does: a wildcard does not match a
-  leading dot unless `dotglob` or `globdots` is set.
+  leading dot unless `dotglob` or `globdots` is set, and brace groups are
+  expanded as bash expands them, up to 256 words in one command, each word
+  matched on its own, so `cat ~/{.helm-ai-kernel,x}/keys/*` is refused and
+  `cp ~/.bashrc{,.bak}` is not.
 
 A glob with anything else is not read: a bracket class, a backslash, a leading
 `/` (which ripgrep anchors where it runs, not at `/`), `!`, white space, a
@@ -121,9 +140,14 @@ braces nested deeper than 4, `.` or `..` segments, or `**` inside a segment.
 Such a glob is refused, with a reason that names the construct, when the
 search starts at, inside or above the data directory, or when a walk of the
 search root (up to 65,536 entries, at most four roots per call) finds a file
-with a key file name or cannot finish. A shell word with a bracket class is
-refused when the directory it starts in is at, inside or above the data
-directory, so `cat ~/.helm-ai-kernel/k[]e]ys/*` is refused and `cat
+with a key file name or cannot finish. In a repository larger than the walk,
+a filter outside the grammar (`!node_modules/**`, `*.[jt]s`) is therefore
+refused; write it in the grammar (`*.js` and `*.ts`). A shell word with a
+bracket class, a segment longer than 1024 bytes, or braces past the 256-word
+budget is refused when the directory it starts in is at, inside or above the
+data directory (for braces: the directory its first brace group starts in,
+one level up for every `..` after it, and `/` when the word starts with a
+brace group), so `cat ~/.helm-ai-kernel/k[]e]ys/*` is refused and `cat
 src/[ab]*.go` is not.
 
 The globs of one call share one expansion budget: 256 alternatives and 64 KiB
@@ -131,7 +155,8 @@ of expansion together, with each glob outside the grammar counting as one
 alternative. A call past it is refused with `TRUST_MATERIAL_ACCESS_DENIED`
 under every profile and a reason that says its globs are too large to expand.
 The hook also stops classifying a call after 10 seconds and refuses it the
-same way, well before the 30 second timeout setup installs.
+same way, well before the 30 second timeout setup installs; the classifier
+then ends its work on the call.
 
 A program passed to an interpreter, or to Hermes
 `execute_code`, is refused when its text names the path, and so is a script
@@ -232,7 +257,12 @@ read tools are a secret read when given a credential path, or a search glob
 that selects credential files (`.env`, `**/*.pem`), and pass otherwise. A
 search glob in the grammar above is decided on what it can name; one outside
 it (`.en[v]`, `.en\v`) is a secret read when a walk of the search root finds
-a credential file or cannot finish, and the reason says so. `Grep`'s
+a credential file or cannot finish, and the reason says so. A credential
+file inside a directory (`.docker/config.json`, `.ssh/config`, `.kube/config`,
+`.config/gcloud/`) is selected only by a glob that names the directory or
+whose `**` can stand for it: `**/*.json`, `**/config` and `.docker/*` are
+secret reads, while `*.json`, `*.db` and `*config` are not, although ripgrep
+matches them at any depth. `Grep`'s
 `pattern`, and Hermes `search_files` `pattern` unless `target` is `files`, is
 a regular expression for a content search and is not read as a glob. Through
 a shell, a credential path is read with a backslash taken as quoting the next

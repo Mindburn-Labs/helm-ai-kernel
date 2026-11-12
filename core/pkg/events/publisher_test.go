@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 type captureSlogHandler struct {
@@ -105,6 +107,110 @@ func TestSlogPublisherRejectsNonSyntheticAndUnsafeFields(t *testing.T) {
 		}
 		if name == "payload" && !errors.Is(err, ErrUnsafeEventField) {
 			t.Errorf("payload error = %v, want ErrUnsafeEventField", err)
+		}
+	}
+}
+
+// args_hash is on the exact allowlist, and every dispatch-completed event built
+// from a receipt carries it. The substring denylist must not drop it.
+func TestSlogPublisherPublishesDispatchCompletedWithArgsHash(t *testing.T) {
+	meta := EventMeta{
+		EventID:       "evt-1",
+		CorrelationID: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+		Env:           EnvSynthetic,
+	}
+	argsHash := "sha256:" + strings.Repeat("a", 64)
+	event := NewDispatchCompleted(meta, contracts.Receipt{
+		ReceiptID: "rcpt-1",
+		Status:    "SUCCESS",
+		ArgsHash:  argsHash,
+	}, "")
+	if event.Fields["args_hash"] != argsHash {
+		t.Fatalf("dispatch event carries no args_hash: %#v", event.Fields)
+	}
+
+	handler := &captureSlogHandler{}
+	if err := SlogPublisher(slog.New(handler))(context.Background(), event); err != nil {
+		t.Fatalf("publish dispatch event with args_hash: %v", err)
+	}
+	published := map[string]any{}
+	handler.record.Attrs(func(attr slog.Attr) bool {
+		published[attr.Key] = attr.Value.Any()
+		return true
+	})
+	if published["helm.event.type"] != DispatchCompleted || published["helm.event.field.args_hash"] != argsHash {
+		t.Fatalf("published attributes = %#v, want the dispatch event with its args_hash", published)
+	}
+
+	// Only the exact name is accepted, not its neighbours.
+	for _, key := range []string{"args", "tool_args", "arguments_hash", "args_hash_raw"} {
+		rejected := NewRequestReceived(meta, "EXECUTE_TOOL", "read")
+		rejected.Fields[key] = argsHash
+		if err := SlogPublisher(slog.New(handler))(context.Background(), rejected); !errors.Is(err, ErrUnsafeEventField) {
+			t.Errorf("field %q: error = %v, want ErrUnsafeEventField", key, err)
+		}
+	}
+}
+
+// The publisher accepts the exact allowlist and nothing else, so a denied-term
+// screen has no work to do at publish time. It does its work here instead:
+// every allowlisted name is held to it, so a name that would carry free text
+// or a request-scoped value cannot be added to the allowlist unnoticed.
+var (
+	deniedFieldNames      = []string{"reason", "message", "detail", "error", "failure_reason"}
+	deniedFieldSubstrings = []string{"payload", "arguments", "argument", "args", "secret", "session", "principal", "response", "raw"}
+
+	// Allowlisted names that contain a denied term, each with why it is safe.
+	deniedTermExceptions = map[string]string{
+		"args_hash": "the digest of the arguments, never the arguments themselves",
+	}
+)
+
+func deniedFieldTerm(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, term := range deniedFieldNames {
+		if name == term {
+			return term
+		}
+	}
+	for _, term := range deniedFieldSubstrings {
+		if strings.Contains(name, term) {
+			return term
+		}
+	}
+	return ""
+}
+
+func TestAllowedFieldNamesContainNoDeniedTerm(t *testing.T) {
+	if len(allowedFieldNames) < 30 {
+		t.Fatalf("the allowlist holds %d names: this test is not reading the publisher's allowlist", len(allowedFieldNames))
+	}
+	for _, name := range []string{"raw_args", "payload", "tool_arguments", "session_id", "error"} {
+		if deniedFieldTerm(name) == "" {
+			t.Fatalf("the screen passes %q: it no longer discriminates", name)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, name := range allowedFieldNames {
+		if seen[name] {
+			t.Errorf("allowlisted field %q is listed twice", name)
+		}
+		seen[name] = true
+		term := deniedFieldTerm(name)
+		why, excepted := deniedTermExceptions[name]
+		switch {
+		case term != "" && !excepted:
+			t.Errorf("allowlisted field %q contains the denied term %q; remove it, or record in deniedTermExceptions why it carries no free text or request-scoped value", name, term)
+		case term != "" && strings.TrimSpace(why) == "":
+			t.Errorf("exception for %q gives no reason", name)
+		case term == "" && excepted:
+			t.Errorf("exception for %q is stale: the name contains no denied term", name)
+		}
+	}
+	for name := range deniedTermExceptions {
+		if !seen[name] {
+			t.Errorf("exception for %q names a field that is not on the allowlist", name)
 		}
 	}
 }

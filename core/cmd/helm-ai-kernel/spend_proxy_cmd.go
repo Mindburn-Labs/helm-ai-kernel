@@ -64,7 +64,7 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 		signSecret  string
 	)
 	cmd.StringVar(&configPath, "config", "", "Path to the spend-proxy JSON config (required; prices, envelopes, defaults)")
-	cmd.StringVar(&addr, "addr", "127.0.0.1", "Listen address (loopback by default; the proxy holds a live provider key)")
+	cmd.StringVar(&addr, "addr", "127.0.0.1", "Listen address (loopback only: the proxy holds a live provider key and has no caller credential)")
 	cmd.IntVar(&port, "port", 9095, "Listen port")
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory for the durable receipt log and trusted-key registry")
 	cmd.StringVar(&upstream, "upstream", "https://openrouter.ai/api/v1", "Upstream OpenAI-compatible base URL (includes /v1); e.g. https://inference.do-ai.run/v1 for DigitalOcean Gradient serverless inference")
@@ -76,6 +76,13 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 	if configPath == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: --config is required")
 		_, _ = fmt.Fprintln(stderr, "Run `helm-ai-kernel spend-proxy --help` for usage.")
+		return 2
+	}
+	// The proxy spends the upstream provider key for whoever reaches it and
+	// takes workspace, agent and principal from request headers. It has no
+	// caller credential, so the listener rule leaves it loopback only.
+	if err := requireListenerAuth("spend-proxy", addr, false, "spend-proxy has no caller credential to configure, and it spends the upstream provider key for any caller that reaches it: pass a loopback --addr"); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 	if apiKey == "" {

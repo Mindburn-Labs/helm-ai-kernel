@@ -149,12 +149,8 @@ func TestScanErrorAndWalkerBranches(t *testing.T) {
 		}
 		return nil
 	}
-	report, err := NewScanner().Scan("root")
-	if err != nil {
-		t.Fatalf("Scan() info error branch returned %v", err)
-	}
-	if report.FilesSkipped != 1 {
-		t.Fatalf("FilesSkipped = %d, want 1", report.FilesSkipped)
+	if _, err := NewScanner().Scan("root"); !errors.Is(err, ErrNothingExamined) {
+		t.Fatalf("Scan() info error branch = %v, want ErrNothingExamined", err)
 	}
 	restore()
 
@@ -162,7 +158,7 @@ func TestScanErrorAndWalkerBranches(t *testing.T) {
 	writeFile(t, root, "large.py", "import openai\n")
 	s := NewScanner()
 	s.MaxFileBytes = 1
-	report, err = s.Scan(root)
+	report, err := s.Scan(root)
 	if err != nil {
 		t.Fatalf("Scan() large file error = %v", err)
 	}
@@ -370,6 +366,113 @@ func TestStrictScannerFailsClosedOnIncompleteCoverage(t *testing.T) {
 			t.Fatalf("strict long line error = %v, want coverage error", err)
 		}
 	})
+}
+
+// A scan that read nothing has no grade: "nothing read" is not "nothing found".
+func TestScanRefusesToGradeWhatItCouldNotRead(t *testing.T) {
+	t.Run("missing root", func(t *testing.T) {
+		report, err := NewScanner().Scan(filepath.Join(t.TempDir(), "missing"))
+		if !errors.Is(err, ErrNothingExamined) {
+			t.Fatalf("missing root: report = %+v, err = %v, want ErrNothingExamined", report, err)
+		}
+	})
+
+	t.Run("unreadable root", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		defer restore()
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			entry := fakeDirEntry{name: "root", dir: true}
+			if err := fn(root, entry, nil); err != nil {
+				return err
+			}
+			return fn(root, entry, fs.ErrPermission)
+		}
+		report, err := NewScanner().Scan("root")
+		if !errors.Is(err, ErrNothingExamined) {
+			t.Fatalf("unreadable root: report = %+v, err = %v, want ErrNothingExamined", report, err)
+		}
+	})
+
+	t.Run("nothing readable below the root", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		defer restore()
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			if err := fn(root, fakeDirEntry{name: "root", dir: true}, nil); err != nil {
+				return err
+			}
+			sub := fakeDirEntry{name: "src", dir: true}
+			if err := fn(filepath.Join(root, "src"), sub, nil); err != nil {
+				return err
+			}
+			return fn(filepath.Join(root, "src"), sub, fs.ErrPermission)
+		}
+		report, err := NewScanner().Scan("root")
+		if !errors.Is(err, ErrNothingExamined) {
+			t.Fatalf("unreadable tree: report = %+v, err = %v, want ErrNothingExamined", report, err)
+		}
+	})
+
+	t.Run("only candidate cannot be opened", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "agent.py", "import openai\n")
+		restore := replaceScannerHooks(t)
+		defer restore()
+		scannerOpen = func(string) (*os.File, error) { return nil, fs.ErrPermission }
+		report, err := NewScanner().Scan(root)
+		if !errors.Is(err, ErrNothingExamined) {
+			t.Fatalf("unopenable candidate: report = %+v, err = %v, want ErrNothingExamined", report, err)
+		}
+	})
+}
+
+// Entries the scanner could not read below a readable root are counted apart
+// from the files it read, and the grade says they were left out.
+func TestScanCountsUnreadableEntriesBelowReadableRoot(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+	root := t.TempDir()
+	writeFile(t, root, "readable.py", "print('no agent here')\n")
+	writeFile(t, root, "locked/agent.py", "import openai\n")
+	lockedFile := writeFile(t, root, "locked.py", "import anthropic\n")
+	lockedDir := filepath.Join(root, "locked")
+	for _, path := range []string{lockedFile, lockedDir} {
+		if err := os.Chmod(path, 0); err != nil {
+			t.Fatalf("chmod %s: %v", path, err)
+		}
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(lockedDir, 0o755)
+		_ = os.Chmod(lockedFile, 0o644)
+	})
+
+	report, err := NewScanner().Scan(root)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if report.FilesScanned != 1 || report.PathsUnreadable != 2 {
+		t.Fatalf("scanned = %d, unreadable = %d, want 1 and 2", report.FilesScanned, report.PathsUnreadable)
+	}
+	if report.Grade.Letter != "A" || !strings.Contains(report.Grade.Reason, "2 path(s) could not be read") {
+		t.Fatalf("grade = %s — %s, want an A that names the 2 unread paths", report.Grade.Letter, report.Grade.Reason)
+	}
+}
+
+// The legacy tolerance stays: a readable tree with no agent surface is an A.
+func TestScanGradesReadableEmptyAndAgentFreeTreesA(t *testing.T) {
+	agentFree := t.TempDir()
+	writeFile(t, agentFree, "main.go", "package main\n\nfunc main() {}\n")
+	writeFile(t, agentFree, "README.md", "# notes\n")
+
+	for name, root := range map[string]string{"empty": t.TempDir(), "agent-free": agentFree} {
+		report, err := NewScanner().Scan(root)
+		if err != nil {
+			t.Fatalf("%s: Scan() error = %v", name, err)
+		}
+		if report.Grade.Letter != "A" || report.Grade.Reason != "no agent execution surface detected" || report.PathsUnreadable != 0 {
+			t.Fatalf("%s: grade = %s — %s, unreadable = %d", name, report.Grade.Letter, report.Grade.Reason, report.PathsUnreadable)
+		}
+	}
 }
 
 func replaceScannerHooks(t *testing.T) func() {

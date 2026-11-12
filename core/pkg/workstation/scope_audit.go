@@ -56,6 +56,13 @@ type ScopeAuditSummary struct {
 	MemoryWrites       int `json:"memory_writes"`
 	RecurringLoops     int `json:"recurring_loops"`
 	HighImpactMetadata int `json:"high_impact_metadata"`
+	// UntrustedSignerReceipts counts receipts whose signature matches a key
+	// other than the trusted one, the retired built-in key included, and
+	// UntrustedSignerActions the actions they claim. Those receipts show what
+	// their signer claims, not what this workstation decided, so they are in
+	// no other count of the report.
+	UntrustedSignerReceipts int `json:"untrusted_signer_receipts"`
+	UntrustedSignerActions  int `json:"untrusted_signer_actions"`
 }
 
 type BoundarySummary struct {
@@ -168,7 +175,10 @@ type scopeAuditBuilder struct {
 // BuildScopeAudit audits the receipts whose signature matches their content.
 // An input that is unsigned or altered is named in Limitations and left out
 // of every count; how far the remaining signers are trusted is stated there
-// too. With no input left there is nothing to audit.
+// too. When a trust anchor is given, receipts signed by another key, the
+// retired built-in key included, are counted apart, in
+// UntrustedSignerReceipts and UntrustedSignerActions, and in nothing else. A file that repeats a receipt already read is counted once.
+// With no input left there is nothing to audit.
 func BuildScopeAudit(trust TrustAnchor, paths ...string) (ScopeAuditReport, error) {
 	files, err := expandJSONInputs(paths)
 	if err != nil {
@@ -177,30 +187,54 @@ func BuildScopeAudit(trust TrustAnchor, paths ...string) (ScopeAuditReport, erro
 	if len(files) == 0 {
 		return ScopeAuditReport{}, errors.New("no workstation receipt JSON files found")
 	}
-	view, err := BuildOperatorView(trust, files...)
+	inputs, verification, err := loadCheckedInputs(trust, files)
 	if err != nil {
 		return ScopeAuditReport{}, err
 	}
-	if view.Verification.Counted() == 0 {
-		return ScopeAuditReport{}, fmt.Errorf("no input receipt has a signature that matches its content: %s", strings.Join(view.Verification.Statements(), " "))
+	if verification.Counted() == 0 {
+		return ScopeAuditReport{}, fmt.Errorf("no input receipt has a signature that matches its content: %s", strings.Join(verification.Statements(), " "))
 	}
-	builder := newScopeAuditBuilder(len(files), view)
-	for _, file := range files {
-		input, err := loadCheckedReceipt(file, trust)
-		if err != nil {
-			return ScopeAuditReport{}, err
-		}
-		if input.status == SignatureUnsigned || input.status == SignatureInvalid {
+	builder := newScopeAuditBuilder(len(files), operatorViewFrom(inputs, verification))
+	for _, input := range inputs {
+		switch input.status {
+		case SignatureUnsigned, SignatureInvalid:
 			continue
+		case SignatureUntrustedKey, SignatureRetiredKey:
+			// Only an anchor tells the workstation's own receipts from
+			// others'; without one every receipt whose signature holds is
+			// counted, and the limitations say trust was not checked.
+			if verification.TrustAnchor != "" {
+				builder.addUntrusted(input)
+				continue
+			}
 		}
 		if input.receipt != nil {
-			builder.addAgentRunReceipt(file, input.receipt)
+			builder.addAgentRunReceipt(input.path, input.receipt)
 		}
 		if input.decision != nil {
-			builder.addDecisionReceipt(file, input.decision)
+			builder.addDecisionReceipt(input.path, input.decision)
 		}
 	}
+	if untrusted := builder.report.Summary.UntrustedSignerReceipts; untrusted > 0 {
+		builder.report.Limitations = append(builder.report.Limitations, fmt.Sprintf(
+			"%d receipts signed by a key other than the trusted one are counted apart (untrusted_signer_receipts) with the %d actions they claim (untrusted_signer_actions); they are in no other count of this report.",
+			untrusted, builder.report.Summary.UntrustedSignerActions))
+	}
 	return builder.finish(), nil
+}
+
+// addUntrusted counts a receipt whose signer is not the trusted key, and the
+// actions it claims, apart from the report's totals.
+func (b *scopeAuditBuilder) addUntrusted(input checkedReceipt) {
+	scratch := newScopeAuditBuilder(0, OperatorView{})
+	if input.receipt != nil {
+		scratch.addAgentRunReceipt(input.path, input.receipt)
+	}
+	if input.decision != nil {
+		scratch.addDecisionReceipt(input.path, input.decision)
+	}
+	b.report.Summary.UntrustedSignerReceipts++
+	b.report.Summary.UntrustedSignerActions += scratch.report.Summary.TotalActions
 }
 
 func WriteScopeAuditArtifacts(report ScopeAuditReport, outDir string, includeEvidencePack bool) (ScopeAuditExport, error) {
@@ -329,7 +363,8 @@ func RenderScopeAuditMarkdown(report ScopeAuditReport) string {
 	fmt.Fprintf(&b, "- Inputs: %d\n", report.Summary.InputFiles)
 	fmt.Fprintf(&b, "- Actions: %d allowed=%d denied=%d tainted=%d\n", report.Summary.TotalActions, report.Summary.AllowedActions, report.Summary.DeniedActions, report.Summary.TaintedActions)
 	fmt.Fprintf(&b, "- Out-of-scope attempts: %d\n", report.Summary.OutOfScopeAttempts)
-	fmt.Fprintf(&b, "- Missing controls: %d\n\n", report.Summary.MissingControls)
+	fmt.Fprintf(&b, "- Missing controls: %d\n", report.Summary.MissingControls)
+	fmt.Fprintf(&b, "- Receipts of another signer, counted apart: %d (actions: %d)\n\n", report.Summary.UntrustedSignerReceipts, report.Summary.UntrustedSignerActions)
 	fmt.Fprintf(&b, "## Boundaries\n\n")
 	for _, boundary := range report.Boundaries {
 		fmt.Fprintf(&b, "- %s: total=%d allow=%d deny=%d tainted=%d unknown=%d\n", boundary.Boundary, boundary.Total, boundary.Allowed, boundary.Denied, boundary.Tainted, boundary.Unknown)

@@ -84,9 +84,14 @@ archive, an input redirect, a write or delete, `Read`, `Grep`, `Glob`, `Write`,
 A path is compared after `~` and `$HOME` expansion, resolution against the
 working directory and any `cd` inside the command, removal of `.`, `..` and
 repeated slashes, and resolution of symbolic links, ignoring case. A glob
-pattern is matched one path segment at a time. A program passed to an
-interpreter is refused when its text names the path, and so is a script file
-whose content names it when the script is run.
+pattern is matched one path segment at a time, and `**` spans any number of
+directories. A search tool's glob filter (`Grep` `glob`, Hermes `file_glob`)
+is matched at any depth below the search root, and a filter or pattern whose
+last part is aimed at a key file name (`*.seed`, `workstation-ed25519.*`) is
+refused wherever the search runs; a filter that selects files in general
+(`*`, `**/*.go`) is not. A program passed to an interpreter, or to Hermes
+`execute_code`, is refused when its text names the path, and so is a script
+file whose content names it when the script is run.
 
 This is a check on what a call says, not isolation. The hook and the agent
 run as the same operating-system user, so the agent can read any file the hook
@@ -135,6 +140,9 @@ When `enforce` is given a command to run (`workstation enforce [flags] -- comman
 - `--class shell` and `--class shell-operate` decide on the command line itself. A `--target` that is not that command line is refused.
 - Any other class is decided as declared, in addition to what the argv shows.
 - Every receipt for a wrapped command carries `argv_binding: jcs-sha256` and `argv_sha256`, the digest of the exact argv. `--out` receives the receipt that settled the outcome, the first denial or else the first decision; `--receipt-dir` receives all of them.
+- The command inherits the wrapper's environment, and the decision covers the variables in it that change where a client connects or what a shell runs first (see [Network egress decisions](#network-egress-decisions)).
+
+Exit codes: `126` when the command is not run, because an effect is denied, the declaration cannot be matched to the argv, a receipt cannot be written, or a receipt is not an operate-mode `ALLOW`; the command's own exit code when it runs, `128` plus the signal number when a signal ends it, and `127` when it cannot be started; `2` for a usage error.
 
 The command is looked up on `PATH` when it runs. The decision names the program as written, not the file that `PATH` resolves it to.
 
@@ -147,7 +155,9 @@ A network decision is made per destination. The hook and `enforce` read the dest
 - `curl`, `wget`, `git`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet` and `openssl s_client` are parsed. A bash `/dev/tcp` or `/dev/udp` redirect is a destination. A heredoc or here-string fed to a shell is classified as the script it is, and so is a network client that follows a prefix command the scanner does not know (`watch curl URL`).
 - A command whose destinations cannot all be named is denied with `EGRESS_DESTINATION_UNDETERMINED` under any profile that has an allowlist. That covers an argument computed at run time (a variable, a command substitution, `xargs`), an option the parser does not know, a destination read from a file (`curl --config`, `wget --input-file`, `ssh -F`), a replaced connection program (`ssh -o ProxyCommand`, `rsync -e`, `GIT_SSH_COMMAND`), a `HOME` or configuration override, a client that follows redirects (`curl --location`, `wget` without `--max-redirect=0`, `git` over HTTP without `-c http.followRedirects=false`), a URL that parsers read differently (a backslash, an `@` after the authority, a percent-encoded or numeric host), and a network client that is not parsed (`aria2c`, `ftp`, `lftp`, `socat`, HTTPie, `proxychains`, `torsocks`).
 - `git` with an address on the command line is decided on that address, including `git remote add`, `git remote set-url` and `git config remote.<name>.url`. A remote named in git configuration is the operator's setting: `git push origin main` is not classified, and a `-c` override or connection variable on the same command is.
-- With several destinations the hook writes one receipt per destination. Each carries `egress.destination_count` and `egress.destination_set_sha256`, the SHA-256 of the sorted destinations joined by newlines, so one receipt shows how many others belong to the call. A hook receipt's `request.target` is the SHA-256 of the canonical destination, not of the URL.
+- With several destinations the hook writes one receipt per destination. Each carries `egress.destination_count` and `egress.destination_set_sha256`, the SHA-256 of the sorted destinations joined by newlines, so one receipt shows how many others belong to the call. A call that names more than 64 destinations is decided as one `EGRESS_DESTINATION_UNDETERMINED` network decision that still carries the count and digest of all of them, and a call that names more than 64 credential paths as one secret read with `secret.target_count`.
+- A hook network receipt's `request.target` is the SHA-256 of the canonical destination, not of the URL, under `target_binding: sha256:utf-8:network-destination`. Receipts written by earlier releases hashed the whole URL under `sha256:utf-8`; they still verify. Other hook receipts keep `sha256:utf-8`, the digest of the text the decision names.
+- `workstation enforce` also decides on its own environment, which the command inherits: a proxy variable set there is a destination, and `CURL_HOME`, `WGETRC`, the `GIT_SSH*`, `GIT_PROXY_COMMAND`, `GIT_CONFIG*` and `GIT_EXEC_PATH` variables, `RSYNC_RSH`, `RSYNC_CONNECT_PROG`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `BASH_ENV` and `ENV` leave the destinations undetermined. Its own `HOME` and `XDG_CONFIG_HOME` are not decided on: they locate the user's configuration, which the decision does not read. `BASH_ENV` and `ENV` set on a hook command line are decided the same way.
 
 The hook is not on the network path. It does not see a redirect, a DNS answer, a hostname alias in `~/.ssh/config`, a default in `~/.curlrc`, or what a script does when it runs. Writes to `.curlrc`, `.wgetrc`, `.netrc`, `.ssh/` and `.git/` are sensitive writes for that reason.
 
@@ -167,14 +177,40 @@ an encoder, a pager, an editor, an archiver, an interpreter given the path, or
 an input redirect. Commands that only list, test, create, remove or
 re-permission a file are the exception.
 
+A public key (a name ending in `.pub`) and an example env file
+(`.env.example`, `.env.sample`, `.env.template`) are not credentials: reading
+one is a plain read, through a shell and through a read tool alike.
+
 Tools that are not a shell are classified too. `Read`, `Grep` and the other
-read tools are a secret read when given a credential path and pass otherwise.
-`WebFetch` and the other fetch tools are network egress to the host of their
-URL; a search tool, which names no URL, has an undetermined destination. A tool
-the hook has no class for is decided as a tool call with its input digest in
-the receipt and needs the `mcp.mutate` permission; under the default profile it
-is denied. The built-in default profile is unchanged: it allows observe- and
-draft-class actions and denies every operate-class one.
+read tools are a secret read when given a credential path, or a search glob
+that selects credential files (`.env`, `**/*.pem`), and pass otherwise.
+`WebFetch`, Hermes `browser_navigate` and the other fetch tools are network
+egress to the host of their URL; a search tool, which names no URL, has an
+undetermined destination. Hermes `vision_analyze` is a read when its
+`image_url` is a local file and network egress otherwise. Hermes
+`execute_code` runs a program the hook cannot read as a command line, so it is
+a shell operation that needs `shell.operate`, like a shell tool call whose
+`command` is missing or is not a string. Claude Code `ReadMcpResourceTool` and
+`ListMcpResourcesTool` are MCP calls to the server they name, except the HELM
+server setup installs. A tool the hook has no class for is decided as a tool
+call with its input digest in the receipt and needs the `mcp.mutate`
+permission; under the default profile it is denied. The built-in default
+profile is unchanged: it allows observe- and draft-class actions and denies
+every operate-class one.
+
+The hook reads at most 4 MiB of standard input. A larger payload is not
+classified: it is denied with `TOOL_INPUT_TOO_LARGE` and a receipt that
+carries `tool_input_limit_bytes`.
+
+Every effect of one call is decided before any receipt is written. When one is
+denied, only the denials are written, so no `ALLOW` receipt stands for a call
+that did not run. Every receipt of a call carries, in its signed bytes,
+`call_id` (shared by the receipts of that call), `call_receipts` (how many
+receipts the call wrote), `call_verdict` (the outcome of the whole call) and
+`tool_input_binding: jcs-sha256` with `tool_input_sha256`, the digest of the
+canonical tool input. If a receipt cannot be written the call is denied and
+the receipts already written for it are removed; one that cannot be removed
+still shows, through `call_receipts`, that its set is incomplete.
 
 Shell syntax whose meaning is only known after expansion also routes to a
 decision rather than passing unclassified: ANSI-C or locale quoting (`$'...'`,
@@ -228,7 +264,9 @@ These commands check each input receipt before using it. The signature is checke
 | `invalid_signature` | The content does not match the signature. |
 | `unsigned` | There is no signature. |
 
-A row is listed for every input. The denied timeline, memory queue and loop registry are built only from receipts whose signature matches their content; an `unsigned` or `invalid_signature` input is named in the output and left out of them. A receipt signed by any key other than the trusted one shows what its signer claims, not what this workstation decided.
+A row is listed for every input. The denied timeline, memory queue and loop registry are built only from receipts whose signature matches their content; an `unsigned` or `invalid_signature` input is named in the output and left out of them. Each item in them carries the `signature_status` of the receipt it came from. A receipt signed by any key other than the trusted one shows what its signer claims, not what this workstation decided. An input file that repeats a receipt already read (the same receipt hash) is counted once and named under `duplicate_inputs`.
+
+With `--json`, `operator` prints the whole view and `list`, `denied`, `memory` and `loops` print one section in the same envelope: an object with the section's items under the key the whole view uses (`runs`, `denied_timeline`, `memory_review_queue`, `recurring_loops`) and `verification`, which holds `trust_anchor`, `signature_statuses`, `not_counted` and `duplicate_inputs`. No JSON schema is published for this output.
 
 Enterprise Console exposes the same read model as workspace-scoped API routes after a receipt or decision receipt is imported:
 
@@ -256,7 +294,7 @@ The command accepts `AgentRunReceipt` and `WorkstationPolicyDecisionReceipt` JSO
 
 The report groups events into `mcp`, `filesystem`, `network`, `memory`, `secret`, `deploy`, `payment`, `loop`, and `shell`. It counts allowed, denied, tainted, and unknown actions; lists out-of-scope attempts; records missing controls; summarizes memory TTL/sensitivity/review state; and preserves source receipt hashes and signature presence. Secret, deploy, and payment details are metadata conventions in v1 (`secret_ref`, `lease_ref`, `redaction_ref`, `environment`, `artifact_digest`, `approval_ref`, `rollback_ref`, `verification_ref`, `amount`, `currency`, `counterparty_ref`, `spend_cap_ref`, `idempotency_key`, `ledger_ref`) so existing receipt compatibility is preserved.
 
-`audit scope` checks signatures the same way as the operator commands and takes the same `--data-dir` and `--trusted-public-key-file` flags. An input that is unsigned or does not match its signature is left out of every count and named in `limitations`; the report also states there which key signer trust was checked against, or that it was not checked. With no input left the command fails instead of writing an empty report.
+`audit scope` checks signatures the same way as the operator commands and takes the same `--data-dir` and `--trusted-public-key-file` flags. An input that is unsigned or does not match its signature is left out of every count and named in `limitations`; the report also states there which key signer trust was checked against, or that it was not checked. When a trusted key is available, a receipt signed by any other key, the retired built-in key included, is counted apart in `summary.untrusted_signer_receipts` and `summary.untrusted_signer_actions` and in no other count. Without a trusted key every receipt whose signature holds is counted, as `limitations` says. A repeated receipt is counted once. With no input left the command fails instead of writing an empty report.
 
 `audit scope` is an audit and evidence export over HELM-owned receipts, wrapper decisions, and imported artifacts. It does not imply OS-wide control, full browser control, hosted Console enforcement, or control of proprietary hosted agents unless the relevant action passed through HELM receipts, wrappers, or adapters.
 
@@ -267,7 +305,11 @@ it certified adapters from checked-in fixtures, not from a running adapter.
 Export evidence with `helm-ai-kernel workstation evidence` and verify it with
 `helm-ai-kernel verify`. `workstation evidence` accepts a `receipt_id` made of
 letters, digits, `_` and `-` only, and writes every file through the pack
-directory, so a receipt cannot place a file outside it.
+directory, so a receipt cannot place a file outside it. The output directory
+must be new or empty: one that holds files is refused with a non-zero exit, so
+no file left from an earlier export sits in the pack unlisted and no link in
+it is written through. Every pack file is created new, and two names that a
+case-insensitive filesystem would store as one file are refused.
 
 Reference receipts live under `fixtures/workstation/reference/receipts/`. A sample EvidencePack lives under `fixtures/workstation/sample-evidencepack/`.
 

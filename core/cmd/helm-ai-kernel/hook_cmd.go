@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,7 +33,13 @@ var (
 	hookStdin            = io.Reader(os.Stdin)
 	hookNow              = func() time.Time { return time.Now().UTC() }
 	errHookPolicyProfile = errors.New("hook policy profile unavailable")
+	errHookInputTooLarge = errors.New("hook payload exceeds the input limit")
 )
+
+// hookMaxInputBytes bounds what the hook reads from standard input. A client
+// may run a call whose hook outlives its timeout, so a payload larger than
+// this is not read and classified: it is denied with a receipt.
+const hookMaxInputBytes = 4 << 20
 
 type hookOptions struct {
 	Client              string
@@ -74,6 +82,9 @@ type hookClassification struct {
 	// TrustMaterial marks a call that reaches the hook's own signing or
 	// trust material. It is denied under every profile.
 	TrustMaterial bool
+	// InputTooLarge marks a call whose payload exceeded hookMaxInputBytes and
+	// was not read. It is denied under every profile.
+	InputTooLarge bool
 }
 
 func init() {
@@ -127,44 +138,100 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		}
 	}
 	payload, err := decodePreToolPayload(stdin)
-	if err != nil {
+	var classifications []hookClassification
+	switch {
+	case errors.Is(err, errHookInputTooLarge):
+		classifications = []hookClassification{oversizedToolCallClassification()}
+	case err != nil:
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
+	default:
+		classifications = classifyPreToolPayloads(payload, workstationPathGuard(opts.DataDir, opts.SigningSeedFile, opts.PolicyProfile))
 	}
-	classifications := classifyPreToolPayloads(payload, workstationPathGuard(opts.DataDir, opts.SigningSeedFile, opts.PolicyProfile))
 	if len(classifications) == 0 {
 		// An unclassified call is successful progress, so it breaks any
 		// consecutive-denial run without changing the fail-closed policy path.
 		recordHookDoomLoopOutcome(opts, payload, hookClassification{}, false, stderr)
 		return 0
 	}
-	for _, decision := range classifications {
-		receipt, err := buildHookDecisionReceipt(opts, payload, decision)
+	return decideHookCall(opts, payload, classifications, stdout, stderr)
+}
+
+// oversizedToolCallClassification is the one decision for a call whose
+// payload exceeded hookMaxInputBytes. Nothing about the call was read, so it
+// is decided as a tool call the hook cannot see into and refused.
+func oversizedToolCallClassification() hookClassification {
+	return hookClassification{
+		ShouldDecide:  true,
+		Class:         "mcp",
+		Target:        "tool input over " + strconv.Itoa(hookMaxInputBytes) + " bytes",
+		Action:        "oversized_tool_call",
+		ToolID:        "unknown",
+		Reason:        "tool call whose input exceeds what the hook reads",
+		Metadata:      map[string]string{"tool_input_limit_bytes": strconv.Itoa(hookMaxInputBytes)},
+		InputTooLarge: true,
+	}
+}
+
+// decideHookCall decides every effect of one call before it writes any
+// receipt. A call with a denied effect leaves only its denials on disk, so no
+// ALLOW receipt stands for a call that never ran. Every receipt of the call
+// carries, in its signed bytes, the call's identifier, how many receipts the
+// call wrote, the call's verdict and a digest of the tool input.
+func decideHookCall(opts hookOptions, payload preToolPayload, classifications []hookClassification, stdout, stderr io.Writer) int {
+	decider, err := newHookDecider(opts)
+	if err != nil {
+		return failHookDecision(opts, payload, classifications[0], err, stdout, stderr)
+	}
+	call, err := newHookCallBinding(payload, classifications)
+	if err != nil {
+		return failHookDecision(opts, payload, classifications[0], err, stdout, stderr)
+	}
+	// The verdict of each effect is settled first; the receipts that are kept
+	// are then signed with the outcome of the whole call in them.
+	verdicts := make([]string, len(classifications))
+	callVerdict := contracts.WorkstationVerdictAllow
+	for i, classification := range classifications {
+		receipt, err := decider.decide(payload, classification, nil)
 		if err != nil {
-			fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
-			if errors.Is(err, errHookPolicyProfile) {
-				return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
-					"HELM denied operation: policy profile is unavailable",
-					actioninbox.ReasonPolicyProfileUnavailable,
-					"HELM cannot load or verify the selected workstation policy profile, so the operation fails closed.",
-					"Do not retry until the policy profile and its approved digest are restored.",
-					"Escalate to the human operator; policy profile repair is an operator action.",
-				)))
-			}
-			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
-				"HELM denied operation: local receipt signer is unavailable",
-				actioninbox.ReasonSignerUnavailable,
-				"HELM cannot sign a local decision receipt, so the operation fails closed.",
-				"Do not retry until the signer is fixed. Run helm-ai-kernel doctor or helm-ai-kernel setup, or pass --signing-seed-file.",
-				"Escalate to the human operator; signer repair is an operator action, not an agent action.",
-			)))
+			return failHookDecision(opts, payload, classification, err, stdout, stderr)
 		}
+		verdicts[i] = receipt.Verdict
+		if receipt.Verdict == contracts.WorkstationVerdictDeny {
+			callVerdict = contracts.WorkstationVerdictDeny
+		}
+	}
+	var kept []int
+	for i := range classifications {
+		if callVerdict == contracts.WorkstationVerdictAllow || verdicts[i] == contracts.WorkstationVerdictDeny {
+			kept = append(kept, i)
+		}
+	}
+	binding := call.metadata(len(kept), callVerdict)
+	receipts := make([]*contracts.WorkstationPolicyDecisionReceipt, 0, len(kept))
+	for _, i := range kept {
+		receipt, err := decider.decide(payload, classifications[i], binding)
+		if err == nil && receipt.Verdict != verdicts[i] {
+			err = fmt.Errorf("decision for %s changed between evaluations", classifications[i].Action)
+		}
+		if err != nil {
+			return failHookDecision(opts, payload, classifications[i], err, stdout, stderr)
+		}
+		receipts = append(receipts, receipt)
+	}
+	written := make([]string, 0, len(receipts))
+	for k, receipt := range receipts {
 		receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 		if err != nil {
+			// The call is refused, so the receipts already written for it
+			// would stand for a call that never ran. Removing them is best
+			// effort; call_receipts tells a reader the set is incomplete.
+			for _, path := range written {
+				_ = os.Remove(path)
+			}
 			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
-			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			tripped, run := recordHookDoomLoopOutcome(opts, payload, classifications[kept[k]], true, stderr)
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, classifications[kept[k]], run, failClosedSteeringText(
 				"HELM denied operation: receipt persistence is unavailable",
 				actioninbox.ReasonReceiptPersistence,
 				"HELM cannot persist the signed decision receipt, so the operation fails closed.",
@@ -172,21 +239,89 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 				"Escalate to the human operator; storage repair is an operator action, not an agent action.",
 			)))
 		}
-		if receipt.Verdict == contracts.WorkstationVerdictDeny {
-			// The receipt has already been persisted. The breaker only enriches
-			// the denial text after repeated identical failures; it never
-			// decides the effect or bypasses receipt generation.
-			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
-			feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
-			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run,
-				fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
-					decision.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback))))
-		}
+		written = append(written, receiptPath)
+	}
+	if callVerdict == contracts.WorkstationVerdictDeny {
+		// The receipts have already been persisted. The breaker only enriches
+		// the denial text after repeated identical failures; it never
+		// decides the effect or bypasses receipt generation.
+		decision, receipt := classifications[kept[0]], receipts[0]
+		tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
+		feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
+		return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run,
+			fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
+				decision.Reason, receipt.ReasonCode, written[0], actioninbox.RenderSteeringText(feedback))))
 	}
 	// A fully allowed multi-effect call is successful progress only after
-	// every current-main classification has produced a signed receipt.
+	// every classification has produced a signed, persisted receipt.
 	recordHookDoomLoopOutcome(opts, payload, hookClassification{}, false, stderr)
 	return 0
+}
+
+// failHookDecision refuses a call whose decision could not be made: the
+// policy profile or the signer is unavailable. Nothing is written.
+func failHookDecision(opts hookOptions, payload preToolPayload, decision hookClassification, err error, stdout, stderr io.Writer) int {
+	fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
+	tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
+	if errors.Is(err, errHookPolicyProfile) {
+		return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			"HELM denied operation: policy profile is unavailable",
+			actioninbox.ReasonPolicyProfileUnavailable,
+			"HELM cannot load or verify the selected workstation policy profile, so the operation fails closed.",
+			"Do not retry until the policy profile and its approved digest are restored.",
+			"Escalate to the human operator; policy profile repair is an operator action.",
+		)))
+	}
+	return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+		"HELM denied operation: local receipt signer is unavailable",
+		actioninbox.ReasonSignerUnavailable,
+		"HELM cannot sign a local decision receipt, so the operation fails closed.",
+		"Do not retry until the signer is fixed. Run helm-ai-kernel doctor or helm-ai-kernel setup, or pass --signing-seed-file.",
+		"Escalate to the human operator; signer repair is an operator action, not an agent action.",
+	)))
+}
+
+// hookCallBinding is what every receipt of one call records about the call:
+// an identifier shared by its receipts and a digest of the tool input.
+type hookCallBinding struct {
+	id         string
+	inputSHA   string
+	inputBound bool
+}
+
+func newHookCallBinding(payload preToolPayload, classifications []hookClassification) (hookCallBinding, error) {
+	id, err := newHookRandomID("hookcall_")
+	if err != nil {
+		return hookCallBinding{}, fmt.Errorf("generate hook call ID: %w", err)
+	}
+	call := hookCallBinding{id: id}
+	for _, classification := range classifications {
+		if classification.InputTooLarge {
+			// The input was not read, so there is nothing to bind.
+			return call, nil
+		}
+	}
+	canonicalInput, err := canonicalize.JCS(payload.ToolInput)
+	if err != nil {
+		return hookCallBinding{}, fmt.Errorf("canonicalize tool input: %w", err)
+	}
+	call.inputSHA, call.inputBound = canonicalize.ComputeArtifactHash(canonicalInput), true
+	return call, nil
+}
+
+// metadata is the call binding as receipt metadata, for a call that writes
+// receipts receipts and whose overall verdict is verdict.
+func (c hookCallBinding) metadata(receipts int, verdict string) map[string]string {
+	metadata := map[string]string{
+		"call_id":       c.id,
+		"call_receipts": strconv.Itoa(receipts),
+		"call_verdict":  verdict,
+	}
+	if c.inputBound {
+		metadata["tool_input_binding"] = "jcs-sha256"
+		metadata["tool_input_sha256"] = c.inputSHA
+	}
+	return metadata
 }
 
 // withDoomLoopSteering appends circuit-breaker escalation guidance to an
@@ -647,7 +782,14 @@ func saveHookDoomLoopState(path string, state *hookDoomLoopFile) error {
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 	var payload preToolPayload
-	dec := json.NewDecoder(stdin)
+	raw, err := io.ReadAll(io.LimitReader(stdin, hookMaxInputBytes+1))
+	if err != nil {
+		return payload, fmt.Errorf("read hook payload: %w", err)
+	}
+	if len(raw) > hookMaxInputBytes {
+		return payload, errHookInputTooLarge
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	if err := dec.Decode(&payload); err != nil {
 		return payload, fmt.Errorf("decode hook payload: %w", err)
@@ -683,7 +825,16 @@ func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard)
 	tool := strings.TrimSpace(payload.ToolName)
 	kind := hookToolKindOf(tool)
 	if kind == hookToolShell {
-		command := inputString(payload.ToolInput, "command", "cmd")
+		command, ok := shellCommandText(payload.ToolInput)
+		if !ok {
+			// A command that is missing or is not a string cannot be read, so
+			// what the call would run is unknown: an opaque shell operation,
+			// after the signer's files have been looked for in all of it.
+			if target, found := guardedToolTarget(guard, hookToolUnknown, payload); found {
+				return trustMaterialClassification(tool, target, nil)
+			}
+			return []hookClassification{opaqueShellClassification(canonicalToolInput(payload.ToolInput), "the command is missing or is not a string")}
+		}
 		// Structural (AST-based) pre-flight classification. The classifier is
 		// advisory input only: it decides whether the command reaches the
 		// existing signed decision path; the permit/receipt verdict is still
@@ -734,12 +885,20 @@ func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard)
 		return readToolClassifications(tool, payload)
 	case hookToolFetch:
 		return fetchToolClassifications(tool, payload)
+	case hookToolCode:
+		return codeToolClassifications(tool, payload)
+	case hookToolImage:
+		return imageToolClassifications(tool, payload)
+	case hookToolMCPResource:
+		return mcpResourceClassifications(tool, payload)
 	}
 	return unknownToolClassifications(tool)
 }
 
-func hookClassificationFromShellscanFact(fact shellscan.EffectFact, scan shellscan.Result) (hookClassification, bool) {
-	metadata := shellscanReceiptMetadata(scan)
+// hookClassificationFromShellscanFact turns one scanner fact into a decision.
+// scanMetadata describes the whole scan; each decision gets its own copy.
+func hookClassificationFromShellscanFact(fact shellscan.EffectFact, scanMetadata map[string]string) (hookClassification, bool) {
+	metadata := maps.Clone(scanMetadata)
 	switch fact.Class {
 	case "network":
 		return hookClassification{
@@ -766,7 +925,7 @@ func hookClassificationFromShellscanFact(fact shellscan.EffectFact, scan shellsc
 	}
 }
 
-func shellscanGenericClassification(command string, scan shellscan.Result) hookClassification {
+func shellscanGenericClassification(command string, scan shellscan.Result, scanMetadata map[string]string) hookClassification {
 	class := "shell-operate"
 	target := command
 	action := "shell_operate"
@@ -784,7 +943,7 @@ func shellscanGenericClassification(command string, scan shellscan.Result) hookC
 		Action:                  action,
 		ToolID:                  "shell",
 		Reason:                  reason,
-		Metadata:                shellscanReceiptMetadata(scan),
+		Metadata:                maps.Clone(scanMetadata),
 		RequiresShellPermission: scan.RequiresShellPermission,
 	}
 }
@@ -811,11 +970,16 @@ func appendRequiredShellPermission(classifications []hookClassification, command
 	return decisions
 }
 
-func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {
-	effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(classification.Class)
-	action := firstNonEmptyString(classification.Action, defaultAction)
-	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
-	targetFingerprint := fingerprintHookTarget(classification.Target)
+// hookDecider holds what every decision of one call is made with: the policy
+// profile, its digest and the signing seed, each loaded once per call.
+type hookDecider struct {
+	opts          hookOptions
+	profile       contracts.WorkstationPolicyProfile
+	profileDigest string
+	seed          []byte
+}
+
+func newHookDecider(opts hookOptions) (*hookDecider, error) {
 	profile, profileDigest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errHookPolicyProfile, err)
@@ -829,7 +993,38 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 			return nil, fmt.Errorf("%w: custom policy profile digest does not match installed configuration", errHookPolicyProfile)
 		}
 	}
-	requestID, err := newHookRequestID()
+	seed, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile)
+	if err != nil {
+		return nil, fmt.Errorf("load workstation signing key: %w", err)
+	}
+	return &hookDecider{opts: opts, profile: profile, profileDigest: profileDigest, seed: seed}, nil
+}
+
+// Target bindings name what request.target is the SHA-256 of. A network
+// receipt's target is the destination, scheme://host[:port]; receipts written
+// before this release hashed the whole URL under hookTargetBindingText, so the
+// destination has a binding of its own.
+const (
+	hookTargetBindingText        = "sha256:utf-8"
+	hookTargetBindingDestination = "sha256:utf-8:network-destination"
+)
+
+func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+	decider, err := newHookDecider(opts)
+	if err != nil {
+		return nil, err
+	}
+	return decider.decide(payload, classification, nil)
+}
+
+// decide signs one decision. callMetadata, when given, binds the receipt to
+// its call and is part of the signed bytes.
+func (d *hookDecider) decide(payload preToolPayload, classification hookClassification, callMetadata map[string]string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+	effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(classification.Class)
+	action := firstNonEmptyString(classification.Action, defaultAction)
+	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
+	targetFingerprint := fingerprintHookTarget(classification.Target)
+	requestID, err := newHookRandomID("hook_")
 	if err != nil {
 		return nil, fmt.Errorf("generate hook request ID: %w", err)
 	}
@@ -838,7 +1033,7 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 		RunID:        firstNonEmptyString(payload.SessionID, "hook-pre-tool"),
 		ActorID:      "agent.local",
 		WorkspaceID:  firstNonEmptyString(payload.CWD, "local-workstation"),
-		AgentSurface: opts.Client,
+		AgentSurface: d.opts.Client,
 		ToolID:       toolID,
 		Action:       action,
 		EffectType:   effectType,
@@ -846,24 +1041,23 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 		Target:       classification.Target,
 		OccurredAt:   hookNow(),
 		Metadata: map[string]string{
-			"client": opts.Client,
+			"client": d.opts.Client,
 			"tool":   payload.ToolName,
 		},
 	}
 	for key, value := range classification.Metadata {
 		req.Metadata[key] = value
 	}
-	seed, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile)
-	if err != nil {
-		return nil, fmt.Errorf("load workstation signing key: %w", err)
-	}
 	persistedMetadata := map[string]string{
-		"target_binding": "sha256:utf-8",
+		"target_binding": hookTargetBindingText,
 	}
-	if profileDigest != "" {
-		persistedMetadata["policy_profile_sha256"] = profileDigest
+	if effectType == contracts.EffectTypeWorkstationNetworkEgress {
+		persistedMetadata["target_binding"] = hookTargetBindingDestination
 	}
-	if effectType == contracts.EffectTypeWorkstationMCPToolCall {
+	if d.profileDigest != "" {
+		persistedMetadata["policy_profile_sha256"] = d.profileDigest
+	}
+	if effectType == contracts.EffectTypeWorkstationMCPToolCall && !classification.InputTooLarge {
 		canonicalInput, err := canonicalize.JCS(payload.ToolInput)
 		if err != nil {
 			return nil, fmt.Errorf("canonicalize MCP tool input: %w", err)
@@ -871,20 +1065,25 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 		persistedMetadata["mcp_input_binding"] = "jcs-sha256"
 		persistedMetadata["mcp_input_sha256"] = canonicalize.ComputeArtifactHash(canonicalInput)
 	}
-	return workstation.Decide(profile, req, workstation.DecisionOptions{
-		SigningSeed:       seed,
+	for key, value := range callMetadata {
+		persistedMetadata[key] = value
+	}
+	return workstation.Decide(d.profile, req, workstation.DecisionOptions{
+		SigningSeed:       d.seed,
 		PersistedTarget:   targetFingerprint,
 		PersistedMetadata: persistedMetadata,
 		TrustMaterial:     classification.TrustMaterial,
+		InputTooLarge:     classification.InputTooLarge,
 	})
 }
 
-func newHookRequestID() (string, error) {
+// newHookRandomID returns prefix followed by 16 random bytes in hex.
+func newHookRandomID(prefix string) (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
 		return "", err
 	}
-	return "hook_" + hex.EncodeToString(value[:]), nil
+	return prefix + hex.EncodeToString(value[:]), nil
 }
 
 func fingerprintHookTarget(target string) string {

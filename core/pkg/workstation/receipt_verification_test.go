@@ -148,8 +148,8 @@ func TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Summary.InputFiles != 6 || report.Summary.DecisionReceipts != 3 || report.Summary.DeniedActions != 3 || len(report.EvidenceRefs) != 3 {
-		t.Fatalf("summary = %+v refs = %d, want six inputs and three counted receipts", report.Summary, len(report.EvidenceRefs))
+	if report.Summary.InputFiles != 6 || report.Summary.DecisionReceipts != 1 || report.Summary.DeniedActions != 1 || len(report.EvidenceRefs) != 1 || report.Summary.UntrustedSignerReceipts != 2 {
+		t.Fatalf("summary = %+v refs = %d, want six inputs, one receipt by the trusted key and two by other keys counted apart", report.Summary, len(report.EvidenceRefs))
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil {

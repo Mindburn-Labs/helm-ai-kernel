@@ -6,8 +6,8 @@
   ],
   "summary": {
     "total": 87,
-    "enforced": 48,
-    "observed_only": 25,
+    "enforced": 49,
+    "observed_only": 24,
     "unmanaged": 14,
     "retired_invariants": 13,
     "build_plane": 1
@@ -2487,10 +2487,10 @@
       "id": "CTL-035",
       "title": "Local coding-agent hook shell guard",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt. For the network clients it parses (curl, wget, the ssh family, rsync, git, netcat, telnet, openssl) and for fetch tools, it decides network egress on every destination the call names, and under an allowlist profile it denies a call whose destinations it cannot all name, which includes an option the client's table does not know. It denies, under every profile, a call that reaches its own signing key, trusted public key or policy profile, or that runs the kernel command which signs with that key or installs the hook. A read or fetch tool is decided like the same effect through a shell, and a tool it has no class for is decided, not passed.",
+      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt. For the network clients it parses (curl, wget, the ssh family, rsync, git, netcat, telnet, openssl) and for fetch tools, it decides network egress on every destination the call names, and under an allowlist profile it denies a call whose destinations it cannot all name, which includes an option the client's table does not know. It denies, under every profile, a call that reaches its own signing key, trusted public key or policy profile, or that runs the kernel command which signs with that key or installs the hook. A read or fetch tool is decided like the same effect through a shell, a tool that runs code or a shell call whose command it cannot read is a shell operation, and a tool it has no class for is decided, not passed. It decides every effect of a call before it writes a receipt, leaves only the denials of a denied call on disk, and binds the call identifier, the call's verdict and a digest of the tool input into every receipt it signs. A call that names more than 64 destinations is one undetermined decision, and a payload over 4 MiB is denied unread.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. No removal proof deletes these checks yet.",
+      "reason": "The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. Deleting the trust-material override in workstation.Decide, the tool-input guard (guardedToolTarget), the decision for a tool with no class, or the per-destination split makes the tests named for them fail, but the registry holds removal proofs for enforced entries only, and no removal proof can cover the claim about each client's command line as a whole.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.runHookPreToolCmd",
@@ -2506,18 +2506,23 @@
         "Tool calls that a coding-agent client routes to `helm-ai-kernel hook pre-tool`."
       ],
       "bypass_assumptions": [
-        "A call the client does not route to the hook is not seen. The installed matcher routes shell, file, read and fetch tools and MCP calls; a search tool that names no URL is not routed.",
+        "A call the client does not route to the hook is not seen. The installed matcher routes shell, file, read and fetch tools, tools that run code or load an image, and MCP calls including Claude Code's MCP resource tools. Not routed: Claude Code WebSearch (it names no URL), Task (a subagent, whose own calls reach the hook) and TodoWrite; Hermes web_search, skill_manage, memory, cronjob_manage and process_manage. An install made by an earlier release keeps its narrower matcher until setup is run again; setup status reports it as outdated.",
+        "BASH_ENV or ENV set on a command line makes its network destinations undetermined; a shell started with one runs the file it names, which is not read.",
         "HELM is not on the network path: a redirect, a DNS answer, an alias in `~/.ssh/config` or a default in `~/.curlrc` is not seen. Clients that follow redirects are refused under an allowlist profile unless redirects are turned off on the command line.",
         "A remote named in git configuration is treated as operator configuration and is not decided.",
         "A script file is not read for what it does: `python3 script.py` is decided on its arguments, and on its text only for a literal reference to the signing material. A path computed at run time, a renamed copy of the kernel binary, a `PATH` override and a recursive read of a directory above the data directory are not detected.",
         "A profile that grants `shell.operate` allows opaque shell forms, which can open connections the allowlist does not see.",
         "A program outside the client table is not classified as egress: package managers, language toolchains, DNS tools and HTTP clients the table does not list connect without a network decision.",
-        "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected."
+        "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected. A search glob that selects files in general (`*`, `**/*.go`) below a directory above the data directory is a recursive read of it and is not refused.",
+        "A glob longer than 4096 path segments is taken to reach trust material and refused; a classification is bounded in time only by the 4 MiB input limit and linear work per word."
       ],
       "tests": {
         "allowed": [
           "core/cmd/helm-ai-kernel.TestHookPreToolAllowsSafeBashWithoutApprovalOutput",
           "core/cmd/helm-ai-kernel.TestHookGrantedProfileAllowsClassifiedTools",
+          "core/cmd/helm-ai-kernel.TestHookLeavesPublicKeysAndExampleEnvFilesAlone",
+          "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput",
+          "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding",
           "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
         ],
         "forbidden": [
@@ -2528,12 +2533,22 @@
           "core/cmd/helm-ai-kernel.TestHookReceiptsNameEveryEgressDestination",
           "core/cmd/helm-ai-kernel.TestHookProtectsAnExplicitSigningSeedFile",
           "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/cmd/helm-ai-kernel.TestHookDeniedCallLeavesNoAllowReceipt",
+          "core/cmd/helm-ai-kernel.TestHookDecidesACallWithManyDestinationsOnce",
+          "core/cmd/helm-ai-kernel.TestHookCapsTheDestinationsOfOneCall",
+          "core/cmd/helm-ai-kernel.TestHookDeniesAPayloadOverTheInputLimit",
+          "core/cmd/helm-ai-kernel.TestHookClassifiesCodeAndBrowserTools",
+          "core/cmd/helm-ai-kernel.TestHookGlobFiltersReachProtectedFiles",
+          "core/cmd/helm-ai-kernel.TestHookDecidesAShellCallWithoutAStringCommand",
           "core/pkg/shellscan.TestClassifyReadsClientOptionsWhereverTheClientDoes",
           "core/pkg/shellscan.TestClassifyRefusesWhatAClientTableDoesNotKnow"
         ],
         "removal": [],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools",
+          "core/cmd/helm-ai-kernel.TestSetupStatusReportsAnOutdatedHookMatcher",
+          "core/cmd/helm-ai-kernel.TestSetupWarnsAboutASharedHookEntryItWillNotRewrite",
           "core/pkg/shellscan.TestClassifyNamesEveryEgressDestination",
           "core/pkg/shellscan.TestClassifyRefusesToGuessEgressDestinations",
           "core/pkg/shellscan.TestClassifyReportsProtectedPaths",
@@ -2548,10 +2563,9 @@
       "id": "CTL-036",
       "title": "Workstation enforce wrapper",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "`helm-ai-kernel workstation enforce` decides on the argv it is about to run, exits 126 instead of running it when any effect found in that argv is denied or when the declared class and target cannot be matched to it, and runs it only on operate-mode ALLOW receipts that bind the argv.",
-      "status": "observed-only",
+      "claim": "`helm-ai-kernel workstation enforce` decides on the argv it is about to run and on the variables of its own environment that the argv inherits and that move a network client's connection or make a shell run another file first. It exits 126 instead of running the argv when any effect found in it is denied, when the declared class and target cannot be matched to it, or when a receipt cannot be written; it runs the argv only on operate-mode ALLOW receipts that bind the argv, and then exits with the argv's own exit code.",
+      "status": "enforced",
       "plane": "runtime",
-      "reason": "Tested for commands that run and commands that are refused, but no removal proof deletes the check yet, so R1 does not count it as enforced. The argv is classified from its text, with the limits of CTL-035.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.runWorkstationEnforceCmd",
@@ -2568,21 +2582,95 @@
       "bypass_assumptions": [
         "A command run without the wrapper is not governed.",
         "The command is resolved on `PATH` when it runs; the decision names the program as written.",
-        "What a wrapped script or interpreter does when it runs is not seen."
+        "What a wrapped script or interpreter does when it runs is not seen. The argv is classified from its text, with the limits of CTL-035.",
+        "The wrapper's own HOME and XDG_CONFIG_HOME are not decided on: the configuration they locate (`~/.curlrc`, `~/.ssh/config`, git configuration) is not read.",
+        "Only the variables shellscan tracks are decided on: the proxy variables, the connection variables (CURL_HOME, WGETRC, GIT_SSH, GIT_SSH_COMMAND, GIT_PROXY_COMMAND, GIT_CONFIG*, GIT_EXEC_PATH, RSYNC_RSH, RSYNC_CONNECT_PROG, LD_PRELOAD, DYLD_INSERT_LIBRARIES) and BASH_ENV and ENV, and those only for network clients the table parses. Other variables reach the command undecided, among them LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, PATH, PYTHONPATH, NODE_OPTIONS and the TLS trust variables; a command with no network effect that starts a shell runs the file BASH_ENV or ENV names under the decision it already needs."
       ],
       "tests": {
         "allowed": [
-          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceReturnsTheCommandsExitCode"
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand",
           "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns",
-          "core/cmd/helm-ai-kernel.TestWorkstationEnforceProtectsItsOwnSigningMaterial"
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceProtectsItsOwnSigningMaterial",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceExitsDeniedWhenAReceiptCannotBeWritten"
         ],
-        "removal": [],
-        "bypass": []
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceExitsDeniedWhenAReceiptCannotBeWritten",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceReturnsTheCommandsExitCode"
+        ],
+        "bypass": [
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses"
+        ]
       },
-      "removal_proofs": []
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceExitsDeniedWhenAReceiptCannotBeWritten"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/workstation_m3_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWorkstationEnforceReturnsTheCommandsExitCode"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-037",
@@ -2591,7 +2679,7 @@
       "claim": "Workstation decision-receipt verification keeps integrity separate from signer trust and never trusts a retired seed.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "Tested, but no removal proof deletes the check yet, so R1 does not count it as enforced.",
+      "reason": "Tested at the entry point, but no removal proof deletes the check, so R1 does not count it as enforced. Deleting the retired-key check in workstation.VerifyDecisionReceiptWithTrustedKey makes TestReceiptSigningRequiresExplicitSeedAndTrustedKey and TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey fail.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.runWorkstationVerifyDecisionCmd",
@@ -2605,8 +2693,13 @@
       ],
       "bypass_assumptions": [],
       "tests": {
-        "allowed": [],
+        "allowed": [
+          "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionAcceptsAReceiptFromTheBaseRelease"
+        ],
         "forbidden": [
+          "core/cmd/helm-ai-kernel.TestHookPreToolDeniesDestructiveBashAndWritesReceipt",
+          "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey",
+          "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey",
           "core/cmd/helm-ai-kernel.TestWorkstationViewSeparatesIntegrityFromTrustedSigner",
           "core/cmd/helm-ai-kernel.TestWorkstationViewRejectsRetiredSignerEvenWithExplicitKey"
         ],

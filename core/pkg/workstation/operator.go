@@ -55,6 +55,16 @@ type ReceiptVerification struct {
 	TrustAnchor string           `json:"trust_anchor,omitempty"`
 	Statuses    map[string]int   `json:"signature_statuses"`
 	NotCounted  []UncountedInput `json:"not_counted"`
+	// DuplicateInputs are input files that hold a receipt already read from
+	// another input. A copy is the same decision, so it is read once.
+	DuplicateInputs []DuplicateInput `json:"duplicate_inputs"`
+}
+
+// DuplicateInput is an input file left out because it repeats a receipt
+// already read from DuplicateOf.
+type DuplicateInput struct {
+	SourcePath  string `json:"source_path"`
+	DuplicateOf string `json:"duplicate_of"`
 }
 
 // UncountedInput is an input file left out because its signature is missing
@@ -65,7 +75,7 @@ type UncountedInput struct {
 }
 
 func newReceiptVerification(trust TrustAnchor) *ReceiptVerification {
-	verification := &ReceiptVerification{Statuses: map[string]int{}, NotCounted: []UncountedInput{}}
+	verification := &ReceiptVerification{Statuses: map[string]int{}, NotCounted: []UncountedInput{}, DuplicateInputs: []DuplicateInput{}}
 	if len(trust.PublicKey) == ed25519.PublicKeySize {
 		verification.TrustAnchor = trust.Source
 	}
@@ -106,6 +116,13 @@ func (v *ReceiptVerification) Statements() []string {
 		signature += " The others are not counted in this report: " + strings.Join(excluded, ", ") + "."
 	}
 	statements := []string{signature}
+	if len(v.DuplicateInputs) > 0 {
+		duplicates := make([]string, 0, len(v.DuplicateInputs))
+		for _, input := range v.DuplicateInputs {
+			duplicates = append(duplicates, fmt.Sprintf("%s (copy of %s)", input.SourcePath, input.DuplicateOf))
+		}
+		statements = append(statements, fmt.Sprintf("%d input files repeat a receipt already read and are counted once: %s.", len(v.DuplicateInputs), strings.Join(duplicates, ", ")))
+	}
 	if v.TrustAnchor == "" {
 		return append(statements, "Signer trust was not checked: no trusted workstation public key was available. A receipt signed with any key matches its own signature, so the counted receipts show what their signers claim, not who signed them.")
 	}
@@ -168,6 +185,9 @@ type DeniedTimelineItem struct {
 	Receipt  string    `json:"receipt"`
 	Occurred time.Time `json:"occurred_at"`
 	Source   string    `json:"source"`
+	// SignatureStatus is the status of the receipt the item was read from,
+	// when it was read from a file and checked.
+	SignatureStatus string `json:"signature_status,omitempty"`
 }
 
 type MemoryReviewItem struct {
@@ -181,6 +201,8 @@ type MemoryReviewItem struct {
 	Verdict     string    `json:"verdict"`
 	Receipt     string    `json:"receipt"`
 	ObservedAt  time.Time `json:"observed_at"`
+	// SignatureStatus: as on DeniedTimelineItem.
+	SignatureStatus string `json:"signature_status,omitempty"`
 }
 
 type RecurringLoopItem struct {
@@ -192,25 +214,29 @@ type RecurringLoopItem struct {
 	ExpiresAt  time.Time `json:"expires_at"`
 	Verdict    string    `json:"verdict"`
 	Receipt    string    `json:"receipt"`
+	// SignatureStatus: as on DeniedTimelineItem.
+	SignatureStatus string `json:"signature_status,omitempty"`
 }
 
 // BuildOperatorView reads receipts and checks each signature before using
 // the receipt. Every input gets a row in Runs with its signature status; the
 // denied timeline, memory queue and loop registry are built only from inputs
-// whose signature matches their content.
+// whose signature matches their content, and each of their items carries the
+// status of the receipt it came from. A file that repeats a receipt already
+// read is left out and named in Verification.
 func BuildOperatorView(trust TrustAnchor, paths ...string) (OperatorView, error) {
-	files, err := expandJSONInputs(paths)
+	inputs, verification, err := loadCheckedInputs(trust, paths)
 	if err != nil {
 		return OperatorView{}, err
 	}
-	view := OperatorView{Verification: newReceiptVerification(trust)}
-	for _, file := range files {
-		input, err := loadCheckedReceipt(file, trust)
-		if err != nil {
-			return OperatorView{}, err
-		}
-		counted := view.Verification.note(file, input.status)
-		before := len(view.Runs)
+	return operatorViewFrom(inputs, verification), nil
+}
+
+func operatorViewFrom(inputs []checkedReceipt, verification *ReceiptVerification) OperatorView {
+	view := OperatorView{Verification: verification}
+	for _, input := range inputs {
+		counted := countedStatus(input.status)
+		runs, denied, memory, loops := len(view.Runs), len(view.DeniedTimeline), len(view.MemoryReviewQueue), len(view.RecurringLoops)
 		detail := &view
 		if !counted {
 			// The row is kept so the operator sees the file; what it claims
@@ -226,19 +252,75 @@ func BuildOperatorView(trust TrustAnchor, paths ...string) (OperatorView, error)
 		if !counted {
 			view.Runs = append(view.Runs, detail.Runs...)
 		}
-		for i := before; i < len(view.Runs); i++ {
+		for i := runs; i < len(view.Runs); i++ {
 			view.Runs[i].SignatureStatus = input.status
+		}
+		for i := denied; i < len(view.DeniedTimeline); i++ {
+			view.DeniedTimeline[i].SignatureStatus = input.status
+		}
+		for i := memory; i < len(view.MemoryReviewQueue); i++ {
+			view.MemoryReviewQueue[i].SignatureStatus = input.status
+		}
+		for i := loops; i < len(view.RecurringLoops); i++ {
+			view.RecurringLoops[i].SignatureStatus = input.status
 		}
 	}
 	sortOperatorView(&view)
-	return view, nil
+	return view
+}
+
+// countedStatus reports whether an input's content may be counted: its
+// signature matches its content.
+func countedStatus(status string) bool {
+	return status != SignatureUnsigned && status != SignatureInvalid
 }
 
 // checkedReceipt is one input file with the result of its signature check.
 type checkedReceipt struct {
+	path     string
 	receipt  *contracts.AgentRunReceipt
 	decision *contracts.WorkstationPolicyDecisionReceipt
 	status   string
+}
+
+// hash is the receipt hash of the input, which its signature covers once the
+// signature is found to match.
+func (c checkedReceipt) hash() string {
+	if c.receipt != nil {
+		return c.receipt.ReceiptHash
+	}
+	return c.decision.ReceiptHash
+}
+
+// loadCheckedInputs reads and checks every input file once. A file whose
+// signature holds and whose receipt hash was already read is a copy: it is
+// left out and named in the verification, so a duplicated file does not
+// count one decision twice. Inputs whose signature does not hold are never
+// taken as copies; they are not counted anyway.
+func loadCheckedInputs(trust TrustAnchor, paths []string) ([]checkedReceipt, *ReceiptVerification, error) {
+	files, err := expandJSONInputs(paths)
+	if err != nil {
+		return nil, nil, err
+	}
+	verification := newReceiptVerification(trust)
+	seen := map[string]string{}
+	inputs := make([]checkedReceipt, 0, len(files))
+	for _, file := range files {
+		input, err := loadCheckedReceipt(file, trust)
+		if err != nil {
+			return nil, nil, err
+		}
+		if countedStatus(input.status) {
+			if first, ok := seen[input.hash()]; ok {
+				verification.DuplicateInputs = append(verification.DuplicateInputs, DuplicateInput{SourcePath: file, DuplicateOf: first})
+				continue
+			}
+			seen[input.hash()] = file
+		}
+		verification.note(file, input.status)
+		inputs = append(inputs, input)
+	}
+	return inputs, verification, nil
 }
 
 func loadCheckedReceipt(path string, trust TrustAnchor) (checkedReceipt, error) {
@@ -246,7 +328,7 @@ func loadCheckedReceipt(path string, trust TrustAnchor) (checkedReceipt, error) 
 	if err != nil {
 		return checkedReceipt{}, err
 	}
-	input := checkedReceipt{receipt: receipt, decision: decision}
+	input := checkedReceipt{path: path, receipt: receipt, decision: decision}
 	if receipt != nil {
 		matches, err := VerifyReceiptSignature(receipt)
 		input.status = signatureStatus(receipt.Signature, receipt.SignerKeyID, matches, err, trust)

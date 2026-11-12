@@ -218,6 +218,21 @@ func slashPath(value string) string {
 // Option adjusts one classification.
 type Option func(*collector)
 
+// WithEnvironment classifies the command as run with environ, the
+// NAME=value entries of an environment it inherits: a proxy set there is a
+// destination of every network command, and a variable that changes how a
+// client connects, or what a shell runs first, makes the destinations
+// undetermined. The command line's own assignments still apply after it.
+func WithEnvironment(environ []string) Option {
+	return func(c *collector) {
+		for _, entry := range environ {
+			if name, value, ok := strings.Cut(entry, "="); ok && tracksVariable(name) {
+				c.env = append(c.env, envOverride{name: name, value: value})
+			}
+		}
+	}
+}
+
 // WithPathGuard makes the classifier report, in Result.ProtectedPath, any
 // reference to the material guard protects.
 func WithPathGuard(guard *PathGuard) Option {
@@ -650,12 +665,75 @@ func SecretReadPath(path string) bool {
 	return isLocalSecretPath(path)
 }
 
+// secretGlobSamples are credential files as a search finds them, at least one
+// for each rule in secretReadPathNeedles, so a glob can be asked whether it
+// selects one.
+var secretGlobSamples = []string{
+	".env", ".env.local", "server.pem", "cert.p12", "tls.key", "id_rsa", "id_ed25519", "id_ecdsa",
+	".ssh/id_rsa", ".ssh/config", ".aws/credentials", ".config/gcloud/credentials.db",
+	".kube/config", ".netrc", ".npmrc", ".pypirc", ".docker/config.json",
+}
+
+// maxSecretGlobSegments bounds how much of a glob SecretGlob compares; the
+// samples are at most three segments deep.
+const maxSecretGlobSegments = 64
+
+// SecretGlob reports whether a file-search glob, applied at any depth below
+// wherever the search runs, selects credential material by the rules
+// SecretReadPath uses. A glob whose last segment selects files in general,
+// such as "*" or "**/*.go", is a search of the tree, not a read of a
+// credential; SecretReadPath of its literal text still applies.
+func SecretGlob(pattern string) bool {
+	pattern = strings.ToLower(slashPath(strings.TrimSpace(pattern)))
+	if pattern == "" {
+		return false
+	}
+	for _, alternative := range expandBraces(pattern, maxBraceAlternatives) {
+		segments := strings.Split(strings.Trim(path.Clean(alternative), "/"), "/")
+		if len(segments) > maxSecretGlobSegments {
+			segments = segments[len(segments)-maxSecretGlobSegments:]
+		}
+		if generalSegment(segments[len(segments)-1]) {
+			continue
+		}
+		for _, sample := range secretGlobSamples {
+			target := strings.Split(sample, "/")
+			// The leading segments of the glob name the directories the
+			// search starts in, which can be anything.
+			for start := range segments {
+				if globMatch(segments[start:], target, true, nil) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// publicCounterpart reports a file that sits beside credential material and
+// is named like it but holds none: a public key, or an example env file kept
+// in the repository for its variable names.
+func publicCounterpart(normalized string) bool {
+	base := path.Base(path.Clean(normalized))
+	if strings.HasSuffix(base, ".pub") {
+		return true
+	}
+	switch base {
+	case ".env.example", ".env.sample", ".env.template":
+		return true
+	}
+	return false
+}
+
 func isLocalSecretPath(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.Contains(value, "://") || isRemotePathSpec(value) {
 		return false
 	}
 	normalized := strings.ToLower(strings.ReplaceAll(value, `\\`, "/"))
+	if publicCounterpart(normalized) {
+		return false
+	}
 	for _, needle := range secretReadPathNeedles {
 		if strings.Contains(normalized, needle) {
 			return true

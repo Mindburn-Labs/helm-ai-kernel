@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -74,6 +76,15 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		return EvidencePackExport{}, fmt.Errorf("open evidence pack: %w", err)
 	}
 	defer pack.Close()
+	// The pack is written into a directory of its own. In a used one a file
+	// left from an earlier export would sit beside the new ones unlisted, and
+	// a file linked to one elsewhere would be written through.
+	if empty, err := rootIsEmpty(pack); err != nil {
+		return EvidencePackExport{}, fmt.Errorf("read evidence pack directory: %w", err)
+	} else if !empty {
+		return EvidencePackExport{}, fmt.Errorf("evidence pack directory %s is not empty: export into a new or empty directory", outDir)
+	}
+	writer := newPackWriter(pack)
 	for _, dir := range evidencePackDirs {
 		if err := pack.MkdirAll(dir, 0o750); err != nil {
 			return EvidencePackExport{}, fmt.Errorf("create evidence pack dir %s: %w", dir, err)
@@ -120,7 +131,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		if err != nil {
 			return EvidencePackExport{}, fmt.Errorf("canonicalize %s: %w", rel, err)
 		}
-		if err := pack.WriteFile(rel, append(data, '\n'), 0o600); err != nil {
+		if err := writer.create(rel, append(data, '\n')); err != nil {
 			return EvidencePackExport{}, fmt.Errorf("write %s: %w", rel, err)
 		}
 		fileHashes[rel] = hashBytes(data)
@@ -137,7 +148,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		"extensions":     []string{"workstation"},
 		"files":          sortedStringMap(fileHashes),
 	}
-	if err := writeCanonicalIn(pack, "00_INDEX.json", index); err != nil {
+	if err := writer.createCanonical("00_INDEX.json", index); err != nil {
 		return EvidencePackExport{}, err
 	}
 	score := map[string]any{
@@ -150,7 +161,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		"raw_chat_required":  false,
 		"deterministic_root": rootHash,
 	}
-	if err := writeCanonicalIn(pack, "01_SCORE.json", score); err != nil {
+	if err := writer.createCanonical("01_SCORE.json", score); err != nil {
 		return EvidencePackExport{}, err
 	}
 	return EvidencePackExport{
@@ -174,12 +185,58 @@ func writeCanonical(path string, value any) error {
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-func writeCanonicalIn(dir *os.Root, name string, value any) error {
+// rootIsEmpty reports whether an opened directory holds no entry.
+func rootIsEmpty(root *os.Root) (bool, error) {
+	dir, err := root.Open(".")
+	if err != nil {
+		return false, err
+	}
+	defer dir.Close()
+	if _, err := dir.ReadDir(1); errors.Is(err, io.EOF) {
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+// packWriter creates the files of one pack through its opened directory.
+// Each file is new: an existing name, which may be a link to a file
+// elsewhere, is refused rather than truncated and written through. Two names
+// equal under case folding are refused too, since a case-insensitive
+// filesystem would make them one file.
+type packWriter struct {
+	root  *os.Root
+	names map[string]string
+}
+
+func newPackWriter(root *os.Root) *packWriter {
+	return &packWriter{root: root, names: map[string]string{}}
+}
+
+func (w *packWriter) create(name string, data []byte) error {
+	folded := strings.ToLower(name)
+	if other, ok := w.names[folded]; ok {
+		return fmt.Errorf("%s and %s name one file on a case-insensitive filesystem", other, name)
+	}
+	w.names[folded] = name
+	file, err := w.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func (w *packWriter) createCanonical(name string, value any) error {
 	data, err := canonicalize.JCS(value)
 	if err != nil {
 		return err
 	}
-	return dir.WriteFile(name, append(data, '\n'), 0o600)
+	return w.create(name, append(data, '\n'))
 }
 
 func EvidencePackRequiredFiles() []string {

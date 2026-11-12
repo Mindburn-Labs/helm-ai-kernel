@@ -93,6 +93,11 @@ var kernelDenyGuidance = map[string]struct {
 		Remediation: "Do not retry and do not look for another route to the same files or commands. Nothing in the task needs them; continue without them.",
 		Escalation:  "Ask the human operator if the signer, the policy profile or the hook installation needs attention; maintaining them is an operator action.",
 	},
+	"TOOL_INPUT_TOO_LARGE": {
+		Explanation: "The tool call's input is larger than the HELM hook reads, so the call could not be classified and fails closed.",
+		Remediation: "Split the work into smaller calls: write large content in parts, or name fewer files or URLs in one call.",
+		Escalation:  "Ask the human operator if one call genuinely needs an input this large.",
+	},
 	"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE": {
 		Explanation: "The write target is outside the configured workspace roots; drafts are confined to the workspace scope.",
 		Remediation: "Retarget the write to a path inside the configured workspace roots.",

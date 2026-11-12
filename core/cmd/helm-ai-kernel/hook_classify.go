@@ -1,8 +1,13 @@
+// quantum_posture: the destination-set digest in this file is a classical
+// SHA-256 commitment; no signing or post-quantum primitive is used here.
+
 package main
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 )
@@ -26,6 +32,13 @@ const (
 	hookToolRead
 	hookToolFetch
 	hookToolMCP
+	// hookToolCode runs code the hook cannot read as a command line.
+	hookToolCode
+	// hookToolImage loads an image from a URL or a local file.
+	hookToolImage
+	// hookToolMCPResource reads from an MCP server through the client
+	// rather than through an mcp__server__tool name.
+	hookToolMCPResource
 )
 
 // hookToolKinds maps the lower-cased tool names of the supported clients.
@@ -42,7 +55,12 @@ var hookToolKinds = map[string]hookToolKind{
 	"search_files": hookToolRead, "list_files": hookToolRead,
 
 	"webfetch": hookToolFetch, "web_fetch": hookToolFetch, "web_extract": hookToolFetch,
-	"websearch": hookToolFetch, "web_search": hookToolFetch,
+	"websearch": hookToolFetch, "web_search": hookToolFetch, "browser_navigate": hookToolFetch,
+
+	"execute_code":   hookToolCode,
+	"vision_analyze": hookToolImage,
+
+	"readmcpresourcetool": hookToolMCPResource, "listmcpresourcestool": hookToolMCPResource,
 }
 
 func hookToolKindOf(tool string) hookToolKind {
@@ -144,26 +162,49 @@ func signerInvocation(commands []shellscan.Command) (string, bool) {
 	return "", false
 }
 
+// hookMaxEgressDestinations is the most destinations one call may name and
+// still be decided one destination at a time. Past it the call is one
+// undetermined decision: a client may run a call whose hook outlives its
+// timeout, so the work and the receipts one call costs stay bounded.
+const hookMaxEgressDestinations = 64
+
+// hookMaxSecretTargets bounds the secret-read decisions of one call the same
+// way: past it the call is one secret-read decision for all of them.
+const hookMaxSecretTargets = 64
+
 // shellClassifications turns a scan of a shell command, or of an argv that is
 // about to be executed, into the decisions the call needs.
 func shellClassifications(tool, command string, scan shellscan.Result) []hookClassification {
+	metadata := shellscanReceiptMetadata(scan)
 	if scan.ProtectedPath != "" {
-		return trustMaterialClassification(tool, scan.ProtectedPath, shellscanReceiptMetadata(scan))
+		return trustMaterialClassification(tool, scan.ProtectedPath, metadata)
 	}
 	if target, ok := signerInvocation(scan.Commands); ok {
-		return trustMaterialClassification(tool, target, shellscanReceiptMetadata(scan))
+		return trustMaterialClassification(tool, target, metadata)
 	}
-	var destinations []string
+	var destinations, secrets []string
 	for _, fact := range scan.EffectFacts {
-		if fact.Class == "network" {
+		switch fact.Class {
+		case "network":
 			destinations = append(destinations, fact.Target)
+		case "secret":
+			secrets = append(secrets, fact.Target)
 		}
 	}
-	classifications := make([]hookClassification, 0, len(scan.EffectFacts)+2)
-	for _, fact := range scan.EffectFacts {
-		if classification, ok := hookClassificationFromShellscanFact(fact, scan); ok {
-			if fact.Class == "network" {
-				bindEgressDestinations(classification.Metadata, destinations)
+	// The count and digest of the destination set are computed once and
+	// copied into each network receipt of the call.
+	binding := egressBinding(destinations)
+	facts := capEffectFacts(scan.EffectFacts, len(destinations), len(secrets))
+	classifications := make([]hookClassification, 0, len(facts)+2)
+	for _, fact := range facts {
+		if classification, ok := hookClassificationFromShellscanFact(fact, metadata); ok {
+			switch fact.Class {
+			case "network":
+				maps.Copy(classification.Metadata, binding)
+			case "secret":
+				if len(secrets) > hookMaxSecretTargets {
+					classification.Metadata["secret.target_count"] = strconv.Itoa(len(secrets))
+				}
 			}
 			classifications = append(classifications, classification)
 			continue
@@ -177,25 +218,62 @@ func shellClassifications(tool, command string, scan shellscan.Result) []hookCla
 			Action:       "shell_operate",
 			ToolID:       "shell",
 			Reason:       "unrecognized shell effect fact",
-			Metadata:     shellscanReceiptMetadata(scan),
+			Metadata:     maps.Clone(metadata),
 		})
 	}
 	if scan.RequiresShellDecision {
-		classifications = append(classifications, shellscanGenericClassification(command, scan))
+		classifications = append(classifications, shellscanGenericClassification(command, scan, metadata))
 	}
 	return appendRequiredShellPermission(classifications, command)
 }
 
-// bindEgressDestinations records, in every network receipt of a call, how
-// many destinations the call has and a digest of the whole set. One receipt
-// names one destination; the digest lets a reader holding it tell whether
-// the others are in hand.
-func bindEgressDestinations(metadata map[string]string, destinations []string) {
-	sorted := append([]string(nil), destinations...)
+// capEffectFacts keeps the facts of a call that names no more destinations
+// or secret paths than one call may. Past a limit the facts of that class
+// become one: an undetermined destination, which no allowlist holds, or the
+// first secret path, decided under the same permission as every other.
+func capEffectFacts(facts []shellscan.EffectFact, destinations, secrets int) []shellscan.EffectFact {
+	if destinations <= hookMaxEgressDestinations && secrets <= hookMaxSecretTargets {
+		return facts
+	}
+	kept := make([]shellscan.EffectFact, 0, hookMaxEgressDestinations+hookMaxSecretTargets)
+	network, secret := false, false
+	for _, fact := range facts {
+		switch {
+		case fact.Class == "network" && destinations > hookMaxEgressDestinations:
+			if network {
+				continue
+			}
+			network = true
+			fact = shellscan.EffectFact{
+				Class:  "network",
+				Action: "network_egress",
+				Target: netdest.Undetermined,
+				Reason: fmt.Sprintf("network egress: destination could not be determined (the call names %d destinations, more than the %d one call may name)", destinations, hookMaxEgressDestinations),
+			}
+		case fact.Class == "secret" && secrets > hookMaxSecretTargets:
+			if secret {
+				continue
+			}
+			secret = true
+			fact.Reason = fmt.Sprintf("%s and %d other secret paths", fact.Reason, secrets-1)
+		}
+		kept = append(kept, fact)
+	}
+	return kept
+}
+
+// egressBinding is what every network receipt of a call records about the
+// whole destination set: how many destinations the call names and a digest
+// of the set. One receipt names one destination; the digest lets a reader
+// holding it tell whether the others are in hand.
+func egressBinding(destinations []string) map[string]string {
+	sorted := slices.Clone(destinations)
 	sort.Strings(sorted)
 	sum := sha256.Sum256([]byte(strings.Join(sorted, "\n")))
-	metadata["egress.destination_count"] = strconv.Itoa(len(sorted))
-	metadata["egress.destination_set_sha256"] = "sha256:" + hex.EncodeToString(sum[:])
+	return map[string]string{
+		"egress.destination_count":      strconv.Itoa(len(sorted)),
+		"egress.destination_set_sha256": "sha256:" + hex.EncodeToString(sum[:]),
+	}
 }
 
 // hookToolStrings walks a tool input and calls visit for every string in it,
@@ -230,10 +308,30 @@ var writeContentKeys = map[string]bool{
 
 // globInputKeys hold glob syntax. A content search's "pattern" is a regular
 // expression instead, which globToolPattern tells apart by the tool.
-var globInputKeys = map[string]bool{"pattern": true, "glob": true, "include": true}
+var globInputKeys = map[string]bool{"pattern": true, "glob": true, "include": true, "file_glob": true}
+
+// globFilterKeys hold a filter the search applies to file names at any depth
+// below its root, as ripgrep's --glob does. A Glob tool's "pattern" is
+// anchored at the root instead.
+var globFilterKeys = map[string]bool{"glob": true, "include": true, "file_glob": true}
 
 func globToolPattern(tool, key string) bool {
 	return globInputKeys[key] && !(key == "pattern" && strings.EqualFold(tool, "grep"))
+}
+
+// searchRoot is the absolute directory a search tool starts in: its "path"
+// argument, resolved against the working directory, or the working
+// directory itself. It is "" when neither says.
+func searchRoot(base, cwd string) string {
+	switch {
+	case base == "":
+		return cwd
+	case filepath.IsAbs(base) || strings.HasPrefix(base, "~") || strings.HasPrefix(base, "$HOME"):
+		return base
+	case cwd != "":
+		return filepath.Join(cwd, base)
+	}
+	return ""
 }
 
 // guardedToolTarget reports the first reference to signing or trust material
@@ -256,17 +354,9 @@ func guardedToolTarget(guard *shellscan.PathGuard, kind hookToolKind, payload pr
 			return
 		}
 		if globToolPattern(payload.ToolName, key) {
-			// A search pattern is glob syntax, relative to the search root.
-			root := payload.CWD
-			if base != "" {
-				if filepath.IsAbs(base) || strings.HasPrefix(base, "~") {
-					root = ""
-					text = strings.TrimSuffix(base, "/") + "/" + text
-				} else if root != "" {
-					root = filepath.Join(root, base)
-				}
-			}
-			if rule, ok := guard.MatchPattern(text, root); ok {
+			// A search pattern is glob syntax, relative to the search root; a
+			// filter selects names at any depth below it.
+			if rule, ok := guard.MatchSearchGlob(text, searchRoot(base, payload.CWD), globFilterKeys[key]); ok {
 				found = rule
 			}
 			return
@@ -294,10 +384,22 @@ func applyPatchTargets(patch string) []string {
 
 // readToolClassifications decides a read tool the way the same read through a
 // shell is decided: a credential path is a secret read, anything else passes.
+// A search glob that selects credential files at any depth is such a read
+// too, as `grep -r --include=.env` is through a shell.
 func readToolClassifications(tool string, payload preToolPayload) []hookClassification {
 	target := ""
 	hookToolStrings(payload.ToolInput, "", func(key, text string) {
-		if target == "" && !globInputKeys[key] && shellscan.SecretReadPath(text) {
+		if target != "" {
+			return
+		}
+		switch {
+		case globToolPattern(payload.ToolName, key):
+			if shellscan.SecretReadPath(text) || shellscan.SecretGlob(text) {
+				target = text
+			}
+		case globInputKeys[key]:
+			// A content search's regular expression is not a path.
+		case shellscan.SecretReadPath(text):
 			target = text
 		}
 	})
@@ -327,7 +429,13 @@ func fetchToolClassifications(tool string, payload preToolPayload) []hookClassif
 	}
 	listed, listOK := inputStringList(payload.ToolInput, "urls")
 	raws = append(raws, listed...)
+	return fetchClassifications(tool, raws, listOK)
+}
 
+// fetchClassifications decides the URLs a tool was given: one decision per
+// destination, or one undetermined decision when a URL cannot be parsed, none
+// was given, or there are more than one call may name.
+func fetchClassifications(tool string, raws []string, listOK bool) []hookClassification {
 	undetermined := ""
 	var targets []string
 	switch {
@@ -336,25 +444,33 @@ func fetchToolClassifications(tool string, payload preToolPayload) []hookClassif
 	case len(raws) == 0:
 		undetermined = "the call names no URL"
 	}
+	seen := make(map[string]bool, len(raws))
 	for _, raw := range raws {
 		destination, err := netdest.Parse(raw)
 		if err != nil {
 			undetermined = "a URL could not be parsed"
 			break
 		}
-		if target := destination.String(); !slices.Contains(targets, target) {
+		if target := destination.String(); !seen[target] {
+			seen[target] = true
 			targets = append(targets, target)
 		}
 	}
+	binding := egressBinding(targets)
+	if undetermined == "" && len(targets) > hookMaxEgressDestinations {
+		undetermined = fmt.Sprintf("the call names %d destinations, more than the %d one call may name", len(targets), hookMaxEgressDestinations)
+	}
 	reason := "network egress via " + tool
 	if undetermined != "" {
+		if len(targets) <= hookMaxEgressDestinations {
+			binding = egressBinding([]string{netdest.Undetermined})
+		}
 		targets = []string{netdest.Undetermined}
 		reason += ": destination could not be determined (" + undetermined + ")"
 	}
 	classifications := make([]hookClassification, 0, len(targets))
 	for _, target := range targets {
-		metadata := map[string]string{}
-		bindEgressDestinations(metadata, targets)
+		metadata := maps.Clone(binding)
 		classifications = append(classifications, hookClassification{
 			ShouldDecide: true,
 			Class:        "network",
@@ -406,5 +522,134 @@ func unknownToolClassifications(tool string) []hookClassification {
 		ToolID:       tool,
 		Reason:       "tool call the hook does not classify",
 		Metadata:     map[string]string{"tool_classification": "unknown"},
+	}}
+}
+
+// opaqueShellClassification decides a call that runs code the hook cannot
+// read as a command line, as an interpreter given a program would be: a
+// shell operation that needs the shell.operate permission.
+func opaqueShellClassification(target, reason string) hookClassification {
+	return hookClassification{
+		ShouldDecide: true,
+		Class:        "shell-operate",
+		Target:       target,
+		Action:       "shell_operate",
+		ToolID:       "shell",
+		Reason:       "shell operation: " + reason,
+	}
+}
+
+// shellCommandText reads the command a shell tool was given. ok is false when
+// no command is given or one is given as something other than a string: the
+// hook cannot read what such a call would run.
+func shellCommandText(input map[string]any) (command string, ok bool) {
+	present := false
+	for _, key := range []string{"command", "cmd"} {
+		value, found := input[key]
+		if !found {
+			continue
+		}
+		text, isString := value.(string)
+		if !isString {
+			return "", false
+		}
+		if !present {
+			command, present = strings.TrimSpace(text), true
+		}
+	}
+	return command, present
+}
+
+// canonicalToolInput renders a tool input as the text a receipt target binds
+// when the input is all there is to name the call by.
+func canonicalToolInput(input map[string]any) string {
+	canonical, err := canonicalize.JCS(input)
+	if err != nil {
+		return "<tool input>"
+	}
+	return string(canonical)
+}
+
+// codeToolClassifications decides a tool that runs a program, such as
+// Hermes execute_code. The program is not a command line the hook can read,
+// so the call is an opaque shell operation; its text has already been
+// searched for the signer's files.
+func codeToolClassifications(tool string, payload preToolPayload) []hookClassification {
+	target, ok := payload.ToolInput["code"].(string)
+	if !ok || strings.TrimSpace(target) == "" {
+		target = canonicalToolInput(payload.ToolInput)
+	}
+	return []hookClassification{opaqueShellClassification(target, "code execution via "+tool)}
+}
+
+// imageToolClassifications decides a tool that loads an image, such as Hermes
+// vision_analyze: a local file is a read and is decided like Read, anything
+// else is a URL and is network egress. A value with no scheme that is not a
+// path is taken as a host, so a name the hook cannot place is decided, not
+// passed.
+func imageToolClassifications(tool string, payload preToolPayload) []hookClassification {
+	source := inputString(payload.ToolInput, "image_url", "url")
+	lower := strings.ToLower(source)
+	switch {
+	case strings.HasPrefix(lower, "data:"):
+		// The image is in the call itself.
+		return nil
+	case strings.HasPrefix(lower, "file://"):
+		source = source[len("file://"):]
+		fallthrough
+	case localFileReference(source) || existsBelow(payload.CWD, source):
+		local := payload
+		local.ToolInput = map[string]any{"path": source}
+		return readToolClassifications(tool, local)
+	}
+	var raws []string
+	if source != "" {
+		raws = append(raws, source)
+	}
+	return fetchClassifications(tool, raws, true)
+}
+
+// existsBelow reports a relative path that names an existing file in the
+// working directory, which a tool given it reads rather than fetches.
+func existsBelow(cwd, value string) bool {
+	if cwd == "" || value == "" || !filepath.IsAbs(cwd) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(cwd, value))
+	return err == nil
+}
+
+// localFileReference reports a value written as a path on this machine.
+func localFileReference(value string) bool {
+	return filepath.IsAbs(value) || strings.HasPrefix(value, "~") ||
+		strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") ||
+		len(value) > 2 && value[1] == ':' && (value[2] == '\\' || value[2] == '/')
+}
+
+// mcpResourceClassifications decides a read or listing of MCP resources made
+// through the client, as Claude Code's ReadMcpResourceTool and
+// ListMcpResourcesTool do. It is an MCP call to the named server, decided
+// like mcp__server__tool. The resources of the HELM server setup installs are
+// governed by that server, as its tools are.
+func mcpResourceClassifications(tool string, payload preToolPayload) []hookClassification {
+	server := inputString(payload.ToolInput, "server")
+	if server == setupMCPServerName {
+		return nil
+	}
+	target, action := tool, "mcp_resource_list"
+	if strings.EqualFold(tool, "ReadMcpResourceTool") {
+		action = "mcp_resource_read"
+	}
+	if server != "" {
+		target = tool + ":" + server
+	}
+	return []hookClassification{{
+		ShouldDecide: true,
+		Class:        "mcp",
+		Target:       target,
+		Action:       action,
+		ToolID:       tool,
+		Reason:       "MCP resource access",
+		Metadata:     map[string]string{"mcp_server": server},
 	}}
 }

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
@@ -72,8 +74,11 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 				out = flags.out
 			}
 			if _, err := writeDecisionReceipt(out, flags.receiptDir, receipt); err != nil {
-				_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-				return 1
+				// Without its receipt the decision cannot be shown, so the
+				// command does not run, and the exit code says so as a
+				// denial does.
+				_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command: write decision receipt: %v\n", err)
+				return cliui.ExitDenied
 			}
 		}
 		if decisive != nil {
@@ -108,11 +113,25 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: command failed: %v\n", err)
-		return 1
+	return childExitCode(cmd.Run(), stderr)
+}
+
+// childExitCode is the wrapper's exit code for a command it ran: the
+// command's own code, 128 plus the signal number when a signal ended it, and
+// 127, as a shell gives, when it could not be started.
+func childExitCode(err error, stderr io.Writer) int {
+	if err == nil {
+		return 0
 	}
-	return 0
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		_, _ = fmt.Fprintf(stderr, "Error: command could not be started: %v\n", err)
+		return 127
+	}
+	if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return 128 + int(status.Signal())
+	}
+	return exitErr.ExitCode()
 }
 
 func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) int {
@@ -406,7 +425,13 @@ func enforceEffects(flags enforceFlags) (effects []hookClassification, refusal s
 	}
 	cwd, _ := os.Getwd()
 	command := strings.Join(flags.argv, " ")
-	scan := shellscan.ClassifyArgvAt(flags.argv, cwd, shellscan.WithPathGuard(workstationPathGuard(dataDir, flags.seedFile, flags.policyPath)))
+	// The command runs with this process's environment, so the decision is
+	// made on it too: a proxy set there is a destination, and a variable
+	// that changes how a client connects or what a shell runs first leaves
+	// the destinations undetermined.
+	scan := shellscan.ClassifyArgvAt(flags.argv, cwd,
+		shellscan.WithPathGuard(workstationPathGuard(dataDir, flags.seedFile, flags.policyPath)),
+		shellscan.WithEnvironment(enforceEnvironment(os.Environ())))
 	derived := shellClassifications("workstation.enforce", command, scan)
 	if scan.ProtectedPath != "" {
 		return derived, ""
@@ -450,6 +475,23 @@ func enforceEffects(flags enforceFlags) (effects []hookClassification, refusal s
 		effects = append(effects, effect)
 	}
 	return effects, refusal
+}
+
+// enforceEnvironment is the part of the wrapper's environment the decision
+// covers: every entry with a value, except HOME and XDG_CONFIG_HOME. Those
+// locate the user's own configuration, which every command run here reads
+// alike; what that configuration says is a limit of the decision (CTL-036),
+// not a reason to refuse every command.
+func enforceEnvironment(environ []string) []string {
+	kept := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || value == "" || name == "HOME" || name == "XDG_CONFIG_HOME" {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
 }
 
 // decideEnforceEffects signs one decision per effect. Every receipt for a
@@ -553,6 +595,9 @@ func printReceiptVerification(stdout io.Writer, verification *workstation.Receip
 	for _, input := range verification.NotCounted {
 		_, _ = fmt.Fprintf(stdout, "  not counted: %s (%s)\n", input.SourcePath, input.SignatureStatus)
 	}
+	for _, input := range verification.DuplicateInputs {
+		_, _ = fmt.Fprintf(stdout, "  duplicate, counted once: %s (copy of %s)\n", input.SourcePath, input.DuplicateOf)
+	}
 	if verification.TrustAnchor == "" {
 		_, _ = fmt.Fprintln(stdout, "Signer trust: not checked (no trusted workstation public key; pass --trusted-public-key-file)")
 		return
@@ -576,36 +621,43 @@ func printOperatorView(stdout io.Writer, section string, view workstation.Operat
 	if section == "all" || section == "denied" {
 		_, _ = fmt.Fprintf(stdout, "Denied timeline: %d\n", len(view.DeniedTimeline))
 		for _, item := range view.DeniedTimeline {
-			_, _ = fmt.Fprintf(stdout, "  %s %s %s %s\n", item.RunID, item.Effect, item.Reason, item.Target)
+			_, _ = fmt.Fprintf(stdout, "  %s %s %s %s %s\n", item.RunID, item.Effect, item.Reason, item.Target, item.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "memory" {
 		_, _ = fmt.Fprintf(stdout, "Memory review queue: %d\n", len(view.MemoryReviewQueue))
 		for _, item := range view.MemoryReviewQueue {
-			_, _ = fmt.Fprintf(stdout, "  %s %s ttl=%d sensitivity=%s verdict=%s\n", item.RunID, item.MemoryClass, item.TTLDays, item.Sensitivity, item.Verdict)
+			_, _ = fmt.Fprintf(stdout, "  %s %s ttl=%d sensitivity=%s verdict=%s %s\n", item.RunID, item.MemoryClass, item.TTLDays, item.Sensitivity, item.Verdict, item.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "loops" {
 		_, _ = fmt.Fprintf(stdout, "Recurring loops: %d\n", len(view.RecurringLoops))
 		for _, item := range view.RecurringLoops {
-			_, _ = fmt.Fprintf(stdout, "  %s %s max=%s verdict=%s\n", item.RunID, item.Schedule, item.MaxRuntime, item.Verdict)
+			_, _ = fmt.Fprintf(stdout, "  %s %s max=%s verdict=%s %s\n", item.RunID, item.Schedule, item.MaxRuntime, item.Verdict, item.SignatureStatus)
 		}
 	}
 }
 
+// sectionValue is the JSON of one operator section: the same envelope as
+// the whole view, the section's items under the key the whole view uses and
+// the signature checks beside them, so one section never reads as more
+// trusted than the view it is part of.
 func sectionValue(section string, view workstation.OperatorView) any {
+	var key string
+	var items any
 	switch section {
 	case "runs":
-		return view.Runs
+		key, items = "runs", view.Runs
 	case "denied":
-		return view.DeniedTimeline
+		key, items = "denied_timeline", view.DeniedTimeline
 	case "memory":
-		return view.MemoryReviewQueue
+		key, items = "memory_review_queue", view.MemoryReviewQueue
 	case "loops":
-		return view.RecurringLoops
+		key, items = "recurring_loops", view.RecurringLoops
 	default:
 		return view
 	}
+	return map[string]any{key: items, "verification": view.Verification}
 }
 
 func splitInputs(input string) []string {

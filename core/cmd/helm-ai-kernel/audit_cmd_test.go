@@ -15,7 +15,10 @@ func TestAuditScopeJSON(t *testing.T) {
 	root := kernelRepoRoot(t)
 	input := filepath.Join(root, "fixtures", "workstation", "reference", "receipts")
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"helm-ai-kernel", "audit", "scope", "--input", input, "--json"}, &stdout, &stderr)
+	// The reference receipts are signed by the retired built-in key. Against
+	// the local key of whoever runs the test they would be counted apart, so
+	// the run names an empty data directory and checks no signer.
+	code := Run([]string{"helm-ai-kernel", "audit", "scope", "--input", input, "--data-dir", t.TempDir(), "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("audit scope exit = %d stderr = %s", code, stderr.String())
 	}

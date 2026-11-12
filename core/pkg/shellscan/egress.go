@@ -150,17 +150,22 @@ func optionLabel(name string) string {
 // egressScan is what one command's arguments say about where it connects.
 type egressScan struct {
 	destinations []netdest.Destination
+	// seen holds the destinations already added, so a command that names
+	// many costs time in proportion to their number, not its square.
+	seen map[netdest.Destination]bool
 	// undetermined says why the destinations are not all known. Once set, the
 	// command as a whole is undetermined whatever else was resolved.
 	undetermined string
 }
 
 func (s *egressScan) add(destination netdest.Destination) {
-	for _, existing := range s.destinations {
-		if existing == destination {
-			return
-		}
+	if s.seen[destination] {
+		return
 	}
+	if s.seen == nil {
+		s.seen = map[netdest.Destination]bool{}
+	}
+	s.seen[destination] = true
 	s.destinations = append(s.destinations, destination)
 }
 
@@ -1190,10 +1195,15 @@ var connectionVariables = map[string]bool{
 	"ld_preload": true, "dyld_insert_libraries": true,
 }
 
+// shellStartupVariables name a file a shell runs before its command, so a
+// command run with one set first does what that file says. Shells read them
+// in upper case only.
+var shellStartupVariables = map[string]bool{"BASH_ENV": true, "ENV": true}
+
 // tracksVariable reports whether an assignment to name matters for egress.
 func tracksVariable(name string) bool {
-	name = strings.ToLower(name)
-	return proxyVariables[name] || connectionVariables[name]
+	lower := strings.ToLower(name)
+	return proxyVariables[lower] || connectionVariables[lower] || shellStartupVariables[name]
 }
 
 func applyEnvOverrides(scan *egressScan, overrides []envOverride) {
@@ -1204,6 +1214,8 @@ func applyEnvOverrides(scan *egressScan, overrides []envOverride) {
 			// The name itself is computed, so it may be any of the variables
 			// a client reads.
 			scan.refuse("a variable is set under a name computed at run time")
+		case shellStartupVariables[override.name]:
+			scan.refuse(override.name + " makes a shell run another file first")
 		case connectionVariables[name]:
 			scan.refuse(override.name + " changes how the client connects")
 		case !proxyVariables[name]:

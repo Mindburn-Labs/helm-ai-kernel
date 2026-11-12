@@ -130,6 +130,17 @@ type setupSummary struct {
 	PlannedActions    []string `json:"planned_actions"`
 	RetainedData      bool     `json:"retained_data,omitempty"`
 	RecoveryRequired  bool     `json:"recovery_required,omitempty"`
+	// HookMatcher is the matcher of the installed hook entry, and
+	// HookMatcherExpected the one this release installs. The matcher is
+	// outdated when it does not route a tool this release routes to the
+	// hook; HookMatcherMissingTools names them.
+	HookMatcher             string   `json:"hook_matcher,omitempty"`
+	HookMatcherExpected     string   `json:"hook_matcher_expected,omitempty"`
+	HookMatcherOutdated     bool     `json:"hook_matcher_outdated,omitempty"`
+	HookMatcherMissingTools []string `json:"hook_matcher_missing_tools,omitempty"`
+	// Warnings are what setup could not do for the user, such as a shared
+	// hook entry whose matcher it left alone.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type setupRecoveryMarker struct {
@@ -672,6 +683,10 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 	summary.HookInstalled = true
 	summary.ClientDetected = true
 	summary.ClientState = "configured"
+	summary.Warnings = setupSharedHookEntryWarnings(opts, summary.HookConfigPath, summary.BinaryPath)
+	for _, warning := range summary.Warnings {
+		fmt.Fprintf(stderr, "setup: warning: %s\n", warning)
+	}
 	if opts.Target == "codex" && opts.Scope == "project" {
 		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
 		if summary.CodexTrustPending {
@@ -761,6 +776,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
 	observeSetupClientState(opts, &summary)
+	observeSetupHookMatcher(opts, &summary)
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
@@ -916,6 +932,7 @@ func inspectSetupTarget(opts setupOptions, target string) (setupSummary, error) 
 	summary.MCPInstalled = setupMCPInstalled(normalized, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(normalized, summary.HookConfigPath, summary.BinaryPath)
 	observeSetupClientState(normalized, &summary)
+	observeSetupHookMatcher(normalized, &summary)
 	assignSetupLifecycle(&summary)
 	return summary, nil
 }
@@ -1728,7 +1745,7 @@ func setupNextAction(summary setupSummary) string {
 }
 
 func setupStatusHealthy(summary setupSummary) bool {
-	if !summary.HookInstalled || !summary.ClientDetected || !summary.NativeLoaded || summary.CodexTrustPending {
+	if !summary.HookInstalled || !summary.ClientDetected || !summary.NativeLoaded || summary.CodexTrustPending || summary.HookMatcherOutdated {
 		return false
 	}
 	if setupIncludesMCP(summary.Target) && !summary.MCPInstalled {
@@ -2201,6 +2218,13 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	if summary.ClientState != "" {
 		fmt.Fprintf(stdout, "  Client state:  %s (lifecycle=%s detected=%v native_loaded=%v)\n", summary.ClientState, summary.Lifecycle, summary.ClientDetected, summary.NativeLoaded)
 	}
+	if summary.HookMatcherOutdated {
+		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. Run helm-ai-kernel setup %s --yes to upgrade it.\n",
+			summary.HookMatcher, strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, summary.Target)
+	}
+	for _, warning := range summary.Warnings {
+		fmt.Fprintf(stdout, "  Warning:       %s\n", warning)
+	}
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
 	}
@@ -2442,20 +2466,156 @@ func setupHookConfigPath(opts setupOptions) string {
 }
 
 // setupHookMatcher lists the tools a client sends to the hook. A tool left out
-// is never seen, so the list holds every tool that can read a file, write one,
-// run a command or fetch a URL. A search tool that takes no URL is left out:
-// the hook could name no destination for it and would only ever refuse it.
+// is never seen. The list holds the client's tools that run a command or
+// code, write a file, read one, fetch a URL or call an MCP server, as far as
+// the hook has a class for them. The tools left out are named in CTL-035
+// bypass_assumptions and in docs/INTEGRATIONS/<client>.md:
+//   - Claude Code: WebSearch (it names no URL, so the hook could only refuse
+//     it), Task (a subagent, whose own tool calls reach the hook) and
+//     TodoWrite (the client's own task list).
+//   - Hermes: web_search, skill_manage, memory, cronjob_manage and
+//     process_manage, which the hook has no class for.
 func setupHookMatcher(target string) string {
 	switch target {
 	case "codex":
 		return "^(Bash|apply_patch|mcp__.*)$"
 	case "hermes":
-		return "^(terminal|write_file|patch|read_file|search_files|web_extract|mcp_.*)$"
+		return "^(terminal|write_file|patch|read_file|search_files|web_extract|execute_code|browser_navigate|vision_analyze|mcp_.*)$"
 	case "deepseek":
 		return "^(bash|write|edit|read|grep|glob|webfetch|mcp_.*)$"
 	default:
-		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|mcp__.*)$"
+		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool|mcp__.*)$"
 	}
+}
+
+// setupHookMatcherTools lists the tools setupHookMatcher routes for a client,
+// with an MCP name standing for every MCP tool.
+func setupHookMatcherTools(target string) []string {
+	body := strings.TrimSuffix(strings.TrimPrefix(setupHookMatcher(target), "^("), ")$")
+	tools := strings.Split(body, "|")
+	for i, tool := range tools {
+		switch tool {
+		case "mcp__.*":
+			tools[i] = "mcp__server__tool"
+		case "mcp_.*":
+			tools[i] = "mcp_server_tool"
+		}
+	}
+	return tools
+}
+
+// setupHookMatcherMissing lists the tools this release routes to the hook
+// that matcher does not route. An empty matcher or "*" routes every tool, as
+// the clients read it; a matcher that does not compile routes none.
+func setupHookMatcherMissing(target, matcher string) []string {
+	if matcher == "" || matcher == "*" {
+		return nil
+	}
+	compiled, err := regexp.Compile(matcher)
+	var missing []string
+	for _, tool := range setupHookMatcherTools(target) {
+		if err != nil || !compiled.MatchString(tool) {
+			missing = append(missing, tool)
+		}
+	}
+	return missing
+}
+
+// setupHookEntry is one hook entry that holds the HELM hook: its matcher and
+// whether it also holds other hooks.
+type setupHookEntry struct {
+	matcher string
+	shared  bool
+}
+
+// setupInstalledHookEntries reads the client's hook configuration for the
+// entries that hold the HELM hook.
+func setupInstalledHookEntries(opts setupOptions, path, bin string) []setupHookEntry {
+	readPath := path
+	if root := setupPrivateFileRoot(opts); root != "" {
+		resolved, err := privateFileWritePath(path, root)
+		if err != nil {
+			return nil
+		}
+		readPath = resolved
+	}
+	key := hookCommandKey(setupHookCommand(opts, bin))
+	var entries []setupHookEntry
+	if opts.Target == "hermes" {
+		root, err := readYAMLObject(readPath)
+		if err != nil {
+			return nil
+		}
+		for _, item := range hermesPreToolCallEntries(hermesHooksMap(root)) {
+			if obj, ok := item.(map[string]any); ok && hookCommandKey(yamlString(obj["command"])) == key {
+				entries = append(entries, setupHookEntry{matcher: yamlString(obj["matcher"])})
+			}
+		}
+		return entries
+	}
+	root, err := readJSONObject(readPath)
+	if err != nil {
+		return nil
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range arrayValue(hooks, "PreToolUse") {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hookItems, _ := obj["hooks"].([]any)
+		for _, h := range hookItems {
+			if hookCommandKey(hookCommandFromAny(h)) == key {
+				matcher, _ := obj["matcher"].(string)
+				entries = append(entries, setupHookEntry{matcher: matcher, shared: len(hookItems) > 1})
+				break
+			}
+		}
+	}
+	return entries
+}
+
+// observeSetupHookMatcher reports the matcher of an installed hook and
+// whether it routes every tool this release routes. An outdated matcher
+// leaves calls the hook would decide unseen, so the install is degraded.
+func observeSetupHookMatcher(opts setupOptions, summary *setupSummary) {
+	if !summary.HookInstalled {
+		return
+	}
+	entries := setupInstalledHookEntries(opts, summary.HookConfigPath, summary.BinaryPath)
+	if len(entries) == 0 {
+		return
+	}
+	summary.HookMatcher = entries[0].matcher
+	summary.HookMatcherExpected = setupHookMatcher(opts.Target)
+	summary.HookMatcherMissingTools = setupHookMatcherMissing(opts.Target, entries[0].matcher)
+	summary.HookMatcherOutdated = len(summary.HookMatcherMissingTools) > 0
+	if summary.HookMatcherOutdated {
+		summary.ClientState = "degraded"
+		summary.Lifecycle = ""
+	}
+}
+
+// setupSharedHookEntryWarnings names each hook entry that holds the HELM
+// hook beside other hooks and does not route every tool this release routes.
+// setup does not rewrite such an entry: its matcher also decides which calls
+// reach the user's other hooks.
+func setupSharedHookEntryWarnings(opts setupOptions, path, bin string) []string {
+	var warnings []string
+	for _, entry := range setupInstalledHookEntries(opts, path, bin) {
+		if !entry.shared {
+			continue
+		}
+		if missing := setupHookMatcherMissing(opts.Target, entry.matcher); len(missing) > 0 {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; it does not route %s to HELM. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
+				path, entry.matcher, strings.Join(missing, ", "), setupHookMatcher(opts.Target)))
+		}
+	}
+	return warnings
 }
 
 func setupHookCommand(opts setupOptions, bin string) string {

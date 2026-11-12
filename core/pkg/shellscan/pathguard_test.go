@@ -111,6 +111,14 @@ func TestPathGuardMatchesPatternsAndText(t *testing.T) {
 		work + "/*.json":        false,
 		"~/.signer/keys-old/*":  false,
 		"~/.signer/receipts/**": false,
+		// "**" spans any number of directories, as globstar and the search
+		// tools' glob syntax read it.
+		"/**/keys/*":         true,
+		"/**/s*.seed":        true,
+		"/**/*.go":           false,
+		f.home + "/**/*.go":  false,
+		f.home + "/**/*":     true,
+		f.home + "/**/k*/**": true,
 	} {
 		if rule, got := f.guard.MatchPattern(pattern, work); got != want {
 			t.Errorf("MatchPattern(%q) = %q, %v; want %v", pattern, rule, got, want)

@@ -347,7 +347,11 @@ func TestHookPreToolComposesASTEffectFactsIntoBoundReceipts(t *testing.T) {
 		if receipt.Request.Target != fingerprintHookTarget(expected.target) {
 			t.Fatalf("receipt target = %q, want fingerprint for %q", receipt.Request.Target, expected.target)
 		}
-		if receipt.Request.Metadata["policy_profile_sha256"] != profileDigest || receipt.Request.Metadata["target_binding"] != "sha256:utf-8" {
+		wantBinding := hookTargetBindingText
+		if receipt.Request.EffectType == contracts.EffectTypeWorkstationNetworkEgress {
+			wantBinding = hookTargetBindingDestination
+		}
+		if receipt.Request.Metadata["policy_profile_sha256"] != profileDigest || receipt.Request.Metadata["target_binding"] != wantBinding {
 			t.Fatalf("receipt bindings = %+v", receipt.Request.Metadata)
 		}
 		if receipt.Request.Metadata["shellscan.parse_ok"] != "true" || !strings.Contains(receipt.Request.Metadata["shellscan.commands"], "curl") {
@@ -754,47 +758,55 @@ func TestHookPreToolDeniesProtectedShellConfigWriteEvenWithShellGrant(t *testing
 }
 
 func TestHookPreToolRequiresFileAndShellPermissionForCompoundSensitiveCommand(t *testing.T) {
-	tmp := t.TempDir()
-	restoreHookClock(t)
-	profile := workstation.DefaultObserveDraftProfile()
-	profile.Mode = "high_risk_effect_capable"
-	profile.Operate.Permissions = []string{contracts.WorkstationPermissionFileWrite}
-	profilePath := filepath.Join(tmp, "file-write-only.json")
-	profileBytes, err := json.Marshal(profile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(profilePath, profileBytes, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf .env /tmp/helm-cleanup"}}`
-	var stdout, stderr bytes.Buffer
-	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profilePath, "--policy-profile-sha256", hookPolicyProfileDigest(t, profilePath)}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "shell operation") {
-		t.Fatalf("compound command must be denied by the shell permission, output = %s", stdout.String())
-	}
-	receipts := globReceipts(t, tmp)
-	if len(receipts) != 2 {
-		t.Fatalf("receipts = %v, want file and shell decisions", receipts)
-	}
-	var fileAllowed, shellDenied bool
-	for _, path := range receipts {
-		receipt, err := workstation.LoadDecisionReceipt(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		switch receipt.Request.EffectType {
-		case contracts.EffectTypeWorkstationFileWrite:
-			fileAllowed = receipt.Verdict == contracts.WorkstationVerdictAllow
-		case contracts.EffectTypeWorkstationShellCommand:
-			shellDenied = receipt.Verdict == contracts.WorkstationVerdictDeny && receipt.ReasonCode == "OPERATE_PERMISSION_NOT_GRANTED"
-		}
-	}
-	if !fileAllowed || !shellDenied {
-		t.Fatalf("compound receipt verdicts must require both capabilities: fileAllowed=%v shellDenied=%v", fileAllowed, shellDenied)
+	// The command needs file.write for .env and shell.operate for the
+	// compound form. Each grant alone leaves the call denied, and only the
+	// denial of the call is left on disk.
+	for _, tc := range []struct {
+		name       string
+		permission string
+		denied     string
+	}{
+		{"file write granted", contracts.WorkstationPermissionFileWrite, contracts.EffectTypeWorkstationShellCommand},
+		{"shell operate granted", contracts.WorkstationPermissionShellOperate, contracts.EffectTypeWorkstationFileWrite},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			restoreHookClock(t)
+			profile := workstation.DefaultObserveDraftProfile()
+			profile.Mode = "high_risk_effect_capable"
+			profile.Operate.Permissions = []string{tc.permission}
+			profilePath := filepath.Join(tmp, "one-permission.json")
+			profileBytes, err := json.Marshal(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(profilePath, profileBytes, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf .env /tmp/helm-cleanup"}}`
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profilePath, "--policy-profile-sha256", hookPolicyProfileDigest(t, profilePath)}, strings.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+				t.Fatalf("compound command must be denied without both permissions, output = %s", stdout.String())
+			}
+			receipts := globReceipts(t, tmp)
+			if len(receipts) != 1 {
+				t.Fatalf("receipts = %v, want the one denial", receipts)
+			}
+			receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if receipt.Request.EffectType != tc.denied || receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "OPERATE_PERMISSION_NOT_GRANTED" {
+				t.Fatalf("receipt = %s/%s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED for %s", receipt.Request.EffectType, receipt.Verdict, receipt.ReasonCode, tc.denied)
+			}
+			if receipt.Request.Metadata["call_verdict"] != contracts.WorkstationVerdictDeny || receipt.Request.Metadata["call_receipts"] != "1" {
+				t.Fatalf("receipt does not carry the outcome of its call: %+v", receipt.Request.Metadata)
+			}
+		})
 	}
 }
 

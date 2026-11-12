@@ -93,15 +93,52 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook
   matcher for Claude Code, Hermes and the DeepSeek harness now also routes the
   read and fetch tools (`Read`, `Grep`, `Glob`, `WebFetch` and their
-  equivalents); an existing install keeps its narrower matcher until then.
-  Under the built-in profile, which has no egress allowlist, a routed
-  `WebFetch` is denied like `curl` already was.
+  equivalents), Claude Code's `ReadMcpResourceTool` and
+  `ListMcpResourcesTool`, and Hermes `execute_code`, `browser_navigate` and
+  `vision_analyze`; an existing install keeps its narrower matcher until then.
+  `setup status` now reports such a matcher: `hook_matcher`,
+  `hook_matcher_expected`, `hook_matcher_outdated` and
+  `hook_matcher_missing_tools` in `--json`, client state `degraded` and a
+  non-zero exit. When the HELM hook shares a hook entry with another hook,
+  `setup` leaves that entry's matcher alone and prints a warning naming the
+  file and the matcher (`warnings` in `--json`). Under the built-in profile,
+  which has no egress allowlist, a routed `WebFetch` is denied like `curl`
+  already was, and `execute_code` is denied like any shell operation.
 - A tool the hook has no class for is no longer passed: it is decided as a
   tool call and needs the `mcp.mutate` permission. The installed matchers do
   not route such tools; a matcher you widened yourself now does get denials
   for them under the built-in profile.
 - Hook network receipts bind the destination, not the URL: `request.target` is
-  the SHA-256 of `scheme://host[:port]`, one receipt per destination.
+  the SHA-256 of `scheme://host[:port]`, one receipt per destination, and
+  `target_binding` is `sha256:utf-8:network-destination`. Receipts written by
+  earlier releases carry `sha256:utf-8` over the whole URL and still verify;
+  other hook receipts keep `sha256:utf-8`.
+- Every hook receipt carries, in its signed bytes, `call_id`,
+  `call_receipts`, `call_verdict`, `tool_input_binding: jcs-sha256` and
+  `tool_input_sha256`. The hook decides every effect of a call before writing
+  any receipt; a denied call leaves only its denials on disk, where an
+  earlier release could leave an `ALLOW` receipt for an effect decided before
+  the denial.
+- A hook call that names more than 64 destinations is one
+  `EGRESS_DESTINATION_UNDETERMINED` decision, and one that names more than 64
+  credential paths is one secret read with `secret.target_count`. A hook
+  payload over 4 MiB is denied unread with the new reason code
+  `TOOL_INPUT_TOO_LARGE`, with a receipt.
+- A shell tool call whose `command` is missing or is not a string is decided
+  as a shell operation (`shell.operate`) instead of passed.
+- Under the built-in profile, `ls ~/.helm-ai-kernel` and any other command
+  that names the data directory itself is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED`, and `Read` or `Grep` of a credential path
+  (`.env`, `~/.ssh/id_ed25519`, `~/.aws/credentials`) is a denied secret read
+  where it was passed. A search glob is decided too: one aimed at the hook's
+  key files (`**/*.seed`, `file_glob: workstation-ed25519.*`) is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and one that selects
+  credential files (`glob: .env`, `**/*.pem`) is a secret read. A public key
+  (`*.pub`) and an example env file (`.env.example`, `.env.sample`,
+  `.env.template`) are not credentials: reading one passes, through `Read` and
+  through a shell alike.
+- `BASH_ENV` and `ENV` set on a command line, like a connection variable, make
+  its network destinations undetermined.
 - Under a profile with an egress allowlist, a command whose destinations
   cannot all be read from its arguments is denied with
   `EGRESS_DESTINATION_UNDETERMINED`. This includes `curl --location`, `wget`
@@ -123,12 +160,35 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   commands that do not show content are the exception.
 - `workstation enforce -- command` decides on the command's argv. `--class
   network --target URL` with a command that does not connect to that host is
-  refused, as is a shell `--target` that is not the command line.
+  refused, as is a shell `--target` that is not the command line. It also
+  decides on its own environment: a proxy variable set there is a destination
+  the allowlist must hold, and a connection variable, `LD_PRELOAD`,
+  `DYLD_INSERT_LIBRARIES`, `BASH_ENV` or `ENV` makes the destinations
+  undetermined. It exits with the command's own exit code (it was 1 for any
+  failure), 128 plus the signal number when a signal ends it, 127 when the
+  command cannot be started, and 126, not 1, when a receipt cannot be written;
+  the command does not run then.
 - `workstation list`, `denied`, `memory`, `loops`, `operator` and
   `audit scope` leave out a receipt that is unsigned or does not match its
   signature, and `audit scope` fails when no input is left. The Go functions
   `workstation.BuildOperatorView` and `workstation.BuildScopeAudit` take a
   `workstation.TrustAnchor` as their first argument.
+- `workstation list`, `denied`, `memory` and `loops` with `--json` print an
+  object instead of a bare array: the section's items under the key
+  `operator --json` uses (`runs`, `denied_timeline`, `memory_review_queue`,
+  `recurring_loops`) and `verification` beside them. Every denied, memory and
+  loop item carries the `signature_status` of its receipt. Read `.runs` where
+  you read the array before.
+- An input file that repeats a receipt already read is counted once by the
+  operator commands and `audit scope`, and named in
+  `verification.duplicate_inputs`.
+- With a trusted key available, `audit scope` counts a receipt signed by any
+  other key, the retired built-in key included, in
+  `summary.untrusted_signer_receipts` and `summary.untrusted_signer_actions`
+  only; it was in every total. The scope audit report schema gains these two
+  properties.
+- `workstation evidence` refuses an output directory that is not empty; export
+  into a new or empty one.
 - `shellscan` network facts carry the canonical destination in `Target`, and
   a command with several destinations yields several facts.
 
@@ -141,6 +201,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `workstation list`, the other operator commands and `audit scope` take
   `--data-dir` and `--trusted-public-key-file`, print which signature checks
   the input receipts went through, and give each run a `signature_status`.
+- `shellscan.WithEnvironment` classifies a command as run with an inherited
+  environment; `shellscan.SecretGlob` and `PathGuard.MatchSearchGlob` decide a
+  file-search glob; a path guard pattern reads `**` as any number of
+  directories.
 
 ### Fixed
 
@@ -170,9 +234,16 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   carried a `receipt_id` with path separators. The identifier is now checked
   and every pack file is written through the opened directory.
 - `workstation enforce` ran a command after deciding on the declared class and
-  target instead of the command.
+  target instead of the command, and passed its own environment to the command
+  undecided, so an inherited `HTTPS_PROXY` moved the connection after an
+  `ALLOW` for the named host.
 - `audit scope` and `workstation list` reported on receipts whose signature
   was missing or did not match.
+- The operator commands and `audit scope` counted a duplicated input file
+  twice.
+- `workstation evidence` opened pack files with truncation, so a file
+  hard-linked into a reused output directory was written through, and a
+  re-export left stale receipt files the index did not list.
 
 ## [0.12.0]
 

@@ -89,6 +89,9 @@ func printScopeAuditSummary(stdout io.Writer, report workstation.ScopeAuditRepor
 		for _, input := range verification.NotCounted {
 			_, _ = fmt.Fprintf(stdout, "    not counted: %s (%s)\n", input.SourcePath, input.SignatureStatus)
 		}
+		for _, input := range verification.DuplicateInputs {
+			_, _ = fmt.Fprintf(stdout, "    duplicate, counted once: %s (copy of %s)\n", input.SourcePath, input.DuplicateOf)
+		}
 		if verification.TrustAnchor == "" {
 			_, _ = fmt.Fprintln(stdout, "  signer trust:  not checked (no trusted workstation public key)")
 		} else {
@@ -98,6 +101,9 @@ func printScopeAuditSummary(stdout io.Writer, report workstation.ScopeAuditRepor
 				verification.Statuses[workstation.SignatureUntrustedKey],
 				verification.Statuses[workstation.SignatureRetiredKey])
 		}
+	}
+	if report.Summary.UntrustedSignerReceipts > 0 {
+		_, _ = fmt.Fprintf(stdout, "  other signers: %d receipts with %d actions, counted apart from the totals below\n", report.Summary.UntrustedSignerReceipts, report.Summary.UntrustedSignerActions)
 	}
 	_, _ = fmt.Fprintf(stdout, "  actions:       %d\n", report.Summary.TotalActions)
 	_, _ = fmt.Fprintf(stdout, "  allowed:       %d\n", report.Summary.AllowedActions)

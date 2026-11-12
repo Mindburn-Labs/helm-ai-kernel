@@ -29,6 +29,7 @@ func enforceShim(t *testing.T, names ...string) (marker string) {
 		}
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	clearEnforceEnvironment(t)
 	return marker
 }
 
@@ -91,9 +92,23 @@ func TestWorkstationEnforceDecidesOnTheArgvItRuns(t *testing.T) {
 			wantCode: 126, reason: "EGRESS_DESTINATION_UNDETERMINED",
 		},
 		{
+			// Every destination of the command is allowed, but it is not the
+			// one the caller declared: the declaration is refused on its own.
+			name:     "declared target names another port of an allowed host",
+			args:     []string{"--class", "network", "--target", "https://api.github.com:8443/zen", "--", "curl", "https://api.github.com/zen"},
+			wantCode: 126, stderr: "cannot confirm that it connects to the declared target",
+		},
+		{
 			name:     "declared network target with a command that shows no destination",
 			args:     []string{"--class", "network", "--target", "https://api.github.com/zen", "--", "python3", "fetch.py"},
 			wantCode: 126, stderr: "cannot confirm",
+		},
+		{
+			// With no destination to decide there is no receipt at all, so
+			// the refusal is all that stands between the call and the run.
+			name:     "network class with a command that shows no destination",
+			args:     []string{"--class", "network", "--", "python3", "fetch.py"},
+			wantCode: 126, stderr: "name no network destination",
 		},
 		{
 			name:     "declared target is not the command",
@@ -239,10 +254,13 @@ func TestWorkstationListSaysWhichReceiptsItChecked(t *testing.T) {
 	if code := Run([]string{"helm-ai-kernel", "workstation", "list", "--input", dir, "--json"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("list --json exit = %d stderr = %s", code, stderr.String())
 	}
-	var runs []map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &runs); err != nil {
+	var envelope struct {
+		Runs []map[string]any `json:"runs"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 		t.Fatalf("list JSON: %v\n%s", err, stdout.String())
 	}
+	runs := envelope.Runs
 	status := map[string]string{}
 	for _, run := range runs {
 		status[run["run_id"].(string)], _ = run["signature_status"].(string)

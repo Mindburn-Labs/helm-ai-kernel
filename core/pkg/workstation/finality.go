@@ -54,6 +54,10 @@ var denialCatalog = map[string]denialClass{
 	// A bound was exceeded and the agent can retry under it.
 	"MEMORY_TTL_EXCEEDS_POLICY": {contracts.DenialInstanceParameter, discloseScalarBound},
 
+	// The call was too large to read, so nothing about it was decided. The
+	// same work split into smaller calls is read and decided as usual.
+	"TOOL_INPUT_TOO_LARGE": {contracts.DenialInstanceParameter, discloseNothing},
+
 	// The destination was not something the allowlist could be asked about: a
 	// computed address, an option that reads it from elsewhere. Nothing about
 	// the allowlist is disclosed; the agent can retry with a named host.

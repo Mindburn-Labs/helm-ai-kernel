@@ -1515,6 +1515,24 @@ removal_proofs:
     replace: "\t\tif opt != 0 {\n"
     tests:
       - "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage"
+  - control: CTL-064
+    file: core/pkg/verifier/verifier.go
+    find: "\tif succ.SignatureVersion != contracts.ReceiptSignatureV5 && n.declared != \"\" {\n"
+    replace: "\tif n.declared != \"\" {\n"
+    tests:
+      - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
+  - control: CTL-064
+    file: core/pkg/verifier/verifier.go
+    find: "\tif tooDeep > 0 {\n"
+    replace: "\tif false && tooDeep > 0 {\n"
+    tests:
+      - "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
+  - control: CTL-064
+    file: core/cmd/helm-ai-kernel/host_evidence_cmd.go
+    find: "\t\tif err := receiptverify.ValidateReceiptMemberNames(data); err != nil {\n"
+    replace: "\t\tif err := receiptverify.ValidateReceiptMemberNames(data); false && err != nil {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
 
 controls:
 
@@ -5031,7 +5049,13 @@ controls:
       lamport_monotonicity of helm-ai-kernel verify) decode a receipt file
       into contracts.Receipt only after
       receiptverify.ValidateReceiptMemberNames has applied the same
-      member-name rules to it. POST /api/demo/verify and POST /api/demo/tamper
+      member-name rules to it, and there a receipt.v5 receipt links only to a
+      predecessor whose contracts.ReceiptChainHash, or the SHA-256 of whose
+      file, is its prev_hash: a "hash" member a receipt declares about itself
+      links only a successor with no signature_version. helm-ai-kernel
+      evidence correlate-host applies ValidateReceiptMemberNames to each
+      receipt file before it decodes one, and exits 2 naming a file it
+      refuses. POST /api/demo/verify and POST /api/demo/tamper
       read their request body by exact member name and refuse any member but
       receipt, expected_receipt_hash and, for tamper, mutation, a letter-case
       variant of one of them included. Keys of maps and free-form values are
@@ -5040,9 +5064,9 @@ controls:
       reader cannot take a top-level verdict for a checked receipt's. A
       document nested deeper than 64 levels is refused before it is walked;
       the signature check of the EvidencePack verifier
-      (embedded_signature_trust) counts a file under receipts/ or
-      07_ATTESTATIONS/ that it refuses for that depth as a signature that did
-      not verify, not as a file it may skip. A receipt with no
+      (embedded_signature_trust) fails for a file under receipts/ or
+      07_ATTESTATIONS/ that it refuses for that depth, and its reason counts
+      such files as refused unread, not as signatures. A receipt with no
       signature_version is not checked. VerifyBundleWith answers with one
       error and no checks unless Options.AllowLegacyV4 is set, receipt_verify
       exits 2 without --allow-legacy-v4, and VerifyJSON, which the WASM
@@ -5086,15 +5110,17 @@ controls:
       - "core/cmd/helm-ai-kernel.runVerifyReceiptCmd"
       - "core/cmd/helm-ai-kernel.verifyDemoReceipt"
       - "core/cmd/helm-ai-kernel.readDemoReceiptRequest"
+      - "core/pkg/receiptverify.ValidateRequestBodyStructure"
+      - "core/cmd/helm-ai-kernel.loadHELMReceipts"
     config:
       - "receipt_verify --allow-legacy-v4 (receiptverify.Options.AllowLegacyV4); helm-ai-kernel verify --allow-legacy-v4-receipts (verifier.VerifyOptions.AllowLegacyV4Receipts); and, for Go callers of core/pkg/crypto, AllowLegacyReceiptPreimages. None has an environment variable, and all default to refusing."
     protected_operations:
-      - "receipt_verify --receipt, receiptverify.VerifyJSON in the WASM verifier, helm-ai-kernel verify receipt, the receipt files and the receipt signature check of POST /api/v1/evidence/verify, the request bodies and receipts of POST /api/demo/verify and POST /api/demo/tamper, and the dev-local MCP receipt check and the chain checks of helm-ai-kernel verify."
+      - "receipt_verify --receipt, receiptverify.VerifyJSON in the WASM verifier, helm-ai-kernel verify receipt, the receipt files and the receipt signature check of POST /api/v1/evidence/verify, the request bodies and receipts of POST /api/demo/verify and POST /api/demo/tamper, the dev-local MCP receipt check and the chain checks of helm-ai-kernel verify, and the receipt files helm-ai-kernel evidence correlate-host reads."
     bypass_assumptions:
       - "Under an opt-in the replay of a versioned signature as a legacy receipt is refused by its receipt_id, which begins with \"{\". Everything a legacy signature never covered stays open under the opt-in: verdict, tool_name, timestamp and every member but the eight it signs can be rewritten on a receipt issued before receipt.v5, and the opted-in output says so."
       - "Member names are matched exactly only where a Go struct is decoded from a document receiptverify has checked (ParseBundle, ParseReceipt, ValidateReceiptMemberNames). Keys of maps and free-form values (metadata, public_key_set, subject) are data: two keys there that differ in letter case are two keys. A member no decoded type names is ignored as before, except a receipt member at the top level of a bundle."
       - "A bundle is refused for a receipt member beside receipts, in any letter case. A top-level member that is not a receipt member name (a comment, summary or paging member) is still ignored, so a reader must take a receipt's members from the entries of receipts and from nowhere else in the document."
-      - "The signature check of the EvidencePack verifier (embedded_signature_trust) reads receipt documents as maps, by exact member name, through receiptverify.ParseReceiptDocument: it refuses one name written twice, a member in another letter case is a separate member it does not read, and a file nested deeper than 64 levels is refused unread and counted as a signature that did not verify. Its chain checks (chain_integrity, lamport_monotonicity) decode each receipt file into contracts.Receipt after receiptverify.ValidateReceiptMemberNames has refused a receipt member in another letter case, one name written twice, a trailing value and nesting deeper than 64 levels; they do not apply the receipt.v5 member contract, because a pack holds receipts of more than one schema. A receipts/*.json file that is a bundle passes embedded_signature_trust unchecked and reads to the chain loader as a receipt with none of its members set; an array passes embedded_signature_trust the same way and fails the chain loader. Both predate this control and are left to helm-tracker#308. A Go consumer that decodes a pack's receipt file into contracts.Receipt parses it with receiptverify.ParseReceipt."
+      - "The signature check of the EvidencePack verifier (embedded_signature_trust) reads receipt documents as maps, by exact member name, through receiptverify.ParseReceiptDocument: it refuses one name written twice, a member in another letter case is a separate member it does not read, and a file nested deeper than 64 levels is refused unread, fails the check and is counted in its reason as a file refused unread. Its chain checks (chain_integrity, lamport_monotonicity) decode each receipt file into contracts.Receipt after receiptverify.ValidateReceiptMemberNames has refused a member of a receipt, or of a struct a receipt holds, in another letter case, one name written twice at any depth, a trailing value, invalid JSON and nesting deeper than 64 levels; they do not apply the receipt.v5 member contract, because a pack holds receipts of more than one schema. In them a receipt.v5 successor links only to an identity recomputed from its predecessor, so a file put in a deleted receipt's place, signed or not, links it only if its contracts.ReceiptChainHash or the SHA-256 of its bytes is the successor's signed prev_hash. A successor with no signature_version still links through a declared \"hash\", which has no specified preimage (security ledger F-20), so in a chain of such receipts a receipt can be replaced by a file that declares its hash. The chain checks do not see the last receipt of a chain deleted: the receipts left still link genesis-to-head. A receipts/*.json file that is a bundle passes embedded_signature_trust unchecked and reads to the chain loader as a receipt with none of its members set; an array passes embedded_signature_trust the same way and fails the chain loader. Both predate this control and are left to helm-tracker#308. A Go consumer that decodes a pack's receipt file into contracts.Receipt parses it with receiptverify.ParseReceipt, or applies receiptverify.ValidateReceiptMemberNames first, as the chain checks and evidence correlate-host do."
       - "POST /api/v1/evidence/verify and POST /api/demo/verify leave signature_profile and signature_algorithm to core/pkg/crypto (receiptverify.AnySignatureProfile), which verifies the hybrid and ML-DSA profiles. A signer of another type that exposes VerifyReceipt answers an unversioned receipt for itself."
       - "A receipt.v5 signature covers 13 members. The other members of a single receipt, or of the last receipt of a chain, are covered by nothing; the integrity check and verify receipt say so and do not fail."
       - "An unversioned DecisionRecord is a separate preimage with the same missing domain separation; it is outside this control."
@@ -5141,6 +5167,8 @@ controls:
         - "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked"
         - "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules"
         - "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage"
+        - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
+        - "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
       removal:
         - "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields"
         - "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected"
@@ -5182,6 +5210,8 @@ controls:
         - "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked"
         - "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules"
         - "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage"
+        - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
+        - "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
       bypass:
         - "core/pkg/receiptverify.TestIntegrityDetailIsTrueOfAChain"
         - "core/pkg/receiptverify.TestFoldNameMatchesEncodingJSON"

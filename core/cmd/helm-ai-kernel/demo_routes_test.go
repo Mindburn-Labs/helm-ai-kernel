@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"gopkg.in/yaml.v3"
 )
 
 func TestDemoRunVerifyAndTamper(t *testing.T) {
@@ -336,6 +339,50 @@ func TestDemoVerifyReadsTheReceiptAsItsReaderDoes(t *testing.T) {
 // ALLOW by exact name and whose "Receipt" is the genuine DENY came back valid.
 // The body is now read by exact member name, and any member the route does not
 // take, a letter-case variant included, is refused.
+// TestDemoRequestSchemasDeclareTheMembersTheRoutesTake is helm-tracker#305
+// round 3 finding NF4: the demo routes answer 400 for a request member they
+// do not take, and their OpenAPI request schemas must say so, with
+// unevaluatedProperties or additionalProperties false.
+func TestDemoRequestSchemasDeclareTheMembersTheRoutesTake(t *testing.T) {
+	data, err := readOpenAPIFromRepository()
+	if err != nil {
+		t.Fatalf("read OpenAPI: %v", err)
+	}
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]struct {
+					Schema struct {
+						AdditionalProperties  any            `yaml:"additionalProperties"`
+						UnevaluatedProperties any            `yaml:"unevaluatedProperties"`
+						Properties            map[string]any `yaml:"properties"`
+					} `yaml:"schema"`
+				} `yaml:"content"`
+			} `yaml:"requestBody"`
+		} `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("parse OpenAPI: %v", err)
+	}
+	for route, members := range map[string][]string{"/api/demo/verify": demoVerifyMembers, "/api/demo/tamper": demoTamperMembers} {
+		schema := spec.Paths[route]["post"].RequestBody.Content["application/json"].Schema
+		declared := make([]string, 0, len(schema.Properties))
+		for name := range schema.Properties {
+			declared = append(declared, name)
+		}
+		sort.Strings(declared)
+		taken := append([]string(nil), members...)
+		sort.Strings(taken)
+		if !reflect.DeepEqual(declared, taken) {
+			t.Errorf("%s: the request schema declares %v, the route takes %v", route, declared, taken)
+		}
+		if schema.UnevaluatedProperties != false && schema.AdditionalProperties != false {
+			t.Errorf("%s: the request schema must close the object, the route refuses any other member; got unevaluatedProperties %v, additionalProperties %v",
+				route, schema.UnevaluatedProperties, schema.AdditionalProperties)
+		}
+	}
+}
+
 func TestDemoRequestMembersAreMatchedExactly(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("demo-test")
 	if err != nil {
@@ -408,6 +455,19 @@ func TestDemoRequestMembersAreMatchedExactly(t *testing.T) {
 		}
 		if _, answered := payload["valid"]; answered {
 			t.Errorf("%s: a refused body must carry no verification result: %v", tc.name, payload)
+		}
+	}
+
+	// A refusal of what follows the body names the request body, not a
+	// receipt (helm-tracker#305 round 3 NF5).
+	for name, trailing := range map[string]string{
+		"a trailing value":         `{}`,
+		"invalid trailing content": `x`,
+	} {
+		code, payload := post("/api/demo/verify", `{"receipt":`+genuine+`,"expected_receipt_hash":`+hash+`} `+trailing)
+		detail, _ := payload["detail"].(string)
+		if code != http.StatusBadRequest || !strings.Contains(detail, "request body has") || strings.Contains(detail, "receipt has") {
+			t.Errorf("%s: the refusal must name the request body: %d %q", name, code, detail)
 		}
 	}
 }

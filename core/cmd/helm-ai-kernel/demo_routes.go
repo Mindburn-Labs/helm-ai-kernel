@@ -61,6 +61,14 @@ type demoReceiptRequest struct {
 	Mutation            string
 }
 
+// demoVerifyMembers and demoTamperMembers are the request members of POST
+// /api/demo/verify and POST /api/demo/tamper. The request schemas of
+// api/openapi/helm.openapi.yaml declare these and no other.
+var (
+	demoVerifyMembers = []string{"receipt", "expected_receipt_hash"}
+	demoTamperMembers = []string{"receipt", "expected_receipt_hash", "mutation"}
+)
+
 // readDemoReceiptRequest reads a demo request body by exact member name.
 //
 // encoding/json binds an object member to a struct field whatever its letter
@@ -77,7 +85,7 @@ func readDemoReceiptRequest(w http.ResponseWriter, r *http.Request, members ...s
 	if err != nil {
 		return req, err
 	}
-	if err := receiptverify.ValidateJSONStructure(body); err != nil {
+	if err := receiptverify.ValidateRequestBodyStructure(body); err != nil {
 		return req, err
 	}
 	var object map[string]json.RawMessage
@@ -236,7 +244,7 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		req, err := readDemoReceiptRequest(w, r, "receipt", "expected_receipt_hash")
+		req, err := readDemoReceiptRequest(w, r, demoVerifyMembers...)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return
@@ -259,7 +267,7 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		req, err := readDemoReceiptRequest(w, r, "receipt", "expected_receipt_hash", "mutation")
+		req, err := readDemoReceiptRequest(w, r, demoTamperMembers...)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return

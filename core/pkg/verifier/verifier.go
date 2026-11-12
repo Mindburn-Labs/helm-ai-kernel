@@ -372,7 +372,7 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 }
 
 func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
-	valid, selfAttested, notChecked, total := countEmbeddedSignatureTrust(bundlePath, opts)
+	valid, selfAttested, notChecked, tooDeep, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	if total == 0 {
 		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
 	}
@@ -390,11 +390,22 @@ func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckRes
 			Detail: detail,
 		}
 	}
-	reason := fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total-valid, total)
+	// A file refused for its depth was not read, so it is not counted as a
+	// signature in the reason.
+	signatures := total - tooDeep
+	reason := fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", signatures-valid, signatures)
 	if notChecked > 0 {
 		reason = fmt.Sprintf("%d/%d embedded receipt or witness signatures were not verified, %d of them not checked: no signature_version. "+
 			"--allow-legacy-v4-receipts checks a dev-local MCP proof receipt that has none against the legacy V4 preimage; pass it only for a pack known to predate receipt.v5",
-			total-valid, total, notChecked)
+			signatures-valid, signatures, notChecked)
+	}
+	if tooDeep > 0 {
+		refused := fmt.Sprintf("%d file(s) refused unread: %v", tooDeep, receiptverify.ErrJSONTooDeep)
+		if signatures == valid {
+			reason = refused
+		} else {
+			reason += "; " + refused
+		}
 	}
 	return CheckResult{
 		Name:   "embedded_signature_trust",
@@ -404,18 +415,20 @@ func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckRes
 }
 
 func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
-	valid, _, _, total := countEmbeddedSignatureTrust(bundlePath, opts)
+	valid, _, _, _, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	return valid, total
 }
 
 // countEmbeddedSignatureTrust returns how many embedded signatures verified,
 // how many of those verified only against a key carried in the pack, how many
 // were left unchecked for want of a signature_version (legacyReceiptNotChecked),
-// and the total that required verification.
-func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, int, int, int) {
+// how many files were refused unread for their depth, and the total that
+// required verification, those files included.
+func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, int, int, int, int) {
 	valid := 0
 	selfAttested := 0
 	notChecked := 0
+	tooDeep := 0
 	total := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
@@ -434,6 +447,7 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 				// A file refused for its depth was not read; skipping it would
 				// pass a receipt no check looked at.
 				if errors.Is(parseErr, receiptverify.ErrJSONTooDeep) {
+					tooDeep++
 					total++
 				}
 				return nil
@@ -488,7 +502,7 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 			return nil
 		})
 	}
-	return valid, selfAttested, notChecked, total
+	return valid, selfAttested, notChecked, tooDeep, total
 }
 
 // verifyEmbeddedDocumentSignature reports whether the signature verified and
@@ -1096,7 +1110,7 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 		for i := 1; i < len(chain.ordered); i++ {
 			prev := chain.ordered[i-1]
 			cur := chain.ordered[i]
-			if !prev.matches(cur.receipt.PrevHash) {
+			if !prev.matches(cur.receipt) {
 				return CheckResult{
 					Name: "chain_integrity", Pass: false,
 					Reason: fmt.Sprintf("session %q: receipt %s prev_hash=%s does not match the chain hash of %s (%s)",
@@ -1170,9 +1184,10 @@ type receiptNode struct {
 	//   - demo      chains on a "hash" field the receipt declares about itself
 	// The first two are recomputed here, so tampering breaks linkage. The third
 	// has no specified preimage and cannot be recomputed — recorded in the
-	// security ledger as a schema gap.
-	hashes []string
-	file   string
+	// security ledger as a schema gap (F-20) — so it is kept in declared, apart.
+	hashes   []string
+	declared string
+	file     string
 }
 
 // normalizeHash strips the optional "sha256:" prefix so identities produced by
@@ -1181,13 +1196,20 @@ func normalizeHash(h string) string {
 	return strings.TrimPrefix(strings.TrimSpace(h), "sha256:")
 }
 
-// matches reports whether prevHash refers to this node under any derivation.
-func (n receiptNode) matches(prevHash string) bool {
-	want := normalizeHash(prevHash)
+// matches reports whether succ's prev_hash refers to this node. A receipt.v5
+// successor signs its prev_hash, so it links only to an identity recomputed
+// here: anyone can write a declared hash, and an unsigned stand-in declaring a
+// deleted receipt's hash would close the gap (helm-tracker#305).
+func (n receiptNode) matches(succ *contracts.Receipt) bool {
+	want := normalizeHash(succ.PrevHash)
 	if want == "" {
 		return false
 	}
-	for _, h := range n.hashes {
+	ids := n.hashes
+	if succ.SignatureVersion != contracts.ReceiptSignatureV5 && n.declared != "" {
+		ids = append(ids[:len(ids):len(ids)], n.declared)
+	}
+	for _, h := range ids {
 		if normalizeHash(h) == want {
 			return true
 		}
@@ -1260,9 +1282,8 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 		//   - demo/mcp-proof/financedemo receipts carry their own "hash" field
 		//     and chain children on that value directly.
 		//
-		// Use the declared hash when the producer supplies one, otherwise derive
-		// it. Either way the linkage below is real: truncation, reordering and
-		// forks are detected for both shapes.
+		// A receipt.v5 successor links only to an identity derived here; a
+		// successor with no signature_version may also link to the declared hash.
 		//
 		// Caveat recorded in the security ledger: a self-declared "hash" cannot
 		// be recomputed by the verifier, because its preimage is not specified
@@ -1279,9 +1300,8 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			hashes = append(hashes, h)
 		}
 		hashes = append(hashes, "sha256:"+sha256Hex(data))
-		if declared, _ := raw["hash"].(string); strings.TrimSpace(declared) != "" {
-			hashes = append(hashes, declared)
-		}
+		declared, _ := raw["hash"].(string)
+		declared = strings.TrimSpace(declared)
 
 		// Lamport lives under different keys across the schemas.
 		if receipt.LamportClock == 0 {
@@ -1307,7 +1327,7 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			session = receipt.SessionID
 		}
 		bySession[session] = append(bySession[session], receiptNode{
-			receipt: &receipt, hashes: hashes, file: entry.Name(),
+			receipt: &receipt, hashes: hashes, declared: declared, file: entry.Name(),
 		})
 		total++
 	}
@@ -1359,7 +1379,7 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 			if used[n.file] {
 				continue
 			}
-			if current.matches(n.receipt.PrevHash) {
+			if current.matches(n.receipt) {
 				children = append(children, n)
 			}
 		}

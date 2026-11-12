@@ -178,6 +178,11 @@ paths:
             schema:
               type: object
               required: [receipt, expected_receipt_hash]
+              # The server refuses any other member. unevaluatedProperties says
+              # so: the pinned openapi-generator v7.4.0 generates an object
+              # with additionalProperties: false as an open model in this
+              # OpenAPI 3.1 document.
+              unevaluatedProperties: false
               properties:
                 receipt:
                   $ref: '#/components/schemas/Receipt'
@@ -217,6 +222,11 @@ paths:
             schema:
               type: object
               required: [receipt, expected_receipt_hash]
+              # The server refuses any other member. unevaluatedProperties says
+              # so: the pinned openapi-generator v7.4.0 generates an object
+              # with additionalProperties: false as an open model in this
+              # OpenAPI 3.1 document.
+              unevaluatedProperties: false
               properties:
                 receipt:
                   $ref: '#/components/schemas/Receipt'

@@ -35,6 +35,13 @@ import (
 // shadows, saw an unbroken chain, and the pack was verified. A receipt file
 // that spells a receipt member in another letter case is now refused before
 // the chain checks read it.
+//
+// This test covers letter-case shadows and a member written twice;
+// TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn covers a file
+// put in the deleted receipt's place. Both are about a deleted receipt that a
+// signed receipt.v5 receipt in the pack names as its prev_hash. The chain
+// checks do not see the last receipt of a chain deleted: the receipts left
+// still link genesis-to-head.
 func TestTeamPackCannotHideADeletedReceipt(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -97,6 +104,65 @@ func TestTeamPackCannotHideADeletedReceipt(t *testing.T) {
 	}
 }
 
+// TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn is
+// helm-tracker#305 round 3 finding NF1. The chain checks accepted a "hash"
+// member a receipt declares about itself as its identity, and a file with no
+// signature_version joins a session through executor_id. The team-pack
+// operator of TestTeamPackCannotHideADeletedReceipt replaces the deleted DENY
+// with an unsigned stand-in that declares the deleted receipt's chain hash in
+// "hash": no letter case is involved, embedded_signature_trust does not count
+// a file that declares neither signature nor signature_version, and the
+// re-sealed pack verified. A receipt.v5 successor now links only to an
+// identity the verifier recomputed: contracts.ReceiptChainHash of its
+// predecessor or the SHA-256 of the predecessor's file.
+func TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", keyHex)
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+
+	r1 := teamPackReceipt(t, priv, keyHex, "r1", 1, "", "ALLOW")
+	h1 := teamPackChainHash(t, r1)
+	r2 := teamPackReceipt(t, priv, keyHex, "r2", 2, h1, "DENY")
+	h2 := teamPackChainHash(t, r2)
+	r3 := teamPackReceipt(t, priv, keyHex, "r3", 3, h2, "ALLOW")
+	if full := verifyTeamPack(t, map[string][]byte{"r1.json": r1, "r2.json": r2, "r3.json": r3}); !full.Verified {
+		t.Fatalf("the genuine three-receipt team pack does not verify; the case proves nothing: %+v", full.Checks)
+	}
+
+	standIn, err := json.Marshal(map[string]any{
+		"receipt_id": "r2", "executor_id": "session", "prev_hash": h1, "lamport_clock": 2,
+		"hash": h2, "verdict": "ALLOW", "status": "APPLIED",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := verifyTeamPack(t, map[string][]byte{"r1.json": r1, "r2.json": standIn, "r3.json": r3})
+	if trust := packCheck(t, report, "embedded_signature_trust"); !trust.Pass {
+		t.Fatalf("embedded_signature_trust refuses the stand-in by itself; the case proves nothing about the chain checks: %+v", trust)
+	}
+	if report.Verified {
+		t.Fatalf("a team pack whose deleted DENY is replaced by an unsigned stand-in declaring its hash verified: %+v", report.Checks)
+	}
+	for _, check := range []string{"chain_integrity", "lamport_monotonicity"} {
+		result := packCheck(t, report, check)
+		if result.Pass || !strings.Contains(result.Reason, "unreachable from genesis") || !strings.Contains(result.Reason, "r3 (prev_hash="+h2+")") {
+			t.Fatalf("%s must leave the signed successor of the stand-in unreachable: %+v", check, result)
+		}
+	}
+
+	// A successor with no signature_version still links through a declared
+	// hash, as the demo producers chain (security ledger F-20).
+	d1, _ := json.Marshal(map[string]any{"receipt_id": "d1", "executor_id": "demo", "prev_hash": "", "lamport_clock": 1, "hash": "sha256:d1"})
+	d2, _ := json.Marshal(map[string]any{"receipt_id": "d2", "executor_id": "demo", "prev_hash": "sha256:d1", "lamport_clock": 2, "hash": "sha256:d2"})
+	if result := packCheck(t, verifyTeamPack(t, map[string][]byte{"d1.json": d1, "d2.json": d2}), "chain_integrity"); !result.Pass {
+		t.Fatalf("an unversioned chain linked through its declared hashes must still link: %+v", result)
+	}
+}
+
 // TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust: embedded_signature_trust
 // reads each receipt file with receiptverify.ParseReceiptDocument, which since
 // helm-tracker#305 refuses a document nested deeper than 64 levels before it is
@@ -104,7 +170,8 @@ func TestTeamPackCannotHideADeletedReceipt(t *testing.T) {
 // receipt and skipped it, so a team-pack receipt edited from DENY to ALLOW,
 // with metadata nested 70 levels, was not counted and the pack verified with
 // "no embedded receipt or witness signatures require verification". A file
-// refused for its depth now counts as a signature that did not verify.
+// refused for its depth now fails the check, and the reason counts it as a
+// file refused unread, not as a signature (helm-tracker#305 round 3 NF2).
 func TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -126,6 +193,26 @@ func TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust(t *testing.T) {
 	report := verifyTeamPack(t, map[string][]byte{"r1.json": deep})
 	if check := packCheck(t, report, "embedded_signature_trust"); report.Verified || check.Pass {
 		t.Fatalf("a forged receipt nested 70 levels deep was skipped by embedded_signature_trust and the pack verified: %+v", check)
+	}
+
+	const refusedUnread = "1 file(s) refused unread: JSON exceeds the 64-level nesting limit"
+	deepArray := []byte(strings.Repeat("[", 65) + strings.Repeat("]", 65))
+	for _, tc := range []struct {
+		name         string
+		receipts     map[string][]byte
+		attestations map[string][]byte
+		reason       string
+	}{
+		{"a deep receipt", map[string][]byte{"r1.json": deep}, nil, refusedUnread},
+		{"a deep array beside a genuine receipt and a shallow array", map[string][]byte{"r1.json": genuine},
+			map[string][]byte{"deep.json": deepArray, "shallow.json": []byte(`[[[]]]`)}, refusedUnread},
+		{"a deep array beside a forged receipt", map[string][]byte{"r1.json": forged}, map[string][]byte{"deep.json": deepArray},
+			"1/1 embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone; " + refusedUnread},
+	} {
+		check := packCheck(t, verifyTeamPackWith(t, tc.receipts, tc.attestations), "embedded_signature_trust")
+		if check.Pass || check.Reason != tc.reason {
+			t.Errorf("%s: embedded_signature_trust must fail with %q, got %+v", tc.name, tc.reason, check)
+		}
 	}
 }
 
@@ -176,6 +263,12 @@ func teamPackChainHash(t *testing.T, receipt []byte) string {
 // and nothing self-attested.
 func verifyTeamPack(t *testing.T, receipts map[string][]byte) *VerifyReport {
 	t.Helper()
+	return verifyTeamPackWith(t, receipts, nil)
+}
+
+// verifyTeamPackWith is verifyTeamPack with files under 07_ATTESTATIONS/ too.
+func verifyTeamPackWith(t *testing.T, receipts, attestations map[string][]byte) *VerifyReport {
+	t.Helper()
 	dir := createValidBundleFixture(t)
 	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
 	receiptsDir := filepath.Join(dir, "receipts")
@@ -187,6 +280,14 @@ func verifyTeamPack(t *testing.T, receipts map[string][]byte) *VerifyReport {
 	}
 	for name, data := range receipts {
 		if err := os.WriteFile(filepath.Join(receiptsDir, name), bytes.TrimSpace(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, data := range attestations {
+		if err := os.MkdirAll(filepath.Join(dir, "07_ATTESTATIONS"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "07_ATTESTATIONS", name), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -168,7 +168,7 @@ you cannot verify a chain whose hash function is unspecified.
 | ID | Sev | Finding | Status |
 |---|---|---|---|
 | F-19 | T1 | **No canonical chain-hash derivation.** Three producers link receipts three different ways: `store.buildNextCausalReceipt` uses `contracts.ReceiptChainHash` (JCS over the receipt); `mcp-proof` uses `"sha256:" + sha256` of the pretty-printed receipt file as written (`cmd/helm-ai-kernel/mcp_proof_cmd.go:396-402`); `demo`/`financedemo` chain on a `hash` field the receipt declares about itself (`cmd/helm-ai-kernel/demo_cmd.go:285-288`). A third-party verifier cannot check a chain without knowing which convention a pack used. | mitigated |
-| F-20 | T1 | **Self-declared receipt hashes have no specified preimage.** For the demo/financedemo shape, `hash` is asserted by the producer and cannot be recomputed by any verifier. For those receipts the walk proves the chain is well-formed, not that each node's contents are bound to its identity. | remaining |
+| F-20 | T1 | **Self-declared receipt hashes have no specified preimage.** For the demo/financedemo shape, `hash` is asserted by the producer and cannot be recomputed by any verifier. For those receipts the walk proves the chain is well-formed, not that each node's contents are bound to its identity. Since helm-tracker#305 a `receipt.v5` successor no longer links to a declared `hash`; a successor with no `signature_version` still does. | remaining |
 | F-21 | T1 | **Launchpad and conform packs emit no chain at all.** Receipts carry `lamport_clock` values implying an order but no `prev_hash` linking them (`core/pkg/launchpad/receipts`). These packs assert no chain of custody, which is materially weaker than the product's claim. | remaining |
 
 **Mitigation shipped for F-19:** each receipt is given a candidate identity set —
@@ -451,9 +451,22 @@ is refused. The chain checks of `helm-ai-kernel verify` decode each receipt
 file into a Go struct only after `receiptverify.ValidateReceiptMemberNames`
 has refused a receipt member in another letter case: before, a team pack with
 a receipt deleted verified once `"PREV_HASH"` and `"Lamport_Clock"`, outside
-the next receipt's signature, papered over the gap. A receipt file the
-signature check refuses for nesting deeper than 64 levels counts as a
-signature that did not verify instead of being skipped. The `integrity` check,
+the next receipt's signature, papered over the gap. The same pack also
+verified with an unsigned file in the deleted receipt's place that declared
+the deleted receipt's chain hash in `hash` (F-20 used as a route to hide a
+deletion). A `receipt.v5` successor now links only to an identity the
+verifier recomputes from its predecessor (`contracts.ReceiptChainHash` or the
+SHA-256 of its file), never to a declared `hash`. What holds is narrower than
+"a team pack cannot hide a deleted receipt": a deleted receipt that a signed
+`receipt.v5` receipt in the pack follows can no longer be hidden. The chain
+checks do not see the last receipt of a chain deleted, and receipts with no
+`signature_version` still link through declared hashes, so F-20 stays open
+for them. `helm-ai-kernel evidence correlate-host`, which decoded pack
+receipts with Go's JSON decoder and read `"Verdict":"ALLOW"` beside a signed
+`"verdict":"DENY"`, applies `ValidateReceiptMemberNames` first as well. A
+receipt file the signature check refuses for nesting deeper than 64 levels
+fails that check instead of being skipped; its reason counts the file as
+refused unread, not as a signature. The `integrity` check,
 which compares nothing, reports `not_applicable` and no longer says the signed
 bytes are the bytes on disk.
 
@@ -467,10 +480,13 @@ Regressions: `TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt`,
 `TestLetterCaseRuleFollowsTheDecodedType` in `core/pkg/receiptverify`,
 `TestKeyRingReportsALegacyReceiptAsNotChecked` in `core/pkg/crypto`,
 `TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault`,
-`TestTeamPackCannotHideADeletedReceipt` and
+`TestTeamPackCannotHideADeletedReceipt`,
+`TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn` and
 `TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust` in `core/pkg/verifier`,
-and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes` and
-`TestDemoRequestMembersAreMatchedExactly` in `core/cmd/helm-ai-kernel`.
+and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes`,
+`TestDemoRequestMembersAreMatchedExactly` and
+`TestCorrelateHostReadsAReceiptFileAsItsReaderDoes` in
+`core/cmd/helm-ai-kernel`.
 
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 

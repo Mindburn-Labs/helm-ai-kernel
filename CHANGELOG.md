@@ -136,8 +136,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a request
   body nested that deep; and `helm-ai-kernel verify` fails
   `embedded_signature_trust` for such a file in `receipts/` or
-  `07_ATTESTATIONS/`, and fails `chain_integrity` and `lamport_monotonicity`
-  for such a receipt file in a pack whose receipts are chained.
+  `07_ATTESTATIONS/`, with the reason `N file(s) refused unread: JSON exceeds
+  the 64-level nesting limit`, which does not count the file as a signature,
+  and fails `chain_integrity` and `lamport_monotonicity` for such a receipt
+  file in a pack whose receipts are chained.
 - The `integrity` check of `receipt_verify` is now `not_applicable` where it
   was `pass`. It never compared anything; `closure` is the check that compares
   the hashes of a chain. Exit codes and the `valid` member are unchanged.
@@ -160,13 +162,34 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   signature_version` and names the flag. Pass `--allow-legacy-v4-receipts` for
   a pack known to predate `receipt.v5`
   (`verifier.VerifyOptions.AllowLegacyV4Receipts`).
-- `helm-ai-kernel verify` refuses a chained receipt file that spells a receipt
-  member in another letter case (`"PREV_HASH"` for `prev_hash`) or writes one
-  twice: `chain_integrity` and `lamport_monotonicity` fail with
-  `receipt <file> is refused: ...`. Go callers that decode a receipt document
-  into `contracts.Receipt` themselves can apply the same rules with
+- `helm-ai-kernel verify` refuses a chained receipt file that spells a member
+  of a receipt, or of a struct a receipt holds, in another letter case
+  (`"PREV_HASH"` for `prev_hash`, `"LOG_ID"` inside `transparency`), or that
+  writes any member twice at any depth: inside `metadata` or a
+  `witness_signatures` entry too, and two names that decode to one string,
+  such as two lone surrogates, which Go decodes to U+FFFD. `chain_integrity`
+  and `lamport_monotonicity` fail with `receipt <file> is refused: ...`; such
+  a file passed them before, read as the last value written. A receipt file
+  that is not valid JSON, or that has a trailing value, failed them before and
+  still does, but the reason now reads `receipt <file> is refused: ...` (for
+  example `invalid receipt JSON at $: ...` or `receipt has a trailing JSON
+  value ...`) where it read `receipt <file> is not valid JSON: ...`. Nesting
+  deeper than 64 levels is the bullet above. Go callers that decode a receipt
+  document into `contracts.Receipt` themselves can apply the same rules with
   `receiptverify.ValidateReceiptMemberNames`. The nesting-limit refusal is now
   the exported `receiptverify.ErrJSONTooDeep`.
+- In the chain checks of `helm-ai-kernel verify`, a `receipt.v5` receipt links
+  only to a predecessor whose `contracts.ReceiptChainHash`, or the SHA-256 of
+  whose file, is its `prev_hash`. A `hash` member a receipt declares about
+  itself links only a successor with no `signature_version`. A pack in which
+  a `receipt.v5` receipt names its predecessor only by that predecessor's
+  declared `hash` now fails `chain_integrity` and `lamport_monotonicity`: the
+  receipt is unreachable from genesis.
+- `helm-ai-kernel evidence correlate-host` applies the same member-name rules
+  to each receipt file of the pack before it decodes it, and exits 2 with
+  `receipt <file> is refused: ...` for a file they refuse, one nested deeper
+  than 64 levels included. A receipt file that is not valid JSON, which it
+  skipped, now stops it the same way.
 - `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a receipt
   with a member written twice or spelled in another letter case, and for a
   body with no `receipt` or with `"receipt": null`, where both answered 200
@@ -174,9 +197,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   exact member name: a member other than `receipt`, `expected_receipt_hash`
   and, for `/api/demo/tamper`, `mutation` is refused with 400, a letter-case
   variant such as `"Receipt"` included, and so are a member written twice and
-  a trailing value after the body. `verified_fields` now lists the 13 members
-  a `receipt.v5` signature covers, and is empty when the signature was not
-  verified.
+  a trailing value after the body (`request body has a trailing JSON value
+  ...`). The OpenAPI request schemas of both routes declare
+  `unevaluatedProperties: false`; `oasdiff breaking` reports no breaking
+  change, and the generated SDK models are unchanged. `verified_fields` now
+  lists the 13 members a `receipt.v5` signature covers, and is empty when the
+  signature was not verified.
 
 ### Fixed
 
@@ -211,6 +237,20 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   and `"PREV_HASH"` and `"Lamport_Clock"` appended to the next one, outside its
   signature, the chain read unbroken and the re-sealed pack verified. The
   chain checks now refuse such a file.
+- The same team-pack operator could put an unsigned file in the deleted
+  receipt's place, declaring the deleted receipt's chain hash in a `hash`
+  member and joining its session through `executor_id`, and the re-sealed
+  pack verified. The signed successor now links only to an identity the
+  verifier recomputes, so it is unreachable from genesis and the pack fails.
+  Both fixes hold for a deleted receipt that a signed `receipt.v5` receipt in
+  the pack follows. The chain checks do not see the last receipt of a chain
+  deleted, and a chain of receipts with no `signature_version` still links
+  through declared hashes, which nothing can recompute (security ledger
+  F-20).
+- `helm-ai-kernel evidence correlate-host` read a network receipt that says
+  `DENY` by exact member name, with `"Status":"ALLOW"` and
+  `"Verdict":"ALLOW"` appended, as allowed, and reported no Boundary Drift
+  for host egress after the deny.
 - `helm-ai-kernel verify receipt` accepted a file whose only version member
   was `"Signature_Version"`, skipping the `receipt.v5` member checks.
 - `receipt_verify` took gigabytes of memory on a small file nested 100,000

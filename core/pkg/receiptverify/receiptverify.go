@@ -363,6 +363,14 @@ func ValidateJSONStructure(raw []byte) error {
 	return validateJSON(raw, nil)
 }
 
+// ValidateRequestBodyStructure is ValidateJSONStructure for a request body
+// that carries a receipt, such as the body of POST /api/demo/verify. It
+// refuses what ValidateJSONStructure refuses; a refusal of a value after the
+// body names the request body, not a receipt.
+func ValidateRequestBodyStructure(body []byte) error {
+	return validateDocument(body, nil, "request body")
+}
+
 // validateJSON is ValidateJSONStructure for a document that is decoded into
 // target. Wherever a Go struct is decoded, a member whose name is a struct
 // member's name in another letter case is refused: encoding/json would bind
@@ -375,6 +383,11 @@ func ValidateJSONStructure(raw []byte) error {
 // to every reader, and only one name written twice is refused. A nil target
 // checks structure only.
 func validateJSON(raw []byte, target reflect.Type) error {
+	return validateDocument(raw, target, "receipt")
+}
+
+// validateDocument is validateJSON for a document its refusals call subject.
+func validateDocument(raw []byte, target reflect.Type, subject string) error {
 	if err := checkJSONDepth(raw); err != nil {
 		return err
 	}
@@ -384,9 +397,9 @@ func validateJSON(raw []byte, target reflect.Type) error {
 		return err
 	}
 	if token, err := scan.decoder.Token(); err == nil {
-		return fmt.Errorf("receipt has a trailing JSON value beginning with %v", token)
+		return fmt.Errorf("%s has a trailing JSON value beginning with %v", subject, token)
 	} else if !errors.Is(err, io.EOF) {
-		return fmt.Errorf("receipt has invalid trailing JSON: %w", err)
+		return fmt.Errorf("%s has invalid trailing JSON: %w", subject, err)
 	}
 	return nil
 }

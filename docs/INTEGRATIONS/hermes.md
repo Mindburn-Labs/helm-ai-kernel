@@ -57,7 +57,7 @@ helm-ai-kernel setup remove hermes --scope user --yes
 
 Setup writes `hooks.pre_tool_call` with:
 
-- matcher `^(terminal|write_file|patch|mcp_.*)$` (Hermes tool names, plus
+- matcher `^(terminal|write_file|patch|read_file|search_files|web_extract|mcp_.*)$` (Hermes tool names, plus
   MCP names as Hermes emits them: `mcp__server__tool` or older
   `mcp_server_tool`)
 - command `helm-ai-kernel hook pre-tool --client hermes`
@@ -72,8 +72,12 @@ Without the hook entry, Hermes never calls Kernel and the tool runs. A
 DENY path cannot be skipped by omitting the hook and still claiming the
 gate is active.
 
-Unclassified tools are pass-through and write no receipt. The classifier
-decides `terminal`, `write_file`, `patch`, and Hermes-emitted MCP names.
+A read of an ordinary file and a write to an ordinary file pass without a
+receipt. The classifier decides `terminal`, `write_file`, `patch`, a
+`read_file` or `search_files` call on a credential path, `web_extract` as
+network egress, and Hermes-emitted MCP names. A tool it has no class for is
+decided as an unclassified tool call, which the default profile denies; the
+matcher above does not route any.
 
 ## First-use consent
 

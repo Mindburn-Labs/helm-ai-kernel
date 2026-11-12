@@ -71,6 +71,9 @@ type hookClassification struct {
 	Reason                  string
 	Metadata                map[string]string
 	RequiresShellPermission bool
+	// TrustMaterial marks a call that reaches the hook's own signing or
+	// trust material. It is denied under every profile.
+	TrustMaterial bool
 }
 
 func init() {
@@ -128,7 +131,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
 	}
-	classifications := classifyPreToolPayloads(payload)
+	classifications := classifyPreToolPayloads(payload, workstationPathGuard(opts.DataDir, opts.SigningSeedFile, opts.PolicyProfile))
 	if len(classifications) == 0 {
 		// An unclassified call is successful progress, so it breaks any
 		// consecutive-denial run without changing the fail-closed policy path.
@@ -665,46 +668,34 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 }
 
 func classifyPreToolPayload(payload preToolPayload) hookClassification {
-	classifications := classifyPreToolPayloads(payload)
+	classifications := classifyPreToolPayloads(payload, nil)
 	if len(classifications) == 0 {
 		return hookClassification{}
 	}
 	return classifications[0]
 }
 
-func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
+// classifyPreToolPayloads returns the decisions one tool call needs. An empty
+// result means the call is an observe- or draft-class action that passes
+// without a receipt. guard names the signer's own files; a call that reaches
+// them gets a single decision that no profile allows.
+func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard) []hookClassification {
 	tool := strings.TrimSpace(payload.ToolName)
-	switch {
-	case strings.EqualFold(tool, "Bash"), strings.EqualFold(tool, "terminal"):
+	kind := hookToolKindOf(tool)
+	if kind == hookToolShell {
 		command := inputString(payload.ToolInput, "command", "cmd")
 		// Structural (AST-based) pre-flight classification. The classifier is
 		// advisory input only: it decides whether the command reaches the
 		// existing signed decision path; the permit/receipt verdict is still
 		// produced by workstation.Decide, fail-closed as before.
-		scan := shellscan.ClassifyAt(command, payload.CWD)
-		classifications := make([]hookClassification, 0, len(scan.EffectFacts)+2)
-		for _, fact := range scan.EffectFacts {
-			if classification, ok := hookClassificationFromShellscanFact(fact, scan); ok {
-				classifications = append(classifications, classification)
-				continue
-			}
-			// A future scanner fact must never become an ungoverned effect just
-			// because this hook has not learned its dedicated policy class yet.
-			classifications = append(classifications, hookClassification{
-				ShouldDecide: true,
-				Class:        "shell-operate",
-				Target:       command,
-				Action:       "shell_operate",
-				ToolID:       "shell",
-				Reason:       "unrecognized shell effect fact",
-				Metadata:     shellscanReceiptMetadata(scan),
-			})
-		}
-		if scan.RequiresShellDecision {
-			classifications = append(classifications, shellscanGenericClassification(command, scan))
-		}
-		return appendRequiredShellPermission(classifications, command)
-	case strings.HasPrefix(tool, "mcp_"):
+		scan := shellscan.ClassifyAt(command, payload.CWD, shellscan.WithPathGuard(guard))
+		return shellClassifications(tool, command, scan)
+	}
+	if target, ok := guardedToolTarget(guard, kind, payload); ok {
+		return trustMaterialClassification(tool, target, nil)
+	}
+	switch kind {
+	case hookToolMCP:
 		// Claude/Codex emit mcp__server__tool. Hermes has used that shape and
 		// the older mcp_server_tool form. mcp__ is a prefix of mcp_. Only the
 		// HELM server that setup installs is exempt; it governs its own tools.
@@ -719,13 +710,13 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			ToolID:       tool,
 			Reason:       "MCP tool call",
 		}}
-	// DeepSeek Harness emits lowercase bash/write/edit; EqualFold matches those.
-	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "NotebookEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
+	case hookToolWrite:
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file", "notebook_path")
-		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
+		patch := strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")
+		if target == "" && patch {
 			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch", "diff"), payload.CWD)
 		}
-		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
+		if target == "" && patch {
 			target = "apply_patch"
 		}
 		if isSensitiveWriteTarget(target, payload.CWD) {
@@ -738,8 +729,13 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 				Reason:       "sensitive file write",
 			}}
 		}
+		return nil
+	case hookToolRead:
+		return readToolClassifications(tool, payload)
+	case hookToolFetch:
+		return fetchToolClassifications(tool, payload)
 	}
-	return nil
+	return unknownToolClassifications(tool)
 }
 
 func hookClassificationFromShellscanFact(fact shellscan.EffectFact, scan shellscan.Result) (hookClassification, bool) {
@@ -879,6 +875,7 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 		SigningSeed:       seed,
 		PersistedTarget:   targetFingerprint,
 		PersistedMetadata: persistedMetadata,
+		TrustMaterial:     classification.TrustMaterial,
 	})
 }
 
@@ -923,15 +920,9 @@ func inputString(input map[string]any, keys ...string) string {
 }
 
 func sensitiveApplyPatchTarget(command, cwd string) string {
-	for _, line := range strings.Split(command, "\n") {
-		line = strings.TrimSpace(line)
-		for _, prefix := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
-			if strings.HasPrefix(line, prefix) {
-				target := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-				if isSensitiveWriteTarget(target, cwd) {
-					return target
-				}
-			}
+	for _, target := range applyPatchTargets(command) {
+		if isSensitiveWriteTarget(target, cwd) {
+			return target
 		}
 	}
 	return ""

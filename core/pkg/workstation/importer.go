@@ -23,6 +23,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
@@ -414,7 +415,13 @@ func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) 
 		if len(profile.Egress.Allowlist) == 0 {
 			return contracts.WorkstationVerdictDeny, "EGRESS_ALLOWLIST_EMPTY", "network egress allowlist is empty"
 		}
-		if !egressAllowed(profile.Egress.Allowlist, event.Target) {
+		// A target that is not one concrete endpoint is refused before any
+		// comparison, so no allowlist entry can be written to match it.
+		destination, err := netdest.Parse(strings.TrimSpace(event.Target))
+		if err != nil {
+			return contracts.WorkstationVerdictDeny, "EGRESS_DESTINATION_UNDETERMINED", "network destination could not be determined"
+		}
+		if !egressAllowed(profile.Egress.Allowlist, destination) {
 			return contracts.WorkstationVerdictDeny, "EGRESS_DESTINATION_NOT_ALLOWED", "network destination is outside the workstation allowlist"
 		}
 		return evaluateOperatePermission(profile, event)
@@ -1006,30 +1013,22 @@ func draftTargetAllowed(roots []string, target string) bool {
 	return false
 }
 
-func egressAllowed(allowlist []contracts.WorkstationEgressDestination, target string) bool {
-	host, proto := splitTarget(target)
-	for _, dest := range allowlist {
-		if strings.EqualFold(dest.Host, host) && (dest.Protocol == "" || strings.EqualFold(dest.Protocol, proto)) {
+// egressAllowed compares a parsed destination with the allowlist. Each entry
+// host goes through the same canonical form as the destination, so the two
+// cannot differ by case, a trailing dot, punycode or IPv6 spelling. An entry
+// whose host is not a bare host name or address matches nothing. Ports are
+// not compared: an entry allows its host on every port.
+func egressAllowed(allowlist []contracts.WorkstationEgressDestination, destination netdest.Destination) bool {
+	for _, entry := range allowlist {
+		host, err := netdest.CanonicalHost(strings.TrimSpace(entry.Host))
+		if err != nil || host != destination.Host {
+			continue
+		}
+		if entry.Protocol == "" || strings.EqualFold(strings.TrimSpace(entry.Protocol), destination.Scheme) {
 			return true
 		}
 	}
 	return false
-}
-
-func splitTarget(target string) (host, proto string) {
-	proto = "https"
-	rest := strings.TrimSpace(target)
-	if before, after, ok := strings.Cut(rest, "://"); ok {
-		proto = before
-		rest = after
-	}
-	if before, _, ok := strings.Cut(rest, "/"); ok {
-		rest = before
-	}
-	if before, _, ok := strings.Cut(rest, ":"); ok {
-		rest = before
-	}
-	return strings.ToLower(rest), strings.ToLower(proto)
 }
 
 func manifestTimestamp(manifest RunManifest) time.Time {

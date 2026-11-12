@@ -165,7 +165,11 @@ type scopeAuditBuilder struct {
 	generatedAt time.Time
 }
 
-func BuildScopeAudit(paths ...string) (ScopeAuditReport, error) {
+// BuildScopeAudit audits the receipts whose signature matches their content.
+// An input that is unsigned or altered is named in Limitations and left out
+// of every count; how far the remaining signers are trusted is stated there
+// too. With no input left there is nothing to audit.
+func BuildScopeAudit(trust TrustAnchor, paths ...string) (ScopeAuditReport, error) {
 	files, err := expandJSONInputs(paths)
 	if err != nil {
 		return ScopeAuditReport{}, err
@@ -173,21 +177,27 @@ func BuildScopeAudit(paths ...string) (ScopeAuditReport, error) {
 	if len(files) == 0 {
 		return ScopeAuditReport{}, errors.New("no workstation receipt JSON files found")
 	}
-	view, err := BuildOperatorView(files...)
+	view, err := BuildOperatorView(trust, files...)
 	if err != nil {
 		return ScopeAuditReport{}, err
 	}
+	if view.Verification.Counted() == 0 {
+		return ScopeAuditReport{}, fmt.Errorf("no input receipt has a signature that matches its content: %s", strings.Join(view.Verification.Statements(), " "))
+	}
 	builder := newScopeAuditBuilder(len(files), view)
 	for _, file := range files {
-		receipt, decision, err := loadWorkstationReceipt(file)
+		input, err := loadCheckedReceipt(file, trust)
 		if err != nil {
 			return ScopeAuditReport{}, err
 		}
-		if receipt != nil {
-			builder.addAgentRunReceipt(file, receipt)
+		if input.status == SignatureUnsigned || input.status == SignatureInvalid {
+			continue
 		}
-		if decision != nil {
-			builder.addDecisionReceipt(file, decision)
+		if input.receipt != nil {
+			builder.addAgentRunReceipt(file, input.receipt)
+		}
+		if input.decision != nil {
+			builder.addDecisionReceipt(file, input.decision)
 		}
 	}
 	return builder.finish(), nil
@@ -356,6 +366,9 @@ func newScopeAuditBuilder(inputFiles int, view OperatorView) *scopeAuditBuilder 
 			"It does not claim full desktop, browser, OS, or proprietary hosted-agent control.",
 			"Secret values are never required and secret-like metadata is redacted unless it is a safe reference field.",
 		},
+	}
+	if view.Verification != nil {
+		report.Limitations = append(report.Limitations, view.Verification.Statements()...)
 	}
 	builder := &scopeAuditBuilder{
 		report:      report,
@@ -678,6 +691,8 @@ func (b *scopeAuditBuilder) addReasonMissingControl(action scopeAuditAction) {
 		b.addMissingControl("network", action.runID, action.effectID, "egress.allowlist", action.reasonCode, "network egress allowlist is empty", action.receipt)
 	case "EGRESS_DESTINATION_NOT_ALLOWED":
 		b.addMissingControl("network", action.runID, action.effectID, "egress.destination", action.reasonCode, "network destination is outside the allowlist", action.receipt)
+	case "EGRESS_DESTINATION_UNDETERMINED":
+		b.addMissingControl("network", action.runID, action.effectID, "egress.destination", action.reasonCode, "network destination could not be determined", action.receipt)
 	case "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE":
 		b.addMissingControl("filesystem", action.runID, action.effectID, "draft.workspace_roots", action.reasonCode, "file target is outside the configured workspace roots", action.receipt)
 	case "MEMORY_CLASS_DISALLOWED":

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 
@@ -24,6 +25,21 @@ var evidencePackDirs = []string{
 	"09_SCHEMAS",
 	"12_REPORTS",
 	"99_EXT/workstation",
+}
+
+// fileNameIdentifier is the grammar of an identifier that may become part of
+// a file name: the shape of the ids this package generates (prefix, underscore,
+// hex), with no separator, dot or other character a path could turn on.
+var fileNameIdentifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+
+// checkFileNameIdentifier refuses an identifier read from a receipt before it
+// is used in a path. Receipts are input: a hand-written receipt_id is whatever
+// its author typed.
+func checkFileNameIdentifier(field, value string) error {
+	if !fileNameIdentifier.MatchString(value) {
+		return fmt.Errorf("%s %q is not a valid identifier: expected letters, digits, _ and -, at most 128 characters", field, value)
+	}
+	return nil
 }
 
 type EvidencePackExport struct {
@@ -45,11 +61,21 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 	if outDir == "" {
 		return EvidencePackExport{}, errors.New("output directory is required")
 	}
+	if err := checkFileNameIdentifier("receipt_id", result.Receipt.ReceiptID); err != nil {
+		return EvidencePackExport{}, err
+	}
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		return EvidencePackExport{}, fmt.Errorf("create evidence pack: %w", err)
 	}
+	// Every write goes through the opened directory, which refuses a path that
+	// leaves it, including through a link already present inside the pack.
+	pack, err := os.OpenRoot(outDir)
+	if err != nil {
+		return EvidencePackExport{}, fmt.Errorf("open evidence pack: %w", err)
+	}
+	defer pack.Close()
 	for _, dir := range evidencePackDirs {
-		if err := os.MkdirAll(filepath.Join(outDir, dir), 0o750); err != nil {
+		if err := pack.MkdirAll(dir, 0o750); err != nil {
 			return EvidencePackExport{}, fmt.Errorf("create evidence pack dir %s: %w", dir, err)
 		}
 	}
@@ -94,7 +120,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		if err != nil {
 			return EvidencePackExport{}, fmt.Errorf("canonicalize %s: %w", rel, err)
 		}
-		if err := os.WriteFile(filepath.Join(outDir, rel), append(data, '\n'), 0o600); err != nil {
+		if err := pack.WriteFile(rel, append(data, '\n'), 0o600); err != nil {
 			return EvidencePackExport{}, fmt.Errorf("write %s: %w", rel, err)
 		}
 		fileHashes[rel] = hashBytes(data)
@@ -111,7 +137,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		"extensions":     []string{"workstation"},
 		"files":          sortedStringMap(fileHashes),
 	}
-	if err := writeCanonical(filepath.Join(outDir, "00_INDEX.json"), index); err != nil {
+	if err := writeCanonicalIn(pack, "00_INDEX.json", index); err != nil {
 		return EvidencePackExport{}, err
 	}
 	score := map[string]any{
@@ -124,7 +150,7 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 		"raw_chat_required":  false,
 		"deterministic_root": rootHash,
 	}
-	if err := writeCanonical(filepath.Join(outDir, "01_SCORE.json"), score); err != nil {
+	if err := writeCanonicalIn(pack, "01_SCORE.json", score); err != nil {
 		return EvidencePackExport{}, err
 	}
 	return EvidencePackExport{
@@ -146,6 +172,14 @@ func writeCanonical(path string, value any) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func writeCanonicalIn(dir *os.Root, name string, value any) error {
+	data, err := canonicalize.JCS(value)
+	if err != nil {
+		return err
+	}
+	return dir.WriteFile(name, append(data, '\n'), 0o600)
 }
 
 func EvidencePackRequiredFiles() []string {

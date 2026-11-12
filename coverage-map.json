@@ -2487,10 +2487,10 @@
       "id": "CTL-035",
       "title": "Local coding-agent hook shell guard",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt.",
+      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt. It decides network egress on every destination a command names and denies a destination it cannot name under an allowlist profile. It denies, under every profile, a call that reaches its own signing key, trusted public key or policy profile, or that runs the kernel command which signs with that key or installs the hook. A read or fetch tool is decided like the same effect through a shell, and a tool it has no class for is decided, not passed.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. It denies a narrow set of destructive patterns and syntax it cannot evaluate statically.",
+      "reason": "The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. No removal proof deletes these checks yet.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.runHookPreToolCmd",
@@ -2498,24 +2498,44 @@
         }
       ],
       "gates": [],
-      "config": [],
+      "config": [
+        "`--policy-profile` with `--policy-profile-sha256`: the profile whose egress allowlist and operate permissions the decisions use.",
+        "`--data-dir` and `--signing-seed-file`: where the signing material the hook protects lives."
+      ],
       "protected_operations": [
         "Tool calls that a coding-agent client routes to `helm-ai-kernel hook pre-tool`."
       ],
       "bypass_assumptions": [
-        "A call the client does not route to the hook is not seen."
+        "A call the client does not route to the hook is not seen. The installed matcher routes shell, file, read and fetch tools and MCP calls; a search tool that names no URL is not routed.",
+        "HELM is not on the network path: a redirect, a DNS answer, an alias in `~/.ssh/config` or a default in `~/.curlrc` is not seen. Clients that follow redirects are refused under an allowlist profile unless redirects are turned off on the command line.",
+        "A remote named in git configuration is treated as operator configuration and is not decided.",
+        "A script file is not read for what it does: `python3 script.py` is decided on its arguments, and on its text only for a literal reference to the signing material. A path computed at run time, a renamed copy of the kernel binary, a `PATH` override and a recursive read of a directory above the data directory are not detected.",
+        "A profile that grants `shell.operate` allows opaque shell forms, which can open connections the allowlist does not see.",
+        "Package managers and language toolchains that download are not classified as egress."
       ],
       "tests": {
         "allowed": [
-          "core/cmd/helm-ai-kernel.TestHookPreToolAllowsSafeBashWithoutApprovalOutput"
+          "core/cmd/helm-ai-kernel.TestHookPreToolAllowsSafeBashWithoutApprovalOutput",
+          "core/cmd/helm-ai-kernel.TestHookGrantedProfileAllowsClassifiedTools"
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestHookPreToolDeniesDestructiveBashAndWritesReceipt",
           "core/cmd/helm-ai-kernel.TestHookPreToolFailsClosedWhenReceiptCannotPersist",
-          "core/cmd/helm-ai-kernel.TestHookPreToolReturnsBlockingExitWhenDenyCannotBeWritten"
+          "core/cmd/helm-ai-kernel.TestHookPreToolReturnsBlockingExitWhenDenyCannotBeWritten",
+          "core/cmd/helm-ai-kernel.TestHookDefaultProfileClassifiesEveryTool",
+          "core/cmd/helm-ai-kernel.TestHookReceiptsNameEveryEgressDestination",
+          "core/cmd/helm-ai-kernel.TestHookProtectsAnExplicitSigningSeedFile"
         ],
         "removal": [],
-        "bypass": []
+        "bypass": [
+          "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/pkg/shellscan.TestClassifyNamesEveryEgressDestination",
+          "core/pkg/shellscan.TestClassifyRefusesToGuessEgressDestinations",
+          "core/pkg/shellscan.TestClassifyReportsProtectedPaths",
+          "core/pkg/workstation.TestEgressAllowlistComparesTheRealHost",
+          "core/pkg/workstation.TestUndeterminedEgressCannotBeAllowlisted",
+          "core/pkg/netdest.TestParseRefusesWhatIsNotOneEndpoint"
+        ]
       },
       "removal_proofs": []
     },
@@ -2523,10 +2543,10 @@
       "id": "CTL-036",
       "title": "Workstation enforce wrapper",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "`helm-ai-kernel workstation enforce` exits 126 on DENY instead of running the command.",
+      "claim": "`helm-ai-kernel workstation enforce` decides on the argv it is about to run, exits 126 instead of running it when any effect found in that argv is denied or when the declared class and target cannot be matched to it, and runs it only on operate-mode ALLOW receipts that bind the argv.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "Only a refusal test exists; no allowed-case or removal test shows the wrapper exits 126 on DENY and runs the command on ALLOW.",
+      "reason": "Tested for commands that run and commands that are refused, but no removal proof deletes the check yet, so R1 does not count it as enforced. The argv is classified from its text, with the limits of CTL-035.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.runWorkstationEnforceCmd",
@@ -2534,17 +2554,25 @@
         }
       ],
       "gates": [],
-      "config": [],
+      "config": [
+        "`--policy-profile`: the profile the decisions use."
+      ],
       "protected_operations": [
         "Commands wrapped by `workstation enforce`."
       ],
       "bypass_assumptions": [
-        "A command run without the wrapper is not governed."
+        "A command run without the wrapper is not governed.",
+        "The command is resolved on `PATH` when it runs; the decision names the program as written.",
+        "What a wrapped script or interpreter does when it runs is not seen."
       ],
       "tests": {
-        "allowed": [],
+        "allowed": [
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
+        ],
         "forbidden": [
-          "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand"
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns",
+          "core/cmd/helm-ai-kernel.TestWorkstationEnforceProtectsItsOwnSigningMaterial"
         ],
         "removal": [],
         "bypass": []

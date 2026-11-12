@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
 )
 
 func TestCaptureLifecycleAndHelperErrors(t *testing.T) {
@@ -230,10 +231,10 @@ func TestWorkstationResultEvidenceAndOperatorErrorCoverage(t *testing.T) {
 		t.Fatal("expected invalid evidence index error")
 	}
 
-	if _, err := BuildOperatorView(); err == nil {
+	if _, err := BuildOperatorView(TrustAnchor{}); err == nil {
 		t.Fatal("expected missing operator input error")
 	}
-	if _, err := BuildOperatorView(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+	if _, err := BuildOperatorView(TrustAnchor{}, filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Fatal("expected missing operator path error")
 	}
 	unsupported := filepath.Join(t.TempDir(), "unsupported.json")
@@ -246,7 +247,7 @@ func TestWorkstationResultEvidenceAndOperatorErrorCoverage(t *testing.T) {
 	if _, _, err := loadWorkstationReceipt(unsupported); err == nil {
 		t.Fatal("expected unsupported workstation receipt error")
 	}
-	view, err := BuildOperatorView(receiptPath)
+	view, err := BuildOperatorView(TrustAnchor{}, receiptPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,14 +455,22 @@ func TestWorkstationDecisionReceiptAndClassifierCoverage(t *testing.T) {
 	if draftTargetAllowed([]string{absRoot}, filepath.Join(t.TempDir(), "file.txt")) {
 		t.Fatal("draftTargetAllowed accepted absolute target outside root")
 	}
-	if !egressAllowed([]contracts.WorkstationEgressDestination{{Host: "api.example.com"}}, "https://api.example.com:443/v1") {
+	destination := func(target string) netdest.Destination {
+		t.Helper()
+		parsed, err := netdest.Parse(target)
+		if err != nil {
+			t.Fatalf("netdest.Parse(%q): %v", target, err)
+		}
+		return parsed
+	}
+	if !egressAllowed([]contracts.WorkstationEgressDestination{{Host: "api.example.com"}}, destination("https://api.example.com:443/v1")) {
 		t.Fatal("egressAllowed rejected default-protocol allowlist")
 	}
-	if egressAllowed([]contracts.WorkstationEgressDestination{{Host: "api.example.com", Protocol: "https"}}, "http://api.example.com/v1") {
+	if egressAllowed([]contracts.WorkstationEgressDestination{{Host: "api.example.com", Protocol: "https"}}, destination("http://api.example.com/v1")) {
 		t.Fatal("egressAllowed accepted wrong protocol")
 	}
-	if host, proto := splitTarget("api.example.com/path"); host != "api.example.com" || proto != "https" {
-		t.Fatalf("splitTarget default = %s/%s", host, proto)
+	if parsed := destination("api.example.com/path"); parsed.Host != "api.example.com" || parsed.Scheme != "https" {
+		t.Fatalf("bare host default = %s/%s", parsed.Host, parsed.Scheme)
 	}
 	completed := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
 	if got := manifestTimestamp(RunManifest{CompletedAt: &completed}); !got.Equal(completed) {

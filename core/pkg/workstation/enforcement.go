@@ -22,6 +22,10 @@ type DecisionOptions struct {
 	SigningSeed       []byte
 	PersistedTarget   string
 	PersistedMetadata map[string]string
+	// TrustMaterial marks a request that reaches HELM's own signing or trust
+	// material, as established by the caller's path guard. The option can
+	// only deny: no profile allows such a request.
+	TrustMaterial bool
 }
 
 func LoadPolicyProfileFile(path string) (contracts.WorkstationPolicyProfile, error) {
@@ -233,6 +237,9 @@ func Decide(
 		Metadata:   req.Metadata,
 	}
 	verdict, reasonCode, reason := EvaluateEvent(profile, event)
+	if opts.TrustMaterial {
+		verdict, reasonCode, reason = contracts.WorkstationVerdictDeny, "TRUST_MATERIAL_ACCESS_DENIED", "HELM signing and trust material is closed to agent tools"
+	}
 	persistedReq := persistedDecisionRequest(req, opts)
 	receipt := &contracts.WorkstationPolicyDecisionReceipt{
 		ReceiptVersion: contracts.AgentRunReceiptVersion,

@@ -78,7 +78,7 @@ func TestBuildScopeAuditMixedReceiptsAllBoundaries(t *testing.T) {
 	}
 	writeJSONFixture(t, filepath.Join(dir, "payment-deny.json"), paymentDecision)
 
-	report, err := BuildScopeAudit(dir)
+	report, err := BuildScopeAudit(TrustAnchor{}, dir)
 	if err != nil {
 		t.Fatalf("BuildScopeAudit() error = %v", err)
 	}
@@ -118,7 +118,7 @@ func TestBuildScopeAuditMixedReceiptsAllBoundaries(t *testing.T) {
 	if !strings.Contains(string(raw), "[redacted]") {
 		t.Fatalf("scope audit missing redacted marker: %s", string(raw))
 	}
-	again, err := BuildScopeAudit(dir)
+	again, err := BuildScopeAudit(TrustAnchor{}, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestScopeAuditArtifactExport(t *testing.T) {
 		t.Fatalf("Decide(secret) error = %v", err)
 	}
 	writeJSONFixture(t, filepath.Join(dir, "secret-deny.json"), decision)
-	report, err := BuildScopeAudit(dir)
+	report, err := BuildScopeAudit(TrustAnchor{}, dir)
 	if err != nil {
 		t.Fatalf("BuildScopeAudit() error = %v", err)
 	}
@@ -166,7 +166,7 @@ func TestScopeAuditArtifactExport(t *testing.T) {
 }
 
 func TestBuildScopeAuditRejectsEmptyInputDirectory(t *testing.T) {
-	if _, err := BuildScopeAudit(t.TempDir()); err == nil {
+	if _, err := BuildScopeAudit(TrustAnchor{}, t.TempDir()); err == nil {
 		t.Fatal("expected empty input directory error")
 	}
 }

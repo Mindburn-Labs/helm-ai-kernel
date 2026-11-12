@@ -38,8 +38,13 @@ data dir, Kernel URL, draft policy path, and uninstall command.
 ## Verify a Hook Decision
 
 The installed matcher routes `Bash`, `Edit`, `Write`, `MultiEdit`,
-`NotebookEdit`, and `mcp__*` calls to the hook. Every classified PreToolUse
-decision, whether allowed or denied, writes a signed receipt under:
+`NotebookEdit`, `Read`, `Grep`, `Glob`, `WebFetch` and `mcp__*` calls to the
+hook. An install made by an earlier release keeps its narrower matcher until
+`helm-ai-kernel setup claude-code --yes` is run again. `WebSearch` is not
+routed: it names no URL, so the hook could only refuse it. A tool you add to
+the matcher yourself is decided as an unclassified tool call, which the default
+profile denies. Every classified PreToolUse decision, whether allowed or
+denied, writes a signed receipt under:
 
 ```text
 ~/.helm-ai-kernel/receipts/hooks/

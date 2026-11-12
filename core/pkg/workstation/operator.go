@@ -1,6 +1,9 @@
+// quantum_posture: the operator read model checks classical Ed25519 receipt
+// signatures; it adds no post-quantum or hybrid cryptographic control.
 package workstation
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +21,118 @@ type OperatorView struct {
 	DeniedTimeline    []DeniedTimelineItem `json:"denied_timeline"`
 	MemoryReviewQueue []MemoryReviewItem   `json:"memory_review_queue"`
 	RecurringLoops    []RecurringLoopItem  `json:"recurring_loops"`
+	// Verification says which signature checks the receipts behind this view
+	// went through. It is nil for a view assembled from a receipt in hand.
+	Verification *ReceiptVerification `json:"verification,omitempty"`
+}
+
+// TrustAnchor is the workstation public key the caller trusts and where it
+// came from. The zero value means no anchor: signatures are still checked
+// against the key each receipt names, and signer trust is reported as not
+// checked.
+type TrustAnchor struct {
+	PublicKey ed25519.PublicKey
+	Source    string
+}
+
+// Signature statuses of an input receipt. The first two mean the content
+// cannot be tied to any key, so the receipt is not counted. The rest are
+// counted and differ in how far the signer is known.
+const (
+	SignatureUnsigned         = "unsigned"
+	SignatureInvalid          = "invalid_signature"
+	SignatureRetiredKey       = "signed_by_retired_key"
+	SignatureUntrustedKey     = "signed_by_untrusted_key"
+	SignatureSignerNotChecked = "signer_not_checked"
+	SignatureTrustedKey       = "signed_by_trusted_key"
+)
+
+// ReceiptVerification records, for a set of input receipts, what was checked
+// and what each check found.
+type ReceiptVerification struct {
+	// TrustAnchor names the trusted key source, or is empty when signer trust
+	// was not checked.
+	TrustAnchor string           `json:"trust_anchor,omitempty"`
+	Statuses    map[string]int   `json:"signature_statuses"`
+	NotCounted  []UncountedInput `json:"not_counted"`
+}
+
+// UncountedInput is an input file left out because its signature is missing
+// or does not match its content.
+type UncountedInput struct {
+	SourcePath      string `json:"source_path"`
+	SignatureStatus string `json:"signature_status"`
+}
+
+func newReceiptVerification(trust TrustAnchor) *ReceiptVerification {
+	verification := &ReceiptVerification{Statuses: map[string]int{}, NotCounted: []UncountedInput{}}
+	if len(trust.PublicKey) == ed25519.PublicKeySize {
+		verification.TrustAnchor = trust.Source
+	}
+	return verification
+}
+
+// note records one input and reports whether its content may be counted.
+func (v *ReceiptVerification) note(sourcePath, status string) bool {
+	v.Statuses[status]++
+	if status == SignatureUnsigned || status == SignatureInvalid {
+		v.NotCounted = append(v.NotCounted, UncountedInput{SourcePath: sourcePath, SignatureStatus: status})
+		return false
+	}
+	return true
+}
+
+// Counted is the number of inputs whose signature matches their content.
+func (v *ReceiptVerification) Counted() int {
+	total := 0
+	for status, count := range v.Statuses {
+		if status != SignatureUnsigned && status != SignatureInvalid {
+			total += count
+		}
+	}
+	return total
+}
+
+// Statements describes the checks in sentences fit for a report: what was
+// compared, which inputs were left out, and how far the signers are known.
+func (v *ReceiptVerification) Statements() []string {
+	inputs := v.Counted() + len(v.NotCounted)
+	signature := fmt.Sprintf("Receipt signatures were checked against the key each receipt names: %d of %d input files match.", v.Counted(), inputs)
+	if len(v.NotCounted) > 0 {
+		excluded := make([]string, 0, len(v.NotCounted))
+		for _, input := range v.NotCounted {
+			excluded = append(excluded, fmt.Sprintf("%s (%s)", input.SourcePath, input.SignatureStatus))
+		}
+		signature += " The others are not counted in this report: " + strings.Join(excluded, ", ") + "."
+	}
+	statements := []string{signature}
+	if v.TrustAnchor == "" {
+		return append(statements, "Signer trust was not checked: no trusted workstation public key was available. A receipt signed with any key matches its own signature, so the counted receipts show what their signers claim, not who signed them.")
+	}
+	trust := fmt.Sprintf("Signer trust was checked against %s: %d counted receipts are signed by that key, %d by another key.",
+		v.TrustAnchor, v.Statuses[SignatureTrustedKey], v.Statuses[SignatureUntrustedKey])
+	if retired := v.Statuses[SignatureRetiredKey]; retired > 0 {
+		trust += fmt.Sprintf(" %d are signed by the retired built-in key, which anyone can reproduce.", retired)
+	}
+	return append(statements, trust+" Only a receipt signed by the trusted key is evidence of what this workstation decided.")
+}
+
+// signatureStatus classifies one receipt from its own signature fields and
+// the caller's trust anchor.
+func signatureStatus(signature, signerKeyID string, matches bool, err error, trust TrustAnchor) string {
+	switch {
+	case strings.TrimSpace(signature) == "":
+		return SignatureUnsigned
+	case err != nil || !matches:
+		return SignatureInvalid
+	case signerKeyID == retiredObserveOnlySignerKeyID:
+		return SignatureRetiredKey
+	case len(trust.PublicKey) != ed25519.PublicKeySize:
+		return SignatureSignerNotChecked
+	case signerKeyID == ed25519SignerKeyID(trust.PublicKey):
+		return SignatureTrustedKey
+	}
+	return SignatureUntrustedKey
 }
 
 type OperatorRunSummary struct {
@@ -36,6 +151,10 @@ type OperatorRunSummary struct {
 	DeniedEffects     int       `json:"denied_effects,omitempty"`
 	ReceiptHash       string    `json:"receipt_hash"`
 	CreatedAt         time.Time `json:"created_at"`
+	// SignatureStatus is one of the Signature* values when the receipt was
+	// read from a file and checked; a row whose status is unsigned or
+	// invalid_signature shows what the file says and nothing more.
+	SignatureStatus string `json:"signature_status,omitempty"`
 }
 
 type DeniedTimelineItem struct {
@@ -75,26 +194,67 @@ type RecurringLoopItem struct {
 	Receipt    string    `json:"receipt"`
 }
 
-func BuildOperatorView(paths ...string) (OperatorView, error) {
+// BuildOperatorView reads receipts and checks each signature before using
+// the receipt. Every input gets a row in Runs with its signature status; the
+// denied timeline, memory queue and loop registry are built only from inputs
+// whose signature matches their content.
+func BuildOperatorView(trust TrustAnchor, paths ...string) (OperatorView, error) {
 	files, err := expandJSONInputs(paths)
 	if err != nil {
 		return OperatorView{}, err
 	}
-	view := OperatorView{}
+	view := OperatorView{Verification: newReceiptVerification(trust)}
 	for _, file := range files {
-		receipt, decision, err := loadWorkstationReceipt(file)
+		input, err := loadCheckedReceipt(file, trust)
 		if err != nil {
 			return OperatorView{}, err
 		}
-		if receipt != nil {
-			appendAgentRunReceipt(&view, receipt)
+		counted := view.Verification.note(file, input.status)
+		before := len(view.Runs)
+		detail := &view
+		if !counted {
+			// The row is kept so the operator sees the file; what it claims
+			// about denials, memory and loops is not carried into the queues.
+			detail = &OperatorView{}
 		}
-		if decision != nil {
-			appendDecisionReceipt(&view, decision)
+		if input.receipt != nil {
+			appendAgentRunReceipt(detail, input.receipt)
+		}
+		if input.decision != nil {
+			appendDecisionReceipt(detail, input.decision)
+		}
+		if !counted {
+			view.Runs = append(view.Runs, detail.Runs...)
+		}
+		for i := before; i < len(view.Runs); i++ {
+			view.Runs[i].SignatureStatus = input.status
 		}
 	}
 	sortOperatorView(&view)
 	return view, nil
+}
+
+// checkedReceipt is one input file with the result of its signature check.
+type checkedReceipt struct {
+	receipt  *contracts.AgentRunReceipt
+	decision *contracts.WorkstationPolicyDecisionReceipt
+	status   string
+}
+
+func loadCheckedReceipt(path string, trust TrustAnchor) (checkedReceipt, error) {
+	receipt, decision, err := loadWorkstationReceipt(path)
+	if err != nil {
+		return checkedReceipt{}, err
+	}
+	input := checkedReceipt{receipt: receipt, decision: decision}
+	if receipt != nil {
+		matches, err := VerifyReceiptSignature(receipt)
+		input.status = signatureStatus(receipt.Signature, receipt.SignerKeyID, matches, err, trust)
+	} else {
+		matches, err := VerifyDecisionReceiptSignature(decision)
+		input.status = signatureStatus(decision.Signature, decision.SignerKeyID, matches, err, trust)
+	}
+	return input, nil
 }
 
 func appendAgentRunReceipt(view *OperatorView, receipt *contracts.AgentRunReceipt) {

@@ -1,3 +1,5 @@
+// quantum_posture: the scope audit checks classical Ed25519 receipt
+// signatures; this command adds no post-quantum control.
 package main
 
 import (
@@ -28,8 +30,10 @@ func runAuditCmd(args []string, stdout, stderr io.Writer) int {
 func runAuditScopeCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("audit scope", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var input, out string
+	var input, out, dataDir, trustedPublicKeyFile string
 	var jsonOut, evidencePack bool
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
 	cmd.StringVar(&input, "input", "", "Comma-separated workstation receipt files or directories")
 	cmd.StringVar(&out, "out", "", "Write scope-audit.json, scope-audit.md, and evidence-refs.json to this directory")
 	cmd.BoolVar(&jsonOut, "json", false, "Print canonical scope audit JSON")
@@ -46,7 +50,12 @@ func runAuditScopeCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --evidence-pack requires --out")
 		return 2
 	}
-	report, err := workstation.BuildScopeAudit(paths...)
+	trust, err := receiptTrustAnchor(dataDir, trustedPublicKeyFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
+		return 1
+	}
+	report, err := workstation.BuildScopeAudit(trust, paths...)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: scope audit failed: %v\n", err)
 		return 1
@@ -75,6 +84,21 @@ func runAuditScopeCmd(args []string, stdout, stderr io.Writer) int {
 func printScopeAuditSummary(stdout io.Writer, report workstation.ScopeAuditReport, export workstation.ScopeAuditExport) {
 	_, _ = fmt.Fprintf(stdout, "%sAgent Scope Audit%s\n", ColorBold, ColorReset)
 	_, _ = fmt.Fprintf(stdout, "  inputs:        %d\n", report.Summary.InputFiles)
+	if verification := report.OperatorView.Verification; verification != nil {
+		_, _ = fmt.Fprintf(stdout, "  signatures:    %d match the key they name, %d do not and are not counted\n", verification.Counted(), len(verification.NotCounted))
+		for _, input := range verification.NotCounted {
+			_, _ = fmt.Fprintf(stdout, "    not counted: %s (%s)\n", input.SourcePath, input.SignatureStatus)
+		}
+		if verification.TrustAnchor == "" {
+			_, _ = fmt.Fprintln(stdout, "  signer trust:  not checked (no trusted workstation public key)")
+		} else {
+			_, _ = fmt.Fprintf(stdout, "  signer trust:  %s: %d by that key, %d by another key, %d by the retired built-in key\n",
+				verification.TrustAnchor,
+				verification.Statuses[workstation.SignatureTrustedKey],
+				verification.Statuses[workstation.SignatureUntrustedKey],
+				verification.Statuses[workstation.SignatureRetiredKey])
+		}
+	}
 	_, _ = fmt.Fprintf(stdout, "  actions:       %d\n", report.Summary.TotalActions)
 	_, _ = fmt.Fprintf(stdout, "  allowed:       %d\n", report.Summary.AllowedActions)
 	_, _ = fmt.Fprintf(stdout, "  denied:        %d\n", report.Summary.DeniedActions)

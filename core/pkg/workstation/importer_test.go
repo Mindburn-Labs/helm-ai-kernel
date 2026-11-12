@@ -438,7 +438,7 @@ func TestDecisionReceiptsOperatorViewEvidenceAndCertification(t *testing.T) {
 	dir := t.TempDir()
 	writeJSONFixture(t, filepath.Join(dir, "network.json"), network)
 	writeJSONFixture(t, filepath.Join(dir, "import.json"), imported)
-	view, err := BuildOperatorView(dir)
+	view, err := BuildOperatorView(TrustAnchor{}, dir)
 	if err != nil {
 		t.Fatalf("BuildOperatorView() error = %v", err)
 	}
@@ -488,7 +488,7 @@ func TestWorkstationSchemas(t *testing.T) {
 	scopeAuditDir := t.TempDir()
 	scopeAuditReceipt := filepath.Join(scopeAuditDir, "scope-audit-all-boundaries.json")
 	writeJSONFixture(t, scopeAuditReceipt, scopeAuditImport.Receipt)
-	scopeAuditReport, err := BuildScopeAudit(scopeAuditReceipt)
+	scopeAuditReport, err := BuildScopeAudit(TrustAnchor{}, scopeAuditReceipt)
 	if err != nil {
 		t.Fatalf("scope audit report: %v", err)
 	}

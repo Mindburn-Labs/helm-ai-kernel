@@ -83,6 +83,16 @@ var kernelDenyGuidance = map[string]struct {
 		Remediation: "Use an allowlisted destination or fetch the needed data through an already-approved channel; do not probe alternate routes to the same host.",
 		Escalation:  "Ask the human operator to allowlist this destination if the egress is genuinely required.",
 	},
+	"EGRESS_DESTINATION_UNDETERMINED": {
+		Explanation: "HELM could not tell from the call where it would connect, so the egress allowlist could not be applied and the call fails closed.",
+		Remediation: "Name every destination as a literal URL or host. Do not use variables, command substitution, config or input files, redirect-following, proxy or connection overrides, or a client HELM does not parse.",
+		Escalation:  "Ask the human operator to run the call if its destination genuinely cannot be written on the command line.",
+	},
+	"TRUST_MATERIAL_ACCESS_DENIED": {
+		Explanation: "The call reaches HELM's own signing key, trusted public key or policy profile, or runs the HELM command that signs with that key or installs the hook. That is closed to agent tools under every policy profile.",
+		Remediation: "Do not retry and do not look for another route to the same files or commands. Nothing in the task needs them; continue without them.",
+		Escalation:  "Ask the human operator if the signer, the policy profile or the hook installation needs attention; maintaining them is an operator action.",
+	},
 	"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE": {
 		Explanation: "The write target is outside the configured workspace roots; drafts are confined to the workspace scope.",
 		Remediation: "Retarget the write to a path inside the configured workspace roots.",

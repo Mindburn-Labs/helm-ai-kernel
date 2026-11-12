@@ -321,7 +321,7 @@ func TestHookPreToolComposesASTEffectFactsIntoBoundReceipts(t *testing.T) {
 			target: "/root/.aws/credentials", action: "secret_read", toolID: "secret.read",
 		},
 		contracts.EffectTypeWorkstationNetworkEgress: {
-			target: "https://api.github.com/repos/Mindburn-Labs/helm", action: "network_egress", toolID: "network.egress",
+			target: "https://api.github.com", action: "network_egress", toolID: "network.egress",
 		},
 	}
 	seen := make(map[string]bool)
@@ -370,7 +370,7 @@ func TestClassifyPreToolPayloadsRetainsCompoundShellPermission(t *testing.T) {
 	classifications := classifyPreToolPayloads(preToolPayload{
 		ToolName:  "Bash",
 		ToolInput: map[string]any{"command": command},
-	})
+	}, nil)
 	if len(classifications) != 2 {
 		t.Fatalf("classifications = %+v, want sensitive-write plus shell-operate", classifications)
 	}
@@ -391,12 +391,12 @@ func TestClassifyPreToolPayloadsRetainsGenericDecisionAcrossIndirection(t *testi
 	classifications := classifyPreToolPayloads(preToolPayload{
 		ToolName:  "Bash",
 		ToolInput: map[string]any{"command": command},
-	})
+	}, nil)
 	if len(classifications) != 2 {
 		t.Fatalf("classifications = %+v, want network egress plus generic shell decision", classifications)
 	}
 	first, second := classifications[0], classifications[1]
-	if first.Class != "network" || first.Target != "https://api.github.com/repos/Mindburn-Labs/helm" || first.Action != "network_egress" {
+	if first.Class != "network" || first.Target != "https://api.github.com" || first.Action != "network_egress" {
 		t.Fatalf("first classification = %+v, want static network fact", first)
 	}
 	if second.Class != "shell-operate" || second.Target != command || second.Action != "shell_operate" {

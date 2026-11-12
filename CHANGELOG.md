@@ -88,9 +88,75 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook
+  matcher for Claude Code, Hermes and the DeepSeek harness now also routes the
+  read and fetch tools (`Read`, `Grep`, `Glob`, `WebFetch` and their
+  equivalents); an existing install keeps its narrower matcher until then.
+  Under the built-in profile, which has no egress allowlist, a routed
+  `WebFetch` is denied like `curl` already was.
+- A tool the hook has no class for is no longer passed: it is decided as a
+  tool call and needs the `mcp.mutate` permission. The installed matchers do
+  not route such tools; a matcher you widened yourself now does get denials
+  for them under the built-in profile.
+- Hook network receipts bind the destination, not the URL: `request.target` is
+  the SHA-256 of `scheme://host[:port]`, one receipt per destination.
+- Under a profile with an egress allowlist, a command whose destinations
+  cannot all be read from its arguments is denied with
+  `EGRESS_DESTINATION_UNDETERMINED`. This includes `curl --location`, `wget`
+  without `--max-redirect=0` and `git` over HTTP without
+  `-c http.followRedirects=false`, because the client follows redirects to
+  hosts the hook cannot see.
+- `git clone`, `fetch`, `pull`, `push` and `ls-remote` with an address on the
+  command line, `git remote add` and `set-url`, and `git submodule update` are
+  now network egress. `git` with a remote named in git configuration is
+  unchanged.
+- A credential path given to any command, not only to `cat`, `grep` and the
+  other readers, is a secret read. `ls`, `test`, `chmod`, `rm` and similar
+  commands that do not show content are the exception.
+- `workstation enforce -- command` decides on the command's argv. `--class
+  network --target URL` with a command that does not connect to that host is
+  refused, as is a shell `--target` that is not the command line.
+- `workstation list`, `denied`, `memory`, `loops`, `operator` and
+  `audit scope` leave out a receipt that is unsigned or does not match its
+  signature, and `audit scope` fails when no input is left. The Go functions
+  `workstation.BuildOperatorView` and `workstation.BuildScopeAudit` take a
+  `workstation.TrustAnchor` as their first argument.
+- `shellscan` network facts carry the canonical destination in `Target`, and
+  a command with several destinations yields several facts.
+
+### Added
+
+- `shellscan.ClassifyArgvAt` classifies a command given as argv, and
+  `shellscan.PathGuard` with `shellscan.WithPathGuard` reports any reference
+  to paths the caller protects. The new `netdest` package parses a URL or host
+  into the endpoint a client connects to.
+- `workstation list`, the other operator commands and `audit scope` take
+  `--data-dir` and `--trusted-public-key-file`, print which signature checks
+  the input receipts went through, and give each run a `signature_status`.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- The hook's egress allowlist was decided on the first URL of a command only.
+  A second URL, a host hidden behind `user@`, and an option or variable that
+  moves the connection (`--connect-to`, `--resolve`, a proxy, `ssh -J`) now
+  each count as a destination, in the hook and in `workstation` policy
+  evaluation, which share one parser.
+- The hook did not protect its own signing material. A call that reaches the
+  key directory, a seed passed by flag, the policy profile, or the kernel
+  command that signs or installs the hook is now denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, through any tool.
+- `Read`, `WebFetch` and other tools that are not a shell were passed without
+  a decision when routed to the hook.
+- `workstation evidence` wrote outside its output directory when a receipt
+  carried a `receipt_id` with path separators. The identifier is now checked
+  and every pack file is written through the opened directory.
+- `workstation enforce` ran a command after deciding on the declared class and
+  target instead of the command.
+- `audit scope` and `workstation list` reported on receipts whose signature
+  was missing or did not match.
 
 ## [0.12.0]
 

@@ -2441,16 +2441,20 @@ func setupHookConfigPath(opts setupOptions) string {
 	}
 }
 
+// setupHookMatcher lists the tools a client sends to the hook. A tool left out
+// is never seen, so the list holds every tool that can read a file, write one,
+// run a command or fetch a URL. A search tool that takes no URL is left out:
+// the hook could name no destination for it and would only ever refuse it.
 func setupHookMatcher(target string) string {
 	switch target {
 	case "codex":
 		return "^(Bash|apply_patch|mcp__.*)$"
 	case "hermes":
-		return "^(terminal|write_file|patch|mcp_.*)$"
+		return "^(terminal|write_file|patch|read_file|search_files|web_extract|mcp_.*)$"
 	case "deepseek":
-		return "^(bash|write|edit|mcp_.*)$"
+		return "^(bash|write|edit|read|grep|glob|webfetch|mcp_.*)$"
 	default:
-		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*)$"
+		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|mcp__.*)$"
 	}
 }
 
@@ -2499,6 +2503,12 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 				}
 				if hookCommandKey(hookCommandFromAny(h)) == key {
 					hookObj["command"] = command
+					// An entry that holds only this hook takes the current
+					// matcher too, so a re-install routes the tools a newer
+					// release classifies. A shared entry is the user's own.
+					if len(hookItems) == 1 {
+						obj["matcher"] = matcher
+					}
 				}
 			}
 		}

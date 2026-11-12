@@ -17,6 +17,8 @@ import (
 	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -40,30 +42,67 @@ func runWorkstationDecisionCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
-	receipt, out, jsonOut, remaining, err := buildEnforceFromFlags(args, stderr)
+	flags, err := parseEnforceFlags(args, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if _, err := writeDecisionReceipt(out, "", receipt); err != nil {
+	effects, refusal := enforceEffects(flags)
+	receipts, err := decideEnforceEffects(flags, effects)
+	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 1
+		return 2
 	}
-	if jsonOut {
-		data, _ := canonicalize.JCS(receipt)
-		_, _ = fmt.Fprintln(stdout, string(data))
-	} else {
-		printDecisionSummary(stdout, receipt)
+	// The receipt that settles the outcome: the first denial, else the first
+	// decision. With several effects the rest go to --receipt-dir.
+	var decisive *contracts.WorkstationPolicyDecisionReceipt
+	denied := false
+	for _, receipt := range receipts {
+		if receipt.Verdict == contracts.WorkstationVerdictDeny && !denied {
+			decisive, denied = receipt, true
+		}
 	}
-	if receipt.Verdict == contracts.WorkstationVerdictDeny {
+	if decisive == nil && len(receipts) > 0 {
+		decisive = receipts[0]
+	}
+	if denied || refusal == "" {
+		for _, receipt := range receipts {
+			out := ""
+			if receipt == decisive {
+				out = flags.out
+			}
+			if _, err := writeDecisionReceipt(out, flags.receiptDir, receipt); err != nil {
+				_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+				return 1
+			}
+		}
+		if decisive != nil {
+			if flags.jsonOut {
+				data, _ := canonicalize.JCS(decisive)
+				_, _ = fmt.Fprintln(stdout, string(data))
+			} else {
+				printDecisionSummary(stdout, decisive)
+			}
+		}
+	}
+	if denied {
 		return cliui.ExitDenied
 	}
+	if refusal != "" {
+		// Nothing was denied, but nothing decided covers the command either:
+		// an ALLOW for some other effect must not be left on disk for it.
+		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command: %s\n", refusal)
+		return cliui.ExitDenied
+	}
+	remaining := flags.argv
 	if len(remaining) == 0 {
 		return 0
 	}
-	if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
-		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
-		return cliui.ExitDenied
+	for _, receipt := range receipts {
+		if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
+			_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
+			return cliui.ExitDenied
+		}
 	}
 	cmd := exec.CommandContext(context.Background(), remaining[0], remaining[1:]...)
 	cmd.Stdout = stdout
@@ -186,10 +225,12 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 func runWorkstationOperatorCmd(section string, args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation "+section, flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var input string
+	var input, dataDir, trustedPublicKeyFile string
 	var jsonOut bool
 	cmd.StringVar(&input, "input", "", "Comma-separated receipt files or directories")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
@@ -198,7 +239,12 @@ func runWorkstationOperatorCmd(section string, args []string, stdout, stderr io.
 		_, _ = fmt.Fprintln(stderr, "Error: --input is required")
 		return 2
 	}
-	view, err := workstation.BuildOperatorView(paths...)
+	trust, err := receiptTrustAnchor(dataDir, trustedPublicKeyFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
+		return 1
+	}
+	view, err := workstation.BuildOperatorView(trust, paths...)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -314,39 +360,155 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	return receipt, out, receiptDir, jsonOut, nil
 }
 
-func buildEnforceFromFlags(args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, bool, []string, error) {
+type enforceFlags struct {
+	class, target, out, receiptDir         string
+	policyPath, seedHex, seedFile, dataDir string
+	jsonOut                                bool
+	// argv is the command to run after the decision; empty for a decision
+	// about an effect the caller performs itself.
+	argv []string
+}
+
+func parseEnforceFlags(args []string, stderr io.Writer) (enforceFlags, error) {
 	cmd := flag.NewFlagSet("workstation enforce", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var class, target, out, receiptDir, policyPath, seedHex, seedFile, dataDir string
-	var jsonOut bool
-	cmd.StringVar(&class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
-	cmd.StringVar(&target, "target", "", "Effect target")
-	cmd.StringVar(&policyPath, "policy-profile", "", "Policy profile JSON path")
-	cmd.StringVar(&out, "out", "", "Write decision receipt JSON")
-	cmd.StringVar(&receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
-	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
-	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
-	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
-	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	var flags enforceFlags
+	cmd.StringVar(&flags.class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
+	cmd.StringVar(&flags.target, "target", "", "Effect target")
+	cmd.StringVar(&flags.policyPath, "policy-profile", "", "Policy profile JSON path")
+	cmd.StringVar(&flags.out, "out", "", "Write decision receipt JSON")
+	cmd.StringVar(&flags.receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
+	cmd.StringVar(&flags.seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
+	cmd.StringVar(&flags.seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&flags.dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.BoolVar(&flags.jsonOut, "json", false, "Print JSON")
 	if err := cmd.Parse(args); err != nil {
-		return nil, "", false, nil, err
+		return enforceFlags{}, err
 	}
-	remaining := cmd.Args()
-	decisionArgs := []string{"--class", class, "--target", firstNonEmptyString(target, strings.Join(remaining, " ")), "--policy-profile", policyPath, "--out", out, "--receipt-dir", receiptDir, "--data-dir", dataDir}
-	if seedHex != "" {
-		decisionArgs = append(decisionArgs, "--signing-seed-hex", seedHex)
+	flags.argv = cmd.Args()
+	return flags, nil
+}
+
+// enforceEffects lists every effect that must be allowed before the wrapped
+// command runs. With no command it is the declared effect alone. With a
+// command, the effects are read from the argv that will be executed: the
+// declared class and target can add a requirement or name what the command
+// is expected to do, but they never stand in for what the argv shows. refusal
+// is set when the declaration cannot be matched to the command at all.
+func enforceEffects(flags enforceFlags) (effects []hookClassification, refusal string) {
+	declared := hookClassification{ShouldDecide: true, Class: flags.class, Target: flags.target}
+	if len(flags.argv) == 0 {
+		return []hookClassification{declared}, ""
 	}
-	if seedFile != "" {
-		decisionArgs = append(decisionArgs, "--signing-seed-file", seedFile)
+	dataDir := flags.dataDir
+	if abs, err := filepath.Abs(dataDir); err == nil && strings.TrimSpace(dataDir) != "" {
+		dataDir = abs
 	}
-	if jsonOut {
-		decisionArgs = append(decisionArgs, "--json")
+	cwd, _ := os.Getwd()
+	command := strings.Join(flags.argv, " ")
+	scan := shellscan.ClassifyArgvAt(flags.argv, cwd, shellscan.WithPathGuard(workstationPathGuard(dataDir, flags.seedFile, flags.policyPath)))
+	derived := shellClassifications("workstation.enforce", command, scan)
+	if scan.ProtectedPath != "" {
+		return derived, ""
 	}
-	receipt, receiptOut, decisionReceiptDir, receiptJSON, err := buildDecisionFromFlags("workstation enforce", decisionArgs, io.Discard)
-	if receiptOut == "" && decisionReceiptDir != "" && receipt != nil {
-		receiptOut = filepath.Join(decisionReceiptDir, receipt.DecisionID+".json")
+	effectType, _, _, _ := workstation.EffectDefaults(flags.class)
+	switch effectType {
+	case contracts.EffectTypeWorkstationNetworkEgress:
+		// The destinations come from the argv; --target only says which one
+		// the caller expects to find there.
+		reached := map[string]bool{}
+		for _, effect := range derived {
+			if effect.Class == "network" {
+				reached[effect.Target] = true
+			}
+		}
+		switch {
+		case len(reached) == 0:
+			refusal = "cannot confirm where it connects: its arguments name no network destination"
+		case strings.TrimSpace(flags.target) != "":
+			expected, err := netdest.Parse(strings.TrimSpace(flags.target))
+			if err != nil {
+				refusal = "the declared --target is not a network destination"
+			} else if !reached[expected.String()] {
+				refusal = "cannot confirm that it connects to the declared target " + expected.String()
+			}
+		}
+		return derived, refusal
+	case contracts.EffectTypeWorkstationShellCommand:
+		if strings.TrimSpace(flags.target) != "" && flags.target != command {
+			refusal = "the declared --target does not match the command"
+		}
+		declared.Target = command
+	default:
+		declared.Target = firstNonEmptyString(flags.target, command)
 	}
-	return receipt, receiptOut, receiptJSON, remaining, err
+	effects = []hookClassification{declared}
+	for _, effect := range derived {
+		if effect.Class == "shell-operate" && effect.Target == declared.Target && effectType == contracts.EffectTypeWorkstationShellCommand && strings.Contains(flags.class, "operate") {
+			continue // the declared decision already is this one
+		}
+		effects = append(effects, effect)
+	}
+	return effects, refusal
+}
+
+// decideEnforceEffects signs one decision per effect. Every receipt for a
+// wrapped command binds the argv, so a receipt cannot be shown for a command
+// other than the one it was decided for.
+func decideEnforceEffects(flags enforceFlags, effects []hookClassification) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
+	if len(effects) == 0 {
+		return nil, nil
+	}
+	profile, err := workstation.LoadPolicyProfileFile(flags.policyPath)
+	if err != nil {
+		return nil, err
+	}
+	seed, err := resolveWorkstationSigningSeed(flags.dataDir, flags.seedHex, flags.seedFile)
+	if err != nil {
+		return nil, err
+	}
+	var argvBinding map[string]string
+	if len(flags.argv) > 0 {
+		canonicalArgv, err := canonicalize.JCS(flags.argv)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize argv: %w", err)
+		}
+		argvBinding = map[string]string{
+			"argv_binding": "jcs-sha256",
+			"argv_sha256":  canonicalize.ComputeArtifactHash(canonicalArgv),
+		}
+	}
+	receipts := make([]*contracts.WorkstationPolicyDecisionReceipt, 0, len(effects))
+	for _, effect := range effects {
+		effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(effect.Class)
+		req := contracts.WorkstationDecisionRequest{
+			RunID:        "workstation-decision",
+			ActorID:      "agent.local",
+			WorkspaceID:  "local-workstation",
+			AgentSurface: "workstation-cli",
+			ToolID:       firstNonEmptyString(effect.ToolID, defaultTool),
+			Action:       firstNonEmptyString(effect.Action, defaultAction),
+			EffectType:   effectType,
+			EffectMode:   effectMode,
+			Target:       effect.Target,
+			OccurredAt:   time.Unix(0, 0).UTC(),
+		}
+		if len(effect.Metadata)+len(argvBinding) > 0 {
+			req.Metadata = map[string]string{}
+			for key, value := range effect.Metadata {
+				req.Metadata[key] = value
+			}
+			for key, value := range argvBinding {
+				req.Metadata[key] = value
+			}
+		}
+		receipt, err := workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed, TrustMaterial: effect.TrustMaterial})
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, nil
 }
 
 func writeDecisionReceipt(path, receiptDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
@@ -381,12 +543,34 @@ func printDecisionSummary(stdout io.Writer, receipt *contracts.WorkstationPolicy
 	_, _ = fmt.Fprintf(stdout, "  hash:     %s\n", receipt.ReceiptHash)
 }
 
+// printReceiptVerification says, ahead of any figure taken from receipts,
+// which signature checks those receipts went through.
+func printReceiptVerification(stdout io.Writer, verification *workstation.ReceiptVerification) {
+	if verification == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "Signatures: %d input files match the key they name, %d do not and are not counted\n", verification.Counted(), len(verification.NotCounted))
+	for _, input := range verification.NotCounted {
+		_, _ = fmt.Fprintf(stdout, "  not counted: %s (%s)\n", input.SourcePath, input.SignatureStatus)
+	}
+	if verification.TrustAnchor == "" {
+		_, _ = fmt.Fprintln(stdout, "Signer trust: not checked (no trusted workstation public key; pass --trusted-public-key-file)")
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "Signer trust: checked against %s: %d by that key, %d by another key, %d by the retired built-in key\n",
+		verification.TrustAnchor,
+		verification.Statuses[workstation.SignatureTrustedKey],
+		verification.Statuses[workstation.SignatureUntrustedKey],
+		verification.Statuses[workstation.SignatureRetiredKey])
+}
+
 func printOperatorView(stdout io.Writer, section string, view workstation.OperatorView) {
 	_, _ = fmt.Fprintf(stdout, "%sWorkstation Operator View%s\n", ColorBold, ColorReset)
+	printReceiptVerification(stdout, view.Verification)
 	if section == "all" || section == "runs" {
 		_, _ = fmt.Fprintf(stdout, "Runs: %d\n", len(view.Runs))
 		for _, run := range view.Runs {
-			_, _ = fmt.Fprintf(stdout, "  %s %s denied=%d memory=%d loops=%d\n", firstNonEmptyString(run.RunID, run.DecisionID), run.PolicyProfile, run.DeniedEffects, run.MemoryEffects, run.RecurringLoops)
+			_, _ = fmt.Fprintf(stdout, "  %s %s denied=%d memory=%d loops=%d %s\n", firstNonEmptyString(run.RunID, run.DecisionID), run.PolicyProfile, run.DeniedEffects, run.MemoryEffects, run.RecurringLoops, run.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "denied" {

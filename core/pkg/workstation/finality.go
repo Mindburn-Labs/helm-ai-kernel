@@ -42,6 +42,10 @@ var denialCatalog = map[string]denialClass{
 	"EGRESS_DESTINATION_NOT_ALLOWED":       {contracts.DenialInstanceMembership, discloseNothing},
 	"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE": {contracts.DenialInstanceMembership, discloseNothing},
 
+	// HELM's own signing and trust material is closed to every agent tool
+	// under every profile. The class lesson applies: stop attempting it.
+	"TRUST_MATERIAL_ACCESS_DENIED": {contracts.DenialClassForbidden, discloseNothing},
+
 	// Not membership: the refused thing is a policy-named category of action
 	// (writing a given memory class) from a fixed public vocabulary, so the
 	// class lesson applies — stop attempting that category.
@@ -49,6 +53,11 @@ var denialCatalog = map[string]denialClass{
 
 	// A bound was exceeded and the agent can retry under it.
 	"MEMORY_TTL_EXCEEDS_POLICY": {contracts.DenialInstanceParameter, discloseScalarBound},
+
+	// The destination was not something the allowlist could be asked about: a
+	// computed address, an option that reads it from elsewhere. Nothing about
+	// the allowlist is disclosed; the agent can retry with a named host.
+	"EGRESS_DESTINATION_UNDETERMINED": {contracts.DenialInstanceParameter, discloseNothing},
 
 	// A required field was absent. The reason code already names it, so there
 	// is nothing a counterfactual would add.

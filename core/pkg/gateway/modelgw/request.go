@@ -39,7 +39,15 @@ type call struct {
 	MayWriteCache bool
 	// DropChatUsage: strip the usage-only chunk the gateway asked for.
 	DropChatUsage bool
+	// ExtraInputTokens is what the provider can bill as input beyond one
+	// token per request byte: the floors of inline images and of the tool
+	// definitions the provider adds (bound.go).
+	ExtraInputTokens int64
 }
+
+// inputBound is the input-token bound the quote prices for body: one token per
+// byte plus the floors of what bytes do not bound.
+func (c *call) inputBound(body []byte) int64 { return int64(len(body)) + c.ExtraInputTokens }
 
 // field is one member of a JSON object, in order, with its value untouched.
 type field struct {
@@ -226,8 +234,9 @@ func intOf(raw json.RawMessage) (int64, bool) {
 
 // inspect turns a request body into a call, or refuses it. It resolves the
 // route, refuses what the provider would execute on its own account (hosted
-// tools and server-side background runs), and clamps or injects the maximum
-// output tokens: the bound every quote rests on.
+// tools and server-side background runs) and anything else the quote cannot
+// see (bound.go), and clamps or injects the maximum output tokens: the bound
+// every quote rests on.
 func inspect(cfg *Config, api string, body []byte) (*call, *apiError) {
 	fields, err := parseObject(body)
 	if err != nil {
@@ -277,6 +286,11 @@ func inspect(cfg *Config, api string, body []byte) (*call, *apiError) {
 			return nil, refusal
 		}
 		return nil, refuse(http.StatusBadRequest, kindInvalidRequest, "invalid_request", err.Error())
+	}
+	// What the quote cannot see is refused; what bytes do not bound gets its
+	// floor (helm-tracker#313, audit H6).
+	if refusal := boundRequest(c, fields); refusal != nil {
+		return nil, refusal
 	}
 	if len(edit) > 0 {
 		c.Body = rebuild(fields, edit, add)
@@ -401,7 +415,7 @@ func (c *call) fitDefaultOutput(remaining int64) {
 	}
 	candidate := func(tokens int64) ([]byte, bool) {
 		body := rebuild(fields, map[string]json.RawMessage{name: number(tokens)}, nil)
-		quote, err := c.Route.Quote(int64(len(body)), tokens, c.MayWriteCache)
+		quote, err := c.Route.Quote(c.inputBound(body), tokens, c.MayWriteCache)
 		return body, err == nil && quote <= remaining
 	}
 	if _, fits := candidate(c.MaxOutputTokens); fits {

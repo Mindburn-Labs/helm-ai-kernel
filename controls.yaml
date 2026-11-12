@@ -272,6 +272,70 @@ removal_proofs:
     replace: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); false && ok {\n"
     tests:
       - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/engine_lifecycle.go
+    find: "\t\tdecision = effectiveEnvelope(res.env, consumed).EvaluateSpend("
+    replace: "\t\tdecision = effectiveEnvelope(res.env, 0).EvaluateSpend("
+    tests:
+      - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/envelope.go
+    find: "\t\tspend.used = addSaturating(spend.used, debitCents)\n\t\treturn\n"
+    replace: "\t\t_ = debitCents\n\t\treturn\n"
+    tests:
+      - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
+      - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
+      - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
+  - control: CTL-016
+    file: core/pkg/api/governed_gateway.go
+    find: "\tif derr != nil && errors.Is(derr, ErrDispatchNotSent) {\n"
+    replace: "\tif derr != nil {\n"
+    tests:
+      - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
+      - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
+  - control: CTL-016
+    file: core/pkg/spendproxy/dispatch.go
+    find: "\t\tif !connected.Load() {\n"
+    replace: "\t\tif true {\n"
+    tests:
+      - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
+  - control: CTL-016
+    file: core/pkg/spendproxy/server.go
+    find: "\tpending, err := RestorePendingDispatches(records, engine, envelopes)\n"
+    replace: "\tpending, err := RestorePendingDispatches(nil, engine, envelopes)\n"
+    tests:
+      - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
+  - control: CTL-016
+    file: core/pkg/api/governed_gateway.go
+    find: "\tif err := refuseUngovernedMembers(fields); err != nil {\n"
+    replace: "\tif err := refuseUngovernedMembers(fields); false && err != nil {\n"
+    tests:
+      - "core/pkg/api.TestGatewayRefusesRoutingMembers"
+      - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
+  - control: CTL-016
+    file: core/pkg/spendproxy/dispatch.go
+    find: "\tif responded := stringOrEmpty(parsed.Model); !sameModel(responded, quote.SelectedModelID) {\n"
+    replace: "\tif responded := stringOrEmpty(parsed.Model); false && !sameModel(responded, quote.SelectedModelID) {\n"
+    tests:
+      - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/engine.go
+    find: "\tif req.PrincipalID != \"\" && req.PrincipalID != env.PrincipalID {\n"
+    replace: "\tif false && req.PrincipalID != \"\" && req.PrincipalID != env.PrincipalID {\n"
+    tests:
+      - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/engine.go
+    find: "\tquote.PrincipalID = env.PrincipalID\n"
+    replace: "\tquote.PrincipalID = req.PrincipalID\n"
+    tests:
+      - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); err != nil {\n"
+    replace: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); false && err != nil {\n"
+    tests:
+      - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
   - control: CTL-018
     file: core/pkg/guardian/guardian.go
     find: "\treturn contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)\n}\n"
@@ -1329,6 +1393,30 @@ removal_proofs:
     replace: "\tif false && (rpc == \"\") != (wallets == nil) {\n"
     tests:
       - "core/pkg/gateway/runtime.TestTONActonIsOptionalAndAllOrNothing"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/bound.go
+    find: "\t\tif !allowed[f.Key] {\n"
+    replace: "\t\tif false && !allowed[f.Key] {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/request.go
+    find: "\tif refusal := boundRequest(c, fields); refusal != nil {\n"
+    replace: "\tif refusal := boundRequest(c, fields); false && refusal != nil {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/handler.go
+    find: "\theld, err := p.route.Quote(p.call.inputBound(p.call.Body), p.call.MaxOutputTokens, p.call.MayWriteCache)\n"
+    replace: "\theld, err := p.route.Quote(int64(len(p.call.Body)), p.call.MaxOutputTokens, p.call.MayWriteCache)\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/bound.go
+    find: "\t\t\tif beta = strings.TrimSpace(beta); strings.HasPrefix(beta, \"context-1m\") {\n"
+    replace: "\t\t\tif beta = strings.TrimSpace(beta); false && strings.HasPrefix(beta, \"context-1m\") {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
 
 controls:
 
@@ -2674,28 +2762,90 @@ controls:
     claim: >-
       In `helm-ai-kernel spend-proxy`, an inference request is dispatched only
       after an allowing quote, and a replayed idempotency key never reaches the
-      provider.
+      provider. The quote's ceiling is reserved against the spend envelope's
+      max_amount_cents for its period and the balance in one step, so
+      concurrent requests cannot both take the last cents; settlement moves the
+      reservation to used, and the budget-verdict receipt (OK_WITHIN_ENVELOPE)
+      exists only when that reservation succeeded. A dispatch that may have
+      reached the provider is debited at its hold and its key is spent; only an
+      error before the upstream connection opened releases it. A dispatch
+      journalled before its provider call and never settled is held again on
+      start. Routing members (models, provider, plugins, route) and n other
+      than 1 are refused; an answer from another model is debited at the dearer
+      price. The principal in a spend receipt is the envelope's, never a header.
+      `spend-proxy export` reports a signature verified only when it checked it
+      against a --public-key from outside the receipts directory (helm-tracker#313).
     status: enforced
     entry_points:
       - "core/pkg/api.GovernedGateway.handleInference"
       - "core/pkg/inferencegateway.Engine.Quote"
+      - "core/pkg/inferencegateway.Engine.ReserveForDispatch"
+      - "core/pkg/inferencegateway.Engine.SettleAtHold"
+      - "core/pkg/inferencegateway.Engine.RestorePendingDispatch"
+      - "core/pkg/spendproxy.Upstream.Dispatch"
+      - "core/pkg/spendproxy.RestorePendingDispatches"
+      - "core/pkg/spendproxy.ExportEvidencePacks"
     config:
       - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
+      - "The spend-proxy config's envelopes (max_amount_cents per UTC day, per_request_max_cents, principal_id) and request_defaults.principal_id, which must be the default envelope's."
+      - "spend-proxy export --public-key: the issuer's Ed25519 public key, printed at start and served as signing_public_key by /helm/spend/health."
     protected_operations:
       - "Inference requests through the spend proxy."
+      - "Reserving, settling and releasing a dispatch against its envelope and the balance."
+      - "Restarting the spend proxy on an existing receipt log."
+      - "Exporting spend EvidencePacks with signature verification."
     bypass_assumptions:
-      - "The ledger is a JSONL file, not Postgres (R5)."
-      - "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration."
+      - "The ledger is a JSONL file, not Postgres (R5); envelope spend is rebuilt from it on start."
+      - "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration. The principal comes from the envelope; the workspace header is attribution only."
       - "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
+      - "The spend proxy's input estimate is the request size divided by four; settlement debits the actual cost above the hold (DEBIT_ACTUAL) and records the overage, so an envelope can be exceeded by one request's overage."
+      - "A held dispatch is reconciled by no command yet: its cents stay reserved until the log carries its settlement or release."
+      - "Without --public-key export checks no signature. A receipt-log writer can delete lines; the log is not a hash chain."
     tests:
       allowed:
         - "core/pkg/spendproxy.TestGovernedRouteEndToEnd"
+        - "core/pkg/spendproxy.TestExportEvidencePacksOfflineVerifiable"
+        - "core/pkg/spendproxy.TestDispatchThatNeverLeftReleasesTheHold"
+        - "core/pkg/api.TestGatewayDispatchNeverSentReleases"
+        - "core/pkg/api.TestGatewayAnswerWithoutUsageSettlesAtTheHold"
+        - "core/pkg/inferencegateway.TestReleaseFreesTheEnvelopeAndTheNextPeriodResets"
+        - "core/pkg/inferencegateway.TestSettleAtHoldDebitsTheCeiling"
       forbidden:
         - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
         - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
         - "core/pkg/spendproxy.TestUnknownEnvelopeFailsClosed"
+        - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
+        - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
+        - "core/pkg/spendproxy.TestClientThatLeavesDoesNotFreeTheHold"
+        - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
+        - "core/pkg/spendproxy.TestRestoreHoldsAJournalAfterARelease"
+        - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
+        - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
+        - "core/pkg/spendproxy.TestHeaderCannotAssertTheSealedPrincipal"
+        - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
+        - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
+        - "core/pkg/inferencegateway.TestConcurrentRequestsCannotBothTakeTheLastCents"
+        - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
+        - "core/pkg/inferencegateway.TestRestoredPendingDispatchHoldsTheEnvelope"
+        - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+        - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
+        - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
+        - "core/pkg/api.TestGatewayRefusesRoutingMembers"
+        - "core/cmd/helm-ai-kernel.TestSpendProxyExportRefusesAMalformedPublicKey"
       removal:
         - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
+        - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
+        - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
+        - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
+        - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
+        - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
+        - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
+        - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
+        - "core/pkg/api.TestGatewayRefusesRoutingMembers"
+        - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
+        - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
+        - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+        - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
       bypass: []
 
   - id: CTL-017
@@ -4832,3 +4982,47 @@ controls:
         - "core/pkg/connectors/sandbox.TestValidIDRefusesWhatCouldEscapeAPathOrACommandLine"
         - "core/pkg/connectors/sandbox/e2b.TestGatewayFindFiltersOnTheClientAndNeverTruncates"
         - "core/pkg/connectors/sandbox/claudemanaged.TestRemoteRunnerDoesNotFollowRedirects"
+
+  - id: CTL-066
+    title: "A model call's hold bounds what the provider can bill"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway's model gateway quotes a call at one token per request byte
+      plus a token floor for each inline image and each tool definition the
+      provider adds, and the clamped output maximum at the route's price, and
+      refuses with 400, before any attempt exists, every request form whose
+      bill that quote does not bound: a member, input item, content part,
+      block or media source outside a closed list per API (so a stored
+      conversation, a stored prompt, store true, remote or uploaded media,
+      PDFs, audio, predicted outputs, routing members, priority tiers and
+      Anthropic's speed and inference_geo), and an anthropic-beta of
+      context-1m (helm-tracker#313).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/modelgw.inspect"
+      - "core/pkg/gateway/modelgw.boundRequest"
+      - "core/pkg/gateway/modelgw.anthropicBetaRefusal"
+      - "core/pkg/gateway/modelgw.Route.Quote"
+    config:
+      - "HELM_GATEWAY_MODEL_ROUTES_FILE: each route's price and output maximum."
+    protected_operations:
+      - "Every model call on helm-gateway serve's /v1/responses, /v1/chat/completions and /v1/messages, on the main and the worker listener."
+    bypass_assumptions:
+      - "Bytes bound tokens because the providers' tokenizers emit at most one token per byte."
+      - "The image and tool floors are at or above the costs the providers document (docs/architecture/model-gateway.md); a provider that bills more for an image or a hidden tool definition than documented is not bounded."
+      - "The provider honours the output maximum, and the route's price is the provider's highest for a request of max_request_bytes; a provider that charges more above a context length, or an OpenAI project whose default service tier is priority, bills above the quote."
+      - "Headers other than an anthropic-beta of context-1m are forwarded unchecked."
+      - "A provider that bills above the hold anyway is recorded: the confirmed amount stays on the budget counter and billable is capped at the hold."
+    tests:
+      allowed:
+        - "core/pkg/gateway/modelgw.TestRequestsTheQuoteUnderstandsStillPass"
+        - "core/pkg/gateway/modelgw.TestHiddenToolDefinitionsAreInTheHold"
+      forbidden:
+        - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+        - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+        - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+      removal:
+        - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+        - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+        - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+      bypass: []

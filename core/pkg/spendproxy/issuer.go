@@ -60,9 +60,8 @@ func NewIssuer(secret string) (issuer *Issuer, derivedFromPassphrase bool, err e
 		priv = ed25519.NewKeyFromSeed(seed)
 	}
 	pub := priv.Public().(ed25519.PublicKey)
-	sum := sha256.Sum256(pub)
 	return &Issuer{
-		keyID: "spend-proxy-" + hex.EncodeToString(sum[:6]),
+		keyID: IssuerKeyID(pub),
 		priv:  priv,
 		pub:   pub,
 	}, derivedFromPassphrase, nil
@@ -233,17 +232,4 @@ func (t *TrustedKeys) PublicKeyFor(keyID string) (ed25519.PublicKey, bool) {
 		return nil, false
 	}
 	return ed25519.PublicKey(decoded), true
-}
-
-// Verify checks a receipt's Ed25519 signature against the registered key for
-// its SignatureKeyID. Unknown key ids fail closed.
-func (t *TrustedKeys) Verify(r *economic.BudgetVerdictReceipt) error {
-	if r == nil {
-		return errors.New("spendproxy: nil budget verdict receipt")
-	}
-	pub, ok := t.PublicKeyFor(r.SignatureKeyID)
-	if !ok {
-		return fmt.Errorf("spendproxy: signature key %q is not in the trusted-key registry", r.SignatureKeyID)
-	}
-	return r.VerifySignature(pub)
 }

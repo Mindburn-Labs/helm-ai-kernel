@@ -78,12 +78,32 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
 
 Every chat request must set `max_tokens` (or `max_completion_tokens`), and
 `/v1/responses` must set `max_output_tokens`; requests without one get 400.
-The proxy lowers the ceiling to what the envelope's per-request limit can pay
-for, reserves the quoted amount against the balance, and forwards the ceiling
-to the provider. Output beyond the quote is still debited at actual cost and
-logged as an `ALERT`. An `X-HELM-Idempotency-Key` that already settled is never
-sent upstream again: an identical retry gets the original response while the
-proxy still holds it, and any other reuse (or a replay after a restart) gets 409.
+`n` must be 1, and the routing members `models`, `provider`, `plugins` and
+`route` are refused with 400: the quote prices one completion of one model.
+The proxy lowers the ceiling to what the envelope can still pay for, reserves
+the quoted amount against the envelope's `max_amount_cents` for the day and the
+balance in one step, and forwards the ceiling to the provider; a request the
+envelope can no longer cover gets 403 `ERR_BALANCE_INSUFFICIENT`. Output beyond
+the quote is still debited at actual cost and logged as an `ALERT`, and an
+answer from another model than the quoted one is debited at the dearer of the
+two prices, with `response_model` recorded on its usage receipt.
+
+A dispatch that may have reached the provider is never released: a transport
+error after the connection opened, a timeout, an error status, a body cut after
+the status line or usage the proxy cannot read is debited at its whole hold
+(`settled_at_hold` on the usage receipt). A client that disconnects does not
+cancel the provider call; it settles on what the provider reports. Only a
+failure before any request byte left the proxy frees the hold. A dispatch
+journalled before its provider call and never settled, because the process
+stopped, is held again on the next start, pending reconciliation.
+
+An `X-HELM-Idempotency-Key` that already settled, or is held, is never sent
+upstream again: an identical retry gets the original response while the proxy
+still holds it, and any other reuse (or a replay after a restart) gets 409.
+
+The principal a spend receipt names is the envelope's `principal_id`. An
+`X-HELM-Principal` header may repeat it; a request that names another principal
+is refused with 403.
 
 Streaming (`"stream": true`) is supported on `/v1/chat/completions`; the SSE
 bytes pass through verbatim and settlement uses the final usage chunk.
@@ -98,12 +118,20 @@ EvidencePacks:
 ```bash
 helm-ai-kernel spend-proxy export \
   --receipts-dir ./helm-spend-receipts \
-  --out ./helm-spend-evidence
+  --out ./helm-spend-evidence \
+  --public-key ed25519:<hex printed by spend-proxy at start>
 ```
 
 Each pack re-verifies offline (canonical content hashes, financial invariants,
-prompt-body-off-graph) and the BudgetVerdict signature is checked against the
-trusted-key registry at `<receipts-dir>/trusted_keys.json`.
+prompt-body-off-graph). With `--public-key`, export also verifies every
+signature of each intent against that key: the detached signature of each
+receipt line and the BudgetVerdict seal, listed in `signatures_checked`; an
+unsigned line, another key or a signature that does not verify fails the
+export. Take the key from the proxy's start banner or its
+`/helm/spend/health` (`signing_public_key`), not from the receipts directory:
+`<receipts-dir>/trusted_keys.json` is written by the process whose receipts it
+would vouch for. Without `--public-key` no signature is checked and the summary
+says so (`signature_verified: false`).
 
 ## Savings EvidencePack (HELM-614 methodology)
 

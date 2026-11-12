@@ -252,7 +252,7 @@ func TestEngine_DispatchReserveSettle(t *testing.T) {
 	quote := q.Quote
 	openBal := h.ledger.BalanceCents()
 
-	res, err := h.engine.ReserveForDispatch(quote)
+	res, err := h.engine.ReserveForDispatch(q)
 	if err != nil {
 		t.Fatalf("reserve for dispatch: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestEngine_FailedRunReleasesReservation(t *testing.T) {
 	}
 	openBal := h.ledger.BalanceCents()
 
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	if h.ledger.HoldCents() == 0 {

@@ -34,7 +34,7 @@ func legacyModelInsert(ctx context.Context, e *env, caller admission.Caller, c *
 	if err != nil {
 		return err
 	}
-	amount, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	amount, err := c.Route.Quote(c.inputBound(c.Body), c.MaxOutputTokens, c.MayWriteCache)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func TestPostgresDefaultRetryRecognizesLegacyInFlightAndSettledKeys(t *testing.T
 	args, err := json.Marshal(modelArgs{Schema: "model.inference.v1", API: c.API, Route: c.Route.ID,
 		RequestSHA256: forwardDigest, InputBytes: int64(len(c.Body)), MaxOutputTokens: c.MaxOutputTokens, Stream: c.Stream})
 	must(t, err)
-	quote, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	quote, err := c.Route.Quote(c.inputBound(c.Body), c.MaxOutputTokens, c.MayWriteCache)
 	must(t, err)
 	caller := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agt:seat-1", ActorID: cpActor,
 		Episode: &admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-1"}}

@@ -7,6 +7,7 @@ package spendproxy
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -114,6 +115,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	restoreEnvelopeUse(records, ledger, envelopes)
 
 	engine, err := inferencegateway.NewEngine(inferencegateway.EngineConfig{
 		Prices:        prices,
@@ -160,6 +162,21 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, err
 	}
 
+	// A dispatch journalled before its provider call that never settled and
+	// was never released may have been billed: hold it again, pending
+	// reconciliation, so its cents stay spent and its key cannot dispatch
+	// again (helm-tracker#313, audit M18).
+	pending, err := RestorePendingDispatches(records, engine, envelopes)
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	replay.PendingDispatches = len(pending)
+	for _, p := range pending {
+		replay.PendingCents += p.AmountCents
+		logf("spend-proxy: ALERT: dispatch %s was journalled before its provider call and never settled; %d cents stay reserved pending reconciliation", p.Key, p.AmountCents)
+	}
+
 	s := &Server{
 		cfg:        cfg,
 		sourceHash: opts.SourceHash,
@@ -203,6 +220,12 @@ func (s *Server) BalanceCents() int64 { return s.ledger.BalanceCents() }
 // SigningKeyID exposes the verdict issuer key id.
 func (s *Server) SigningKeyID() string { return s.issuer.KeyID() }
 
+// SigningPublicKey is the issuer's Ed25519 public key as "ed25519:<hex>", the
+// value `spend-proxy export --public-key` takes.
+func (s *Server) SigningPublicKey() string {
+	return "ed25519:" + hex.EncodeToString(s.issuer.PublicKey())
+}
+
 // ReceiptLogPath exposes where receipts land.
 func (s *Server) ReceiptLogPath() string { return s.store.Path() }
 
@@ -230,21 +253,38 @@ func (s *Server) modelList() []api.GatewayModel {
 // governedDispatch is the ProviderDispatch handed to the governed gateway. The
 // authorized quote is appended (and fsynced) to the durable log BEFORE the
 // provider is called; a store failure refuses dispatch. This is the
-// no-unreceipted-dispatch invariant in code.
+// no-unreceipted-dispatch invariant in code. A restart that finds this journal
+// line without a settlement or a release holds the dispatch again.
+//
+// The provider call does not end when the client leaves: it runs to its end
+// (bounded by the upstream client's timeout) so it settles on what the
+// provider reports instead of on an unknown.
 func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, body []byte) (api.DispatchOutcome, error) {
 	rec := &ReceiptRecord{
 		Kind:          RecordRouteQuote,
 		TenantID:      quote.TenantID,
 		SpendIntentID: quote.SpendIntentID,
+		Note:          NoteDispatchJournal,
 		RouteQuote:    quote,
 	}
 	if err := s.signRecord(rec); err != nil {
-		return api.DispatchOutcome{}, fmt.Errorf("receipt signing failed; refusing dispatch: %w", err)
+		return api.DispatchOutcome{}, fmt.Errorf("receipt signing failed; refusing dispatch: %w: %w", api.ErrDispatchNotSent, err)
 	}
 	if err := s.store.Append(rec); err != nil {
-		return api.DispatchOutcome{}, fmt.Errorf("receipt store append failed; refusing dispatch: %w", err)
+		return api.DispatchOutcome{}, fmt.Errorf("receipt store append failed; refusing dispatch: %w: %w", api.ErrDispatchNotSent, err)
 	}
-	return s.upstream.Dispatch(r.Context(), r.URL.Path, quote, body)
+	outcome, err := s.upstream.Dispatch(context.WithoutCancel(r.Context()), r.URL.Path, quote, body)
+	if err != nil && errors.Is(err, api.ErrDispatchNotSent) {
+		// The gateway releases the hold; journal that, so a restart does not
+		// hold it again.
+		s.appendOrLog(&ReceiptRecord{
+			Kind:          RecordDispatchReleased,
+			TenantID:      quote.TenantID,
+			SpendIntentID: quote.SpendIntentID,
+			Note:          "released: no byte of the request left the proxy",
+		})
+	}
+	return outcome, err
 }
 
 // RegisterRoutes mounts the proxy's HTTP surface on mux.
@@ -265,6 +305,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"upstream":           s.upstream.BaseURL,
 		"config_source_hash": s.sourceHash,
 		"signing_key_id":     s.issuer.KeyID(),
+		"signing_public_key": s.SigningPublicKey(),
 		"balance_cents":      s.ledger.BalanceCents(),
 		"receipt_log":        s.store.Path(),
 	})

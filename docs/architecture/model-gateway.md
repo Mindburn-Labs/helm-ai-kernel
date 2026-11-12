@@ -34,6 +34,26 @@ execution, an MCP toolset and the rest), a `tool_choice` that names one,
 effect only through the gateway's own tools, which the sandbox's network rules
 enforce.
 
+A request is also read against a closed list of what the quote understands
+(`core/pkg/gateway/modelgw/bound.go`); anything outside it is refused with 400
+before any attempt exists, and the error names it:
+
+| API | Members the quote understands | Content the quote understands |
+|---|---|---|
+| Responses | `model`, `input`, `instructions`, `max_output_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `top_logprobs`, `tools`, `tool_choice`, `parallel_tool_calls`, `max_tool_calls`, `reasoning`, `text`, `include`, `metadata`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier` (`auto`, `default`, `flex`), `truncation`, `store` (`false`), `background` (`false`) | input items `message`, `function_call(_output)`, `custom_tool_call(_output)`, `local_shell_call(_output)`, `apply_patch_call(_output)`, `reasoning`; parts `input_text`, `output_text`, `refusal`, `summary_text`, `reasoning_text`, and `input_image` with an inline `data:` URL |
+| Chat Completions | `model`, `messages`, `max_tokens`, `max_completion_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `n` (1), `stop`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `seed`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `response_format`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `reasoning_effort`, `verbosity`, `metadata`, `store` (`false`), `service_tier` (`auto`, `default`, `flex`), `modalities` (`text` only) | message members `role`, `content`, `name`, `tool_calls`, `tool_call_id`, `function_call`, `refusal`; parts `text`, `refusal`, and `image_url` with an inline `data:` URL |
+| Messages | `model`, `messages`, `max_tokens`, `system`, `stream`, `temperature`, `top_p`, `top_k`, `stop_sequences`, `metadata`, `tools`, `tool_choice`, `thinking`, `context_management`, `service_tier` (`auto`, `standard_only`), `output_config`, `output_format` | blocks `text`, `tool_use`, `tool_result`, `thinking`, `redacted_thinking`, `image` with a `base64` source, `document` with a `text` or `content` source |
+
+So `previous_response_id`, `conversation`, a stored `prompt`, `store: true`, an
+`item_reference`, a chat message's stored `audio`, remote or uploaded media in
+every spelling (an image or file URL, a `file_id`, `input_file`, a chat `file`
+part, a `url` or `file` source), PDFs (`input_file`, a chat `file`, a `base64`
+document), audio input and output, predicted outputs, the routing members
+`models`, `provider`, `plugins` and `route`, priority and scale service tiers,
+Anthropic's `speed` and `inference_geo`, server tool blocks and any member,
+item, part or block the list does not name are refused. An `anthropic-beta`
+of `context-1m-*` is refused too: it bills a long request at a premium.
+
 ## One call, one `model.inference` attempt
 
 The effect type is `model.inference`; its target is the priced route id and its
@@ -49,14 +69,22 @@ content holds a digest and a size, never a prompt.
    clamp or inject the maximum output tokens.
 3. Price the quote in `usd_micros`: every input byte counts as a token at
    the input price, and the clamped maximum output is generated in full at the
-   output price, rounded up once to whole micros. The byte count bounds input
-   tokens only for content carried in the request body. The gateway does not
-   refuse `previous_response_id`, `conversation`, a stored `prompt` or remote
-   media (`image_url`, `file_url`, `file_id`), so the provider can bill tokens
-   the quote does not count. When the request may write a prompt cache (any decoded JSON key
-   of it is `cache_control`, so an escaped spelling cannot avoid this), the input
-   rate is the dearest of the input and cache-write prices. The quote names a
-   zero amount for every other unit the mandate chain sums.
+   output price, rounded up once to whole micros. Bytes bound the tokens of
+   text the request carries; what the closed list keeps but bytes do not bound
+   is added as a token floor: 48,169 tokens for each inline image on the OpenAI
+   APIs (a high-detail image on gpt-4o-mini, OpenAI's dearest documented image)
+   and 8,000 on Anthropic's (five times the about 1,600 tokens Anthropic scales
+   an image to); 600 tokens for Anthropic's tool-use system prompt when a
+   request declares tools; and 2,000 tokens for each client tool whose
+   definition the provider supplies (`bash_*`, `text_editor_*`, `computer_*`,
+   `memory_*`, `local_shell`, `apply_patch`). Since everything else is refused,
+   the quote is the worst case of the call at the route's price, provided the
+   provider honours the output maximum and the route's price is the provider's
+   highest for a request of `max_request_bytes`. When the request may write a
+   prompt cache (any decoded JSON key of it is `cache_control`, so an escaped
+   spelling cannot avoid this), the input rate is the dearest of the input and
+   cache-write prices. The quote names a zero amount for every other unit the
+   mandate chain sums.
 4. Propose the attempt under the key `mi:<scope>:<request sha256>:<n>`. The
    mandates, limits, stops and idempotency of any other effect apply. `DENIED`
    answers 403 with the HELM reason code; `ESCALATED` is cancelled and answers

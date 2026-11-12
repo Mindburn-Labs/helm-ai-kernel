@@ -33,9 +33,19 @@ const (
 	RecordSettlement RecordKind = "settlement"
 	// RecordSettleFailed marks a dispatch whose settlement could not commit
 	// (e.g. quote expired mid-stream). It closes the audit trail instead of
-	// leaving a silent authorized-but-unsettled gap.
+	// leaving a silent authorized-but-unsettled gap; the dispatch stays held,
+	// and a restart holds it again pending reconciliation.
 	RecordSettleFailed RecordKind = "settle_failed"
+	// RecordDispatchReleased marks a journalled dispatch whose hold was
+	// released because no byte of its request left the proxy, so a restart
+	// does not hold it again.
+	RecordDispatchReleased RecordKind = "dispatch_released"
 )
+
+// NoteDispatchJournal is the note of the route_quote line appended before the
+// provider call. A logged quote whose note starts with "rejected" was never
+// dispatched.
+const NoteDispatchJournal = "dispatch: journalled before the provider call"
 
 // ReceiptRecord is one append-only line in the JSONL receipt log. Exactly one
 // of the receipt pointers is set, matching Kind.
@@ -189,6 +199,11 @@ type ReplaySummary struct {
 	RestoredSettlements int
 	// Records is the total number of log lines read.
 	Records int
+	// PendingDispatches counts dispatches journalled before their provider
+	// call that never settled or released; PendingCents is what they hold
+	// again, pending reconciliation.
+	PendingDispatches int
+	PendingCents      int64
 }
 
 // ReplayRecords computes the already-debited total from the log and restores
@@ -258,4 +273,91 @@ func DebitedCents(records []*ReceiptRecord) int64 {
 		}
 	}
 	return total
+}
+
+// restoreEnvelopeUse re-applies every settled debit in the log to the envelope
+// window it was settled in, so a restarted proxy does not hand an envelope's
+// limit out again (helm-tracker#313, audit H7). A debit under an envelope the
+// config no longer declares is not applied to any.
+func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
+	settled := make(map[string]bool)
+	for _, rec := range records {
+		if rec.Kind == RecordSettlement && rec.SpendIntentID != "" {
+			settled[rec.SpendIntentID] = true
+		}
+	}
+	seen := make(map[string]bool)
+	for _, rec := range records {
+		if rec.Kind != RecordUsage || rec.Usage == nil || !settled[rec.SpendIntentID] || seen[rec.SpendIntentID] {
+			continue
+		}
+		seen[rec.SpendIntentID] = true
+		if env := envelopes[rec.Usage.EnvelopeID]; env != nil {
+			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, rec.Usage.BalanceDebitCents)
+		}
+	}
+}
+
+// isDispatchJournal reports whether a route_quote line was appended before a
+// provider call: an allowing quote bound to its receipt and not a logged
+// refusal. Logs written before the journal note existed carry no note.
+func isDispatchJournal(rec *ReceiptRecord) bool {
+	if rec.Kind != RecordRouteQuote || rec.RouteQuote == nil {
+		return false
+	}
+	q := rec.RouteQuote
+	if q.BudgetVerdict != economic.BudgetVerdictAllow || q.ReceiptHash == "" {
+		return false
+	}
+	return rec.Note == NoteDispatchJournal || rec.Note == ""
+}
+
+// RestorePendingDispatches holds again, in engine, every dispatch the log
+// journalled before its provider call that has no settlement and no release:
+// the provider may have billed it, so its quote ceiling stays reserved against
+// its envelope and the balance, pending reconciliation, and its idempotency key
+// cannot dispatch again (audit M18). A dispatch under an envelope the config no
+// longer declares refuses the start: its cents would otherwise be forgotten.
+func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway.Engine, envelopes map[string]*economic.AgentSpendEnvelope) ([]*inferencegateway.Reservation, error) {
+	// Read the log in order: a journal line opens a dispatch, a release closes
+	// the journal before it (a retry may journal the key again), and a
+	// settlement closes the key for good.
+	open := make(map[string]*ReceiptRecord)
+	var order []string
+	listed := make(map[string]bool)
+	settled := make(map[string]bool)
+	for _, rec := range records {
+		switch {
+		case rec.SpendIntentID == "":
+		case rec.Kind == RecordSettlement:
+			settled[rec.SpendIntentID] = true
+		case rec.Kind == RecordDispatchReleased:
+			delete(open, rec.SpendIntentID)
+		case isDispatchJournal(rec):
+			if !listed[rec.SpendIntentID] {
+				listed[rec.SpendIntentID] = true
+				order = append(order, rec.SpendIntentID)
+			}
+			open[rec.SpendIntentID] = rec
+		}
+	}
+	var out []*inferencegateway.Reservation
+	for _, intentID := range order {
+		rec, pending := open[intentID]
+		if !pending || settled[intentID] {
+			continue
+		}
+		env := envelopes[rec.RouteQuote.EnvelopeID]
+		if env == nil {
+			return nil, fmt.Errorf("spendproxy: the log holds an unsettled dispatch %s under envelope %q, which the config no longer declares; refusing to start", rec.SpendIntentID, rec.RouteQuote.EnvelopeID)
+		}
+		res, err := engine.RestorePendingDispatch(env, rec.RouteQuote, rec.RecordedAt)
+		if err != nil {
+			return nil, fmt.Errorf("spendproxy: hold unsettled dispatch %s: %w", rec.SpendIntentID, err)
+		}
+		if res != nil {
+			out = append(out, res)
+		}
+	}
+	return out, nil
 }

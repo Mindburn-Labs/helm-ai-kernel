@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
+	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
@@ -115,23 +118,42 @@ func (u *Upstream) CostCents(quote *economic.RouteQuote, inputTokens, outputToke
 	return snap.QuoteCents(inputTokens, outputTokens)
 }
 
+// notSent marks an error as one before any byte of the request left the
+// process: only then may the gateway release the reservation.
+func notSent(err error) error { return fmt.Errorf("%w: %w", api.ErrDispatchNotSent, err) }
+
 // Dispatch performs one buffered (non-streaming) upstream call. It satisfies
 // api.ProviderDispatch modulo the pre-dispatch persistence wrapper the server
 // adds around it.
+//
+// An error before the transport has a connection to the upstream is wrapped in
+// api.ErrDispatchNotSent: no byte of the request can have left. Every later
+// failure (a transport error, a timeout, an error status, a body cut after the
+// status line) is a dispatch that may have reached the provider, which the
+// gateway debits at its hold (helm-tracker#313, audit H8). An answer whose
+// usage cannot be read or priced is returned with UsageUnknown set, for the
+// same settlement. An answer from another model than the quoted one is priced
+// at the dearer of the two, and the mismatch is recorded (audit M18).
 func (u *Upstream) Dispatch(ctx context.Context, inboundPath string, quote *economic.RouteQuote, body []byte) (api.DispatchOutcome, error) {
 	payload, err := rewriteModel(body, quote)
 	if err != nil {
-		return api.DispatchOutcome{}, err
+		return api.DispatchOutcome{}, notSent(err)
 	}
+	var connected atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(httptrace.GotConnInfo) { connected.Store(true) }})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.upstreamURL(inboundPath), bytes.NewReader(payload))
 	if err != nil {
-		return api.DispatchOutcome{}, fmt.Errorf("spendproxy: build upstream request: %w", err)
+		return api.DispatchOutcome{}, notSent(fmt.Errorf("spendproxy: build upstream request: %w", err))
 	}
 	req.Header.Set("Authorization", "Bearer "+u.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := u.Client.Do(req)
 	if err != nil {
-		return api.DispatchOutcome{}, fmt.Errorf("spendproxy: upstream request failed: %w", err)
+		err = fmt.Errorf("spendproxy: upstream request failed: %w", err)
+		if !connected.Load() {
+			return api.DispatchOutcome{}, notSent(err)
+		}
+		return api.DispatchOutcome{}, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxUpstreamResponse))
@@ -144,31 +166,70 @@ func (u *Upstream) Dispatch(ctx context.Context, inboundPath string, quote *econ
 
 	var parsed struct {
 		ID    string       `json:"id"`
+		Model *string      `json:"model"`
 		Usage *openAIUsage `json:"usage"`
 	}
-	// Tolerate non-JSON success bodies: settlement then uses quote estimates.
-	_ = json.Unmarshal(raw, &parsed)
-
-	in, out, usageSeen := parsed.Usage.tokens()
-	if !usageSeen {
-		// Conservative: settle at the quoted estimate rather than under-charge.
-		in, out = quote.InputTokens, quote.OutputTokens
-	}
-	cost, err := u.CostCents(quote, in, out)
-	if err != nil {
-		return api.DispatchOutcome{}, err
-	}
+	parseErr := json.Unmarshal(raw, &parsed)
 	requestID := parsed.ID
 	if requestID == "" {
 		requestID = "upstream-" + quote.ID
 	}
-	return api.DispatchOutcome{
-		ResponseBody:      raw,
-		ProviderRequestID: requestID,
-		ProviderCostCents: cost,
-		InputTokens:       in,
-		OutputTokens:      out,
-	}, nil
+	outcome := api.DispatchOutcome{ResponseBody: raw, ProviderRequestID: requestID}
+	in, out, usageSeen := parsed.Usage.tokens()
+	if parseErr != nil || !usageSeen || in < 0 || out < 0 {
+		// The provider answered, so it may have billed the call, but its usage
+		// is not readable: the gateway settles at the hold.
+		outcome.UsageUnknown = true
+		return outcome, nil
+	}
+	cost, err := u.CostCents(quote, in, out)
+	if err != nil {
+		outcome.UsageUnknown = true
+		return outcome, nil
+	}
+	if responded := stringOrEmpty(parsed.Model); !sameModel(responded, quote.SelectedModelID) {
+		cost = u.mismatchCost(quote, responded, cost, in, out)
+		outcome.Notes = map[string]string{"response_model": responded, "model_mismatch": "true"}
+	}
+	outcome.ProviderCostCents, outcome.InputTokens, outcome.OutputTokens = cost, in, out
+	return outcome, nil
+}
+
+func stringOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// datedSnapshot matches the version suffix providers append to a model id in
+// their answers: gpt-4o-mini answers as gpt-4o-mini-2024-07-18, and Anthropic
+// models carry an 8-digit date.
+var datedSnapshot = regexp.MustCompile(`^-(\d{4}-\d{2}-\d{2}|\d{8})$`)
+
+// sameModel reports whether a provider's answer names the quoted model: the
+// same id, or the same id with a dated snapshot suffix. An answer that names no
+// model does not.
+func sameModel(responded, quoted string) bool {
+	if responded == quoted {
+		return true
+	}
+	rest, ok := strings.CutPrefix(responded, quoted)
+	return ok && datedSnapshot.MatchString(rest)
+}
+
+// mismatchCost prices an answer from another model than the quoted one at the
+// dearer of the two: the responded model's price when the price book has it
+// for the quoted provider, or, for a model it cannot price, at least the hold.
+func (u *Upstream) mismatchCost(quote *economic.RouteQuote, responded string, quotedCost, in, out int64) int64 {
+	if responded != "" {
+		if snap, ok := u.Prices.Snapshot(quote.SelectedProviderID, responded); ok {
+			if cost, err := snap.QuoteCents(in, out); err == nil {
+				return max(quotedCost, cost)
+			}
+		}
+	}
+	return max(quotedCost, quote.MaxAmountCents)
 }
 
 // StreamOutcome is what a completed (or interrupted) SSE stream yields for

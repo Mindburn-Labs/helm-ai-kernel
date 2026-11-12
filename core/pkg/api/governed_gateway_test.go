@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,12 +27,17 @@ type gatewayFixture struct {
 }
 
 type spyDispatch struct {
+	mu            sync.Mutex // concurrent requests dispatch concurrently
 	called        int
 	cost          int64
 	body          []byte
 	responseBody  json.RawMessage
 	requestID     string
 	afterDispatch func()
+	// fail is the error the dispatch returns; usageUnknown reports an answer
+	// whose usage could not be read.
+	fail         error
+	usageUnknown bool
 }
 
 type advancingPrivacyContext struct {
@@ -90,6 +96,8 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	}
 	spy := &spyDispatch{cost: providerCost}
 	dispatch := func(r *http.Request, quote *economic.RouteQuote, body []byte) (DispatchOutcome, error) {
+		spy.mu.Lock()
+		defer spy.mu.Unlock()
 		spy.called++
 		spy.body = append([]byte(nil), body...)
 		if spy.afterDispatch != nil {
@@ -103,12 +111,16 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 		if requestID == "" {
 			requestID = "prov-req-" + quote.ID
 		}
+		if spy.fail != nil {
+			return DispatchOutcome{}, spy.fail
+		}
 		return DispatchOutcome{
 			ResponseBody:      responseBody,
 			ProviderRequestID: requestID,
 			ProviderCostCents: spy.cost,
 			InputTokens:       1000,
 			OutputTokens:      480,
+			UsageUnknown:      spy.usageUnknown,
 		}, nil
 	}
 

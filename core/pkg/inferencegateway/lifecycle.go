@@ -177,32 +177,17 @@ func (l *BalanceLedger) Reserve(reservationKey string, amountCents int64, quoteR
 	if existing, ok := l.reservations[reservationKey]; ok {
 		return existing, nil // idempotent: same dispatch reserves once
 	}
-	return l.reserveLocked(reservationKey, amountCents, quoteReceiptHash)
+	return l.reserveLocked(reservationKey, amountCents, quoteReceiptHash, false)
 }
 
-// reserveExclusive places a hold that only one dispatch may own: it refuses
-// while a hold for the key is open (a dispatch is in flight or failed to
-// settle) or consumed (the key already settled). A released hold, left by a
-// failed dispatch, is replaced so a retry reserves afresh.
-func (l *BalanceLedger) reserveExclusive(reservationKey string, amountCents int64, quoteReceiptHash string) (*Reservation, error) {
-	if reservationKey == "" || amountCents <= 0 || quoteReceiptHash == "" {
-		return nil, errors.New("inferencegateway: reservation requires a key, a positive amount and a quote receipt hash")
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if existing, ok := l.reservations[reservationKey]; ok && !existing.Released {
-		return nil, ErrDispatchConflict
-	}
-	return l.reserveLocked(reservationKey, amountCents, quoteReceiptHash)
-}
-
-// reserveLocked checks funds and posts a new hold. Callers must hold l.mu.
-func (l *BalanceLedger) reserveLocked(reservationKey string, amountCents int64, quoteReceiptHash string) (*Reservation, error) {
-	if l.account.Status != economic.BalanceAccountActive {
+// reserveLocked checks funds and posts a new hold. force places it even when
+// the account cannot cover it (a recovered hold for money that may already be
+// spent). Callers must hold l.mu.
+func (l *BalanceLedger) reserveLocked(reservationKey string, amountCents int64, quoteReceiptHash string, force bool) (*Reservation, error) {
+	if !force && l.account.Status != economic.BalanceAccountActive {
 		return nil, fmt.Errorf("inferencegateway: balance account is %s, reservation refused", l.account.Status)
 	}
-	if !l.allowNegativeBalance && amountCents > l.account.AvailableCents() {
+	if !force && !l.allowNegativeBalance && amountCents > l.account.AvailableCents() {
 		return nil, errors.New("inferencegateway: reservation exceeds available funds")
 	}
 
@@ -256,6 +241,7 @@ func (l *BalanceLedger) Release(reservationKey string) (*economic.UsageLedgerEnt
 		return nil, fmt.Errorf("inferencegateway: release entry invalid: %w", err)
 	}
 	l.releaseHoldLocked(res.AmountCents)
+	l.releaseEnvelopeLocked(res)
 	res.Released = true
 	l.entries = append(l.entries, entry)
 	return entry, nil
@@ -292,6 +278,7 @@ func (l *BalanceLedger) consumeReservationForDebit(reservationKey string) {
 	defer l.mu.Unlock()
 	if res := l.openReservationLocked(reservationKey); res != nil {
 		l.releaseHoldLocked(res.AmountCents)
+		l.settleEnvelopeLocked(res, res.EnvelopeID, res.AmountCents, time.Now().UTC())
 		res.Consumed = true
 	}
 }

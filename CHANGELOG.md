@@ -88,6 +88,50 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Model gateway (`helm-gateway serve`, helm-tracker#313): requests are read
+  against a closed list of what the quote understands, and anything outside it
+  is refused with 400 before any attempt exists. Clients that send
+  `previous_response_id`, `conversation`, a stored `prompt`, `store: true`,
+  remote or uploaded media, PDFs, audio, predicted outputs, the routing members
+  `models`/`provider`/`plugins`/`route`, a `priority` or `scale` service tier,
+  Anthropic's `speed` or `inference_geo`, an `anthropic-beta` of `context-1m-*`
+  or any member, input item, content part or block not listed in
+  `docs/architecture/model-gateway.md` must drop it. Holds of requests with
+  inline images or tools rise by the token floors listed there.
+- `helm-ai-kernel spend-proxy`: an envelope's `max_amount_cents` is now spent
+  per UTC day; a request the envelope can no longer cover is refused with 403
+  `ERR_BALANCE_INSUFFICIENT`. A dispatch that may have reached the provider is
+  debited at its hold instead of released, so an upstream error status or a
+  timeout now costs the hold. Requests with `n` other than 1 or with
+  `models`, `provider`, `plugins` or `route` get 400. An `X-HELM-Principal`
+  that is not the envelope's `principal_id` gets 403, and a config whose
+  `request_defaults.principal_id` is not its default envelope's no longer
+  loads (exit 2).
+- `spend-proxy` holds, on start, every dispatch its receipt log journalled
+  before the provider call that has no settlement and no release. A log written
+  by an earlier version may hold such lines for dispatches that failed and were
+  released then; they are now held pending reconciliation (`pending:` in the
+  start banner). A held dispatch under an envelope the config no longer declares
+  refuses the start (exit 2).
+- `spend-proxy export` no longer reports `signature_verified: true` from the
+  receipts directory's own key registry. Pass `--public-key ed25519:<hex>`
+  (printed at start and served as `signing_public_key` by
+  `/helm/spend/health`) to verify every signature; without it the summary says
+  no signature was checked.
+- Go API: `inferencegateway.Engine.ReserveForDispatch` takes the
+  `*QuoteResult` and issues its budget-verdict receipt; `Quote` no longer sets
+  `QuoteResult.Receipt`. `Engine.Settle` is replaced by `Engine.SettleUsage`
+  (a `Usage` with optional notes) and `Engine.SettleAtHold`; the new
+  `Engine.RestorePendingDispatch` and `BalanceLedger.RestoreEnvelopeUse` rebuild
+  state on start. `spendproxy.ExportEvidencePacks` takes `ExportOptions`, and
+  `spendproxy.TrustedKeys.Verify` is removed (verify against a pinned key).
+  `api.ProviderDispatch` implementations must wrap `api.ErrDispatchNotSent`
+  for an error before any request byte left the process; any other error is
+  debited at the hold. `api.DispatchOutcome` gains `UsageUnknown` and `Notes`,
+  and `api.GatewayMetadata` gains `SettledAtHold` (`settled_at_hold`).
+
 ### Security
 
 - The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
@@ -112,6 +156,51 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Fixed
 
+- A request through the model gateway can no longer bill more than its hold
+  (helm-tracker#313, audit H6). The quote counted request bytes and the output
+  maximum, while a request could make the provider bill a stored conversation,
+  a stored prompt, remote media or a routing fallback. Requests are now read
+  against a closed list per API (`core/pkg/gateway/modelgw/bound.go`); refusals
+  carry the new error codes `unsupported_member`, `unsupported_content`,
+  `invalid_content` and `unsupported_beta` and name the member. Inline images
+  and provider-supplied tool definitions are held at a token floor.
+- A spend envelope's `max_amount_cents` is consumed (audit H7). The spend
+  proxy and the governed gateway route reserve a quote's ceiling against the
+  envelope's window (the UTC day for the spend proxy's envelopes) and the
+  balance in one step, so concurrent requests cannot both take the last cents;
+  settlement moves the reservation to used, and a release returns it. The
+  budget-verdict receipt (`OK_WITHIN_ENVELOPE`) is issued only when that
+  reservation succeeds; a refused reservation's logged quote carries the DENY
+  verdict. A restart re-applies settled spend to its envelope.
+- A spend-proxy dispatch that may have reached the provider is never released
+  (audit H8): it is debited at its hold, its usage receipt carries metadata
+  `settled_at_hold`, the response is 502 with error type `helm_dispatch_failed`
+  and `helm.settled_at_hold: true` (or the provider's answer, when it answered
+  without readable usage), and its idempotency key cannot dispatch again. Only
+  a failure before the upstream connection opened releases the hold, journalled
+  as the new receipt-log kind `dispatch_released`. A client that disconnects no
+  longer cancels the provider call.
+- The spend proxy holds, on start, a dispatch journalled before its provider
+  call that never settled (audit M18); the journal line now carries the note
+  `dispatch: journalled before the provider call`, and the start banner and
+  `ReplaySummary` report `pending` dispatches and cents. It refuses `n` other
+  than 1 and the routing members `models`, `provider`, `plugins` and `route`,
+  and debits an answer from another model than the quoted one at the dearer of
+  the two prices, recording `response_model` and `model_mismatch` on the usage
+  receipt.
+- `spend-proxy export` verifies what it reports (audit M18): with the new
+  `--public-key` flag it checks the detached signature of every receipt line of
+  each intent and the budget-verdict seal against that key, and lists them in
+  the new JSON member `signatures_checked`; `signature_verified` is true only
+  then. A line that is unsigned, signed by another key or whose signature does
+  not verify fails the export (exit 1); a malformed key exits 2. The start
+  banner prints the public key and `/helm/spend/health` serves it as
+  `signing_public_key`.
+- The principal sealed into a spend receipt is the envelope's configured
+  `principal_id`, never a request header (audit M17). The engine refuses a
+  request that names another principal (403 `ERR_SPEND_ENVELOPE_NOT_FOUND`),
+  and `spend-proxy` refuses a `request_defaults.principal_id` that is not its
+  default envelope's. The listener stays loopback only (CTL-026).
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any

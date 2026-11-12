@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -130,10 +131,15 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  config:        %s (source hash %s)\n", configPath, sourceHash)
 	_, _ = fmt.Fprintf(stdout, "  receipts:      %s\n", server.ReceiptLogPath())
 	_, _ = fmt.Fprintf(stdout, "  signing key:   %s (registered in trusted-key registry)\n", server.SigningKeyID())
+	_, _ = fmt.Fprintf(stdout, "  public key:    %s (pass to `spend-proxy export --public-key`)\n", server.SigningPublicKey())
 	_, _ = fmt.Fprintf(stdout, "  balance:       %d cents available\n", server.BalanceCents())
 	if replay.RestoredSettlements > 0 || replay.DebitedCents > 0 {
 		_, _ = fmt.Fprintf(stdout, "  replayed:      %d settlements, %d cents already debited\n",
 			replay.RestoredSettlements, replay.DebitedCents)
+	}
+	if replay.PendingDispatches > 0 {
+		_, _ = fmt.Fprintf(stdout, "  pending:       %d unsettled dispatches hold %d cents pending reconciliation\n",
+			replay.PendingDispatches, replay.PendingCents)
 	}
 
 	mux := newListenerRouteMux(listenerSpendProxy)
@@ -165,7 +171,9 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 // runSpendProxyExport renders captured receipts into offline-verifiable spend
-// EvidencePacks under --out.
+// EvidencePacks under --out. With --public-key it verifies every signature of
+// each exported intent against that key; the receipts directory's own key
+// registry is never the trust root.
 func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("spend-proxy export", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -173,17 +181,28 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 		receiptsDir string
 		outDir      string
 		intent      string
+		publicKey   string
 		jsonOut     bool
 	)
-	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log and trusted-key registry")
+	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log")
 	cmd.StringVar(&outDir, "out", "./helm-spend-evidence", "Output directory for spend EvidencePacks")
 	cmd.StringVar(&intent, "intent", "", "Export only this spend intent id (default: all)")
+	cmd.StringVar(&publicKey, "public-key", "", "The issuer's Ed25519 public key (ed25519:<hex>, as spend-proxy prints at start), obtained out of band. Every signature is verified against it; without it no signature is verified")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the export summary as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
+	opts := spendproxy.ExportOptions{ReceiptsDir: receiptsDir, OutDir: outDir, IntentFilter: intent}
+	if publicKey != "" {
+		pub, err := spendproxy.ParsePublicKey(publicKey)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: --public-key: %v\n", err)
+			return 2
+		}
+		opts.PublicKey = pub
+	}
 
-	results, err := spendproxy.ExportEvidencePacks(receiptsDir, outDir, intent)
+	results, err := spendproxy.ExportEvidencePacks(opts)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -202,9 +221,9 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 		if !res.OfflineVerified {
 			status = "VERIFICATION FAILED"
 		}
-		sig := "unsigned"
+		sig := "signatures not checked (no --public-key)"
 		if res.SignatureVerified {
-			sig = "signature verified (" + res.SignatureKeyID + ")"
+			sig = "signatures verified against " + res.SignatureKeyID + ": " + strings.Join(res.SignaturesChecked, ", ")
 		}
 		_, _ = fmt.Fprintf(stdout, "%s: %s, %s -> %s\n", res.SpendIntentID, status, sig, res.OutputDir)
 	}

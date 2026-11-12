@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-87 controls: 49 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
+88 controls: 50 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -160,6 +160,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
 | CTL-061 | TON Acton runs local, fork and testnet only, and never tenant code beside a key | enforced | — |
 | CTL-062 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
+| CTL-066 | A model call's hold bounds what the provider can bill | enforced | — |
 
 ---
 

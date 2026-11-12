@@ -20,6 +20,9 @@ func TestSpendEvidencePackExportAndOfflineVerify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
+	if _, err := h.engine.ReserveForDispatch(quote); err != nil {
+		t.Fatalf("ReserveForDispatch() = %v", err)
+	}
 	if quote.Receipt == nil {
 		t.Fatal("expected a budget verdict receipt on ALLOW")
 	}

@@ -111,7 +111,11 @@ type BalanceLedger struct {
 	settled      map[string]*SettlementRecord          // settle idempotency key -> committed settlement
 	movements    map[string]*economic.UsageLedgerEntry // movement idempotency key -> posted entry
 	reservations map[string]*Reservation               // reservation key -> open hold
-	nextEntryID  int64
+	// envelopeSpend is what each envelope window has reserved and used;
+	// envelopePeriods is each evaluated envelope's period (envelope.go).
+	envelopeSpend   map[envelopeWindow]*envelopeSpend
+	envelopePeriods map[string]economic.SpendPeriod
+	nextEntryID     int64
 	// allowNegativeBalance permits the balance to go below zero. It is only set
 	// when enterprise invoicing (deferred billing) is enabled for the account.
 	allowNegativeBalance bool
@@ -127,8 +131,9 @@ type BalanceLedger struct {
 }
 
 // Reservation is an open hold placed against the balance for a dispatch's
-// estimated max cost. It is consumed by a debit at settlement or freed by a
-// release when the run fails.
+// estimated max cost, and against its envelope's window when an engine
+// admitted it. It is consumed by a debit at settlement or freed by a release
+// when the provider was never called.
 type Reservation struct {
 	Key         string
 	AmountCents int64
@@ -136,6 +141,13 @@ type Reservation struct {
 	EntryID     string
 	Released    bool
 	Consumed    bool
+	// EnvelopeID and EnvelopeWindow name the envelope window the hold is
+	// reserved against; empty for a hold placed with Reserve.
+	EnvelopeID     string
+	EnvelopeWindow string
+	// Pending marks a hold a restart recovered for a dispatch that may have
+	// reached the provider and never settled: it waits for reconciliation.
+	Pending bool
 }
 
 // SettlementRecord is the committed financial outcome for one governed request.
@@ -158,6 +170,8 @@ func NewBalanceLedger(account *economic.BalanceAccount) (*BalanceLedger, error) 
 		settled:              make(map[string]*SettlementRecord),
 		movements:            make(map[string]*economic.UsageLedgerEntry),
 		reservations:         make(map[string]*Reservation),
+		envelopeSpend:        make(map[envelopeWindow]*envelopeSpend),
+		envelopePeriods:      make(map[string]economic.SpendPeriod),
 		accrualEntryIDs:      make(map[string]struct{}),
 		allowNegativeBalance: account.Type == economic.BalanceAccountInvoiceAccrual,
 	}, nil
@@ -278,12 +292,15 @@ func (l *BalanceLedger) RestoreSettlement(usage *economic.UsageReceipt, settleme
 //
 // reservationKey names the dispatch hold backing this debit, if any. Its
 // funds count as available, and it is consumed only when the debit posts, so
-// a failed commit leaves the hold in place.
+// a failed commit leaves the hold in place. The debit is also booked as used
+// on the envelope that authorized it, in the reservation's window or, without
+// one, in the window that contains now.
 func (l *BalanceLedger) commit(
 	idempotencyKey string,
 	usage *economic.UsageReceipt,
 	settlement *economic.SettlementReceipt,
 	reservationKey string,
+	now time.Time,
 ) (*SettlementRecord, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -348,6 +365,7 @@ func (l *BalanceLedger) commit(
 		l.releaseHoldLocked(reservation.AmountCents)
 		reservation.Consumed = true
 	}
+	l.settleEnvelopeLocked(reservation, usage.EnvelopeID, debit, now)
 	l.account.BalanceCents = before - debit
 	l.account.UpdatedAt = time.Now().UTC()
 	l.entries = append(l.entries, entry)

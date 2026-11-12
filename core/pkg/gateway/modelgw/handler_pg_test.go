@@ -171,7 +171,9 @@ func TestPostgresAnthropicStreamPassesThroughAndSettles(t *testing.T) {
 		t.Fatalf("attempt = %+v", a)
 	}
 	sonnet, _ := e.cfg.Resolve("anthropic-messages", "claude-sonnet-5-5")
-	held, err := sonnet.Quote(int64(len(wantBody)), 8192, false) // the input bytes and the injected maximum
+	// The input bytes, the floor of the tool-use system prompt Anthropic adds
+	// to a request with tools (helm-tracker#313), and the injected maximum.
+	held, err := sonnet.Quote(int64(len(wantBody))+anthropicToolSystemTokens, 8192, false)
 	must(t, err)
 	mc := a.ModelCall
 	if mc == nil || mc.State != admission.SettlementConfirmed || mc.HeldMicros != held || *mc.ConfirmedMicros != anthropicStreamCost ||

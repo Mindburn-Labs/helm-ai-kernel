@@ -14,10 +14,13 @@
 //     non-ALLOW verdict (deny, escalate, stale price, terms block) returns
 //     without ever calling a provider — with the output ceiling clamped to
 //     what the spend envelope can pay for;
-//  4. reserves the quote ceiling against the balance (exclusive per
-//     idempotency key), then dispatches with the authorized output ceiling;
+//  4. reserves the quote ceiling against the spend envelope and the balance in
+//     one step (exclusive per idempotency key), which issues the budget-verdict
+//     receipt, then dispatches with the authorized output ceiling;
 //  5. settles actual cost against the quote ceiling (per the engine's cost-cap
-//     policy) and emits the usage + settlement receipts;
+//     policy) and emits the usage + settlement receipts. A dispatch that may
+//     have reached the provider is never released: without a usable usage
+//     report it is debited at its hold, and its idempotency key is spent;
 //  6. returns the standard OpenAI response body plus HELM response metadata
 //     (verdict, route receipt, usage receipt, settlement receipt, quote,
 //     actual cost, overage, fallback status, EvidencePack ref).
@@ -54,7 +57,17 @@ type EnvelopeResolver func(tenantID, envelopeID string) (*economic.AgentSpendEnv
 // exists. It returns the OpenAI-shaped response body, the provider request id,
 // actual provider cost in cents, and the actual token usage. Implementations
 // must not be called unless the gateway authorized dispatch.
+//
+// An error means the call did not yield a response the gateway can settle on.
+// It wraps ErrDispatchNotSent only when no byte of the request left the
+// process; any other error is a dispatch that may have reached the provider,
+// which the gateway debits at its hold and never releases.
 type ProviderDispatch func(r *http.Request, quote *economic.RouteQuote, body []byte) (DispatchOutcome, error)
+
+// ErrDispatchNotSent marks a dispatch error that happened before any byte of
+// the request left the process, so the provider cannot have billed it. Only
+// such an error releases the reservation.
+var ErrDispatchNotSent = errors.New("the provider request was not sent")
 
 // DispatchOutcome is the provider result the gateway settles against.
 type DispatchOutcome struct {
@@ -63,6 +76,12 @@ type DispatchOutcome struct {
 	ProviderCostCents int64
 	InputTokens       int64
 	OutputTokens      int64
+	// UsageUnknown: the provider answered, but its usage could not be read or
+	// priced, so the gateway settles the call at its hold.
+	UsageUnknown bool
+	// Notes are recorded on the usage receipt, such as the model the provider
+	// answered with when it differs from the quoted one.
+	Notes map[string]string
 }
 
 // GovernedGateway wires the RouteQuote engine to OpenAI-compatible HTTP routes.
@@ -159,7 +178,10 @@ type GatewayMetadata struct {
 	OverageCents int64 `json:"overage_cents,omitempty"`
 	// SettleFailed marks a response where the provider was called but the
 	// settlement could not commit; Quote identifies the unsettled dispatch.
-	SettleFailed    bool   `json:"settle_failed,omitempty"`
+	SettleFailed bool `json:"settle_failed,omitempty"`
+	// SettledAtHold marks a dispatch debited at its whole hold because the
+	// provider may have billed it and its usage is not known.
+	SettledAtHold   bool   `json:"settled_at_hold,omitempty"`
 	Replayed        bool   `json:"idempotent_replay,omitempty"`
 	EvidencePackRef string `json:"evidence_pack_ref,omitempty"`
 }
@@ -218,6 +240,10 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, "invalid request body")
 		return
 	}
+	if err := refuseUngovernedMembers(fields); err != nil {
+		WriteBadRequest(w, err.Error())
+		return
+	}
 	limitFields := outputLimitFields(r.URL.Path)
 	outputLimit, err := requestedOutputLimit(fields, limitFields)
 	if err != nil {
@@ -260,18 +286,23 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	}
 	quote := quoteRes.Quote
 
-	// Hold the quote ceiling before the provider sees the request. The hold
-	// is exclusive per idempotency key, so a concurrent duplicate is refused.
-	if _, rerr := g.engine.ReserveForDispatch(quote); rerr != nil {
+	// Hold the quote ceiling against the envelope and the balance before the
+	// provider sees the request, in one step that also issues the receipt.
+	// The hold is exclusive per idempotency key, so a concurrent duplicate is
+	// refused; a refused reservation rewrites quoteRes to the refusal.
+	if _, rerr := g.engine.ReserveForDispatch(quoteRes); rerr != nil {
 		if errors.Is(rerr, inferencegateway.ErrDispatchConflict) {
-			writeIdempotencyConflict(w, "a request with this idempotency key is already in flight or settled")
+			writeIdempotencyConflict(w, "a request with this idempotency key is already in flight, settled, or held pending reconciliation")
 			return
 		}
-		g.writeQuoteRejection(w, quoteRes, &inferencegateway.QuoteError{
-			Verdict: economic.BudgetVerdictDeny, ReasonCode: economic.SpendReasonBalanceInsufficient, Message: rerr.Error(),
-		})
+		var qe *inferencegateway.QuoteError
+		if !errors.As(rerr, &qe) {
+			qe = &inferencegateway.QuoteError{Verdict: economic.BudgetVerdictDeny, ReasonCode: economic.SpendReasonBalanceInsufficient, Message: rerr.Error()}
+		}
+		g.writeQuoteRejection(w, quoteRes, qe)
 		return
 	}
+	quote = quoteRes.Quote
 
 	dispatchBody, err := withOutputLimit(body, fields, limitFields, quote.OutputTokens)
 	if err != nil {
@@ -280,18 +311,34 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		return
 	}
 	outcome, derr := g.dispatch(r, quote, dispatchBody)
-	if derr != nil {
-		// Nothing settled: free the hold so a retry with the same key can run.
+	if derr != nil && errors.Is(derr, ErrDispatchNotSent) {
+		// No byte of the request left the process: the provider cannot have
+		// billed it, so the hold is freed and the key may be retried.
 		_, _ = g.engine.ReleaseReservation(quote)
 		WriteError(w, http.StatusBadGateway, "provider dispatch failed", "provider request failed")
 		return
 	}
 
-	settleRes, serr := g.engine.Settle(
-		quote, outcome.ProviderRequestID, outcome.ProviderCostCents,
-		outcome.InputTokens, outcome.OutputTokens,
-	)
+	var settleRes *inferencegateway.SettleResult
+	var serr error
+	switch {
+	case derr != nil || outcome.UsageUnknown:
+		// The request may have reached the provider, which may have billed it
+		// any amount up to the hold: debit the hold, so the key is spent and
+		// the balance and the envelope carry what the call may have cost.
+		reason := "the provider answered without usage the gateway could read"
+		if derr != nil {
+			reason = "the dispatch failed after the request may have reached the provider"
+		}
+		settleRes, serr = g.engine.SettleAtHold(quote, outcome.ProviderRequestID, reason, outcome.Notes)
+	default:
+		settleRes, serr = g.engine.SettleUsage(quote, inferencegateway.Usage{
+			ProviderRequestID: outcome.ProviderRequestID, ProviderCostCents: outcome.ProviderCostCents,
+			InputTokens: outcome.InputTokens, OutputTokens: outcome.OutputTokens, Notes: outcome.Notes,
+		})
+	}
 	if serr != nil {
+		// The hold stays: the provider was called and nothing was debited.
 		writeSettleFailure(w, quote, settleRes, serr)
 		return
 	}
@@ -312,11 +359,25 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		FallbackUsed:      quoteRes.FallbackUsed,
 		Capped:            settleRes.Capped,
 		OverageCents:      settleRes.OverageCents,
+		SettledAtHold:     settleRes.AtHold,
 		Replayed:          settleRes.Replayed,
 		EvidencePackRef:   settleRes.EvidencePackRef,
 	}
 	if g.onSettlement != nil {
 		g.onSettlement(&meta)
+	}
+	if derr != nil {
+		// Settled at the hold; the provider gave no response to return.
+		writeGatewayMetadataHeaders(w, meta)
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"error": map[string]any{
+				"message":     "provider dispatch failed after the request may have reached the provider; the call was debited at its hold",
+				"type":        "helm_dispatch_failed",
+				"reason_code": string(meta.ReasonCode),
+			},
+			"helm": meta,
+		})
+		return
 	}
 	protectedResponse, _, responsePrivacyErr := privacy.ProtectModelResponseJSON(r.Context(), outcome.ResponseBody)
 	if responsePrivacyErr == nil {
@@ -518,6 +579,29 @@ func estimateTokens(body []byte, outputLimit int64) (int64, int64) {
 		in = 1
 	}
 	return in, outputLimit
+}
+
+// ungovernedMembers are request members that let the upstream choose the
+// billed model or provider (OpenRouter's models, provider, plugins and route)
+// or bill more completions than one: the quote prices one completion of the
+// quoted model, so the gateway refuses them (helm-tracker#313, audit M18).
+var ungovernedMembers = []string{"models", "provider", "plugins", "route"}
+
+// refuseUngovernedMembers refuses a request the quote cannot price: a routing
+// member, or n other than 1.
+func refuseUngovernedMembers(fields map[string]json.RawMessage) error {
+	for _, name := range ungovernedMembers {
+		if raw, ok := fields[name]; ok && string(raw) != "null" {
+			return fmt.Errorf("the request member %q lets the upstream choose the billed model or provider; the governed gateway quotes one model and refuses it", name)
+		}
+	}
+	if raw, ok := fields["n"]; ok && string(raw) != "null" {
+		var n int64
+		if err := json.Unmarshal(raw, &n); err != nil || n != 1 {
+			return fmt.Errorf("the request member \"n\" must be 1: the governed gateway quotes and settles one completion per request")
+		}
+	}
+	return nil
 }
 
 // outputLimitFields names the request fields that cap billable output tokens

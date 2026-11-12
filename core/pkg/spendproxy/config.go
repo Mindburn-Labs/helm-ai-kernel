@@ -68,6 +68,8 @@ type BalanceConfig struct {
 // Defaulting is attribution only — the full quote/verdict/settle path still
 // runs against the default envelope. Leave EnvelopeID empty to disable
 // defaulting, in which case header-less requests fail closed with 400.
+// PrincipalID, when set, must be the default envelope's: the principal a spend
+// receipt names is always its envelope's, never a request header.
 type RequestDefaults struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	AgentID     string `json:"agent_id,omitempty"`
@@ -245,6 +247,13 @@ func (c *Config) Validate() error {
 		}
 		if c.Defaults.AgentID == "" {
 			return errors.New("request_defaults.agent_id is required when request_defaults.envelope_id is set")
+		}
+		// A spend is attributed to its envelope's principal; a default that
+		// names another one would have every header-less request refused.
+		for _, e := range c.Envelopes {
+			if e.ID == c.Defaults.EnvelopeID && c.Defaults.PrincipalID != "" && c.Defaults.PrincipalID != e.PrincipalID {
+				return fmt.Errorf("request_defaults.principal_id %q is not the principal_id %q of envelope %q", c.Defaults.PrincipalID, e.PrincipalID, e.ID)
+			}
 		}
 	}
 	return nil

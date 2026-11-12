@@ -80,7 +80,10 @@ type RouteRequest struct {
 	ClampOutputToMandate bool
 }
 
-// QuoteResult is the pre-dispatch outcome.
+// QuoteResult is the pre-dispatch outcome. Receipt stays nil until
+// ReserveForDispatch reserves the quote against its envelope and the balance:
+// a budget-verdict receipt exists only for a dispatch whose reservation
+// succeeded.
 type QuoteResult struct {
 	Decision         economic.SpendAuthorityDecision
 	Quote            *economic.RouteQuote
@@ -89,6 +92,11 @@ type QuoteResult struct {
 	ModelSubstituted bool
 	FallbackUsed     bool
 	EvidencePackRef  string
+
+	// The envelope the quote was evaluated against and the receipt id, for
+	// the reservation.
+	env       *economic.AgentSpendEnvelope
+	receiptID string
 }
 
 // SettleResult is the post-dispatch outcome.
@@ -104,7 +112,10 @@ type SettleResult struct {
 	BalanceAfterCents int64
 	// OverageCents is the actual cost above the quote ceiling that
 	// CostCapDebitActual debited; callers must record and alert on it.
-	OverageCents    int64
+	OverageCents int64
+	// AtHold marks a settlement that debited the whole hold because the
+	// provider may have billed the call and its usage is not known.
+	AtHold          bool
 	Replayed        bool
 	EvidencePackRef string
 }
@@ -189,6 +200,11 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	if req.TenantID != env.TenantID || req.AgentID != env.AgentID {
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonEnvelopeNotFound, "request scope does not match spend envelope")
 	}
+	// The principal a quote and its receipt name is the envelope's. A request
+	// may repeat it; it may not name another one (helm-tracker#313, audit M17).
+	if req.PrincipalID != "" && req.PrincipalID != env.PrincipalID {
+		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonEnvelopeNotFound, "request principal does not match the spend envelope's principal")
+	}
 	if req.RequestedModelID == "" {
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonModelNotAllowed, "requested model is required")
 	}
@@ -231,9 +247,13 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonProviderContractNeeded, "price snapshot is not bound to the reviewed terms profile")
 	}
 
+	// The envelope as it stands in this period: its limit less what its
+	// requests have reserved and used. ReserveForDispatch decides again, in one
+	// step with the reservation.
+	effective := effectiveEnvelope(env, e.cfg.Ledger.envelopeConsumed(env, now))
 	outputTokens := req.EstimatedOutputTokens
 	if req.ClampOutputToMandate {
-		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, mandateCeilingCents(env, route))
+		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, mandateCeilingCents(effective, route))
 		if ok && limit >= 1 && limit < outputTokens {
 			outputTokens = limit
 		}
@@ -251,7 +271,7 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		}
 	}
 
-	decision := env.EvaluateSpend(maxCents, route.ProviderID, route.ModelID)
+	decision := effective.EvaluateSpend(maxCents, route.ProviderID, route.ModelID)
 	evidenceRef := evidencePackRef(req.TenantID, req.IdempotencyKey, snapshot.ContentHash)
 	intentID := spendIntentID(req.TenantID, req.IdempotencyKey)
 
@@ -260,7 +280,7 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		route, quotedCents, maxCents, env.Currency, e.routePolicyHash,
 		now.Add(e.cfg.QuoteTTL), decision,
 	)
-	quote.PrincipalID = req.PrincipalID
+	quote.PrincipalID = env.PrincipalID
 	quote.RequestedModelID = req.RequestedModelID
 	quote.InputTokens = req.EstimatedInputTokens
 	quote.OutputTokens = outputTokens
@@ -287,29 +307,48 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		ModelSubstituted: substituted,
 		FallbackUsed:     fallbackUsed,
 		EvidencePackRef:  evidenceRef,
+		env:              env,
+		receiptID:        receiptID(req.TenantID, req.IdempotencyKey),
 	}
 
-	// A non-ALLOW verdict is terminal: no signed dispatch receipt is issued and
-	// no dispatch may proceed.
+	// A non-ALLOW verdict is terminal: no dispatch receipt is issued and no
+	// dispatch may proceed. An ALLOW verdict still issues none: the receipt is
+	// issued with the reservation.
 	if decision.Verdict != economic.BudgetVerdictAllow {
 		return result, quoteErr(decision.Verdict, decision.ReasonCode, decision.Reason)
 	}
+	return result, nil
+}
 
+// issueReceipt builds the budget-verdict receipt for a quote under the
+// decision its reservation was made on.
+func (e *Engine) issueReceipt(res *QuoteResult, decision economic.SpendAuthorityDecision) *economic.BudgetVerdictReceipt {
+	quote := res.Quote
 	receipt := economic.NewBudgetVerdictReceipt(
-		receiptID(req.TenantID, req.IdempotencyKey), env.TenantID, intentID, env.ID, env.AgentID,
-		route.ProviderID, route.ModelID, quotedCents, maxCents, env.Currency,
-		snapshot.ContentHash, e.routePolicyHash, evidenceRef, decision,
+		res.receiptID, quote.TenantID, quote.SpendIntentID, quote.EnvelopeID, quote.AgentID,
+		quote.SelectedProviderID, quote.SelectedModelID, quote.QuotedAmountCents, quote.MaxAmountCents, quote.Currency,
+		res.PriceSnapshot.ContentHash, e.routePolicyHash, res.EvidencePackRef, decision,
 	)
-	receipt.PrincipalID = req.PrincipalID
+	receipt.PrincipalID = quote.PrincipalID
 	// PrincipalID is part of the receipt's canonical hash, so reseal after
 	// setting it; otherwise the stored ContentHash (computed pre-PrincipalID)
 	// would not match the receipt body and the receipt would fail offline
-	// canonical-hash verification. Bind the quote to the resealed hash.
+	// canonical-hash verification.
 	receipt.Reseal()
-	quote.ReceiptHash = receipt.ContentHash
-	quote.Reseal()
-	result.Receipt = receipt
-	return result, nil
+	return receipt
+}
+
+// deny replaces an allowing result whose reservation was refused: the quote
+// carries the refusing decision and no receipt hash, and no receipt exists.
+func (r *QuoteResult) deny(decision economic.SpendAuthorityDecision) {
+	denied := *r.Quote
+	denied.BudgetVerdict = decision.Verdict
+	denied.ReasonCode = decision.ReasonCode
+	denied.ReceiptHash = ""
+	denied.Reseal()
+	r.Quote = &denied
+	r.Decision = decision
+	r.Receipt = nil
 }
 
 // Lookup returns the committed settlement for a tenant's idempotency key so a
@@ -322,20 +361,57 @@ func (e *Engine) Lookup(tenantID, idempotencyKey string) (*SettleResult, bool) {
 	return replayResult(rec), true
 }
 
-// Settle records actual provider usage after dispatch, enforces quote expiry
-// and the cost ceiling, posts the idempotent balanced debit, and returns the
-// usage + settlement receipts. A replay of the same idempotency key (carried by
-// the quote's spend intent) returns the committed receipts without debiting
-// again.
+// Usage is what a dispatch reports for settlement. Notes are recorded on the
+// usage receipt's metadata (for example the model the provider answered with).
+type Usage struct {
+	ProviderRequestID string
+	ProviderCostCents int64
+	InputTokens       int64
+	OutputTokens      int64
+	Notes             map[string]string
+}
+
+// SettleAtHold settles a dispatch the provider may have billed and whose usage
+// is not known: the debit is the whole hold, the quote's ceiling, and the
+// usage receipt records why (metadata settled_at_hold) and no token counts.
+// The provider was paid an unknown amount up to the hold, so the hold is the
+// debit that never under-charges.
+func (e *Engine) SettleAtHold(quote *economic.RouteQuote, providerRequestID, reason string, notes map[string]string) (*SettleResult, error) {
+	if quote == nil {
+		return nil, errors.New("inferencegateway: route quote is required to settle")
+	}
+	if providerRequestID == "" {
+		providerRequestID = "unknown-" + quote.ID
+	}
+	fee, ok := mulNonNegative(quote.MaxAmountCents, e.cfg.PlatformFeeBps)
+	if !ok {
+		return nil, errors.New("inferencegateway: platform fee overflow")
+	}
+	fee /= 10_000 + e.cfg.PlatformFeeBps
+	merged := map[string]string{"settled_at_hold": reason}
+	for k, v := range notes {
+		merged[k] = v
+	}
+	return e.settle(quote, Usage{ProviderRequestID: providerRequestID, ProviderCostCents: quote.MaxAmountCents - fee, Notes: merged}, fee, true)
+}
+
+// SettleUsage records actual provider usage after dispatch, enforces quote
+// expiry and the cost ceiling, posts the idempotent balanced debit, and returns
+// the usage + settlement receipts, with u.Notes on the usage receipt's
+// metadata. A replay of the same idempotency key (carried by the quote's spend
+// intent) returns the committed receipts without debiting again.
 //
 // Expiry bounds the time between quote and dispatch. A quote whose dispatch
 // reservation was placed in time settles however long the provider took.
-func (e *Engine) Settle(
-	quote *economic.RouteQuote,
-	providerRequestID string,
-	providerCostCents int64,
-	actualInputTokens, actualOutputTokens int64,
-) (*SettleResult, error) {
+func (e *Engine) SettleUsage(quote *economic.RouteQuote, u Usage) (*SettleResult, error) {
+	return e.settle(quote, u, -1, false)
+}
+
+// settle posts one settlement. fee is the platform fee to record, or -1 to
+// derive it from the provider cost.
+func (e *Engine) settle(quote *economic.RouteQuote, u Usage, fee int64, atHold bool) (*SettleResult, error) {
+	providerRequestID, providerCostCents := u.ProviderRequestID, u.ProviderCostCents
+	actualInputTokens, actualOutputTokens := u.InputTokens, u.OutputTokens
 	if quote == nil {
 		return nil, errors.New("inferencegateway: route quote is required to settle")
 	}
@@ -366,6 +442,9 @@ func (e *Engine) Settle(
 		return nil, errors.New("inferencegateway: platform fee overflow")
 	}
 	platformFee := feeBasis / 10_000
+	if fee >= 0 {
+		platformFee = fee
+	}
 	if platformFee > math.MaxInt64-providerCostCents {
 		return nil, errors.New("inferencegateway: actual cost overflow")
 	}
@@ -409,11 +488,15 @@ func (e *Engine) Settle(
 	usage.ProviderPriceSnapshotHash = quote.ProviderPriceSnapshotHash
 	usage.InputTokens = actualInputTokens
 	usage.OutputTokens = actualOutputTokens
-	if overage > 0 {
-		usage.Metadata = map[string]string{
-			"overage_cents":       strconv.FormatInt(overage, 10),
-			"quote_ceiling_cents": strconv.FormatInt(quote.MaxAmountCents, 10),
+	if overage > 0 || len(u.Notes) > 0 {
+		usage.Metadata = map[string]string{}
+		for k, v := range u.Notes {
+			usage.Metadata[k] = v
 		}
+	}
+	if overage > 0 {
+		usage.Metadata["overage_cents"] = strconv.FormatInt(overage, 10)
+		usage.Metadata["quote_ceiling_cents"] = strconv.FormatInt(quote.MaxAmountCents, 10)
 	}
 
 	settlement := e.buildSettlement(quote, usage)
@@ -425,7 +508,7 @@ func (e *Engine) Settle(
 
 	// The commit consumes any dispatch reservation for this quote, so its hold
 	// is not double-counted against the debit. On failure the hold stays.
-	rec, err := e.cfg.Ledger.commit(idem, usage, settlement, quote.ID)
+	rec, err := e.cfg.Ledger.commit(idem, usage, settlement, quote.ID, now)
 	if err != nil {
 		return &SettleResult{
 			QuotedAmountCents: quote.QuotedAmountCents,
@@ -444,6 +527,7 @@ func (e *Engine) Settle(
 		BalanceDebitCents: rec.BalanceDebitCents,
 		BalanceAfterCents: rec.BalanceAfterCents,
 		OverageCents:      overage,
+		AtHold:            atHold,
 		EvidencePackRef:   rec.UsageReceipt.EvidencePackRef,
 	}, nil
 }

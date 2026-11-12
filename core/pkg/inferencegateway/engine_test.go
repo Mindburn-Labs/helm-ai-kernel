@@ -165,6 +165,14 @@ func TestQuoteAndSettleHappyPath(t *testing.T) {
 	if res.Quote.QuotedAmountCents != 2 {
 		t.Fatalf("quoted = %d cents, want 2", res.Quote.QuotedAmountCents)
 	}
+	// The receipt is issued with the reservation, not with the quote
+	// (helm-tracker#313): an allowing quote alone holds nothing.
+	if res.Receipt != nil || res.Quote.ReceiptHash != "" {
+		t.Fatal("a quote that reserved nothing must carry no dispatch receipt")
+	}
+	if _, err := h.engine.ReserveForDispatch(res); err != nil {
+		t.Fatalf("ReserveForDispatch() = %v", err)
+	}
 	if res.Receipt == nil || res.Receipt.ContentHash == "" {
 		t.Fatal("expected a dispatch receipt on ALLOW")
 	}
@@ -406,7 +414,7 @@ func TestLedgerRejectsUnbalancedSettlement(t *testing.T) {
 		{ID: "e1", AccountID: "balance-1", Direction: economic.SettlementDebit, AmountCents: 6, Currency: "USD"},
 		{ID: "e2", AccountID: "treasury-1", Direction: economic.SettlementCredit, AmountCents: 5, Currency: "USD"},
 	})
-	_, err := h.ledger.commit("idem-bad", usage, bad, "")
+	_, err := h.ledger.commit("idem-bad", usage, bad, "", h.now)
 	requireErrContains(t, err, "balanced")
 	if h.ledger.BalanceCents() != 100_000 {
 		t.Fatal("balance must be untouched when settlement is unbalanced")
@@ -570,10 +578,10 @@ func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+	if _, err := h.engine.ReserveForDispatch(q); !errors.Is(err, ErrDispatchConflict) {
 		t.Fatalf("second reserve while in flight = %v, want ErrDispatchConflict", err)
 	}
 	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
@@ -584,7 +592,7 @@ func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
 	if _, err := h.engine.ReleaseReservation(q.Quote); err != nil {
 		t.Fatalf("release: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve after release: %v", err)
 	}
 	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
@@ -595,7 +603,7 @@ func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
 	if _, err := h.engine.Settle(q.Quote, "prov-req-excl", 2, 1000, 480); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+	if _, err := h.engine.ReserveForDispatch(q); !errors.Is(err, ErrDispatchConflict) {
 		t.Fatalf("reserve after settle = %v, want ErrDispatchConflict", err)
 	}
 }
@@ -607,7 +615,7 @@ func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
 		t.Fatalf("quote: %v", err)
 	}
 	h.advance(31 * time.Second)
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err == nil {
+	if _, err := h.engine.ReserveForDispatch(q); err == nil {
 		t.Fatal("an expired quote must not be reserved for dispatch")
 	}
 }
@@ -618,7 +626,7 @@ func TestReservedDispatchSettlesAfterQuoteExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	h.advance(10 * time.Minute) // the provider took longer than the quote TTL
@@ -636,7 +644,7 @@ func TestDebitActualDebitsAndReportsOverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	const providerCost = 300 // 10% fee -> 330 actual against a 2-cent ceiling
@@ -665,7 +673,7 @@ func TestFailedSettlementKeepsTheHold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+	if _, err := h.engine.ReserveForDispatch(q); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	settle, err := h.engine.Settle(q.Quote, "prov-req-broke", 200_000, 1000, 99_999)

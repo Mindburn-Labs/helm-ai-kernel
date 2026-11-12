@@ -117,7 +117,7 @@ func TestReconcileMismatch_FreezesAndRefusesSpend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote after freeze: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err == nil {
+	if _, err := h.engine.ReserveForDispatch(q); err == nil {
 		t.Fatalf("expected reservation to be refused on a frozen account")
 	}
 	if _, err := h.ledger.TopUp("topup-after-freeze", 1000, "k-after-freeze", "evidence://x"); err == nil {
@@ -159,7 +159,7 @@ func TestPaymentFailure_NoNegativeUnmanagedBalance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
-	if _, err := h.engine.ReserveForDispatch(q.Quote); err == nil {
+	if _, err := h.engine.ReserveForDispatch(q); err == nil {
 		t.Fatalf("frozen account must refuse new reservations")
 	}
 }

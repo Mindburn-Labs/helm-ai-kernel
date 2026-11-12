@@ -1,3 +1,7 @@
+// quantum_posture: these tests drive spend-proxy commands whose receipts carry
+// classical Ed25519 signatures; they make or verify no signature themselves
+// and make no post-quantum claim.
+
 package main
 
 import (
@@ -230,5 +234,15 @@ func TestSpendProxyInferenceNetExampleConfigLoads(t *testing.T) {
 		if (env.ID == "env-baseline") == env.AllowModelSubstitution {
 			t.Fatalf("envelope %s has the wrong substitution posture", env.ID)
 		}
+	}
+}
+
+// TestSpendProxyExportRefusesAMalformedPublicKey: --public-key must be an
+// Ed25519 public key; anything else is a usage error before any export.
+func TestSpendProxyExportRefusesAMalformedPublicKey(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runSpendProxyExport([]string{"--receipts-dir", t.TempDir(), "--out", t.TempDir(), "--public-key", "ed25519:abcd"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--public-key") {
+		t.Fatalf("exit = %d, stderr = %q; want 2 naming --public-key", code, stderr.String())
 	}
 }

@@ -377,7 +377,11 @@ func TestGovernedRouteEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open trusted keys: %v", err)
 	}
-	if err := keys.Verify(verdict); err != nil {
+	pub, ok := keys.PublicKeyFor(verdict.SignatureKeyID)
+	if !ok {
+		t.Fatalf("verdict signing key %q is not registered", verdict.SignatureKeyID)
+	}
+	if err := verdict.VerifySignature(pub); err != nil {
 		t.Fatalf("verdict signature verification failed: %v", err)
 	}
 
@@ -555,7 +559,11 @@ func TestExportEvidencePacksOfflineVerifiable(t *testing.T) {
 	}
 
 	outDir := filepath.Join(t.TempDir(), "packs")
-	results, err := ExportEvidencePacks(f.receiptsDir, outDir, "")
+	pub, err := ParsePublicKey(f.server.SigningPublicKey())
+	if err != nil {
+		t.Fatalf("public key: %v", err)
+	}
+	results, err := ExportEvidencePacks(ExportOptions{ReceiptsDir: f.receiptsDir, OutDir: outDir, PublicKey: pub})
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
@@ -567,7 +575,10 @@ func TestExportEvidencePacksOfflineVerifiable(t *testing.T) {
 		t.Fatalf("pack not offline-verified: %+v", res)
 	}
 	if !res.SignatureVerified || res.SignatureKeyID != f.server.SigningKeyID() {
-		t.Fatalf("verdict signature not verified against registry: %+v", res)
+		t.Fatalf("signatures not verified against the pinned key: %+v", res)
+	}
+	if got := strings.Join(res.SignaturesChecked, ","); got != "route_quote,budget_verdict,usage,settlement,budget_verdict_seal" {
+		t.Fatalf("signatures checked = %s, want every record and the verdict seal", got)
 	}
 	if len(res.ReceiptsVerified) != 4 {
 		t.Fatalf("receipts verified = %v, want all 4", res.ReceiptsVerified)

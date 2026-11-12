@@ -56,6 +56,13 @@ func (c advancingPrivacyContext) Err() error {
 
 func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost int64) *gatewayFixture {
 	t.Helper()
+	return newGatewayFixtureWithFee(t, stale, costCap, providerCost, 1000)
+}
+
+// newGatewayFixtureWithFee is newGatewayFixture with the engine's platform fee
+// in basis points.
+func newGatewayFixtureWithFee(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost, feeBps int64) *gatewayFixture {
+	t.Helper()
 	now := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	clk := now
 
@@ -80,7 +87,7 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	eng, err := inferencegateway.NewEngine(inferencegateway.EngineConfig{
 		Prices: prices, Terms: terms, Ledger: ledger,
 		TreasuryID: "treasury-1", RoutePolicyID: "route-policy", QuoteTTL: 30 * time.Second,
-		StalePrice: stale, CostCap: costCap, PlatformFeeBps: 1000,
+		StalePrice: stale, CostCap: costCap, PlatformFeeBps: feeBps,
 		Now: func() time.Time { return clk },
 	})
 	if err != nil {

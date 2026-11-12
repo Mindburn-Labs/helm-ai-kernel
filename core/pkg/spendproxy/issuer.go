@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,9 +39,9 @@ type Issuer struct {
 // base64-encoded 32-byte seed (or 64-byte private key) is used directly; any
 // other non-empty string is treated as a passphrase and hashed to a seed
 // (deterministic but low-entropy — derivedFromPassphrase reports it so callers
-// can warn). An empty secret generates a fresh key: past receipts remain
-// verifiable through the registry's stored public key, but a restarted proxy
-// signs under a new key id.
+// can warn). An empty secret generates a fresh key that lives in memory only.
+// The proxy and reconcile never pass an empty secret: without one they sign
+// with the seed generated in the receipts directory (SigningSeedFileName).
 func NewIssuer(secret string) (issuer *Issuer, derivedFromPassphrase bool, err error) {
 	var priv ed25519.PrivateKey
 	trimmed := strings.TrimSpace(secret)
@@ -126,6 +127,63 @@ func (i *Issuer) SignDetached(payload any) (keyID, signature string, err error) 
 // pack manifest-hash signature), returning the key id and raw signature.
 func (i *Issuer) SignRaw(payload []byte) (keyID string, signature []byte, err error) {
 	return i.keyID, ed25519.Sign(i.priv, payload), nil
+}
+
+// SigningSeedFileName is the file inside a receipts directory that holds the
+// signing seed a proxy generated because it was started without one, as 64
+// hex digits, mode 0600 (helm-tracker#313 r2, finding 5). A restart and
+// `spend-proxy reconcile` without a seed sign with it, so one key signs the
+// whole log. Whoever can read the file can sign receipt lines; pass a seed
+// (--sign or HELM_SPEND_PROXY_SIGNING_SEED) to keep it elsewhere.
+const SigningSeedFileName = "signing-seed"
+
+// signingSeed resolves the secret a proxy signs with: secret when given, else
+// the seed generated in dir, which create generates when there is none. It
+// returns the seed file's path when the seed came from it.
+func signingSeed(dir, secret string, create bool) (string, string, error) {
+	if strings.TrimSpace(secret) != "" {
+		return secret, "", nil
+	}
+	path := filepath.Join(dir, SigningSeedFileName)
+	raw, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return "", "", fmt.Errorf("spendproxy: stat the signing seed: %w", statErr)
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+			return "", "", fmt.Errorf("spendproxy: the signing seed %s is readable by others (mode %v): chmod 600 it", path, info.Mode().Perm())
+		}
+		seed, decErr := hex.DecodeString(strings.TrimSpace(string(raw)))
+		if decErr != nil || len(seed) != ed25519.SeedSize {
+			return "", "", fmt.Errorf("spendproxy: the signing seed %s is not %d bytes of hex", path, ed25519.SeedSize)
+		}
+		return hex.EncodeToString(seed), path, nil
+	case !os.IsNotExist(err):
+		return "", "", fmt.Errorf("spendproxy: read the signing seed: %w", err)
+	case !create:
+		return "", "", fmt.Errorf("spendproxy: no signing seed: pass the proxy's --sign seed, or run against a receipts directory whose proxy generated %s", SigningSeedFileName)
+	}
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return "", "", fmt.Errorf("spendproxy: generate a signing seed: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", "", fmt.Errorf("spendproxy: create receipts dir: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", "", fmt.Errorf("spendproxy: create the signing seed: %w", err)
+	}
+	encoded := hex.EncodeToString(seed)
+	_, werr := f.WriteString(encoded + "\n")
+	serr := f.Sync()
+	cerr := f.Close()
+	if err := errors.Join(werr, serr, cerr); err != nil {
+		return "", "", fmt.Errorf("spendproxy: write the signing seed: %w", err)
+	}
+	return encoded, path, nil
 }
 
 // TrustedKeyFileName is the trusted-key registry file inside a receipts dir.

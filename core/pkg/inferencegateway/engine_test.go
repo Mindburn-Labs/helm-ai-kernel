@@ -713,10 +713,13 @@ func TestQuoteClampsOutputToMandate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clamped quote: %v", err)
 	}
-	// 1000 in * 500 µ¢ leaves 10_000*1e6 - 500_000 µ¢ for output.
-	const want = (10_000*1_000_000 - 1000*500) / 1500
-	if res.Quote.OutputTokens != want || res.Quote.MaxAmountCents != 10_000 {
-		t.Fatalf("clamped output/ceiling = %d/%d, want %d/10000", res.Quote.OutputTokens, res.Quote.MaxAmountCents, want)
+	// The hold carries the harness's 10% platform fee (helm-tracker#313 r2,
+	// finding 1), so the provider quote may take 10_000 * 10^4 / 11_000 =
+	// 9_090 cents of the 10_000-cent limit; 1000 in * 500 µ¢ leaves
+	// 9_090*1e6 - 500_000 µ¢ for output.
+	const want = (9_090*1_000_000 - 1000*500) / 1500
+	if res.Quote.OutputTokens != want || res.Quote.MaxAmountCents > 10_000 {
+		t.Fatalf("clamped output/ceiling = %d/%d, want %d within 10000", res.Quote.OutputTokens, res.Quote.MaxAmountCents, want)
 	}
 
 	// A ceiling inside the mandate is left alone.

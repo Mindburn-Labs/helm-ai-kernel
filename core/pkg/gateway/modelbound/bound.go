@@ -11,13 +11,17 @@
 //   - OpenAI adds a hidden definition for the local_shell and apply_patch
 //     tools.
 //
-// Anything else is refused before any hold or dispatch, naming it: a member,
-// an input item, a content part, a block or a media source outside the list,
+// Anything else is refused before any hold or dispatch, naming it: a member of
+// the request, of a message, of an input item, of a content part, of a block
+// or of a media source outside the list,
 // stored state the provider would bill (a stored conversation, a stored
 // prompt, an item named by its id alone), remote or uploaded media, tools the
 // provider runs on its own account, members that change the billed model or
-// the price tier, and nested configuration outside the closed lists of
-// reasoning, text, thinking, output_config and context_management. Both model
+// the price tier, nested configuration outside the closed lists of reasoning,
+// text, thinking, output_config and context_management, and, where the
+// gateway prices no cache write (Options.CacheWrites), a prompt-cache write.
+// Values the quote counts by their bytes are not read further: tool
+// definitions, tool calls, JSON schemas, metadata and the like. Both model
 // gateways read requests through this package: helm-gateway's model gateway
 // (core/pkg/gateway/modelgw) and the governed OpenAI-compatible gateway the
 // spend proxy serves (core/pkg/api.GovernedGateway).
@@ -30,6 +34,7 @@
 package modelbound
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -87,6 +92,11 @@ type Options struct {
 	// be priority. On another upstream the tier's meaning is the upstream's,
 	// so auto is refused and an absent tier is left absent.
 	StandardTier bool
+	// CacheWrites: the gateway prices a prompt-cache write and reads the
+	// provider's cache-write usage (the model gateway's routes carry
+	// cache-write prices). Without it a request that names cache_control at
+	// any depth is refused: a cache write bills above the input price.
+	CacheWrites bool
 }
 
 // Bound is what Check found in a request the quote can price.
@@ -197,6 +207,11 @@ func Check(api string, fields []Field, opts Options) (*Bound, *Refusal) {
 	if !known {
 		return &Bound{}, &Refusal{Code: "unsupported_api", Message: fmt.Sprintf("the gateway reads no %q requests", api)}
 	}
+	if !opts.CacheWrites {
+		if e := cacheWrite(fields); e != nil {
+			return &Bound{}, e
+		}
+	}
 	if e := hostedTools(api, fields); e != nil {
 		return &Bound{}, e
 	}
@@ -241,9 +256,46 @@ func Check(api string, fields []Field, opts Options) (*Bound, *Refusal) {
 	return bound, nil
 }
 
+// cacheWrite refuses a request that names cache_control at any depth, in any
+// spelling of the key (the decoder unescapes it): the provider would bill a
+// cache write above the input price the hold is quoted at, and the gateway
+// reads no cache-write usage to settle it.
+func cacheWrite(fields []Field) *Refusal {
+	for _, f := range fields {
+		found := f.Key == "cache_control"
+		_ = WalkKeys(json.NewDecoder(bytes.NewReader(f.Raw)), func(key string) {
+			found = found || key == "cache_control"
+		})
+		if found {
+			return unquoted("unsupported_member", "the request member %q carries cache_control: a prompt-cache write is billed above the input price, and this gateway's price book has no cache-write price", f.Key)
+		}
+	}
+	return nil
+}
+
+// closedMembers refuses a member of obj that is not in allowed; a null member
+// is absent.
+func closedMembers(obj map[string]json.RawMessage, where string, allowed ...string) *Refusal {
+	for _, key := range sortedKeys(obj) {
+		if !IsNull(obj[key]) && !slices.Contains(allowed, key) {
+			return unquoted("unsupported_content", "%s has the member %q, which the gateway's quote does not understand", where, key)
+		}
+	}
+	return nil
+}
+
 // member checks one top-level member's value.
 func (b *bounder) member(name string, raw json.RawMessage) *Refusal {
 	switch name {
+	case "stream":
+		var stream bool
+		if json.Unmarshal(raw, &stream) != nil {
+			return &Refusal{Code: "invalid_stream", Message: "stream must be a boolean"}
+		}
+	case "instructions":
+		if _, isString := String(raw); !isString {
+			return memberRefusal("instructions", "must be a string: a list of instructions carries items and media the gateway does not read there")
+		}
 	case "store":
 		var store bool
 		if json.Unmarshal(raw, &store) != nil || store {
@@ -584,6 +636,20 @@ func choiceRefusal(fields []Field, allowed func(toolType string) bool) *Refusal 
 
 // OpenAI Responses ----------------------------------------------------------
 
+// responsesItemMembers are the members each input item type may have.
+var responsesItemMembers = map[string][]string{
+	"message":                 {"type", "id", "role", "content", "status"},
+	"function_call":           {"type", "id", "call_id", "name", "arguments", "status"},
+	"function_call_output":    {"type", "id", "call_id", "output", "status"},
+	"custom_tool_call":        {"type", "id", "call_id", "name", "input", "status"},
+	"custom_tool_call_output": {"type", "id", "call_id", "output"},
+	"local_shell_call":        {"type", "id", "call_id", "action", "status"},
+	"local_shell_call_output": {"type", "id", "output", "status"},
+	"apply_patch_call":        {"type", "id", "call_id", "operation", "status"},
+	"apply_patch_call_output": {"type", "id", "call_id", "output", "status"},
+	"reasoning":               {"type", "id", "summary", "content", "encrypted_content", "status"},
+}
+
 // responsesItems are the input item types the quote understands: messages and
 // the calls and outputs of client-executed tools, which the request carries in
 // full, and reasoning items, whose encrypted content it carries. carried names
@@ -628,6 +694,9 @@ func (b *bounder) responsesInput(raw json.RawMessage) *Refusal {
 			return unquoted("unsupported_content", "%s has the item type %q, which the gateway's quote does not understand", where, kind)
 		}
 		if e := storedByID(obj, where, kind, carried); e != nil {
+			return e
+		}
+		if e := closedMembers(obj, where, responsesItemMembers[kind]...); e != nil {
 			return e
 		}
 		switch kind {
@@ -698,10 +767,24 @@ func (b *bounder) responsesContent(raw json.RawMessage, where string) *Refusal {
 		}
 		kind, _ := String(part["type"])
 		switch kind {
-		case "input_text", "output_text", "refusal", "summary_text", "reasoning_text":
+		case "input_text", "summary_text", "reasoning_text":
+			if e := closedMembers(part, at, "type", "text"); e != nil {
+				return e
+			}
+		case "output_text":
+			if e := closedMembers(part, at, "type", "text", "annotations", "logprobs"); e != nil {
+				return e
+			}
+		case "refusal":
+			if e := closedMembers(part, at, "type", "refusal"); e != nil {
+				return e
+			}
 		case "input_image":
 			if raw, has := part["file_id"]; has && !IsNull(raw) {
 				return unquoted("unsupported_content", "%s names an uploaded image by file_id, which the quote cannot size", at)
+			}
+			if e := closedMembers(part, at, "type", "image_url", "detail"); e != nil {
+				return e
 			}
 			url, _ := String(part["image_url"])
 			if !inlineImage(url) {
@@ -775,11 +858,24 @@ func (b *bounder) chatContent(raw json.RawMessage, where string) *Refusal {
 		}
 		kind, _ := String(part["type"])
 		switch kind {
-		case "text", "refusal":
+		case "text":
+			if e := closedMembers(part, at, "type", "text", "cache_control"); e != nil {
+				return e
+			}
+		case "refusal":
+			if e := closedMembers(part, at, "type", "refusal"); e != nil {
+				return e
+			}
 		case "image_url":
+			if e := closedMembers(part, at, "type", "image_url", "cache_control"); e != nil {
+				return e
+			}
 			url, isString := String(part["image_url"])
 			if !isString {
 				image, _ := Object(part["image_url"])
+				if e := closedMembers(image, at+".image_url", "url", "detail"); e != nil {
+					return e
+				}
 				url, _ = String(image["url"])
 			}
 			if !inlineImage(url) {
@@ -834,6 +930,9 @@ func (b *bounder) anthropicMessages(raw json.RawMessage) *Refusal {
 		if !ok {
 			return unquoted("invalid_content", "%s must be an object", where)
 		}
+		if e := closedMembers(msg, where, "role", "content"); e != nil {
+			return e
+		}
 		if e := b.anthropicContent(msg["content"], where+".content"); e != nil {
 			return e
 		}
@@ -862,6 +961,11 @@ func (b *bounder) anthropicContent(raw json.RawMessage, where string) *Refusal {
 			return unquoted("invalid_content", "%s must be an object", at)
 		}
 		kind, _ := String(block["type"])
+		if members, known := anthropicBlockMembers[kind]; known {
+			if e := closedMembers(block, at, members...); e != nil {
+				return e
+			}
+		}
 		switch kind {
 		case "text", "tool_use", "thinking", "redacted_thinking":
 		case "tool_result":
@@ -884,6 +988,17 @@ func (b *bounder) anthropicContent(raw json.RawMessage, where string) *Refusal {
 		}
 	}
 	return nil
+}
+
+// anthropicBlockMembers are the members each content block type may have.
+var anthropicBlockMembers = map[string][]string{
+	"text":              {"type", "text", "cache_control", "citations"},
+	"tool_use":          {"type", "id", "name", "input", "cache_control"},
+	"tool_result":       {"type", "tool_use_id", "content", "is_error", "cache_control"},
+	"thinking":          {"type", "thinking", "signature"},
+	"redacted_thinking": {"type", "data"},
+	"image":             {"type", "source", "cache_control"},
+	"document":          {"type", "source", "title", "context", "citations", "cache_control"},
 }
 
 // citations refuses a document with citations enabled: Anthropic splits it
@@ -914,11 +1029,17 @@ func (b *bounder) anthropicSource(raw json.RawMessage, at, kind string) *Refusal
 	sourceType, _ := String(source["type"])
 	switch {
 	case kind == "image" && sourceType == "base64":
+		if e := closedMembers(source, at+".source", "type", "media_type", "data"); e != nil {
+			return e
+		}
 		b.images++
 		return nil
 	case kind == "document" && sourceType == "text":
-		return nil
+		return closedMembers(source, at+".source", "type", "media_type", "data")
 	case kind == "document" && sourceType == "content":
+		if e := closedMembers(source, at+".source", "type", "content"); e != nil {
+			return e
+		}
 		return b.anthropicContent(source["content"], at+".source.content")
 	case sourceType == "url":
 		return unquoted("unsupported_content", "%s is a %s with the source type \"url\": the provider fetches and bills it at a size the quote cannot see", at, kind)

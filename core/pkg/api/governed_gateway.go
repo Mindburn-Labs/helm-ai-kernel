@@ -174,6 +174,11 @@ type GatewayMetadata struct {
 	Capped            bool                           `json:"cost_capped,omitempty"`
 	// OverageCents is actual cost debited above the quote ceiling.
 	OverageCents int64 `json:"overage_cents,omitempty"`
+	// EnvelopeClosed and EnvelopeClosedWindows name the envelope and the
+	// period windows a bill above its hold closed, also when its settlement
+	// failed (helm-tracker#313 r2, finding 3).
+	EnvelopeClosed        string   `json:"envelope_closed,omitempty"`
+	EnvelopeClosedWindows []string `json:"envelope_closed_windows,omitempty"`
 	// SettleFailed marks a response where the provider was called but the
 	// settlement could not commit; Quote identifies the unsettled dispatch.
 	SettleFailed bool `json:"settle_failed,omitempty"`
@@ -234,7 +239,8 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	// route (core/pkg/gateway/modelbound): what the quote cannot price is
 	// refused before any quote, hold or dispatch, naming it (helm-tracker#313).
 	// The upstream speaks OpenAI's wire format for another account, so an auto
-	// service tier is refused rather than named.
+	// service tier is refused rather than named, and the price book has no
+	// cache-write price, so a prompt-cache write is refused (r2, finding 6).
 	fieldList, bound, refusal := modelbound.CheckBody(routeAPI(r.URL.Path), body, modelbound.Options{})
 	if refusal != nil {
 		WriteBadRequest(w, refusal.Message)
@@ -367,24 +373,26 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		verdict = settleRes.UsageReceipt.BudgetVerdict
 	}
 	meta := GatewayMetadata{
-		Governed:          true,
-		Verdict:           verdict,
-		ReasonCode:        settleRes.ReasonCode,
-		Quote:             quoteRes.Quote,
-		RouteReceipt:      quoteRes.Receipt,
-		UsageReceipt:      settleRes.UsageReceipt,
-		UsageReceiptView:  publicUsageReceiptView(settleRes.UsageReceipt),
-		SettlementReceipt: settleRes.SettlementReceipt,
-		QuotedAmountCents: settleRes.QuotedAmountCents,
-		ActualAmountCents: settleRes.ActualAmountCents,
-		BalanceAfterCents: settleRes.BalanceAfterCents,
-		ModelSubstituted:  quoteRes.ModelSubstituted,
-		FallbackUsed:      quoteRes.FallbackUsed,
-		Capped:            settleRes.Capped,
-		OverageCents:      settleRes.OverageCents,
-		SettledAtHold:     settleRes.AtHold,
-		Replayed:          settleRes.Replayed,
-		EvidencePackRef:   settleRes.EvidencePackRef,
+		Governed:              true,
+		Verdict:               verdict,
+		ReasonCode:            settleRes.ReasonCode,
+		Quote:                 quoteRes.Quote,
+		RouteReceipt:          quoteRes.Receipt,
+		UsageReceipt:          settleRes.UsageReceipt,
+		UsageReceiptView:      publicUsageReceiptView(settleRes.UsageReceipt),
+		SettlementReceipt:     settleRes.SettlementReceipt,
+		QuotedAmountCents:     settleRes.QuotedAmountCents,
+		ActualAmountCents:     settleRes.ActualAmountCents,
+		BalanceAfterCents:     settleRes.BalanceAfterCents,
+		ModelSubstituted:      quoteRes.ModelSubstituted,
+		FallbackUsed:          quoteRes.FallbackUsed,
+		Capped:                settleRes.Capped,
+		OverageCents:          settleRes.OverageCents,
+		EnvelopeClosed:        settleRes.EnvelopeClosed,
+		EnvelopeClosedWindows: settleRes.EnvelopeClosedWindows,
+		SettledAtHold:         settleRes.AtHold,
+		Replayed:              settleRes.Replayed,
+		EvidencePackRef:       settleRes.EvidencePackRef,
 	}
 	if g.onSettlement != nil {
 		g.onSettlement(&meta)
@@ -439,9 +447,15 @@ func (g *GovernedGateway) writeReplay(w http.ResponseWriter, replayKey, scope st
 		writeIdempotencyConflict(w, "idempotency key was already used for a different request")
 		return
 	}
+	// The verdict is the usage receipt's: a replayed overage says ESCALATE,
+	// as its first answer did (helm-tracker#313 r2, finding 11).
+	verdict := economic.BudgetVerdictAllow
+	if settled.UsageReceipt != nil && settled.UsageReceipt.BudgetVerdict != "" {
+		verdict = settled.UsageReceipt.BudgetVerdict
+	}
 	meta := GatewayMetadata{
 		Governed:          true,
-		Verdict:           economic.BudgetVerdictAllow,
+		Verdict:           verdict,
 		ReasonCode:        settled.ReasonCode,
 		UsageReceipt:      settled.UsageReceipt,
 		UsageReceiptView:  publicUsageReceiptView(settled.UsageReceipt),
@@ -481,6 +495,8 @@ func writeSettleFailure(w http.ResponseWriter, quote *economic.RouteQuote, res *
 		meta.QuotedAmountCents = res.QuotedAmountCents
 		meta.ActualAmountCents = res.ActualAmountCents
 		meta.OverageCents = res.OverageCents
+		meta.EnvelopeClosed = res.EnvelopeClosed
+		meta.EnvelopeClosedWindows = res.EnvelopeClosedWindows
 	}
 	writeGatewayMetadataHeaders(w, meta)
 	writeJSON(w, status, map[string]any{

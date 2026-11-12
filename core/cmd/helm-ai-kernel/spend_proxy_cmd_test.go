@@ -83,7 +83,9 @@ func TestSpendProxyRefusesNonLoopbackBind(t *testing.T) {
 
 	for _, addr := range []string{"0.0.0.0", "::", "", "10.0.0.5", "example.com"} {
 		code, msg := run(addr)
-		if code != 2 || !strings.Contains(msg, "not loopback") || !strings.Contains(msg, "loopback only") {
+		// The refusal holds with caller credentials too, so it does not
+		// blame missing authentication (helm-tracker#313 r2, finding 13).
+		if code != 2 || !strings.Contains(msg, "not loopback") || !strings.Contains(msg, "loopback only") || strings.Contains(msg, "no authentication is configured") {
 			t.Fatalf("--addr %q: exit = %d, stderr = %q, want a refusal that says why", addr, code, msg)
 		}
 	}
@@ -272,6 +274,13 @@ const reconcileSeed = "020202020202020202020202020202020202020202020202020202020
 // intent and its hold.
 func pendingDispatch(t *testing.T) (string, string, string, int64) {
 	t.Helper()
+	return pendingDispatchSigned(t, reconcileSeed)
+}
+
+// pendingDispatchSigned is pendingDispatch with the proxy run under seed ("":
+// the default mode).
+func pendingDispatchSigned(t *testing.T, seed string) (string, string, string, int64) {
+	t.Helper()
 	dir := t.TempDir()
 	config := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(config, []byte(reconcileConfig), 0o600); err != nil {
@@ -288,7 +297,7 @@ func pendingDispatch(t *testing.T) (string, string, string, int64) {
 		t.Fatal(err)
 	}
 	server, err := spendproxy.NewServer(spendproxy.ServerOptions{Config: cfg, SourceHash: sourceHash, ReceiptsDir: receipts,
-		UpstreamBaseURL: upstream.URL + "/v1", UpstreamAPIKey: "k", SigningSecret: reconcileSeed, Logf: t.Logf})
+		UpstreamBaseURL: upstream.URL + "/v1", UpstreamAPIKey: "k", SigningSecret: seed, Logf: t.Logf})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,5 +397,23 @@ func TestSpendProxyReconcileClearsAPendingHold(t *testing.T) {
 				t.Fatal("a reconciled intent was reconciled again")
 			}
 		})
+	}
+}
+
+// TestSpendProxyReconcileInTheDefaultMode (helm-tracker#313 r2, finding 5): a
+// proxy run without --sign keeps a generated seed in its receipts directory,
+// and reconcile without --sign signs with it.
+func TestSpendProxyReconcileInTheDefaultMode(t *testing.T) {
+	t.Setenv("HELM_SPEND_PROXY_SIGNING_SEED", "")
+	config, receipts, intent, _ := pendingDispatchSigned(t, "")
+	var stdout, stderr bytes.Buffer
+	code := runSpendProxyCmd([]string{"reconcile", "--config", config, "--receipts-dir", receipts, "--intent", intent,
+		"--release", "--reason", "the provider has no such request", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("reconcile without --sign: exit %d: %s", code, stderr.String())
+	}
+	var res map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil || res["action"] != "released" || res["spend_intent_id"] != intent {
+		t.Fatalf("reconcile --json = %s (%v)", stdout.String(), err)
 	}
 }

@@ -175,12 +175,18 @@ func (m *mockUpstream) upstreamModel(t *testing.T) string {
 	return req.Model
 }
 
+// testSigningSeed is the signing seed the fixture's proxy runs with.
+const testSigningSeed = "0101010101010101010101010101010101010101010101010101010101010101"
+
 type proxyFixture struct {
 	server      *Server
 	http        *httptest.Server
 	upstream    *mockUpstream
 	receiptsDir string
 	configPath  string
+	// secret is the signing secret the proxy starts with; nil is the fixed
+	// test seed, and "" is the default mode (no --sign).
+	secret *string
 
 	logMu sync.Mutex
 	logs  []string
@@ -211,13 +217,17 @@ func (f *proxyFixture) start(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	secret := testSigningSeed
+	if f.secret != nil {
+		secret = *f.secret
+	}
 	server, err := NewServer(ServerOptions{
 		Config:          cfg,
 		SourceHash:      sourceHash,
 		ReceiptsDir:     f.receiptsDir,
 		UpstreamBaseURL: f.upstream.server.URL + "/v1",
 		UpstreamAPIKey:  "test-key",
-		SigningSecret:   "0101010101010101010101010101010101010101010101010101010101010101",
+		SigningSecret:   secret,
 		Logf: func(format string, args ...any) {
 			line := fmt.Sprintf(format, args...)
 			f.logMu.Lock()

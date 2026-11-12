@@ -1,17 +1,20 @@
-// quantum_posture: this file only persists receipts whose classical Ed25519
-// signatures are produced and verified elsewhere (issuer.go); it implements no
-// cryptographic control itself beyond SHA-256-hashed content pass-through.
+// quantum_posture: this file persists receipts whose classical Ed25519
+// signatures are produced in issuer.go, and verifyBookLines checks those
+// signatures with classical Ed25519 (export.go verifyDetached) before a start
+// replays the lines; no post-quantum primitive is used in this file.
 
 package spendproxy
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,6 +51,13 @@ const (
 // MetadataReleaseReason is the route-quote metadata key of a release record
 // that says why the hold was released.
 const MetadataReleaseReason = "release_reason"
+
+// The route-quote metadata keys of a settle_failed record: the actual cost the
+// provider billed, in cents, and the overage above the hold.
+const (
+	MetadataActualCents  = "actual_amount_cents"
+	MetadataOverageCents = "overage_cents"
+)
 
 // NoteDispatchJournal is the note of the route_quote line appended before the
 // provider call. A logged quote whose note starts with "rejected" was never
@@ -241,6 +251,39 @@ func LoadRecords(path string) ([]*ReceiptRecord, error) {
 	return out, nil
 }
 
+// bookKinds are the lines a start replays into the books that debit a hold or
+// free one: a start accepts them only signed by a trusted key.
+var bookKinds = map[RecordKind]bool{RecordUsage: true, RecordSettlement: true, RecordDispatchReleased: true}
+
+// verifyBookLines refuses a log whose usage, settlement or dispatch_released
+// line is unsigned, signed by a key trusted does not resolve, or whose
+// signature does not verify (helm-tracker#313 r2, finding 9): an unsigned
+// release line appended to the log would otherwise free a pending hold on the
+// next start, and a forged usage line would replace it with a smaller debit.
+func verifyBookLines(records []*ReceiptRecord, trusted func(string) (ed25519.PublicKey, bool)) error {
+	for i, rec := range records {
+		if !bookKinds[rec.Kind] {
+			continue
+		}
+		var problem string
+		pub, known := trusted(rec.PayloadSignatureKeyID)
+		switch {
+		case rec.PayloadSignature == "" || rec.PayloadSignatureKeyID == "":
+			problem = "is unsigned"
+		case !known:
+			problem = fmt.Sprintf("is signed by the key %q, which is neither the proxy's nor one its receipts directory registered", rec.PayloadSignatureKeyID)
+		default:
+			if err := verifyDetached(pub, rec.Payload(), rec.PayloadSignature); err != nil {
+				problem = "has a signature that does not verify: " + err.Error()
+			}
+		}
+		if problem != "" {
+			return fmt.Errorf("spendproxy: receipt log record %d, a %s line of intent %s, %s; a start replays only signed lines that debit or free a hold: refusing to start", i+1, rec.Kind, rec.SpendIntentID, problem)
+		}
+	}
+	return nil
+}
+
 // ReplaySummary reports what restart replay recovered from the receipt log.
 type ReplaySummary struct {
 	// DebitedCents is the sum of committed balance debits found in the log; the
@@ -328,10 +371,13 @@ func DebitedCents(records []*ReceiptRecord) int64 {
 }
 
 // restoreEnvelopeUse re-applies every settled debit in the log to the envelope
-// window it was settled in, so a restarted proxy does not hand an envelope's
-// limit out again (helm-tracker#313, audit H7), and closes again a window a
-// settlement above its hold closed. A debit under an envelope the config no
-// longer declares is not applied to any.
+// window its usage receipt names, so a restarted proxy does not hand an
+// envelope's limit out again (helm-tracker#313, audit H7), and closes again
+// exactly the windows a settlement above its hold closed: the ones its usage
+// receipt names, or, when its settlement failed, its settle_failed line's
+// route quote names (r2, findings 2 and 3). A receipt written before the
+// windows were recorded books, and closes, the window of its line's time. A
+// debit under an envelope the config no longer declares is not applied to any.
 func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
 	settled := make(map[string]bool)
 	for _, rec := range records {
@@ -341,14 +387,46 @@ func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.Balan
 	}
 	seen := make(map[string]bool)
 	for _, rec := range records {
-		if rec.Kind != RecordUsage || rec.Usage == nil || !settled[rec.SpendIntentID] || seen[rec.SpendIntentID] {
-			continue
-		}
-		seen[rec.SpendIntentID] = true
-		if env := envelopes[rec.Usage.EnvelopeID]; env != nil {
-			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, rec.Usage.BalanceDebitCents, rec.Usage.Metadata["envelope_closed"] != "")
+		switch {
+		case rec.Kind == RecordSettleFailed && rec.RouteQuote != nil:
+			if env := envelopes[rec.RouteQuote.EnvelopeID]; env != nil {
+				ledger.RestoreEnvelopeUse(env, rec.RecordedAt, "", 0, closedWindows(rec.RouteQuote.Metadata))
+			}
+		case rec.Kind == RecordUsage && rec.Usage != nil && settled[rec.SpendIntentID] && !seen[rec.SpendIntentID]:
+			seen[rec.SpendIntentID] = true
+			env := envelopes[rec.Usage.EnvelopeID]
+			if env == nil {
+				continue
+			}
+			meta := rec.Usage.Metadata
+			closed := closedWindows(meta)
+			if meta[inferencegateway.MetadataEnvelopeClosed] != "" && len(closed) == 0 {
+				closed = []string{""} // a legacy receipt: the window of its line
+			}
+			window := meta[inferencegateway.MetadataEnvelopeWindow]
+			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, rec.Usage.BalanceDebitCents, legacyWindows(env, rec.RecordedAt, closed))
 		}
 	}
+}
+
+// closedWindows reads the envelope windows a receipt's metadata names as
+// closed.
+func closedWindows(meta map[string]string) []string {
+	if meta[inferencegateway.MetadataEnvelopeClosed] == "" || meta[inferencegateway.MetadataEnvelopeClosedWindows] == "" {
+		return nil
+	}
+	return strings.Split(meta[inferencegateway.MetadataEnvelopeClosedWindows], ",")
+}
+
+// legacyWindows replaces the empty window of a legacy closure with the window
+// of the time its line was written.
+func legacyWindows(env *economic.AgentSpendEnvelope, at time.Time, windows []string) []string {
+	for i, w := range windows {
+		if w == "" {
+			windows[i] = inferencegateway.PeriodWindow(env.Period, at)
+		}
+	}
+	return windows
 }
 
 // isDispatchJournal reports whether a route_quote line was appended before a

@@ -8,6 +8,7 @@ package spendproxy
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,8 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
@@ -38,7 +41,9 @@ type ServerOptions struct {
 	// UpstreamBaseURL and UpstreamAPIKey configure the cloud provider dispatch.
 	UpstreamBaseURL string
 	UpstreamAPIKey  string
-	// SigningSecret seeds the verdict issuer key; empty generates a fresh key.
+	// SigningSecret seeds the verdict issuer key; empty signs with the seed
+	// the proxy generated in ReceiptsDir (SigningSeedFileName), generating
+	// it on the first start.
 	SigningSecret string
 	Logf          func(format string, args ...any)
 }
@@ -61,18 +66,26 @@ type Server struct {
 	prices     *inferencegateway.MemoryPriceBook
 	pending    []PendingDispatch
 	logf       func(format string, args ...any)
+	// lock is the receipts directory's lock, held until Close; seedPath is
+	// the generated seed the issuer key comes from, empty for a given seed.
+	lock     *dirLock
+	seedPath string
 }
 
 // NewServer composes the full governed spend path. Startup replays the durable
 // receipt log so the balance and the idempotency index survive restarts.
 func NewServer(opts ServerOptions) (*Server, error) {
-	s, err := openServer(opts)
+	s, err := openServer(opts, true)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.keys.Register(s.issuer.KeyID(), s.issuer.PublicKey()); err != nil {
+		_ = s.Close()
 		return nil, err
 	}
 	upstream, err := NewUpstream(opts.UpstreamBaseURL, opts.UpstreamAPIKey, s.prices)
 	if err != nil {
-		s.store.Close()
+		_ = s.Close()
 		return nil, err
 	}
 	s.upstream = upstream
@@ -85,7 +98,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		OnSettlement: s.persistOutcome,
 	})
 	if err != nil {
-		s.store.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("spendproxy: governed gateway: %w", err)
 	}
 	s.gatewayMux = http.NewServeMux()
@@ -93,35 +106,52 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	return s, nil
 }
 
-// openServer rebuilds the proxy's state from its config and receipt log
-// (rebuildState) and opens its receipt store and issuer. It serves nothing
-// and calls no provider; NewServer and Reconcile build on it.
-func openServer(opts ServerOptions) (*Server, error) {
-	st, err := rebuildState(opts)
+// openServer takes the receipts directory's lock, resolves the signing key
+// (generating the directory's seed when createSeed is set and no secret is
+// given), rebuilds the proxy's state from its config and receipt log
+// (rebuildState) and opens its receipt store. It serves nothing and calls no
+// provider; NewServer and Reconcile build on it, and Close releases the lock.
+func openServer(opts ServerOptions, createSeed bool) (s *Server, err error) {
+	if err := checkServerOptions(opts); err != nil {
+		return nil, err
+	}
+	lock, err := lockReceiptsDir(opts.ReceiptsDir)
 	if err != nil {
 		return nil, err
 	}
-	store, err := OpenFileStore(opts.ReceiptsDir)
+	var store *FileStore
+	defer func() {
+		if err != nil {
+			if store != nil {
+				_ = store.Close()
+			}
+			lock.Unlock()
+		}
+	}()
+	secret, seedPath, err := signingSeed(opts.ReceiptsDir, opts.SigningSecret, createSeed)
 	if err != nil {
 		return nil, err
 	}
-	issuer, derivedFromPassphrase, err := NewIssuer(opts.SigningSecret)
+	issuer, derivedFromPassphrase, err := NewIssuer(secret)
 	if err != nil {
-		store.Close()
+		return nil, err
+	}
+	keys, err := OpenTrustedKeys(opts.ReceiptsDir)
+	if err != nil {
+		return nil, err
+	}
+	st, err := rebuildState(opts, trustedKeyResolver(keys, issuer))
+	if err != nil {
 		return nil, err
 	}
 	if derivedFromPassphrase {
 		st.logf("spend-proxy: WARNING: signing secret is not a 32-byte seed; derived one by hashing it")
 	}
-	keys, err := OpenTrustedKeys(opts.ReceiptsDir)
+	store, err = OpenFileStore(opts.ReceiptsDir)
 	if err != nil {
-		store.Close()
 		return nil, err
 	}
-	if err := keys.Register(issuer.KeyID(), issuer.PublicKey()); err != nil {
-		store.Close()
-		return nil, err
-	}
+
 	for _, p := range st.pending {
 		st.logf("spend-proxy: ALERT: dispatch %s (intent %s) was journalled before its provider call and never settled; %d cents stay reserved until `spend-proxy reconcile --intent %s` settles or releases it",
 			p.Key, p.Quote.SpendIntentID, p.AmountCents, p.Quote.SpendIntentID)
@@ -139,7 +169,34 @@ func openServer(opts ServerOptions) (*Server, error) {
 		replay:     st.replay,
 		pending:    st.pending,
 		logf:       st.logf,
+		lock:       lock,
+		seedPath:   seedPath,
 	}, nil
+}
+
+// checkServerOptions refuses options rebuildState cannot work from.
+func checkServerOptions(opts ServerOptions) error {
+	switch {
+	case opts.Config == nil:
+		return errors.New("spendproxy: config is required")
+	case opts.SourceHash == "":
+		return errors.New("spendproxy: config source hash is required")
+	case opts.ReceiptsDir == "":
+		return errors.New("spendproxy: receipts dir is required")
+	}
+	return nil
+}
+
+// trustedKeyResolver resolves the keys a start accepts on the lines it
+// replays: the issuer's own and the keys of earlier runs in the receipts
+// directory's registry.
+func trustedKeyResolver(keys *TrustedKeys, issuer *Issuer) func(string) (ed25519.PublicKey, bool) {
+	return func(keyID string) (ed25519.PublicKey, bool) {
+		if issuer != nil && keyID == issuer.KeyID() {
+			return issuer.PublicKey(), true
+		}
+		return keys.PublicKeyFor(keyID)
+	}
 }
 
 // proxyState is what the receipt log and the config rebuild.
@@ -155,16 +212,11 @@ type proxyState struct {
 
 // rebuildState rebuilds the books, the ledger with what the log debited, the
 // envelopes' use, the engine and the dispatches held again pending
-// reconciliation. It writes nothing.
-func rebuildState(opts ServerOptions) (*proxyState, error) {
-	if opts.Config == nil {
-		return nil, errors.New("spendproxy: config is required")
-	}
-	if opts.SourceHash == "" {
-		return nil, errors.New("spendproxy: config source hash is required")
-	}
-	if opts.ReceiptsDir == "" {
-		return nil, errors.New("spendproxy: receipts dir is required")
+// reconciliation. It writes nothing. Every line that debits or frees a hold
+// must be signed by a key trusted resolves (verifyBookLines).
+func rebuildState(opts ServerOptions, trusted func(string) (ed25519.PublicKey, bool)) (*proxyState, error) {
+	if err := checkServerOptions(opts); err != nil {
+		return nil, err
 	}
 	logf := opts.Logf
 	if logf == nil {
@@ -186,6 +238,9 @@ func rebuildState(opts ServerOptions) (*proxyState, error) {
 	// spent against the configured opening balance.
 	records, err := LoadRecords(receiptLogPath(opts.ReceiptsDir))
 	if err != nil {
+		return nil, err
+	}
+	if err := verifyBookLines(records, trusted); err != nil {
 		return nil, err
 	}
 	debited := DebitedCents(records)
@@ -244,8 +299,16 @@ func rebuildState(opts ServerOptions) (*proxyState, error) {
 	return &proxyState{prices: prices, envelopes: envelopes, ledger: ledger, engine: engine, replay: replay, pending: pending, logf: logf}, nil
 }
 
-// Close releases the receipt store.
-func (s *Server) Close() error { return s.store.Close() }
+// Close releases the receipt store and the receipts directory's lock.
+func (s *Server) Close() error {
+	err := s.store.Close()
+	s.lock.Unlock()
+	return err
+}
+
+// SigningSeedPath is the generated seed file the issuer key comes from, or ""
+// when the proxy was given a seed.
+func (s *Server) SigningSeedPath() string { return s.seedPath }
 
 // ReplaySummary reports what startup recovered from the durable log.
 func (s *Server) ReplaySummary() ReplaySummary { return *s.replay }
@@ -318,6 +381,38 @@ func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, b
 	return outcome, err
 }
 
+// settleFailedRecord is the signed line of a dispatch whose settlement failed
+// after the provider was called: the dispatch's route quote, whose metadata
+// records what the provider billed (MetadataActualCents), the overage above
+// the hold and the envelope windows it closed. A restart closes those windows
+// again, and reconcile settles the dispatch at no less than the actual
+// (helm-tracker#313 r2, findings 3 and 4).
+func settleFailedRecord(meta *api.GatewayMetadata, note string) *ReceiptRecord {
+	quote := meta.Quote
+	failed := *quote
+	failed.Metadata = make(map[string]string, len(quote.Metadata)+4)
+	for k, v := range quote.Metadata {
+		failed.Metadata[k] = v
+	}
+	if meta.ActualAmountCents > 0 {
+		failed.Metadata[MetadataActualCents] = strconv.FormatInt(meta.ActualAmountCents, 10)
+	}
+	if meta.OverageCents > 0 {
+		failed.Metadata[MetadataOverageCents] = strconv.FormatInt(meta.OverageCents, 10)
+	}
+	if meta.EnvelopeClosed != "" {
+		failed.Metadata[inferencegateway.MetadataEnvelopeClosed] = meta.EnvelopeClosed
+		failed.Metadata[inferencegateway.MetadataEnvelopeClosedWindows] = strings.Join(meta.EnvelopeClosedWindows, ",")
+	}
+	return &ReceiptRecord{
+		Kind:          RecordSettleFailed,
+		TenantID:      quote.TenantID,
+		SpendIntentID: quote.SpendIntentID,
+		Note:          note,
+		RouteQuote:    &failed,
+	}
+}
+
 // releaseRecord is the signed journal line of a released hold: the dispatch's
 // route quote, whose metadata says why it was released.
 func releaseRecord(quote *economic.RouteQuote, reason string) *ReceiptRecord {
@@ -344,7 +439,7 @@ func (s *Server) RegisterRoutes(mux interface {
 	mux.HandleFunc("/v1/responses", s.handleInference)
 	mux.HandleFunc("/v1/embeddings", s.handleInference)
 	mux.HandleFunc("/v1/models", s.requireCaller(s.gatewayMux.ServeHTTP))
-	mux.HandleFunc("/helm/spend/health", s.handleHealth)
+	mux.HandleFunc("/helm/spend/health", s.requireCaller(s.handleHealth))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -365,7 +460,8 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed", "invalid_request_error", "")
 		return
 	}
-	if refused := s.bindCaller(r); refused != nil {
+	caller, refused := s.bindCaller(r)
+	if refused != nil {
 		code := "helm_caller_scope"
 		if refused.status == http.StatusUnauthorized {
 			code = "helm_caller_credential"
@@ -381,6 +477,7 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.applyHeaderDefaults(r, body)
+	scopeIdempotencyKey(r.Header, caller)
 
 	var probe struct {
 		Stream bool `json:"stream"`
@@ -396,10 +493,16 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 
 // applyHeaderDefaults injects the configured default governance identity for
 // requests that carry no X-HELM headers (a stock OpenAI client repointed via
-// OPENAI_BASE_URL). Governance still runs in full against the default
-// envelope; with no defaults configured, header-less requests fail closed in
+// OPENAI_BASE_URL), and mints an idempotency key for any request that names
+// none, with or without defaults: a stock client sends none, and each such
+// request is a new spend (helm-tracker#313 r2, finding 7). Governance still
+// runs in full against the default envelope; with no defaults and no caller
+// credential, a request without agent and envelope headers fails closed in
 // ParseRequestHeaders.
 func (s *Server) applyHeaderDefaults(r *http.Request, body []byte) {
+	if r.Header.Get(inferencegateway.HeaderIdempotencyKey) == "" {
+		r.Header.Set(inferencegateway.HeaderIdempotencyKey, mintIdempotencyKey(body))
+	}
 	if s.cfg.Defaults.EnvelopeID == "" {
 		return
 	}
@@ -413,9 +516,6 @@ func (s *Server) applyHeaderDefaults(r *http.Request, body []byte) {
 		if s.cfg.Defaults.WorkspaceID != "" {
 			r.Header.Set(inferencegateway.HeaderWorkspace, s.cfg.Defaults.WorkspaceID)
 		}
-	}
-	if r.Header.Get(inferencegateway.HeaderIdempotencyKey) == "" {
-		r.Header.Set(inferencegateway.HeaderIdempotencyKey, mintIdempotencyKey(body))
 	}
 }
 
@@ -466,14 +566,12 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 				// audit trail loudly.
 				note := fmt.Sprintf("settlement failed after dispatch (%s/%s): actual %d cents not debited",
 					envl.HELM.Verdict, envl.HELM.ReasonCode, envl.HELM.ActualAmountCents)
+				if envl.HELM.EnvelopeClosed != "" {
+					note += fmt.Sprintf("; the bill is %d cents above the hold and envelope %s takes no further dispatch in %s",
+						envl.HELM.OverageCents, envl.HELM.EnvelopeClosed, strings.Join(envl.HELM.EnvelopeClosedWindows, ", "))
+				}
 				s.logf("spend-proxy: ALERT: %s for %s", note, envl.HELM.Quote.SpendIntentID)
-				s.appendOrLog(&ReceiptRecord{
-					Kind:          RecordSettleFailed,
-					TenantID:      envl.HELM.Quote.TenantID,
-					SpendIntentID: envl.HELM.Quote.SpendIntentID,
-					Note:          note,
-					RouteQuote:    envl.HELM.Quote,
-				})
+				s.appendOrLog(settleFailedRecord(&envl.HELM, note))
 			} else if envl.HELM.SettlementReceipt == nil && envl.HELM.Quote != nil {
 				s.appendOrLog(&ReceiptRecord{
 					Kind:          RecordRouteQuote,

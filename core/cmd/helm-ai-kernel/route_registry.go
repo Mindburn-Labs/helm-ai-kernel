@@ -260,9 +260,10 @@ const (
 	RouteAuthMetricsToken RouteAuth = "metrics_token"
 	// RouteAuthListenerCredential is the subcommand's own credential: mcp serve
 	// --auth static-header|oauth, or the proxy's HELM_PROXY_TOKEN. Without one,
-	// requireListenerAuth refuses a non-loopback bind. The spend-proxy has no
-	// credential, so its routes are RouteAuthPublic and requireListenerAuth
-	// refuses every non-loopback --addr.
+	// requireListenerAuth refuses a non-loopback bind. The spend-proxy's routes
+	// are RouteAuthPublic to the listener: its optional caller credentials are
+	// checked by the proxy itself (spendproxy.Server.bindCaller), and
+	// requireLoopbackListener refuses every non-loopback --addr.
 	RouteAuthListenerCredential RouteAuth = "listener_credential"
 )
 

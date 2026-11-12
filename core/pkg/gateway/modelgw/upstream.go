@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -21,8 +22,15 @@ type KeyProvider interface {
 }
 
 // The headers the gateway forwards from the client to the provider. Anything
-// else the client sent, its own credential included, stops here.
+// else the client sent, its own credential included, stops here. The
+// Anthropic headers are forwarded on the Messages API only: anthropic-beta
+// selects features, some billed at a premium, and it is checked against the
+// allowlist only there (bound.go), so an OpenAI-API request does not carry it
+// to an upstream that may honour it (helm-tracker#313 r2, finding 12).
 var forwardedRequestHeaders = []string{"Accept", "Anthropic-Version", "Anthropic-Beta", "Openai-Beta"}
+
+// anthropicOnlyHeaders are the forwarded headers sent on the Messages API only.
+var anthropicOnlyHeaders = []string{"Anthropic-Version", "Anthropic-Beta"}
 
 // The headers the gateway relays back from the provider. The provider's own
 // Content-Encoding is not one: the transport decompresses, and the client gets
@@ -94,6 +102,9 @@ func newProviderRequest(ctx context.Context, p *Provider, c *call, key string, i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "helm-model-gateway")
 	for _, name := range forwardedRequestHeaders {
+		if c.API != effectargs.APIAnthropicMessages && slices.Contains(anthropicOnlyHeaders, name) {
+			continue
+		}
 		if v := in.Get(name); v != "" {
 			req.Header.Set(name, v)
 		}

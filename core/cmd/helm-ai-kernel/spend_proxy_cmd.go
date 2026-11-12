@@ -73,7 +73,7 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory for the durable receipt log and trusted-key registry")
 	cmd.StringVar(&upstream, "upstream", "https://openrouter.ai/api/v1", "Upstream OpenAI-compatible base URL (includes /v1); e.g. https://inference.do-ai.run/v1 for DigitalOcean Gradient serverless inference")
 	cmd.StringVar(&apiKey, "api-key", "", "Upstream API key (or set HELM_SPEND_PROXY_UPSTREAM_KEY / OPENROUTER_API_KEY)")
-	cmd.StringVar(&signSecret, "sign", "", "Ed25519 signing seed for BudgetVerdict receipts (or set HELM_SPEND_PROXY_SIGNING_SEED; empty generates a per-run key)")
+	cmd.StringVar(&signSecret, "sign", "", "Ed25519 signing seed for the receipt lines (or set HELM_SPEND_PROXY_SIGNING_SEED); empty signs with the seed generated on the first start in <receipts-dir>/signing-seed (mode 0600), which whoever can read that directory can sign with")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
@@ -86,7 +86,7 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 	// (config callers) bind each request to an identity, but they are bearer
 	// tokens on plain HTTP, so the listener stays loopback only with or
 	// without them.
-	if err := requireListenerAuth("spend-proxy", addr, false, "spend-proxy serves plain HTTP and spends the upstream provider key, so it binds loopback only, with or without caller credentials: pass a loopback --addr"); err != nil {
+	if err := requireLoopbackListener("spend-proxy", addr, "spend-proxy serves plain HTTP and spends the upstream provider key, so it binds loopback only, with or without caller credentials: pass a loopback --addr"); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
@@ -135,6 +135,9 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  config:        %s (source hash %s)\n", configPath, sourceHash)
 	_, _ = fmt.Fprintf(stdout, "  receipts:      %s\n", server.ReceiptLogPath())
 	_, _ = fmt.Fprintf(stdout, "  signing key:   %s (registered in trusted-key registry)\n", server.SigningKeyID())
+	if seed := server.SigningSeedPath(); seed != "" {
+		_, _ = fmt.Fprintf(stdout, "  signing seed:  %s (generated; pass --sign to keep the seed elsewhere)\n", seed)
+	}
 	_, _ = fmt.Fprintf(stdout, "  public key:    %s (pass to `spend-proxy export --public-key`)\n", server.SigningPublicKey())
 	_, _ = fmt.Fprintf(stdout, "  balance:       %d cents available\n", server.BalanceCents())
 	if replay.RestoredSettlements > 0 || replay.DebitedCents > 0 {
@@ -245,14 +248,16 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 // dispatches. Run it while the proxy is stopped.
 //
 // Exit codes: 0 = reconciled or listed, 2 = usage or config error, 1 = the
-// intent is not pending or the line could not be signed and appended.
+// intent is not pending, the line could not be signed and appended, a proxy
+// holds the receipts directory, or the log records that the provider billed
+// the dispatch and the action would erase or understate it.
 func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("spend-proxy reconcile", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	var (
-		configPath, receiptsDir, intent, reason, signSecret string
-		settleCents                                         int64
-		release, jsonOut                                    bool
+		configPath, receiptsDir, intent, reason, signSecret, override string
+		settleCents                                                   int64
+		release, jsonOut                                              bool
 	)
 	cmd.StringVar(&configPath, "config", "", "The spend-proxy config the proxy runs with (required)")
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log")
@@ -260,7 +265,8 @@ func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 	cmd.Int64Var(&settleCents, "settle-cents", 0, "Settle the dispatch at this provider cost in cents (the platform fee is added)")
 	cmd.BoolVar(&release, "release", false, "Release the dispatch: the provider did not bill it")
 	cmd.StringVar(&reason, "reason", "", "Why, recorded and signed with the line (required with --intent)")
-	cmd.StringVar(&signSecret, "sign", "", "The proxy's signing seed (or HELM_SPEND_PROXY_SIGNING_SEED): the line must be signed by the key that signed the dispatch")
+	cmd.StringVar(&signSecret, "sign", "", "The proxy's signing seed (or HELM_SPEND_PROXY_SIGNING_SEED; empty: the seed the proxy generated in --receipts-dir): the line must be signed by the key that signed the dispatch")
+	cmd.StringVar(&override, "override-reason", "", "Why --settle-cents may debit less than the actual cost the receipt log records the provider billed; recorded and signed as reconcile_override_reason")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the result as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -278,7 +284,7 @@ func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	opts := spendproxy.ReconcileOptions{Config: cfg, SourceHash: sourceHash, ReceiptsDir: receiptsDir, SigningSecret: signSecret,
-		SpendIntentID: intent, SettleCents: settleCents, Release: release, Reason: reason,
+		SpendIntentID: intent, SettleCents: settleCents, Release: release, Reason: reason, OverrideReason: override,
 		Logf: func(format string, a ...any) { _, _ = fmt.Fprintf(stderr, format+"\n", a...) }}
 	if intent == "" {
 		pending, err := spendproxy.PendingDispatches(opts)
@@ -292,8 +298,8 @@ func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stdout, "%d pending dispatch(es)\n", len(pending))
 		return 0
 	}
-	if release == (settleCents > 0) || strings.TrimSpace(reason) == "" || settleCents < 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: --intent needs --reason and exactly one of --settle-cents N (N > 0) and --release")
+	if release == (settleCents > 0) || strings.TrimSpace(reason) == "" || settleCents < 0 || (override != "" && release) {
+		_, _ = fmt.Fprintln(stderr, "Error: --intent needs --reason and exactly one of --settle-cents N (N > 0) and --release; --override-reason goes with --settle-cents only")
 		return 2
 	}
 	res, err := spendproxy.Reconcile(opts)

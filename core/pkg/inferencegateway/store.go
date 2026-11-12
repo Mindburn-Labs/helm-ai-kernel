@@ -294,11 +294,13 @@ func (l *BalanceLedger) RestoreSettlement(usage *economic.UsageReceipt, settleme
 // funds count as available, and it is consumed only when the debit posts, so
 // a failed commit leaves the hold in place. The debit is also booked as used
 // on the envelope that authorized it, in the reservation's window or, without
-// one, in the window that contains now. A released reservation cannot be
-// settled: its provider was never called. A debit no reservation backs is
-// decided against its envelope first, as a reservation would have been
-// (helm-tracker#313 r1, F9); a debit above its reservation closes the
-// reservation's envelope window, also when the debit then fails.
+// one, in the window that contains now, and the usage receipt names that
+// window. A released reservation cannot be settled: its provider was never
+// called. A debit no reservation backs is decided against its envelope first,
+// as a reservation would have been (helm-tracker#313 r1, F9); a debit above
+// its reservation closes the reservation's envelope window and the one that
+// contains now, and names them on the usage receipt, also when the debit then
+// fails (r2, finding 2).
 func (l *BalanceLedger) commit(
 	idempotencyKey string,
 	usage *economic.UsageReceipt,
@@ -344,9 +346,12 @@ func (l *BalanceLedger) commit(
 	reservation := l.openReservationLocked(reservationKey)
 	if reservation != nil {
 		available += reservation.AmountCents
-		l.closeAboveHoldLocked(reservation, debit)
+		closed := l.closeAboveHoldLocked(reservation, debit, now)
+		recordEnvelopeWindows(usage, reservation.EnvelopeID, reservation.EnvelopeWindow, closed)
 	} else if err := l.decideUnreservedLocked(usage, debit, now); err != nil {
 		return nil, err
+	} else if w, ok := l.unreservedWindowLocked(usage.EnvelopeID, now); ok {
+		recordEnvelopeWindows(usage, w.envelopeID, w.window, nil)
 	}
 	if debit > available {
 		return nil, errors.New("inferencegateway: balance debit exceeds available funds")

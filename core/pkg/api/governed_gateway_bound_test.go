@@ -37,11 +37,13 @@ func (f *gatewayFixture) postBody(t *testing.T, idem, body string) *httptest.Res
 
 // TestGatewayEnvelopeLimitIsConsumed (helm-tracker#313, audit H7): ten
 // requests against a 2-cent envelope stop at the limit, sequential or
-// concurrent, and a refused request carries no allowing quote or receipt.
+// concurrent, and a refused request carries no allowing quote or receipt. The
+// fixture runs without a platform fee here, so each request holds and costs
+// 1 cent (with a fee the hold carries it, r2 finding 1).
 func TestGatewayEnvelopeLimitIsConsumed(t *testing.T) {
 	for _, concurrent := range []bool{false, true} {
 		t.Run(fmt.Sprintf("concurrent=%v", concurrent), func(t *testing.T) {
-			f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 1)
+			f := newGatewayFixtureWithFee(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 1, 0)
 			f.limitEnvelope(2)
 			var mu sync.Mutex
 			allowed := 0

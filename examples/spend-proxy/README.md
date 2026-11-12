@@ -74,17 +74,31 @@ caller's token, never the token; a caller presents the token as its bearer
 ```
 
 ```bash
-printf %s "$TOKEN" | shasum -a 256   # the token_sha256 value
+TOKEN=$(openssl rand -hex 32)          # 32 random bytes, as 64 hex digits
+printf %s "$TOKEN" | shasum -a 256     # the token_sha256 value
 ```
 
-A request without a configured token gets 401 (`helm_caller_credential`). An
-`X-HELM-Agent`, `X-HELM-Spend-Envelope` or `X-HELM-Workspace` its caller does
-not cover gets 403 (`helm_caller_scope`); an absent one takes the caller's
-agent, its first envelope and its first workspace. `/v1/models` needs the
-token too; `/helm/spend/health` does not.
+A token must be at least 32 bytes; generate it as above, from a random
+source, never from a word or a name. The config holds its unsalted SHA-256:
+for a random 32-byte token that is out of reach of a guess, so a keyed hash
+would add nothing but a key to keep beside the config. A shorter token gets
+401 at its first use, so a config that hashed one shows at once.
+
+A request without a configured token gets 401 (`helm_caller_credential`); the
+`Bearer` scheme is matched in any case. An `X-HELM-Agent`,
+`X-HELM-Spend-Envelope` or `X-HELM-Workspace` its caller does not cover gets
+403 (`helm_caller_scope`); an absent one takes the caller's agent, its first
+envelope and its first workspace, so a stock OpenAI client with the token as
+its API key and no `X-HELM-*` header is served. `/v1/models` and
+`/helm/spend/health` (which shows the balance, the upstream, the receipt log
+path and the signing key) need the token too. An `X-HELM-Idempotency-Key` is
+the caller's own: two callers may use the same key, and neither learns the
+other did.
 
 Requests without `X-HELM-*` headers are governed under the config's
-`request_defaults` envelope. To capture the paired baseline-vs-substitute run,
+`request_defaults` envelope. A request without `X-HELM-Idempotency-Key` gets a
+fresh key, in either mode, so each such request is a new spend and a retry of
+it is another one. To capture the paired baseline-vs-substitute run,
 send the same task with explicit headers against each envelope:
 
 ```bash
@@ -116,21 +130,31 @@ named by its id alone), remote or uploaded media, a data URL that is not an
 image, hosted tools, `web_search_options`, `background: true`, `n` other than
 1, the routing members `models`, `provider`, `plugins` and `route`, a
 `service_tier` other than `default` or `flex` (`auto` too: its meaning is the
-upstream account's), a repeated key and any member the list does not name are
-refused with 400, naming it. A Responses request that names no `store` is sent
-with `store: false`.
+upstream account's), a repeated key, a `stream` that is not a boolean,
+Responses `instructions` that are not a string, and any member of the request,
+of a message, an input item or a content part that the list does not name are
+refused with 400, naming it. `cache_control` is refused at any depth: the price
+book has no cache-write price, and a prompt-cache write bills above the input
+price. A Responses request that names no `store` is sent with `store: false`.
 
 The hold counts one input token per byte of the forwarded request, plus a
 floor for each inline image and each tool definition the provider adds, and
-the output ceiling. The proxy lowers the ceiling to what the envelope can still
-pay for, reserves the hold against the envelope's `max_amount_cents` for the
-day and the balance in one step, and forwards the ceiling to the provider; a
-request the envelope can no longer cover gets 403 `ERR_BALANCE_INSUFFICIENT`.
-A provider that bills above the hold anyway is debited what it billed: the
-usage receipt says `ESCALATE` / `ERR_SPEND_PER_REQUEST_LIMIT` with
-`overage_cents` and `envelope_closed`, an `ALERT` is logged, and the envelope
-refuses further requests (403 `ERR_SPEND_ENVELOPE_INACTIVE`) until the next UTC
-day, also across a restart.
+the output ceiling, at the configured price, with the `platform_fee_bps` fee on
+it rounded up. The proxy lowers the ceiling to what the envelope can still pay
+for, fee included, reserves the hold against the envelope's `max_amount_cents`
+for the day and the balance in one step, and forwards the ceiling to the
+provider; a request the envelope can no longer cover gets 403
+`ERR_BALANCE_INSUFFICIENT`. A dispatch is debited the usage the provider
+reports, priced at the configured price, and the fee; a provider that reported
+no more than its part of the hold is debited no more than the hold. One that
+reports more is debited all of it: the usage receipt says `ESCALATE` /
+`ERR_SPEND_PER_REQUEST_LIMIT` with `overage_cents`, `envelope_closed` and
+`envelope_closed_windows`, an `ALERT` is logged, and the envelope refuses
+further requests (403 `ERR_SPEND_ENVELOPE_INACTIVE`) in the UTC day of the
+reservation and the day of the settlement, until the day after. That holds when
+the balance cannot cover the bill and the settlement fails too (the
+`settle_failed` line records the actual cost, the overage and the closed days,
+signed), and across a restart, which closes the days the receipts name.
 
 An answer is priced by the model it names: the quoted model, or its id with a
 dated suffix (`-2024-07-18`, `-20250514`), at its usage; no model, or the quoted
@@ -150,8 +174,11 @@ stopped (or whose usage line never reached the log), is held again on the next
 start, pending reconciliation, and the start banner prints `pending:` with an
 `ALERT` naming its intent.
 
-To clear a pending hold, stop the proxy, check the provider's console for the
-call, and reconcile it with the proxy's own signing seed:
+To clear a pending hold, stop the proxy (reconcile takes the receipts
+directory's lock, which a running proxy holds, and refuses while it is held;
+a second proxy on the same directory refuses to start for the same reason),
+check the provider's console for the call, and reconcile it with the proxy's
+own signing seed:
 
 ```bash
 helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir>   # lists pending intents
@@ -166,9 +193,19 @@ is added), as usage and settlement lines whose usage receipt carries
 `reconciled_by` and `reconcile_reason`; `--release` frees the hold with a
 `dispatch_released` line whose route quote carries `release_reason`. Both are
 signed by the issuer key, which must be the one that signed the dispatch
-(`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`), and the next start replays them.
-Exit 0 on success, 2 on a usage or config error, 1 when the intent is not
-pending or a line cannot be signed and appended.
+(`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`, or without either the seed the
+proxy generated in the receipts directory), and the next start replays them.
+When the log records that the provider billed the dispatch (a `settle_failed`
+line, or a usage or settlement line without its pair), `--release` is
+refused, and `--settle-cents` must debit at least the actual cost recorded
+unless `--override-reason` says why; the override is recorded and signed on
+the usage receipt as `reconcile_override_reason`. A settlement above the
+balance fails as any debit does: raise `balance.opening_cents` in the config
+first. Exit 0 on success, 2 on a usage or config error, 1 when the intent is
+not pending, a proxy holds the directory, the log's record of the bill refuses
+the action, or a line cannot be signed and appended. `--json` prints
+`spend_intent_id`, `action`, `hold_cents`, `debited_cents`, `reason`, and
+`recorded_actual_cents` and `override_reason` when they apply.
 
 An `X-HELM-Idempotency-Key` that already settled, or is held, is never sent
 upstream again: an identical retry gets the original response while the proxy
@@ -185,7 +222,15 @@ Streaming is not served: a request with `"stream": true` is refused with 403
 
 Every dispatch appends RouteQuote / BudgetVerdict / Usage / Settlement lines to
 `<receipts-dir>/spend-receipts.jsonl` (the quote is fsynced before the provider
-is called; a store failure refuses dispatch). Export offline-verifiable spend
+is called; a store failure refuses dispatch). Each line is signed with the
+issuer key: the `--sign` seed, or without one a seed the proxy generates on
+its first start in `<receipts-dir>/signing-seed` (mode 0600, printed in the
+start banner as `signing seed:`), so restarts and reconcile sign with one key.
+Whoever can read that file can sign receipt lines; pass `--sign` to keep the
+seed elsewhere. A start refuses a log whose usage, settlement or
+`dispatch_released` line is unsigned, or signed by a key that is neither the
+proxy's nor one the directory's `trusted_keys.json` registered, or whose
+signature does not verify, naming the line. Export offline-verifiable spend
 EvidencePacks:
 
 ```bash

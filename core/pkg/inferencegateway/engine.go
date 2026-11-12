@@ -35,11 +35,12 @@ const (
 	// reports the difference as SettleResult.OverageCents, which the caller
 	// must record and alert on. The usage receipt of such a settlement says
 	// ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT with the overage, the ceiling and
-	// the envelope it closed (metadata overage_cents, quote_ceiling_cents,
-	// envelope_closed), and the envelope's window takes no further dispatch
-	// until its next period. Use it when the provider has already been paid:
-	// clamping would under-debit and escalating would debit nothing. It is
-	// never the default.
+	// the envelope and windows it closed (metadata overage_cents,
+	// quote_ceiling_cents, envelope_closed, envelope_closed_windows), and the
+	// envelope takes no further dispatch in the reservation's window or the
+	// one the settlement falls in. Use it when the provider has already been
+	// paid: clamping would under-debit and escalating would debit nothing. It
+	// is never the default.
 	CostCapDebitActual CostCapPolicy = "DEBIT_ACTUAL"
 )
 
@@ -115,9 +116,17 @@ type SettleResult struct {
 	ActualAmountCents int64
 	BalanceDebitCents int64
 	BalanceAfterCents int64
+	// ProviderCostCents is the provider's part of ActualAmountCents.
+	ProviderCostCents int64
 	// OverageCents is the actual cost above the quote ceiling that
 	// CostCapDebitActual debited; callers must record and alert on it.
 	OverageCents int64
+	// EnvelopeClosed names the envelope a debit above its reservation
+	// closed, and EnvelopeClosedWindows the period windows it closed (the
+	// reservation's and the one that contains the settlement time). They are
+	// set when the commit failed too: the closure does not wait for the debit.
+	EnvelopeClosed        string
+	EnvelopeClosedWindows []string
 	// AtHold marks a settlement that debited the whole hold because the
 	// provider may have billed the call and its usage is not known.
 	AtHold          bool
@@ -259,7 +268,9 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	effective := effectiveEnvelope(env, addSaturating(state.reserved, state.used))
 	outputTokens := req.EstimatedOutputTokens
 	if req.ClampOutputToMandate {
-		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, mandateCeilingCents(effective, route))
+		// The ceiling bounds the hold, which carries the platform fee: the
+		// provider quote may take only the part of it the fee leaves.
+		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, e.providerCeiling(mandateCeilingCents(effective, route)))
 		if ok && limit >= 1 && limit < outputTokens {
 			outputTokens = limit
 		}
@@ -268,11 +279,19 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	if err != nil {
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonInvalidAmount, err.Error())
 	}
-	// Max ceiling: the route's explicit cap when set, else the quoted amount.
-	maxCents := quotedCents
+	// The hold is the provider quote with the platform fee on it, rounded up:
+	// a settlement debits the provider cost and its fee, so a hold of the
+	// quote alone would be passed by a provider billing within its quote
+	// (helm-tracker#313 r2, finding 1).
+	holdCents, ok := e.holdFor(quotedCents)
+	if !ok {
+		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonInvalidAmount, "the platform fee on the quoted cost overflows")
+	}
+	// Max ceiling: the route's explicit cap when set, else the hold.
+	maxCents := holdCents
 	if route.MaxAmountCents > 0 {
 		maxCents = route.MaxAmountCents
-		if quotedCents > maxCents {
+		if holdCents > maxCents {
 			return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonPerRequestLimit, "quoted cost exceeds route max ceiling")
 		}
 	}
@@ -389,16 +408,15 @@ func (e *Engine) SettleAtHold(quote *economic.RouteQuote, providerRequestID, rea
 	if providerRequestID == "" {
 		providerRequestID = "unknown-" + quote.ID
 	}
-	fee, ok := mulNonNegative(quote.MaxAmountCents, e.cfg.PlatformFeeBps)
+	provider, ok := e.providerPart(quote.MaxAmountCents)
 	if !ok {
 		return nil, errors.New("inferencegateway: platform fee overflow")
 	}
-	fee /= 10_000 + e.cfg.PlatformFeeBps
 	merged := map[string]string{"settled_at_hold": reason}
 	for k, v := range notes {
 		merged[k] = v
 	}
-	return e.settle(quote, Usage{ProviderRequestID: providerRequestID, ProviderCostCents: quote.MaxAmountCents - fee, Notes: merged}, fee, true)
+	return e.settle(quote, Usage{ProviderRequestID: providerRequestID, ProviderCostCents: provider, Notes: merged}, quote.MaxAmountCents-provider, true)
 }
 
 // SettleUsage records actual provider usage after dispatch, enforces quote
@@ -443,18 +461,10 @@ func (e *Engine) settle(quote *economic.RouteQuote, u Usage, fee int64, atHold b
 		return nil, errors.New("inferencegateway: provider cost cannot be negative")
 	}
 
-	feeBasis, ok := mulNonNegative(providerCostCents, e.cfg.PlatformFeeBps)
-	if !ok {
-		return nil, errors.New("inferencegateway: platform fee overflow")
+	platformFee, actual, err := e.charge(quote, providerCostCents, fee)
+	if err != nil {
+		return nil, err
 	}
-	platformFee := feeBasis / 10_000
-	if fee >= 0 {
-		platformFee = fee
-	}
-	if platformFee > math.MaxInt64-providerCostCents {
-		return nil, errors.New("inferencegateway: actual cost overflow")
-	}
-	actual := providerCostCents + platformFee
 
 	capped := false
 	var overage int64
@@ -501,17 +511,15 @@ func (e *Engine) settle(quote *economic.RouteQuote, u Usage, fee int64, atHold b
 		}
 	}
 	if overage > 0 {
-		// The provider billed above the hold the envelope authorized: the
-		// receipt does not say the envelope covered it, and the envelope's
-		// window closes when the debit books against its reservation
-		// (helm-tracker#313 r1, F2).
+		// The provider billed above its part of the hold the envelope
+		// authorized: the receipt does not say the envelope covered it. When
+		// the debit books against the dispatch's reservation, the commit
+		// closes the envelope's windows and names them on the receipt
+		// (MetadataEnvelopeClosed, helm-tracker#313 r1 F2 and r2 finding 2).
 		usage.BudgetVerdict = economic.BudgetVerdictEscalate
 		usage.ReasonCode = economic.SpendReasonPerRequestLimit
 		usage.Metadata["overage_cents"] = strconv.FormatInt(overage, 10)
 		usage.Metadata["quote_ceiling_cents"] = strconv.FormatInt(quote.MaxAmountCents, 10)
-		if e.cfg.Ledger.hasOpenReservation(quote.ID) {
-			usage.Metadata["envelope_closed"] = quote.EnvelopeID
-		}
 	}
 
 	settlement := e.buildSettlement(quote, usage)
@@ -524,26 +532,33 @@ func (e *Engine) settle(quote *economic.RouteQuote, u Usage, fee int64, atHold b
 	// The commit consumes any dispatch reservation for this quote, so its hold
 	// is not double-counted against the debit. On failure the hold stays.
 	rec, err := e.cfg.Ledger.commit(idem, usage, settlement, quote.ID, now)
+	closedEnvelope, closedWindows := envelopeClosure(usage)
 	if err != nil {
 		return &SettleResult{
-			QuotedAmountCents: quote.QuotedAmountCents,
-			ActualAmountCents: actual,
-			OverageCents:      overage,
+			QuotedAmountCents:     quote.QuotedAmountCents,
+			ProviderCostCents:     providerCostCents,
+			ActualAmountCents:     actual,
+			OverageCents:          overage,
+			EnvelopeClosed:        closedEnvelope,
+			EnvelopeClosedWindows: closedWindows,
 		}, err
 	}
 
 	return &SettleResult{
-		UsageReceipt:      rec.UsageReceipt,
-		SettlementReceipt: rec.SettlementReceipt,
-		Capped:            capped,
-		ReasonCode:        rec.UsageReceipt.ReasonCode,
-		QuotedAmountCents: rec.UsageReceipt.QuotedAmountCents,
-		ActualAmountCents: rec.UsageReceipt.ActualAmountCents,
-		BalanceDebitCents: rec.BalanceDebitCents,
-		BalanceAfterCents: rec.BalanceAfterCents,
-		OverageCents:      overage,
-		AtHold:            atHold,
-		EvidencePackRef:   rec.UsageReceipt.EvidencePackRef,
+		UsageReceipt:          rec.UsageReceipt,
+		SettlementReceipt:     rec.SettlementReceipt,
+		Capped:                capped,
+		ReasonCode:            rec.UsageReceipt.ReasonCode,
+		QuotedAmountCents:     rec.UsageReceipt.QuotedAmountCents,
+		ActualAmountCents:     rec.UsageReceipt.ActualAmountCents,
+		BalanceDebitCents:     rec.BalanceDebitCents,
+		BalanceAfterCents:     rec.BalanceAfterCents,
+		ProviderCostCents:     rec.UsageReceipt.ProviderCostCents,
+		OverageCents:          overage,
+		EnvelopeClosed:        closedEnvelope,
+		EnvelopeClosedWindows: closedWindows,
+		AtHold:                atHold,
+		EvidencePackRef:       rec.UsageReceipt.EvidencePackRef,
 	}, nil
 }
 
@@ -559,6 +574,44 @@ func replayResult(rec *SettlementRecord) *SettleResult {
 		Replayed:          true,
 		EvidencePackRef:   rec.UsageReceipt.EvidencePackRef,
 	}
+}
+
+// DebitFor is what SettleUsage debits on quote for a provider cost, before
+// the cost-cap policy: the cost and the platform fee on it, the fee cut to the
+// hold when the cost is within the provider's part of it.
+func (e *Engine) DebitFor(quote *economic.RouteQuote, providerCostCents int64) (int64, error) {
+	if quote == nil {
+		return 0, errors.New("inferencegateway: route quote is required")
+	}
+	if providerCostCents < 0 {
+		return 0, errors.New("inferencegateway: provider cost cannot be negative")
+	}
+	_, actual, err := e.charge(quote, providerCostCents, -1)
+	return actual, err
+}
+
+// charge is the platform fee and the actual cost of a provider cost on quote.
+// fee is the fee to record, or -1 to derive it from the cost. The hold is the
+// provider's part and the fee on it: a provider that billed within its part
+// is debited no more than the hold, the fee its rounding would put above the
+// hold not charged, so only a provider bill above its part is an overage
+// (helm-tracker#313 r2, finding 1).
+func (e *Engine) charge(quote *economic.RouteQuote, providerCostCents, fee int64) (int64, int64, error) {
+	feeBasis, ok := mulNonNegative(providerCostCents, e.cfg.PlatformFeeBps)
+	if !ok {
+		return 0, 0, errors.New("inferencegateway: platform fee overflow")
+	}
+	platformFee := feeBasis / 10_000
+	if fee >= 0 {
+		platformFee = fee
+	}
+	if part, ok := e.providerPart(quote.MaxAmountCents); ok && providerCostCents <= part && platformFee > quote.MaxAmountCents-providerCostCents {
+		platformFee = quote.MaxAmountCents - providerCostCents
+	}
+	if platformFee > math.MaxInt64-providerCostCents {
+		return 0, 0, errors.New("inferencegateway: actual cost overflow")
+	}
+	return platformFee, providerCostCents + platformFee, nil
 }
 
 // selectRoute resolves the requested model against the envelope allow-list and
@@ -687,6 +740,68 @@ func affordableOutputTokens(s *economic.ProviderPriceSnapshot, inputTokens, ceil
 		return 0, false
 	}
 	return (budget - inputCost) / s.OutputTokenMicroCents, true
+}
+
+// holdFor is the hold that covers a provider cost and the platform fee on it:
+// the cost plus its fee rounded up, ceil(p x (1 + bps/10^4)). ok is false on
+// overflow.
+func (e *Engine) holdFor(providerCents int64) (int64, bool) {
+	basis, ok := mulNonNegative(providerCents, e.cfg.PlatformFeeBps)
+	if !ok {
+		return 0, false
+	}
+	fee := basis / 10_000
+	if basis%10_000 != 0 {
+		fee++
+	}
+	if fee > math.MaxInt64-providerCents {
+		return 0, false
+	}
+	return providerCents + fee, true
+}
+
+// providerPart is the provider's part of a hold: the hold less the fee it
+// carries, floor(hold x bps / (10^4 + bps)). It is the split a debit at the
+// hold books (SettleAtHold), and a provider that bills at most this much is
+// debited within the hold. It is at least the provider quote the hold was
+// made from.
+func (e *Engine) providerPart(holdCents int64) (int64, bool) {
+	fee, ok := mulDiv(holdCents, e.cfg.PlatformFeeBps, 10_000+e.cfg.PlatformFeeBps)
+	if !ok {
+		return 0, false
+	}
+	return holdCents - fee, true
+}
+
+// providerCeiling is the most a provider quote may be for its hold to stay
+// within ceilingCents: floor(ceiling x 10^4 / (10^4 + bps)).
+func (e *Engine) providerCeiling(ceilingCents int64) int64 {
+	if ceilingCents <= 0 {
+		return ceilingCents
+	}
+	p, ok := mulDiv(ceilingCents, 10_000, 10_000+e.cfg.PlatformFeeBps)
+	if !ok {
+		return 0
+	}
+	return p
+}
+
+// mulDiv returns floor(a*b/c) for non-negative operands and a positive c,
+// computed without overflowing the product, and false when the result does
+// not fit in an int64.
+func mulDiv(a, b, c int64) (int64, bool) {
+	if a < 0 || b < 0 || c <= 0 {
+		return 0, false
+	}
+	hi, lo := bits.Mul64(uint64(a), uint64(b))
+	if hi >= uint64(c) {
+		return 0, false
+	}
+	q, _ := bits.Div64(hi, lo, uint64(c))
+	if q > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(q), true
 }
 
 // mulNonNegative returns a*b for non-negative operands and reports false when

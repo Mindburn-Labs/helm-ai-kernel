@@ -27,7 +27,9 @@ func boundRequest(cfg *Config, c *call, fields []field) ([]field, *apiError) {
 	if p := cfg.Provider(c.Route.Provider); p != nil {
 		standard = p.Kind == KindOpenAI || p.Kind == KindAnthropic
 	}
-	bound, refusal := modelbound.Check(c.API, fields, modelbound.Options{StandardTier: standard})
+	// The routes carry cache-write prices (defaulted where a provider bills a
+	// write premium, Price), and usage.go reads the provider's cache writes.
+	bound, refusal := modelbound.Check(c.API, fields, modelbound.Options{StandardTier: standard, CacheWrites: true})
 	if refusal != nil {
 		return nil, boundRefusal(refusal)
 	}

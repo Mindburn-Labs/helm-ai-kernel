@@ -3,6 +3,8 @@ package inferencegateway
 import (
 	"fmt"
 	"math"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
@@ -16,9 +18,26 @@ import (
 // section of the ledger, so two concurrent dispatches cannot both take the
 // last cents; a settlement moves its reservation to used; a release frees it.
 // A settlement above its reservation (a provider that billed more than the
-// hold the quote bounded) closes its window: the envelope takes no further
-// dispatch until its next period, so it passes its limit by at most the
-// overages of the dispatches already in flight when the first one settled.
+// hold the quote bounded) closes the reservation's window and the window the
+// settlement falls in, which differ when a dispatch straddles a period
+// boundary: the envelope takes no further dispatch in either, so it passes its
+// limit by at most the overages of the dispatches already in flight when the
+// first one settled. The usage receipt names the window its debit is booked
+// in and the windows it closed (MetadataEnvelopeWindow,
+// MetadataEnvelopeClosedWindows), so a restart rebuilds the same state.
+
+// The usage-receipt metadata keys that record an envelope's windows.
+const (
+	// MetadataEnvelopeWindow is the period window a settlement's debit is
+	// booked in: its reservation's, or the window that contains the
+	// settlement time when no reservation backs it.
+	MetadataEnvelopeWindow = "envelope_window"
+	// MetadataEnvelopeClosed is the envelope a debit above its reservation
+	// closed, and MetadataEnvelopeClosedWindows the windows it closed,
+	// comma-separated in order.
+	MetadataEnvelopeClosed        = "envelope_closed"
+	MetadataEnvelopeClosedWindows = "envelope_closed_windows"
+)
 
 // envelopeWindow names one period of one envelope.
 type envelopeWindow struct {
@@ -33,6 +52,10 @@ type envelopeSpend struct {
 	used     int64
 	closed   bool
 }
+
+// PeriodWindow names the window of period p that contains t, as a usage
+// receipt's MetadataEnvelopeWindow does.
+func PeriodWindow(p economic.SpendPeriod, t time.Time) string { return periodWindow(p, t) }
 
 // periodWindow is the period of p that contains t, in UTC: a day, an ISO
 // week, a month or a quarter. A period the engine does not know is one window
@@ -111,19 +134,31 @@ func (l *BalanceLedger) envelopeState(env *economic.AgentSpendEnvelope, now time
 	return *l.envelopeSpendLocked(l.envelopeWindowLocked(env, now))
 }
 
-// RestoreEnvelopeUse re-applies a settlement committed in a previous process
-// run to its envelope's window, so a restarted engine does not hand the same
-// limit out again; aboveHold marks a settlement above its hold, which closes
-// the window again. Call it beside RestoreSettlement.
-func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at time.Time, cents int64, aboveHold bool) {
-	if env == nil || cents <= 0 {
+// RestoreEnvelopeUse re-applies what a previous process run recorded for env,
+// so a restarted engine does not hand the same limit out again: cents used in
+// window (the usage receipt's MetadataEnvelopeWindow; empty for a receipt
+// written before it existed, which books in the window that contains at), and
+// the windows a settlement above its hold closed, which close again. Call it
+// beside RestoreSettlement, and with no cents for a closure whose debit failed.
+func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at time.Time, window string, cents int64, closedWindows []string) {
+	if env == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	s := l.envelopeSpendLocked(l.envelopeWindowLocked(env, at))
-	s.used = addSaturating(s.used, cents)
-	s.closed = s.closed || aboveHold
+	w := l.envelopeWindowLocked(env, at)
+	if window != "" {
+		w.window = window
+	}
+	if cents > 0 {
+		s := l.envelopeSpendLocked(w)
+		s.used = addSaturating(s.used, cents)
+	}
+	for _, closed := range closedWindows {
+		if closed != "" {
+			l.envelopeSpendLocked(envelopeWindow{envelopeID: env.ID, window: closed}).closed = true
+		}
+	}
 }
 
 // reserveDispatch is admission's one step: under the ledger lock it refuses a
@@ -208,13 +243,54 @@ func (l *BalanceLedger) settleEnvelopeLocked(res *Reservation, envelopeID string
 	}
 }
 
-// closeAboveHoldLocked closes the window of a reservation whose debit goes
-// above it, even when the debit then fails: the bound the hold rested on did
-// not hold. Callers must hold l.mu.
-func (l *BalanceLedger) closeAboveHoldLocked(res *Reservation, debitCents int64) {
-	if res != nil && res.EnvelopeID != "" && debitCents > res.AmountCents {
-		l.envelopeSpendLocked(envelopeWindow{envelopeID: res.EnvelopeID, window: res.EnvelopeWindow}).closed = true
+// closeAboveHoldLocked closes, for a reservation whose debit goes above it,
+// the reservation's window and the window that contains now, even when the
+// debit then fails: the bound the hold rested on did not hold. It returns the
+// windows it closed, in order, or none for a debit within its reservation.
+// Callers must hold l.mu.
+func (l *BalanceLedger) closeAboveHoldLocked(res *Reservation, debitCents int64, now time.Time) []string {
+	if res == nil || res.EnvelopeID == "" || debitCents <= res.AmountCents {
+		return nil
 	}
+	windows := []string{res.EnvelopeWindow}
+	if env := l.envelopes[res.EnvelopeID]; env != nil {
+		if current := periodWindow(env.Period, now); current != res.EnvelopeWindow {
+			windows = append(windows, current)
+		}
+	}
+	slices.Sort(windows)
+	for _, w := range windows {
+		l.envelopeSpendLocked(envelopeWindow{envelopeID: res.EnvelopeID, window: w}).closed = true
+	}
+	return windows
+}
+
+// recordEnvelopeWindows writes on a usage receipt the window its debit is
+// booked in and the envelope windows it closed. Metadata is not part of the
+// receipt's content hash; the receipt is not yet shared. Callers must hold
+// l.mu.
+func recordEnvelopeWindows(usage *economic.UsageReceipt, envelopeID, window string, closed []string) {
+	if window == "" && len(closed) == 0 {
+		return
+	}
+	if usage.Metadata == nil {
+		usage.Metadata = map[string]string{}
+	}
+	if window != "" {
+		usage.Metadata[MetadataEnvelopeWindow] = window
+	}
+	if len(closed) > 0 {
+		usage.Metadata[MetadataEnvelopeClosed] = envelopeID
+		usage.Metadata[MetadataEnvelopeClosedWindows] = strings.Join(closed, ",")
+	}
+}
+
+// envelopeClosure reads back what recordEnvelopeWindows recorded as closed.
+func envelopeClosure(usage *economic.UsageReceipt) (string, []string) {
+	if usage == nil || usage.Metadata[MetadataEnvelopeClosed] == "" {
+		return "", nil
+	}
+	return usage.Metadata[MetadataEnvelopeClosed], strings.Split(usage.Metadata[MetadataEnvelopeClosedWindows], ",")
 }
 
 // unreservedWindowLocked is the window a debit without a reservation is booked

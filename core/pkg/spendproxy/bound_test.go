@@ -231,8 +231,11 @@ func TestRestartRecoversAnUnsettledDispatchAsReserved(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the dispatch never reached the provider")
 	}
-	// The first process is stuck in its provider call: start a second one on
-	// the same receipts, as after a crash.
+	// The first process is stuck in its provider call when it dies: the OS
+	// closes its receipt log and drops its lock on the receipts directory
+	// (helm-tracker#313 r2, finding 14), and a second one starts on the same
+	// receipts, as after a crash.
+	_ = f.server.Close()
 	f.start(t)
 	if f.held() == 0 {
 		t.Errorf("after a restart the unsettled dispatch holds nothing: balance %d, hold %d",

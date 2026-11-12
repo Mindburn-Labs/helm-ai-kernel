@@ -170,11 +170,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `request_defaults.workspace_id` gets 403. The start banner prints
   `callers:` when credentials are configured. New config member `callers[]`
   (`id`, `token_sha256`, `agent_id`, `envelopes`, `workspaces`).
-- `spend-proxy`, settlement: a provider bill above the hold closes the
-  envelope for the rest of its period (403 `ERR_SPEND_ENVELOPE_INACTIVE`, also
-  after a restart), and its usage receipt says `ESCALATE` /
-  `ERR_SPEND_PER_REQUEST_LIMIT` with metadata `envelope_closed`; the gateway
-  metadata `verdict` and `X-HELM-Reason-Code` report the same. An answer that
+- `spend-proxy`, settlement: a provider bill above its part of the hold closes
+  the envelope for the period of its reservation and the period its settlement
+  falls in (403 `ERR_SPEND_ENVELOPE_INACTIVE`), also when the settlement then
+  fails and after a restart, and its usage receipt says `ESCALATE` /
+  `ERR_SPEND_PER_REQUEST_LIMIT` with metadata `envelope_closed` and
+  `envelope_closed_windows`; the gateway metadata `verdict` and
+  `X-HELM-Reason-Code` report the same. An answer that
   names no model, or the quoted id with a suffix that is not a date, was
   debited at least the whole hold by an unreleased build of this change; it is
   now debited its usage at the quoted price, recording `model_mismatch`
@@ -192,13 +194,16 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   line is held at its hold on start (`pending:`), where it closed the key with
   no debit.
 - `spend-proxy reconcile` is new: `--config`, `--receipts-dir`, `--intent`,
-  `--settle-cents`, `--release`, `--reason`, `--sign` (or
-  `HELM_SPEND_PROXY_SIGNING_SEED`), `--json`; exit 0 when reconciled or
-  listed, 2 on a usage or config error, 1 when the intent is not pending or
-  its line cannot be signed and appended. A settled line's usage receipt
-  carries metadata `reconciled_by` and `reconcile_reason`. Run it while the
-  proxy is stopped. The ALERT a start logs for a pending dispatch now names
-  its intent.
+  `--settle-cents`, `--release`, `--reason`, `--override-reason`, `--sign`
+  (or `HELM_SPEND_PROXY_SIGNING_SEED`; without either, the seed the proxy
+  generated in the receipts directory), `--json`; exit 0 when reconciled or
+  listed, 2 on a usage or config error, 1 when the intent is not pending, a
+  proxy holds the receipts directory, the log's record of the bill refuses
+  the action, or its line cannot be signed and appended. A settled line's
+  usage receipt carries metadata `reconciled_by` and `reconcile_reason`, and
+  `reconcile_override_reason` under an override. It refuses to run while the
+  proxy runs. The ALERT a start logs for a pending dispatch now names its
+  intent.
 - Go API (helm-tracker#313 r1): `BalanceLedger.RestoreEnvelopeUse` takes a
   fourth argument, whether the settlement went above its hold;
   `spendproxy.RestorePendingDispatches` returns `[]spendproxy.PendingDispatch`
@@ -213,6 +218,84 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `core/pkg/gateway/modelbound` (the closed list both gateways read requests
   through). `inferencegateway.CostCapDebitActual` stays a configurable policy
   and is not the engine's default (`CAP` is); the spend proxy sets it.
+- Breaking, `platform_fee_bps` above 0 (helm-tracker#313 r2): the hold is now
+  the provider quote with the fee on it, rounded up (`max_amount_cents` of the
+  route quote; `quoted_amount_cents` stays the provider quote), and the output
+  ceiling is lowered so that hold fits the envelope. Holds rise by the fee, so
+  a request near an envelope's limits may now be refused with 403 or get a
+  lower output ceiling. A provider bill within its part of the hold is debited
+  no more than the hold; an unreleased build of this change debited the fee
+  above it, signed `envelope_closed` on the receipt and closed the envelope
+  for the day. A route's `max_amount_cents` cap now bounds the fee-inclusive
+  hold.
+- Breaking, `spend-proxy` idempotency keys (r2): a request without
+  `X-HELM-Idempotency-Key` gets a minted key in every mode, so a stock OpenAI
+  client is served in callers mode, where an unreleased build of this change
+  answered 400; without callers and without `request_defaults`, a request
+  that names its agent and envelope but no key is now served too (it got 400).
+  Each such request is a new spend: send a key to make retries safe. With
+  callers, a key is the caller's: the spend intent of a request derives from
+  the caller's id and its key, so two callers' uses of one key are two
+  dispatches, and neither gets 409 or learns of the other.
+- Breaking, `spend-proxy reconcile --json` (r2): it prints `spend_intent_id`,
+  `action` (`settled` or `released`), `hold_cents`, `debited_cents` and
+  `reason`, and now `recorded_actual_cents` and `override_reason` when they
+  apply. `--release` is refused (exit 1) for a dispatch the log records the
+  provider billed (a `settle_failed` line, or a usage or settlement line), and
+  `--settle-cents` that debits less than the recorded actual cost is refused
+  (exit 1) unless the new `--override-reason` says why, which the usage
+  receipt records as `reconcile_override_reason`. Reconcile takes the receipts
+  directory's lock and refuses (exit 1) while a proxy runs on it.
+- `spend-proxy`, receipts directory (r2): without `--sign` or
+  `HELM_SPEND_PROXY_SIGNING_SEED` the proxy no longer signs under a new key per
+  run: it generates a seed on its first start in `<receipts-dir>/signing-seed`
+  (mode 0600; a start refuses a seed file readable by others, exit 2) and
+  signs with it on every start, and reconcile without `--sign` signs with it.
+  The start banner prints `signing seed:` with its path. A running proxy holds
+  `<receipts-dir>/spend-proxy.lock`; a second proxy on the same directory
+  refuses to start (exit 2). A start refuses (exit 2) a log whose `usage`,
+  `settlement` or `dispatch_released` line is unsigned, signed by a key that is
+  neither the proxy's nor one `trusted_keys.json` registered, or whose
+  signature does not verify; a hand-written or hand-edited such line must be
+  removed or re-signed.
+- `spend-proxy`, requests (r2): `cache_control` at any depth is refused with
+  400 `unsupported_member` (the price book has no cache-write price); a member
+  of a message, an input item or a content part outside the lists in
+  `docs/architecture/model-gateway.md`, Responses `instructions` that are not a
+  string and a `stream` that is not a boolean are refused with 400. With
+  callers, `/helm/spend/health` needs the token (401 `helm_caller_credential`),
+  the `Bearer` scheme is matched in any case, and a token shorter than 32
+  bytes gets 401. The refusal of a non-loopback `--addr` now reads "is not
+  loopback; spend-proxy serves plain HTTP ..." instead of claiming no
+  authentication is configured.
+- Model gateway (r2): the members of input items, content parts, Anthropic
+  messages, blocks and block sources and Chat `image_url` objects are closed
+  as the docs list them, and Responses `instructions` must be a string (400).
+  `anthropic-beta` and `anthropic-version` are forwarded on the Messages API
+  only. On an `anthropic` or `openai-compatible` route that names no
+  `cache_write_5m` or `cache_write_1h`, they default to 1.25 times (rounded up)
+  and 2 times `input`, so the hold of a request that may write a prompt cache
+  rises up to twice on its input side, and a reported write settles at that
+  price; name the prices on the route to keep others.
+- Receipts and JSON (r2): a usage receipt booked against an envelope window
+  carries metadata `envelope_window`, and one that closed windows
+  `envelope_closed_windows` beside `envelope_closed`. A `settle_failed` line's
+  route quote carries metadata `actual_amount_cents`, `overage_cents`,
+  `envelope_closed` and `envelope_closed_windows`, signed. The governed
+  gateway metadata gains `envelope_closed` and `envelope_closed_windows`, and
+  an idempotent replay reports its usage receipt's verdict instead of `ALLOW`.
+- Go API (r2): `BalanceLedger.RestoreEnvelopeUse` takes `(env, at, window,
+  cents, closedWindows)`; `inferencegateway.SettleResult` gains
+  `ProviderCostCents`, `EnvelopeClosed` and `EnvelopeClosedWindows`; new
+  `Engine.DebitFor`, `PeriodWindow`, `MetadataEnvelopeWindow`,
+  `MetadataEnvelopeClosed`, `MetadataEnvelopeClosedWindows`;
+  `modelbound.Options.CacheWrites`; `api.GatewayMetadata.EnvelopeClosed` and
+  `EnvelopeClosedWindows`; in `spendproxy`, `ReconcileOptions.OverrideReason`,
+  `ReconcileResult.RecordedActualCents` and `OverrideReason`,
+  `Server.SigningSeedPath`, `SigningSeedFileName`, `LockFileName`,
+  `MinCallerTokenBytes`, `MetadataActualCents`, `MetadataOverageCents` and
+  `MetadataReconcileOverride`. An empty `ServerOptions.SigningSecret` signs
+  with the receipts directory's generated seed instead of a per-run key.
 
 ### Security
 
@@ -308,8 +391,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `ESCALATE` / `ERR_SPEND_PER_REQUEST_LIMIT` (metadata `overage_cents`,
   `quote_ceiling_cents`, `envelope_closed`) instead of `OK_WITHIN_ENVELOPE`,
   an `ALERT` names the closed envelope, and the envelope refuses further
-  dispatch (403 `ERR_SPEND_ENVELOPE_INACTIVE`) until its next period, across
-  restarts.
+  dispatch (403 `ERR_SPEND_ENVELOPE_INACTIVE`) in the period of the
+  reservation and the period the settlement falls in, also when the
+  settlement fails, and across restarts (r2).
 - `spend-proxy export --public-key` could report a forged usage line as
   verified: a line's signed payload was the first receipt it carried, while
   the pack took the one its kind named. A line's payload is now strictly the
@@ -325,6 +409,28 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   (`--release`), with a `--reason`, as signed receipt lines the next start
   replays; without `--intent` it lists the pending dispatches
   (helm-tracker#313 r1).
+- A request is debited no more than its hold when the provider bills within
+  its quote (helm-tracker#313 r2): the platform fee is inside the hold, and an
+  overage is judged against the provider's part of it, so the receipt and the
+  `ALERT` blame the provider only when its bill went above that part.
+- Closing an envelope after an overage closes the window of the reservation
+  and the window the settlement falls in, records them on the usage receipt,
+  and a restart closes the same windows; an overage whose settlement fails is
+  recorded on its signed `settle_failed` line and closes the envelope across a
+  restart (r2).
+- `spend-proxy reconcile` no longer releases or understates a dispatch the
+  log records the provider billed, works without `--sign` against a proxy that
+  ran without it, and refuses to run beside a live proxy (r2).
+- A cache write could bill above the hold: the model gateway prices writes on
+  `anthropic` and `openai-compatible` routes at Anthropic's premium unless the
+  route names its own, and the spend proxy refuses `cache_control` (r2).
+- A stock OpenAI client is served in callers mode, an idempotency key is
+  scoped to its caller, `/helm/spend/health` needs the caller token, and the
+  bearer scheme is matched in any case (r2).
+- Unknown members of parts, items and blocks, and Responses `instructions`
+  given as a list, are refused instead of forwarded; `anthropic-beta` no
+  longer reaches an upstream on the OpenAI APIs; a start verifies the
+  signatures of the lines that debit or free a hold (r2).
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any

@@ -96,9 +96,10 @@ the caller's own: two callers may use the same key, and neither learns the
 other did.
 
 Requests without `X-HELM-*` headers are governed under the config's
-`request_defaults` envelope. A request without `X-HELM-Idempotency-Key` gets a
-fresh key, in either mode, so each such request is a new spend and a retry of
-it is another one. To capture the paired baseline-vs-substitute run,
+`request_defaults` envelope. A request without `X-HELM-Idempotency-Key`, or
+with one that is only whitespace, gets a fresh key, in either mode, so each
+such request is a new spend and a retry of it is another one. To capture the
+paired baseline-vs-substitute run,
 send the same task with explicit headers against each envelope:
 
 ```bash
@@ -148,13 +149,17 @@ provider; a request the envelope can no longer cover gets 403
 reports, priced at the configured price, and the fee; a provider that reported
 no more than its part of the hold is debited no more than the hold. One that
 reports more is debited all of it: the usage receipt says `ESCALATE` /
-`ERR_SPEND_PER_REQUEST_LIMIT` with `overage_cents`, `envelope_closed` and
-`envelope_closed_windows`, an `ALERT` is logged, and the envelope refuses
+`ERR_SPEND_PER_REQUEST_LIMIT` with `overage_cents` (the debit above the hold,
+fee included), `envelope_closed` and `envelope_closed_windows`, an `ALERT` is
+logged, and the envelope refuses
 further requests (403 `ERR_SPEND_ENVELOPE_INACTIVE`) in the UTC day of the
 reservation and the day of the settlement, until the day after. That holds when
 the balance cannot cover the bill and the settlement fails too (the
 `settle_failed` line records the actual cost, the overage and the closed days,
-signed), and across a restart, which closes the days the receipts name.
+signed), and across a restart, which closes the days the receipts name, also
+when the usage line or the settlement line of the overage never reached the
+log: the settlement line names the closed days too, and a line whose debit
+exceeds its hold closes the day its dispatch was journalled.
 
 An answer is priced by the model it names: the quoted model, or its id with a
 dated suffix (`-2024-07-18`, `-20250514`), at its usage; no model, or the quoted
@@ -170,9 +175,10 @@ the status line or usage the proxy cannot read is debited at its whole hold
 cancel the provider call; it settles on what the provider reports. Only a
 failure before any request byte left the proxy frees the hold. A dispatch
 journalled before its provider call and never settled, because the process
-stopped (or whose usage line never reached the log), is held again on the next
-start, pending reconciliation, and the start banner prints `pending:` with an
-`ALERT` naming its intent.
+stopped (or whose usage or settlement line never reached the log), is held
+again on the next start, pending reconciliation, at its hold or at the actual
+cost the log records when that is more, and the start banner prints
+`pending:` with an `ALERT` naming its intent.
 
 To clear a pending hold, stop the proxy (reconcile takes the receipts
 directory's lock, which a running proxy holds, and refuses while it is held;
@@ -192,9 +198,18 @@ helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir> \
 is added), as usage and settlement lines whose usage receipt carries
 `reconciled_by` and `reconcile_reason`; `--release` frees the hold with a
 `dispatch_released` line whose route quote carries `release_reason`. Both are
-signed by the issuer key, which must be the one that signed the dispatch
-(`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`, or without either the seed the
-proxy generated in the receipts directory), and the next start replays them.
+signed by the key of the seed (`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`, or
+without either the seed the proxy generated in the receipts directory), and
+the next start replays them. That key should be the one that signed the
+dispatch. When another key signed it, because the seed was lost or changed or
+an earlier version run without `--sign` signed each run with a new key, start
+the proxy once under the current seed, which registers its key in
+`trusted_keys.json`, stop it and reconcile with that seed: reconcile signs for
+the dispatch when `trusted_keys.json` registers both keys and the journal line
+verifies against the old one, or, when the registry no longer has the old key,
+with `--journal-key-reason "<why>"`. The line records the old key as
+`reconcile_journal_key_id`, and the reason as `reconcile_journal_key_reason`;
+a start logs a `WARNING` for each pending dispatch another key journalled.
 When the log records that the provider billed the dispatch (a `settle_failed`
 line, or a usage or settlement line without its pair), `--release` is
 refused, and `--settle-cents` must debit at least the actual cost recorded
@@ -202,8 +217,11 @@ unless `--override-reason` says why; the override is recorded and signed on
 the usage receipt as `reconcile_override_reason`. A settlement above the
 balance fails as any debit does: raise `balance.opening_cents` in the config
 first. Exit 0 on success, 2 on a usage or config error, 1 when the intent is
-not pending, a proxy holds the directory, the log's record of the bill refuses
-the action, or a line cannot be signed and appended. `--json` prints
+not pending, the seed is missing, not a regular file or readable by others,
+the dispatch's key is one reconcile may not sign for, a proxy holds the
+directory (the list form, without `--intent`, runs beside a proxy), the log's
+record of the bill refuses the action, or a line cannot be signed and
+appended. `--json` prints
 `spend_intent_id`, `action`, `hold_cents`, `debited_cents`, `reason`, and
 `recorded_actual_cents` and `override_reason` when they apply.
 
@@ -227,10 +245,11 @@ issuer key: the `--sign` seed, or without one a seed the proxy generates on
 its first start in `<receipts-dir>/signing-seed` (mode 0600, printed in the
 start banner as `signing seed:`), so restarts and reconcile sign with one key.
 Whoever can read that file can sign receipt lines; pass `--sign` to keep the
-seed elsewhere. A start refuses a log whose usage, settlement or
-`dispatch_released` line is unsigned, or signed by a key that is neither the
-proxy's nor one the directory's `trusted_keys.json` registered, or whose
-signature does not verify, naming the line. Export offline-verifiable spend
+seed elsewhere; the file must be a regular file, not a link. A start refuses a
+log whose usage, settlement, `dispatch_released` or `settle_failed` line is
+unsigned, or signed by a key that is neither the proxy's nor one the
+directory's `trusted_keys.json` registered, or whose signature does not
+verify, naming the line. Export offline-verifiable spend
 EvidencePacks:
 
 ```bash
@@ -245,7 +264,10 @@ prompt-body-off-graph). With `--public-key`, export also verifies every
 signature of each intent against that key: the detached signature of each
 receipt line and the BudgetVerdict seal, listed in `signatures_checked`; an
 unsigned line, another key or a signature that does not verify fails the
-export. Take the key from the proxy's start banner or its
+export. Repeat `--public-key` for a log signed by more than one key, as after
+a reconcile under a new seed: each signature is checked against the key its
+key id names, and `signature_key_ids` lists the keys that signed an intent.
+Take the key from the proxy's start banner or its
 `/helm/spend/health` (`signing_public_key`), not from the receipts directory:
 `<receipts-dir>/trusted_keys.json` is written by the process whose receipts it
 would vouch for. Without `--public-key` no signature is checked and the summary

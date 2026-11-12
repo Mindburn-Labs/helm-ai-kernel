@@ -197,15 +197,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `--settle-cents`, `--release`, `--reason`, `--override-reason`, `--sign`
   (or `HELM_SPEND_PROXY_SIGNING_SEED`; without either, the seed the proxy
   generated in the receipts directory), `--json`; exit 0 when reconciled or
-  listed, 2 on a usage or config error, 1 when the intent is not pending, a
-  proxy holds the receipts directory, the log's record of the bill refuses
-  the action, or its line cannot be signed and appended. A settled line's
-  usage receipt carries metadata `reconciled_by` and `reconcile_reason`, and
-  `reconcile_override_reason` under an override. It refuses to run while the
-  proxy runs. The ALERT a start logs for a pending dispatch now names its
-  intent.
-- Go API (helm-tracker#313 r1): `BalanceLedger.RestoreEnvelopeUse` takes a
-  fourth argument, whether the settlement went above its hold;
+  listed, 2 on a usage or config error, 1 when the intent is not pending, the
+  signing seed is missing, not a regular file or readable by others, a proxy
+  holds the receipts directory, the log's record of the bill refuses the
+  action, or its line cannot be signed and appended. A settled line's usage
+  receipt carries metadata `reconciled_by` and `reconcile_reason`, and
+  `reconcile_override_reason` under an override. With `--intent` it refuses
+  to run while a proxy runs on the receipts directory; the list form, without
+  `--intent`, takes no lock and runs beside a proxy. The ALERT a start logs
+  for a pending dispatch now names its intent.
+- Go API (helm-tracker#313 r1): `BalanceLedger.RestoreEnvelopeUse` takes
+  the arguments the r2 entry below lists;
   `spendproxy.RestorePendingDispatches` returns `[]spendproxy.PendingDispatch`
   (the reservation and its route quote); `ReceiptRecord.Payload` returns only
   the receipt the record's kind names; `Engine.SettleUsage` refuses a released
@@ -244,12 +246,14 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   provider billed (a `settle_failed` line, or a usage or settlement line), and
   `--settle-cents` that debits less than the recorded actual cost is refused
   (exit 1) unless the new `--override-reason` says why, which the usage
-  receipt records as `reconcile_override_reason`. Reconcile takes the receipts
-  directory's lock and refuses (exit 1) while a proxy runs on it.
+  receipt records as `reconcile_override_reason`. Reconcile with `--intent`
+  takes the receipts directory's lock and refuses (exit 1) while a proxy runs
+  on it; the list form takes no lock.
 - `spend-proxy`, receipts directory (r2): without `--sign` or
   `HELM_SPEND_PROXY_SIGNING_SEED` the proxy no longer signs under a new key per
   run: it generates a seed on its first start in `<receipts-dir>/signing-seed`
-  (mode 0600; a start refuses a seed file readable by others, exit 2) and
+  (mode 0600; a seed file readable by others is refused by a start, exit 2,
+  and by reconcile, exit 1) and
   signs with it on every start, and reconcile without `--sign` signs with it.
   The start banner prints `signing seed:` with its path. A running proxy holds
   `<receipts-dir>/spend-proxy.lock`; a second proxy on the same directory
@@ -281,7 +285,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   carries metadata `envelope_window`, and one that closed windows
   `envelope_closed_windows` beside `envelope_closed`. A `settle_failed` line's
   route quote carries metadata `actual_amount_cents`, `overage_cents`,
-  `envelope_closed` and `envelope_closed_windows`, signed. The governed
+  `envelope_closed` and `envelope_closed_windows`, signed. `overage_cents`, on
+  a usage receipt or a `settle_failed` line, is the debit above the hold, the
+  platform fee included, so with a fee it can exceed what the provider billed
+  above its part of the hold. The governed
   gateway metadata gains `envelope_closed` and `envelope_closed_windows`, and
   an idempotent replay reports its usage receipt's verdict instead of `ALLOW`.
 - Go API (r2): `BalanceLedger.RestoreEnvelopeUse` takes `(env, at, window,
@@ -296,6 +303,50 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `MinCallerTokenBytes`, `MetadataActualCents`, `MetadataOverageCents` and
   `MetadataReconcileOverride`. An empty `ServerOptions.SigningSecret` signs
   with the receipts directory's generated seed instead of a per-run key.
+- `spend-proxy`, restart after a lost line (helm-tracker#313 r3): a usage
+  line whose settlement line never reached the log, or a settlement line
+  whose usage line did not, now closes the envelope windows its overage
+  closed, as both lines did live; a settlement line names them in the new
+  record members `envelope_closed` and `envelope_closed_windows`, outside its
+  signed payload, and a usage or settlement line whose debit exceeds its
+  journal line's hold closes the window of the journal's time. Such a
+  dispatch is held at the actual cost the log records when that is more than
+  its hold, so `pending:` may show more cents than before, and a usage line a
+  reconcile settled again is debited once on restart, not twice.
+- Upgrade, `spend-proxy reconcile` and signing keys (r3): reconcile signs
+  with the seed's key for a dispatch another key journalled when
+  `trusted_keys.json` registers the seed's key and the journal's key (and the
+  journal line verifies against it), or with the new `--journal-key-reason`
+  when it does not register the journal's key; the line it signs carries
+  metadata `reconcile_journal_key_id` and `reconcile_journal_key_reason`. A
+  start logs a `WARNING` for each pending dispatch journalled under another
+  key. A log written by an earlier version run without `--sign` signed each
+  run with a new key it registered in `trusted_keys.json`, and its failed
+  dispatches are held on the first start of this version: let that start
+  generate and register `<receipts-dir>/signing-seed`, stop the proxy, then
+  reconcile without `--sign`. After a lost or changed seed, start the proxy
+  once under the new seed, stop it, and reconcile with the new seed; when
+  `trusted_keys.json` was lost too, reconcile needs `--journal-key-reason`.
+  `spend-proxy export --public-key` repeats, one per key that signed the log;
+  an earlier version's per-run public keys are only in its
+  `trusted_keys.json`, which export does not trust on its own. `--json` adds
+  `signature_key_ids`, the keys that signed each intent; with more than one
+  key given, `signature_key_id` is set only when one key signed the intent.
+- `spend-proxy`, other changes (r3): an `X-HELM-Idempotency-Key` that is only
+  whitespace names no key, so the proxy mints one: in callers mode such
+  requests were one key (a replay or 409), and without callers they got 400.
+  A start refuses (exit 2) a log whose `settle_failed` line is unsigned,
+  signed by a key it does not trust, or whose signature does not verify. A
+  `<receipts-dir>/signing-seed` that is not a regular file, such as a link, is
+  refused by a start (exit 2) and by reconcile (exit 1).
+- Go API (r3): `Engine.RestorePendingDispatch` takes a fourth argument,
+  `holdCents`, the hold to place (at least the quote's); new
+  `spendproxy.PendingDispatch.Journal`, `ReceiptRecord.EnvelopeClosed` and
+  `EnvelopeClosedWindows`, `ReconcileOptions.JournalKeyReason`,
+  `MetadataReconcileJournalKey`, `MetadataReconcileJournalKeyReason`,
+  `ExportOptions.PublicKeys` and `ExportResult.SignatureKeyIDs`;
+  `DebitedCents` counts each intent's last usage line that has a settlement
+  line.
 
 ### Security
 
@@ -421,6 +472,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `spend-proxy reconcile` no longer releases or understates a dispatch the
   log records the provider billed, works without `--sign` against a proxy that
   ran without it, and refuses to run beside a live proxy (r2).
+- An overage whose usage or settlement line never reached the receipt log no
+  longer reopens the envelope on restart, and its dispatch is held at the
+  cost the log records instead of its smaller hold; a reconciled settlement
+  of such a dispatch is debited once (helm-tracker#313 r3). `spend-proxy
+  reconcile` clears a dispatch journalled under an earlier key, such as one a
+  proxy run without `--sign` signed before this version, where it refused
+  with no way out.
 - A cache write could bill above the hold: the model gateway prices writes on
   `anthropic` and `openai-compatible` routes at Anthropic's premium unless the
   route names its own, and the spend proxy refuses `cache_control` (r2).

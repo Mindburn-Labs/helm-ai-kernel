@@ -139,21 +139,26 @@ const SigningSeedFileName = "signing-seed"
 
 // signingSeed resolves the secret a proxy signs with: secret when given, else
 // the seed generated in dir, which create generates when there is none. It
-// returns the seed file's path when the seed came from it.
+// returns the seed file's path when the seed came from it. The seed file must
+// be a regular file, not a link to one elsewhere (helm-tracker#313 r3, note
+// 6), and on unix readable by its owner only.
 func signingSeed(dir, secret string, create bool) (string, string, error) {
 	if strings.TrimSpace(secret) != "" {
 		return secret, "", nil
 	}
 	path := filepath.Join(dir, SigningSeedFileName)
-	raw, err := os.ReadFile(path)
+	info, err := os.Lstat(path)
 	switch {
 	case err == nil:
-		info, statErr := os.Stat(path)
-		if statErr != nil {
-			return "", "", fmt.Errorf("spendproxy: stat the signing seed: %w", statErr)
+		if !info.Mode().IsRegular() {
+			return "", "", fmt.Errorf("spendproxy: the signing seed %s is not a regular file (mode %v): replace it with the seed itself", path, info.Mode())
 		}
 		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			return "", "", fmt.Errorf("spendproxy: the signing seed %s is readable by others (mode %v): chmod 600 it", path, info.Mode().Perm())
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return "", "", fmt.Errorf("spendproxy: read the signing seed: %w", readErr)
 		}
 		seed, decErr := hex.DecodeString(strings.TrimSpace(string(raw)))
 		if decErr != nil || len(seed) != ed25519.SeedSize {

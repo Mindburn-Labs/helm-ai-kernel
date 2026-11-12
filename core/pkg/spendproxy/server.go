@@ -155,6 +155,10 @@ func openServer(opts ServerOptions, createSeed bool) (s *Server, err error) {
 	for _, p := range st.pending {
 		st.logf("spend-proxy: ALERT: dispatch %s (intent %s) was journalled before its provider call and never settled; %d cents stay reserved until `spend-proxy reconcile --intent %s` settles or releases it",
 			p.Key, p.Quote.SpendIntentID, p.AmountCents, p.Quote.SpendIntentID)
+		if keyID := p.Journal.PayloadSignatureKeyID; keyID != issuer.KeyID() {
+			st.logf("spend-proxy: WARNING: intent %s was %s, not by this proxy's key %s: reconcile signs for it with this key when %s registers the journal's key, or with --journal-key-reason",
+				p.Quote.SpendIntentID, signedBy(keyID), issuer.KeyID(), TrustedKeyFileName)
+		}
 	}
 	return &Server{
 		cfg:        opts.Config,
@@ -383,8 +387,8 @@ func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, b
 
 // settleFailedRecord is the signed line of a dispatch whose settlement failed
 // after the provider was called: the dispatch's route quote, whose metadata
-// records what the provider billed (MetadataActualCents), the overage above
-// the hold and the envelope windows it closed. A restart closes those windows
+// records the actual cost (MetadataActualCents), the overage, which is the
+// actual cost above the hold, and the envelope windows it closed. A restart closes those windows
 // again, and reconcile settles the dispatch at no less than the actual
 // (helm-tracker#313 r2, findings 3 and 4).
 func settleFailedRecord(meta *api.GatewayMetadata, note string) *ReceiptRecord {
@@ -495,12 +499,13 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 // requests that carry no X-HELM headers (a stock OpenAI client repointed via
 // OPENAI_BASE_URL), and mints an idempotency key for any request that names
 // none, with or without defaults: a stock client sends none, and each such
-// request is a new spend (helm-tracker#313 r2, finding 7). Governance still
+// request is a new spend (helm-tracker#313 r2, finding 7). A key that is only
+// whitespace names none (r3, note 3). Governance still
 // runs in full against the default envelope; with no defaults and no caller
 // credential, a request without agent and envelope headers fails closed in
 // ParseRequestHeaders.
 func (s *Server) applyHeaderDefaults(r *http.Request, body []byte) {
-	if r.Header.Get(inferencegateway.HeaderIdempotencyKey) == "" {
+	if strings.TrimSpace(r.Header.Get(inferencegateway.HeaderIdempotencyKey)) == "" {
 		r.Header.Set(inferencegateway.HeaderIdempotencyKey, mintIdempotencyKey(body))
 	}
 	if s.cfg.Defaults.EnvelopeID == "" {
@@ -567,7 +572,7 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 				note := fmt.Sprintf("settlement failed after dispatch (%s/%s): actual %d cents not debited",
 					envl.HELM.Verdict, envl.HELM.ReasonCode, envl.HELM.ActualAmountCents)
 				if envl.HELM.EnvelopeClosed != "" {
-					note += fmt.Sprintf("; the bill is %d cents above the hold and envelope %s takes no further dispatch in %s",
+					note += fmt.Sprintf("; the actual cost is %d cents above the hold and envelope %s takes no further dispatch in %s",
 						envl.HELM.OverageCents, envl.HELM.EnvelopeClosed, strings.Join(envl.HELM.EnvelopeClosedWindows, ", "))
 				}
 				s.logf("spend-proxy: ALERT: %s for %s", note, envl.HELM.Quote.SpendIntentID)

@@ -52,8 +52,10 @@ const (
 // that says why the hold was released.
 const MetadataReleaseReason = "release_reason"
 
-// The route-quote metadata keys of a settle_failed record: the actual cost the
-// provider billed, in cents, and the overage above the hold.
+// The route-quote metadata keys of a settle_failed record: the actual cost, in
+// cents (the provider's bill and the platform fee on it), and the overage,
+// the actual cost above the hold, which with a fee can exceed what the
+// provider billed above its part of the hold.
 const (
 	MetadataActualCents  = "actual_amount_cents"
 	MetadataOverageCents = "overage_cents"
@@ -89,6 +91,14 @@ type ReceiptRecord struct {
 	BudgetVerdict *economic.BudgetVerdictReceipt `json:"budget_verdict,omitempty"`
 	Usage         *economic.UsageReceipt         `json:"usage,omitempty"`
 	Settlement    *economic.SettlementReceipt    `json:"settlement,omitempty"`
+
+	// EnvelopeClosed and EnvelopeClosedWindows are set on a settlement line
+	// whose usage receipt closed envelope windows, as that receipt's metadata
+	// names them, so a start closes them though the usage line never reached
+	// the log (helm-tracker#313 r3, finding 1). They lie outside the signed
+	// payload, so a start only ever closes windows by them.
+	EnvelopeClosed        string   `json:"envelope_closed,omitempty"`
+	EnvelopeClosedWindows []string `json:"envelope_closed_windows,omitempty"`
 }
 
 // payloadKinds names the payload each record kind carries.
@@ -251,15 +261,17 @@ func LoadRecords(path string) ([]*ReceiptRecord, error) {
 	return out, nil
 }
 
-// bookKinds are the lines a start replays into the books that debit a hold or
-// free one: a start accepts them only signed by a trusted key.
-var bookKinds = map[RecordKind]bool{RecordUsage: true, RecordSettlement: true, RecordDispatchReleased: true}
+// bookKinds are the lines a start replays into the books that debit a hold,
+// free one or close an envelope and set the floor reconcile settles at: a
+// start accepts them only signed by a trusted key.
+var bookKinds = map[RecordKind]bool{RecordUsage: true, RecordSettlement: true, RecordDispatchReleased: true, RecordSettleFailed: true}
 
-// verifyBookLines refuses a log whose usage, settlement or dispatch_released
-// line is unsigned, signed by a key trusted does not resolve, or whose
-// signature does not verify (helm-tracker#313 r2, finding 9): an unsigned
-// release line appended to the log would otherwise free a pending hold on the
-// next start, and a forged usage line would replace it with a smaller debit.
+// verifyBookLines refuses a log whose usage, settlement, dispatch_released or
+// settle_failed line is unsigned, signed by a key trusted does not resolve, or
+// whose signature does not verify (helm-tracker#313 r2, finding 9; r3, note
+// 4): an unsigned release line appended to the log would otherwise free a
+// pending hold on the next start, and a forged usage line would replace it
+// with a smaller debit.
 func verifyBookLines(records []*ReceiptRecord, trusted func(string) (ed25519.PublicKey, bool)) error {
 	for i, rec := range records {
 		if !bookKinds[rec.Kind] {
@@ -278,7 +290,7 @@ func verifyBookLines(records []*ReceiptRecord, trusted func(string) (ed25519.Pub
 			}
 		}
 		if problem != "" {
-			return fmt.Errorf("spendproxy: receipt log record %d, a %s line of intent %s, %s; a start replays only signed lines that debit or free a hold: refusing to start", i+1, rec.Kind, rec.SpendIntentID, problem)
+			return fmt.Errorf("spendproxy: receipt log record %d, a %s line of intent %s, %s; a start replays only signed lines that debit, free or close: refusing to start", i+1, rec.Kind, rec.SpendIntentID, problem)
 		}
 	}
 	return nil
@@ -351,62 +363,119 @@ func ReplayRecords(records []*ReceiptRecord, ledger *inferencegateway.BalanceLed
 }
 
 // DebitedCents sums the committed balance debits in the log — the amount
-// already spent against the configured opening balance in prior runs. Only
-// usage records with a matching settlement count (an unsettled usage line
-// cannot exist under the ledger's commit invariants, but fail safe anyway).
+// already spent against the configured opening balance in prior runs: the
+// debit of each intent's committed usage line (pairedUsage). A usage line
+// without a settlement line is held instead (RestorePendingDispatches), and a
+// usage line a reconcile settlement replaced is not counted again.
 func DebitedCents(records []*ReceiptRecord) int64 {
-	settled := make(map[string]bool)
-	for _, rec := range records {
-		if rec.Kind == RecordSettlement && rec.SpendIntentID != "" {
-			settled[rec.SpendIntentID] = true
-		}
-	}
 	var total int64
-	for _, rec := range records {
-		if rec.Kind == RecordUsage && rec.Usage != nil && settled[rec.SpendIntentID] {
-			total += rec.Usage.BalanceDebitCents
-		}
+	for _, rec := range pairedUsage(records) {
+		total += rec.Usage.BalanceDebitCents
 	}
 	return total
 }
 
-// restoreEnvelopeUse re-applies every settled debit in the log to the envelope
-// window its usage receipt names, so a restarted proxy does not hand an
-// envelope's limit out again (helm-tracker#313, audit H7), and closes again
-// exactly the windows a settlement above its hold closed: the ones its usage
-// receipt names, or, when its settlement failed, its settle_failed line's
-// route quote names (r2, findings 2 and 3). A receipt written before the
-// windows were recorded books, and closes, the window of its line's time. A
-// debit under an envelope the config no longer declares is not applied to any.
-func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
+// pairedUsage is, for each intent with a settlement line, its last usage
+// line: the one ReplayRecords restores beside the last settlement line, whose
+// debit the log committed. An earlier usage line of the intent is one whose
+// settlement line was lost and that a reconcile settled again (helm-tracker#313
+// r3, finding 1).
+func pairedUsage(records []*ReceiptRecord) map[string]*ReceiptRecord {
 	settled := make(map[string]bool)
-	for _, rec := range records {
-		if rec.Kind == RecordSettlement && rec.SpendIntentID != "" {
-			settled[rec.SpendIntentID] = true
-		}
-	}
-	seen := make(map[string]bool)
+	last := make(map[string]*ReceiptRecord)
 	for _, rec := range records {
 		switch {
+		case rec.SpendIntentID == "":
+		case rec.Kind == RecordSettlement:
+			settled[rec.SpendIntentID] = true
+		case rec.Kind == RecordUsage && rec.Usage != nil:
+			last[rec.SpendIntentID] = rec
+		}
+	}
+	for intent := range last {
+		if !settled[intent] {
+			delete(last, intent)
+		}
+	}
+	return last
+}
+
+// restoreEnvelopeUse re-applies every committed debit in the log to the
+// envelope window its usage receipt names, so a restarted proxy does not hand
+// an envelope's limit out again (helm-tracker#313, audit H7), and closes again
+// the windows a settlement above its hold closed, from every verified line
+// that records them (r2, findings 2 and 3; r3, finding 1): a usage line,
+// whether or not its settlement line reached the log; a settlement line,
+// which names them too; and a settle_failed line's route quote. A usage or
+// settlement line whose debit exceeds its journal line's hold also closes the
+// window of the journal's time and the window it names, so a line that names
+// none still closes. A receipt written before the windows were recorded
+// books, and closes, the window of its line's time. A debit under an envelope
+// the config no longer declares is not applied to any.
+func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
+	paired := pairedUsage(records)
+	journals := make(map[string]*ReceiptRecord)
+	for _, rec := range records {
+		var env *economic.AgentSpendEnvelope
+		var window string
+		var cents, debit int64
+		var closed []string
+		switch {
+		case isDispatchJournal(rec):
+			journals[rec.SpendIntentID] = rec
+			continue
 		case rec.Kind == RecordSettleFailed && rec.RouteQuote != nil:
 			if env := envelopes[rec.RouteQuote.EnvelopeID]; env != nil {
 				ledger.RestoreEnvelopeUse(env, rec.RecordedAt, "", 0, closedWindows(rec.RouteQuote.Metadata))
 			}
-		case rec.Kind == RecordUsage && rec.Usage != nil && settled[rec.SpendIntentID] && !seen[rec.SpendIntentID]:
-			seen[rec.SpendIntentID] = true
-			env := envelopes[rec.Usage.EnvelopeID]
-			if env == nil {
-				continue
-			}
+			continue
+		case rec.Kind == RecordUsage && rec.Usage != nil:
+			env = envelopes[rec.Usage.EnvelopeID]
 			meta := rec.Usage.Metadata
-			closed := closedWindows(meta)
+			closed = closedWindows(meta)
 			if meta[inferencegateway.MetadataEnvelopeClosed] != "" && len(closed) == 0 {
 				closed = []string{""} // a legacy receipt: the window of its line
 			}
-			window := meta[inferencegateway.MetadataEnvelopeWindow]
-			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, rec.Usage.BalanceDebitCents, legacyWindows(env, rec.RecordedAt, closed))
+			window = meta[inferencegateway.MetadataEnvelopeWindow]
+			debit = rec.Usage.BalanceDebitCents
+			if paired[rec.SpendIntentID] == rec {
+				cents = debit
+			}
+		case rec.Kind == RecordSettlement && rec.Settlement != nil:
+			if rec.EnvelopeClosed != "" {
+				env, closed = envelopes[rec.EnvelopeClosed], rec.EnvelopeClosedWindows
+			}
+			debit = settlementDebit(rec.Settlement)
+		default:
+			continue
+		}
+		if journal := journals[rec.SpendIntentID]; journal != nil {
+			if env == nil {
+				env = envelopes[journal.RouteQuote.EnvelopeID]
+			}
+			if env != nil && debit > journal.RouteQuote.MaxAmountCents {
+				closed = append(closed, inferencegateway.PeriodWindow(env.Period, journal.RecordedAt))
+				if window != "" {
+					closed = append(closed, window)
+				}
+			}
+		}
+		if env == nil {
+			continue
+		}
+		ledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, cents, legacyWindows(env, rec.RecordedAt, closed))
+	}
+}
+
+// settlementDebit is what a settlement receipt debited: its debit entries.
+func settlementDebit(settlement *economic.SettlementReceipt) int64 {
+	var debit int64
+	for _, entry := range settlement.LedgerEntries {
+		if entry.Direction == economic.SettlementDebit {
+			debit += entry.AmountCents
 		}
 	}
+	return debit
 }
 
 // closedWindows reads the envelope windows a receipt's metadata names as
@@ -449,10 +518,11 @@ func isDispatchJournal(rec *ReceiptRecord) bool {
 // reserved against its envelope and the balance, pending reconciliation, and
 // its idempotency key cannot dispatch again (audit M18). A settlement is
 // committed only with both its usage and its settlement line (ReplayRecords
-// restored it into the engine's ledger): a settlement line whose usage line
-// never reached the log carries no debit, so its dispatch is held at its hold
-// (helm-tracker#313 r1, F10). A dispatch under an envelope the config no
-// longer declares refuses the start: its cents would otherwise be forgotten.
+// restored it into the engine's ledger): a dispatch with one of them and not
+// the other is held at its hold (helm-tracker#313 r1, F10), or at the actual
+// cost the log records when that is more (r3, finding 1). A dispatch under an
+// envelope the config no longer declares refuses the start: its cents would
+// otherwise be forgotten.
 func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway.Engine, envelopes map[string]*economic.AgentSpendEnvelope) ([]PendingDispatch, error) {
 	// Read the log in order: a journal line opens a dispatch, and a release
 	// closes the journal before it (a retry may journal the key again). The
@@ -460,6 +530,7 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 	open := make(map[string]*ReceiptRecord)
 	var order []string
 	listed := make(map[string]bool)
+	billed := make(map[string]bool)
 	for _, rec := range records {
 		switch {
 		case rec.SpendIntentID == "":
@@ -471,6 +542,8 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 				order = append(order, rec.SpendIntentID)
 			}
 			open[rec.SpendIntentID] = rec
+		case rec.Kind == RecordUsage || rec.Kind == RecordSettlement:
+			billed[rec.SpendIntentID] = true
 		}
 	}
 	var out []PendingDispatch
@@ -483,20 +556,29 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 		if env == nil {
 			return nil, fmt.Errorf("spendproxy: the log holds an unsettled dispatch %s under envelope %q, which the config no longer declares; refusing to start", rec.SpendIntentID, rec.RouteQuote.EnvelopeID)
 		}
-		res, err := engine.RestorePendingDispatch(env, rec.RouteQuote, rec.RecordedAt)
+		hold := rec.RouteQuote.MaxAmountCents
+		if billed[intentID] {
+			// Its usage or settlement line reached the log without the other:
+			// the provider billed it what that line records.
+			actual, _ := recordedActual(records, intentID)
+			hold = max(hold, actual)
+		}
+		res, err := engine.RestorePendingDispatch(env, rec.RouteQuote, rec.RecordedAt, hold)
 		if err != nil {
 			return nil, fmt.Errorf("spendproxy: hold unsettled dispatch %s: %w", rec.SpendIntentID, err)
 		}
 		if res != nil {
-			out = append(out, PendingDispatch{Reservation: res, Quote: rec.RouteQuote})
+			out = append(out, PendingDispatch{Reservation: res, Quote: rec.RouteQuote, Journal: rec})
 		}
 	}
 	return out, nil
 }
 
 // PendingDispatch is a dispatch held again on start, pending reconciliation:
-// its hold and the route quote its journal line carries.
+// its hold, the route quote its journal line carries and the journal line,
+// whose PayloadSignatureKeyID is the key that signed the dispatch.
 type PendingDispatch struct {
 	*inferencegateway.Reservation
-	Quote *economic.RouteQuote
+	Quote   *economic.RouteQuote
+	Journal *ReceiptRecord
 }

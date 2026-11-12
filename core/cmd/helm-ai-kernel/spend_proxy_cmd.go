@@ -182,8 +182,9 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 // runSpendProxyExport renders captured receipts into offline-verifiable spend
 // EvidencePacks under --out. With --public-key it verifies every signature of
-// each exported intent against that key; the receipts directory's own key
-// registry is never the trust root.
+// each exported intent against the key its key id names; the flag repeats for
+// a log signed by more than one key (a reconcile after the seed changed). The
+// receipts directory's own key registry is never the trust root.
 func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("spend-proxy export", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -191,25 +192,29 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 		receiptsDir string
 		outDir      string
 		intent      string
-		publicKey   string
+		publicKeys  multiFlag
 		jsonOut     bool
 	)
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log")
 	cmd.StringVar(&outDir, "out", "./helm-spend-evidence", "Output directory for spend EvidencePacks")
 	cmd.StringVar(&intent, "intent", "", "Export only this spend intent id (default: all)")
-	cmd.StringVar(&publicKey, "public-key", "", "The issuer's Ed25519 public key (ed25519:<hex>, as spend-proxy prints at start), obtained out of band. Every signature is verified against it; without it no signature is verified")
+	cmd.Var(&publicKeys, "public-key", "The issuer's Ed25519 public key (ed25519:<hex>, as spend-proxy prints at start), obtained out of band; repeat it for a log signed by more than one key. Every signature is verified against the key its key id names; without it no signature is verified")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the export summary as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
 	opts := spendproxy.ExportOptions{ReceiptsDir: receiptsDir, OutDir: outDir, IntentFilter: intent}
-	if publicKey != "" {
-		pub, err := spendproxy.ParsePublicKey(publicKey)
+	for i, text := range publicKeys {
+		pub, err := spendproxy.ParsePublicKey(text)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: --public-key: %v\n", err)
 			return 2
 		}
-		opts.PublicKey = pub
+		if i == 0 {
+			opts.PublicKey = pub
+		} else {
+			opts.PublicKeys = append(opts.PublicKeys, pub)
+		}
 	}
 
 	results, err := spendproxy.ExportEvidencePacks(opts)
@@ -233,7 +238,7 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 		}
 		sig := "signatures not checked (no --public-key)"
 		if res.SignatureVerified {
-			sig = "signatures verified against " + res.SignatureKeyID + ": " + strings.Join(res.SignaturesChecked, ", ")
+			sig = "signatures verified against " + strings.Join(res.SignatureKeyIDs, ", ") + ": " + strings.Join(res.SignaturesChecked, ", ")
 		}
 		_, _ = fmt.Fprintf(stdout, "%s: %s, %s -> %s\n", res.SpendIntentID, status, sig, res.OutputDir)
 	}
@@ -248,16 +253,19 @@ func runSpendProxyExport(args []string, stdout, stderr io.Writer) int {
 // dispatches. Run it while the proxy is stopped.
 //
 // Exit codes: 0 = reconciled or listed, 2 = usage or config error, 1 = the
-// intent is not pending, the line could not be signed and appended, a proxy
-// holds the receipts directory, or the log records that the provider billed
-// the dispatch and the action would erase or understate it.
+// intent is not pending, the signing seed is missing, not a regular file or
+// readable by others, the dispatch was journalled under a key reconcile may
+// not sign for, the line could not be signed and appended, a proxy holds the
+// receipts directory (with --intent; the list runs beside a proxy), or the
+// log records that the provider billed the dispatch and the action would
+// erase or understate it.
 func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("spend-proxy reconcile", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	var (
-		configPath, receiptsDir, intent, reason, signSecret, override string
-		settleCents                                                   int64
-		release, jsonOut                                              bool
+		configPath, receiptsDir, intent, reason, signSecret, override, journalKey string
+		settleCents                                                               int64
+		release, jsonOut                                                          bool
 	)
 	cmd.StringVar(&configPath, "config", "", "The spend-proxy config the proxy runs with (required)")
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log")
@@ -265,8 +273,9 @@ func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 	cmd.Int64Var(&settleCents, "settle-cents", 0, "Settle the dispatch at this provider cost in cents (the platform fee is added)")
 	cmd.BoolVar(&release, "release", false, "Release the dispatch: the provider did not bill it")
 	cmd.StringVar(&reason, "reason", "", "Why, recorded and signed with the line (required with --intent)")
-	cmd.StringVar(&signSecret, "sign", "", "The proxy's signing seed (or HELM_SPEND_PROXY_SIGNING_SEED; empty: the seed the proxy generated in --receipts-dir): the line must be signed by the key that signed the dispatch")
+	cmd.StringVar(&signSecret, "sign", "", "The proxy's signing seed (or HELM_SPEND_PROXY_SIGNING_SEED; empty: the seed the proxy generated in --receipts-dir): the line is signed by its key, which must be the key that signed the dispatch or one trusted_keys.json registers")
 	cmd.StringVar(&override, "override-reason", "", "Why --settle-cents may debit less than the actual cost the receipt log records the provider billed; recorded and signed as reconcile_override_reason")
+	cmd.StringVar(&journalKey, "journal-key-reason", "", "Why reconcile may sign for a dispatch whose journal line is unsigned or signed by a key trusted_keys.json does not register (a lost seed and key registry); recorded and signed as reconcile_journal_key_reason")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the result as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -285,7 +294,8 @@ func runSpendProxyReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	opts := spendproxy.ReconcileOptions{Config: cfg, SourceHash: sourceHash, ReceiptsDir: receiptsDir, SigningSecret: signSecret,
 		SpendIntentID: intent, SettleCents: settleCents, Release: release, Reason: reason, OverrideReason: override,
-		Logf: func(format string, a ...any) { _, _ = fmt.Fprintf(stderr, format+"\n", a...) }}
+		JournalKeyReason: journalKey,
+		Logf:             func(format string, a ...any) { _, _ = fmt.Fprintf(stderr, format+"\n", a...) }}
 	if intent == "" {
 		pending, err := spendproxy.PendingDispatches(opts)
 		if err != nil {

@@ -112,9 +112,11 @@ func (e *Engine) ReleaseReservation(quote *economic.RouteQuote) (*economic.Usage
 // released (audit M18). The provider may have billed it, so the quote's ceiling
 // stays reserved against env and the balance, pending reconciliation, and its
 // idempotency key cannot dispatch again. at is when it was journalled, which
-// names the envelope window. A key already settled or already held is left as
-// it is.
-func (e *Engine) RestorePendingDispatch(env *economic.AgentSpendEnvelope, quote *economic.RouteQuote, at time.Time) (*Reservation, error) {
+// names the envelope window. holdCents is the hold placed, at least the
+// quote's MaxAmountCents: more when the log records that the provider billed
+// more (helm-tracker#313 r3, finding 1). A key already settled or already held
+// is left as it is.
+func (e *Engine) RestorePendingDispatch(env *economic.AgentSpendEnvelope, quote *economic.RouteQuote, at time.Time, holdCents int64) (*Reservation, error) {
 	if env == nil || quote == nil {
 		return nil, errors.New("inferencegateway: an envelope and a quote are required to restore a pending dispatch")
 	}
@@ -131,5 +133,5 @@ func (e *Engine) RestorePendingDispatch(env *economic.AgentSpendEnvelope, quote 
 	if bound == "" {
 		bound = quote.ContentHash
 	}
-	return e.cfg.Ledger.restorePending(quote.ID, env, quote.MaxAmountCents, bound, at)
+	return e.cfg.Ledger.restorePending(quote.ID, env, max(holdCents, quote.MaxAmountCents), bound, at)
 }

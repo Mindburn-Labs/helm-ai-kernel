@@ -21,9 +21,11 @@ type ReconcileOptions struct {
 	Config      *Config
 	SourceHash  string
 	ReceiptsDir string
-	// SigningSecret is the proxy's signing seed: the lines reconcile appends
-	// must be signed by the key that signed the dispatch. Empty signs with
-	// the seed the proxy generated in ReceiptsDir (SigningSeedFileName).
+	// SigningSecret is the proxy's signing seed, whose key signs the lines
+	// reconcile appends: the key that signed the dispatch, or, when that key
+	// is another (a lost or changed seed), a key trusted_keys.json registers.
+	// Empty signs with the seed the proxy generated in ReceiptsDir
+	// (SigningSeedFileName).
 	SigningSecret string
 	// SpendIntentID names the pending dispatch; empty lists them.
 	SpendIntentID string
@@ -40,7 +42,12 @@ type ReconcileOptions struct {
 	// of the intent); it is recorded and signed on the usage receipt as
 	// reconcile_override_reason. Without it such a settlement is refused.
 	OverrideReason string
-	Logf           func(format string, args ...any)
+	// JournalKeyReason lets reconcile sign for a dispatch whose journal line
+	// is unsigned or signed by a key trusted_keys.json does not register (the
+	// seed and the registry were lost); it is recorded and signed on the line
+	// as reconcile_journal_key_reason. Without it such a dispatch is refused.
+	JournalKeyReason string
+	Logf             func(format string, args ...any)
 }
 
 // ReconcileResult reports one reconciled dispatch. RecordedActualCents is the
@@ -68,6 +75,15 @@ const (
 	reconcileProviderIDStart  = "reconciled-"
 )
 
+// MetadataReconcileJournalKey names, on a line reconcile signs for a dispatch
+// journalled under another key, the key that signed its journal line (empty
+// when it was unsigned); MetadataReconcileJournalKeyReason is the operator's
+// JournalKeyReason, when one cleared it (helm-tracker#313 r3, finding 2).
+const (
+	MetadataReconcileJournalKey       = "reconcile_journal_key_id"
+	MetadataReconcileJournalKeyReason = "reconcile_journal_key_reason"
+)
+
 // PendingDispatches lists the dispatches a start would hold again, pending
 // reconciliation, from the config and the receipt log.
 func PendingDispatches(opts ReconcileOptions) ([]PendingDispatch, error) {
@@ -85,10 +101,11 @@ func PendingDispatches(opts ReconcileOptions) ([]PendingDispatch, error) {
 // Reconcile clears one pending dispatch: it settles it at the stated provider
 // cost, as usage and settlement receipts whose usage metadata names the
 // operator and the reason, or releases it with a dispatch_released line whose
-// route quote carries the reason. Every line is signed by the issuer key that
-// signed the dispatch and appended to the receipt log, so the next start
-// replays it. It takes the receipts directory's lock, so it refuses to run
-// beside a live proxy (helm-tracker#313 r2, finding 14).
+// route quote carries the reason. Every line is signed by the key of the
+// signing seed and appended to the receipt log, so the next start replays it;
+// a dispatch journalled under another key is cleared only as journalKeyNotes
+// allows (helm-tracker#313 r3, finding 2). It takes the receipts directory's
+// lock, so it refuses to run beside a live proxy (r2, finding 14).
 //
 // A dispatch the log records the provider billed (a settle_failed, usage or
 // settlement line of its intent) is not released, and it is settled at no
@@ -120,8 +137,9 @@ func Reconcile(opts ReconcileOptions) (*ReconcileResult, error) {
 		return nil, err
 	}
 	quote := pending.Quote
-	if signer := journalSigner(records, quote); signer != s.issuer.KeyID() {
-		return nil, fmt.Errorf("spendproxy: the dispatch was signed by key %q and the signing seed is key %s: reconcile with the proxy's own seed", signer, s.issuer.KeyID())
+	keyNotes, err := s.journalKeyNotes(pending, opts.JournalKeyReason)
+	if err != nil {
+		return nil, err
 	}
 	actual, evidence := recordedActual(records, quote.SpendIntentID)
 	result := &ReconcileResult{SpendIntentID: opts.SpendIntentID, HoldCents: pending.AmountCents, Reason: opts.Reason, RecordedActualCents: actual}
@@ -132,7 +150,11 @@ func Reconcile(opts ReconcileOptions) (*ReconcileResult, error) {
 		if _, err := s.engine.ReleaseReservation(quote); err != nil {
 			return nil, fmt.Errorf("spendproxy: release %s: %w", opts.SpendIntentID, err)
 		}
-		if err := s.appendSigned(releaseRecord(quote, reconcileReleasePrefix+opts.Reason)); err != nil {
+		release := releaseRecord(quote, reconcileReleasePrefix+opts.Reason)
+		for k, v := range keyNotes {
+			release.RouteQuote.Metadata[k] = v
+		}
+		if err := s.appendSigned(release); err != nil {
 			return nil, err
 		}
 		result.Action = reconcileActionReleased
@@ -143,6 +165,9 @@ func Reconcile(opts ReconcileOptions) (*ReconcileResult, error) {
 		return nil, fmt.Errorf("spendproxy: settle %s: %w", opts.SpendIntentID, err)
 	}
 	notes := map[string]string{MetadataReconciledBy: reconciledByOperator, MetadataReconcileReason: opts.Reason}
+	for k, v := range keyNotes {
+		notes[k] = v
+	}
 	if debit < actual {
 		if strings.TrimSpace(opts.OverrideReason) == "" {
 			return nil, fmt.Errorf("spendproxy: --settle-cents %d debits %d cents, below the %d cents the log records the provider billed intent %s (%s): settle at the recorded actual, or give an override reason", opts.SettleCents, debit, actual, opts.SpendIntentID, evidence)
@@ -200,13 +225,7 @@ func recordedActual(records []*ReceiptRecord, intent string) (int64, string) {
 		case rec.Kind == RecordUsage && rec.Usage != nil:
 			note(rec.Usage.ActualAmountCents, "a usage line")
 		case rec.Kind == RecordSettlement && rec.Settlement != nil:
-			var debit int64
-			for _, entry := range rec.Settlement.LedgerEntries {
-				if entry.Direction == economic.SettlementDebit {
-					debit += entry.AmountCents
-				}
-			}
-			note(debit, "a settlement line")
+			note(settlementDebit(rec.Settlement), "a settlement line")
 		}
 	}
 	return actual, evidence
@@ -221,15 +240,45 @@ func findPending(list []PendingDispatch, opts ReconcileOptions) (*PendingDispatc
 	return nil, fmt.Errorf("spendproxy: intent %s holds no pending dispatch in %s", opts.SpendIntentID, opts.ReceiptsDir)
 }
 
-// journalSigner is the key id that signed the dispatch's journal line.
-func journalSigner(records []*ReceiptRecord, quote *economic.RouteQuote) string {
-	signer := ""
-	for _, rec := range records {
-		if rec.SpendIntentID == quote.SpendIntentID && isDispatchJournal(rec) {
-			signer = rec.PayloadSignatureKeyID
-		}
+// journalKeyNotes decides whether reconcile signs for a pending dispatch with
+// the signing seed's key, and returns what the line it signs records about the
+// key that signed the dispatch's journal line (helm-tracker#313 r3, finding
+// 2). A dispatch journalled under the seed's key needs nothing. One journalled
+// under another key, as after the seed was lost or changed, or by a proxy run
+// without --sign before the seed was generated, needs the seed's key to be one
+// trusted_keys.json registers, so the next start accepts the line whatever
+// seed it runs with; and the journal's key registered there with the journal
+// line verifying against it, or the operator's reason for clearing it anyway.
+// The line then names the journal's key, and the reason.
+func (s *Server) journalKeyNotes(p *PendingDispatch, reason string) (map[string]string, error) {
+	journalKey, signer := p.Journal.PayloadSignatureKeyID, s.issuer.KeyID()
+	if journalKey == signer {
+		return nil, nil
 	}
-	return signer
+	if _, registered := s.keys.PublicKeyFor(signer); !registered {
+		return nil, fmt.Errorf("spendproxy: the dispatch was %s and the signing seed is key %s, which %s does not register: reconcile with the seed the proxy runs with", signedBy(journalKey), signer, TrustedKeyFileName)
+	}
+	notes := map[string]string{MetadataReconcileJournalKey: journalKey}
+	if strings.TrimSpace(reason) != "" {
+		notes[MetadataReconcileJournalKeyReason] = reason
+		return notes, nil
+	}
+	pub, registered := s.keys.PublicKeyFor(journalKey)
+	if !registered {
+		return nil, fmt.Errorf("spendproxy: the dispatch was %s, which %s does not register, and the signing seed is key %s: reconcile with the seed that signed it, or give the journal key reason (--journal-key-reason) the line records", signedBy(journalKey), TrustedKeyFileName, signer)
+	}
+	if err := verifyDetached(pub, p.Journal.Payload(), p.Journal.PayloadSignature); err != nil {
+		return nil, fmt.Errorf("spendproxy: the journal line of intent %s does not verify against key %q, which %s registers: %v; give the journal key reason (--journal-key-reason) to clear it anyway", p.Quote.SpendIntentID, journalKey, TrustedKeyFileName, err)
+	}
+	return notes, nil
+}
+
+// signedBy says which key signed a journal line.
+func signedBy(keyID string) string {
+	if keyID == "" {
+		return "journalled unsigned"
+	}
+	return fmt.Sprintf("signed by key %q", keyID)
 }
 
 // appendSigned signs a line and appends it, failing on either.
@@ -243,10 +292,15 @@ func (s *Server) appendSigned(rec *ReceiptRecord) error {
 	return nil
 }
 
-// settlementRecords are the usage and settlement lines of a settlement.
+// settlementRecords are the usage and settlement lines of a settlement. The
+// settlement line names the envelope windows the usage receipt closed.
 func settlementRecords(usage *economic.UsageReceipt, settlement *economic.SettlementReceipt, balanceAfter int64, note string) []*ReceiptRecord {
+	settled := &ReceiptRecord{Kind: RecordSettlement, TenantID: settlement.TenantID, SpendIntentID: usage.SpendIntentID, Settlement: settlement}
+	if closed := closedWindows(usage.Metadata); len(closed) > 0 {
+		settled.EnvelopeClosed, settled.EnvelopeClosedWindows = usage.Metadata[inferencegateway.MetadataEnvelopeClosed], closed
+	}
 	return []*ReceiptRecord{
 		{Kind: RecordUsage, TenantID: usage.TenantID, SpendIntentID: usage.SpendIntentID, BalanceAfterCents: balanceAfter, Note: note, Usage: usage},
-		{Kind: RecordSettlement, TenantID: settlement.TenantID, SpendIntentID: usage.SpendIntentID, Settlement: settlement},
+		settled,
 	}
 }

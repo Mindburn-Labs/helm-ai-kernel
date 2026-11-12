@@ -165,7 +165,7 @@ func TestRestoredPendingDispatchHoldsTheEnvelope(t *testing.T) {
 	}
 	// A second engine over a fresh ledger stands for the restarted process.
 	h2 := newHarness(t, func(c *EngineConfig) { c.PlatformFeeBps = 0 })
-	restored, err := h2.engine.RestorePendingDispatch(env, res.Quote, h2.now)
+	restored, err := h2.engine.RestorePendingDispatch(env, res.Quote, h2.now, 0)
 	if err != nil || restored == nil || !restored.Pending {
 		t.Fatalf("restore = %+v, %v; want a pending reservation", restored, err)
 	}

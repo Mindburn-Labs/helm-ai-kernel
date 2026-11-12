@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -37,10 +38,16 @@ const (
 	// and a restart holds it again pending reconciliation.
 	RecordSettleFailed RecordKind = "settle_failed"
 	// RecordDispatchReleased marks a journalled dispatch whose hold was
-	// released because no byte of its request left the proxy, so a restart
-	// does not hold it again.
+	// released, so a restart does not hold it again: because no byte of its
+	// request left the proxy, or because an operator released it with a
+	// reason (`spend-proxy reconcile --release`). It carries the dispatch's
+	// route quote, whose metadata release_reason says why, signed.
 	RecordDispatchReleased RecordKind = "dispatch_released"
 )
+
+// MetadataReleaseReason is the route-quote metadata key of a release record
+// that says why the hold was released.
+const MetadataReleaseReason = "release_reason"
 
 // NoteDispatchJournal is the note of the route_quote line appended before the
 // provider call. A logged quote whose note starts with "rejected" was never
@@ -48,7 +55,7 @@ const (
 const NoteDispatchJournal = "dispatch: journalled before the provider call"
 
 // ReceiptRecord is one append-only line in the JSONL receipt log. Exactly one
-// of the receipt pointers is set, matching Kind.
+// of the receipt pointers is set, the one its Kind names (payloadKinds).
 type ReceiptRecord struct {
 	Kind          RecordKind `json:"kind"`
 	TenantID      string     `json:"tenant_id"`
@@ -60,11 +67,11 @@ type ReceiptRecord struct {
 	Note              string `json:"note,omitempty"`
 
 	// PayloadSignature is the issuer's detached Ed25519 signature over the RFC
-	// 8785 (JCS) canonicalization of the receipt payload carried by this record.
-	// It covers post-dispatch fields (token counts, timestamps, substitution
-	// flags) that the receipt types' sealed content-hash preimages omit, so
-	// exported evidence can anchor them. PayloadSignatureKeyID resolves in the
-	// trusted-key registry.
+	// 8785 (JCS) canonicalization of the receipt payload its Kind names. It
+	// covers post-dispatch fields (token counts, timestamps, substitution
+	// flags, metadata) that the receipt types' sealed content-hash preimages
+	// omit, so exported evidence can anchor them. PayloadSignatureKeyID is the
+	// issuer's key id.
 	PayloadSignature      string `json:"payload_signature,omitempty"`
 	PayloadSignatureKeyID string `json:"payload_signature_key_id,omitempty"`
 
@@ -74,21 +81,63 @@ type ReceiptRecord struct {
 	Settlement    *economic.SettlementReceipt    `json:"settlement,omitempty"`
 }
 
-// Payload returns the receipt payload carried by this record (exactly one
-// pointer is set, matching Kind), or nil for kinds without a payload.
+// payloadKinds names the payload each record kind carries.
+var payloadKinds = map[RecordKind]string{
+	RecordRouteQuote:       "route_quote",
+	RecordBudgetVerdict:    "budget_verdict",
+	RecordUsage:            "usage",
+	RecordSettlement:       "settlement",
+	RecordSettleFailed:     "route_quote",
+	RecordDispatchReleased: "route_quote",
+}
+
+// Payload returns the receipt payload the record's Kind names, which is what
+// its detached signature covers, or nil when the record does not carry it.
+// Whatever else a record carries is never the payload (helm-tracker#313 r1,
+// F1): a line cannot borrow another line's payload and signature.
 func (r *ReceiptRecord) Payload() any {
-	switch {
-	case r.RouteQuote != nil:
-		return r.RouteQuote
-	case r.BudgetVerdict != nil:
-		return r.BudgetVerdict
-	case r.Usage != nil:
-		return r.Usage
-	case r.Settlement != nil:
-		return r.Settlement
-	default:
-		return nil
+	switch payloadKinds[r.Kind] {
+	case "route_quote":
+		if r.RouteQuote != nil {
+			return r.RouteQuote
+		}
+	case "budget_verdict":
+		if r.BudgetVerdict != nil {
+			return r.BudgetVerdict
+		}
+	case "usage":
+		if r.Usage != nil {
+			return r.Usage
+		}
+	case "settlement":
+		if r.Settlement != nil {
+			return r.Settlement
+		}
 	}
+	return nil
+}
+
+// checkPayload refuses a record whose kind is unknown, or that does not carry
+// exactly the one payload its kind names.
+func (r *ReceiptRecord) checkPayload() error {
+	want, known := payloadKinds[r.Kind]
+	if !known {
+		return fmt.Errorf("unknown record kind %q", r.Kind)
+	}
+	var carried []string
+	for name, set := range map[string]bool{
+		"route_quote": r.RouteQuote != nil, "budget_verdict": r.BudgetVerdict != nil,
+		"usage": r.Usage != nil, "settlement": r.Settlement != nil,
+	} {
+		if set {
+			carried = append(carried, name)
+		}
+	}
+	if len(carried) != 1 || carried[0] != want {
+		sort.Strings(carried)
+		return fmt.Errorf("a %s line must carry exactly its %s payload, and it carries %v", r.Kind, want, carried)
+	}
+	return nil
 }
 
 // ReceiptLogName is the stable file name of the append-only receipt log inside
@@ -179,6 +228,9 @@ func LoadRecords(path string) ([]*ReceiptRecord, error) {
 		}
 		rec := &ReceiptRecord{}
 		if err := json.Unmarshal(line, rec); err != nil {
+			return nil, fmt.Errorf("spendproxy: receipt log %s line %d: %w", path, lineNo, err)
+		}
+		if err := rec.checkPayload(); err != nil {
 			return nil, fmt.Errorf("spendproxy: receipt log %s line %d: %w", path, lineNo, err)
 		}
 		out = append(out, rec)
@@ -277,8 +329,9 @@ func DebitedCents(records []*ReceiptRecord) int64 {
 
 // restoreEnvelopeUse re-applies every settled debit in the log to the envelope
 // window it was settled in, so a restarted proxy does not hand an envelope's
-// limit out again (helm-tracker#313, audit H7). A debit under an envelope the
-// config no longer declares is not applied to any.
+// limit out again (helm-tracker#313, audit H7), and closes again a window a
+// settlement above its hold closed. A debit under an envelope the config no
+// longer declares is not applied to any.
 func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
 	settled := make(map[string]bool)
 	for _, rec := range records {
@@ -293,7 +346,7 @@ func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.Balan
 		}
 		seen[rec.SpendIntentID] = true
 		if env := envelopes[rec.Usage.EnvelopeID]; env != nil {
-			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, rec.Usage.BalanceDebitCents)
+			ledger.RestoreEnvelopeUse(env, rec.RecordedAt, rec.Usage.BalanceDebitCents, rec.Usage.Metadata["envelope_closed"] != "")
 		}
 	}
 }
@@ -313,24 +366,25 @@ func isDispatchJournal(rec *ReceiptRecord) bool {
 }
 
 // RestorePendingDispatches holds again, in engine, every dispatch the log
-// journalled before its provider call that has no settlement and no release:
-// the provider may have billed it, so its quote ceiling stays reserved against
-// its envelope and the balance, pending reconciliation, and its idempotency key
-// cannot dispatch again (audit M18). A dispatch under an envelope the config no
+// journalled before its provider call that has no committed settlement and no
+// release: the provider may have billed it, so its quote ceiling stays
+// reserved against its envelope and the balance, pending reconciliation, and
+// its idempotency key cannot dispatch again (audit M18). A settlement is
+// committed only with both its usage and its settlement line (ReplayRecords
+// restored it into the engine's ledger): a settlement line whose usage line
+// never reached the log carries no debit, so its dispatch is held at its hold
+// (helm-tracker#313 r1, F10). A dispatch under an envelope the config no
 // longer declares refuses the start: its cents would otherwise be forgotten.
-func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway.Engine, envelopes map[string]*economic.AgentSpendEnvelope) ([]*inferencegateway.Reservation, error) {
-	// Read the log in order: a journal line opens a dispatch, a release closes
-	// the journal before it (a retry may journal the key again), and a
-	// settlement closes the key for good.
+func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway.Engine, envelopes map[string]*economic.AgentSpendEnvelope) ([]PendingDispatch, error) {
+	// Read the log in order: a journal line opens a dispatch, and a release
+	// closes the journal before it (a retry may journal the key again). The
+	// engine leaves a key it holds a committed settlement for as it is.
 	open := make(map[string]*ReceiptRecord)
 	var order []string
 	listed := make(map[string]bool)
-	settled := make(map[string]bool)
 	for _, rec := range records {
 		switch {
 		case rec.SpendIntentID == "":
-		case rec.Kind == RecordSettlement:
-			settled[rec.SpendIntentID] = true
 		case rec.Kind == RecordDispatchReleased:
 			delete(open, rec.SpendIntentID)
 		case isDispatchJournal(rec):
@@ -341,10 +395,10 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 			open[rec.SpendIntentID] = rec
 		}
 	}
-	var out []*inferencegateway.Reservation
+	var out []PendingDispatch
 	for _, intentID := range order {
 		rec, pending := open[intentID]
-		if !pending || settled[intentID] {
+		if !pending {
 			continue
 		}
 		env := envelopes[rec.RouteQuote.EnvelopeID]
@@ -356,8 +410,15 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 			return nil, fmt.Errorf("spendproxy: hold unsettled dispatch %s: %w", rec.SpendIntentID, err)
 		}
 		if res != nil {
-			out = append(out, res)
+			out = append(out, PendingDispatch{Reservation: res, Quote: rec.RouteQuote})
 		}
 	}
 	return out, nil
+}
+
+// PendingDispatch is a dispatch held again on start, pending reconciliation:
+// its hold and the route quote its journal line carries.
+type PendingDispatch struct {
+	*inferencegateway.Reservation
+	Quote *economic.RouteQuote
 }

@@ -185,15 +185,20 @@ func (f *gatewayFixture) do(t *testing.T, method, path, model string, hdr map[st
 	t.Helper()
 	var body []byte
 	if model != "" {
-		payload := map[string]any{
-			"model":    model,
-			"messages": []map[string]string{{"role": "user", "content": "hello"}},
-		}
+		// Each route's own request shape: the gateway reads each against its
+		// API's closed list (helm-tracker#313).
+		payload := map[string]any{"model": model}
 		switch path {
 		case "/v1/chat/completions":
+			payload["messages"] = []map[string]string{{"role": "user", "content": "hello"}}
 			payload["max_tokens"] = 64
 		case "/v1/responses":
+			payload["input"] = "hello"
 			payload["max_output_tokens"] = 64
+		case "/v1/embeddings":
+			payload["input"] = []string{"hello"}
+		default:
+			payload["messages"] = []map[string]string{{"role": "user", "content": "hello"}}
 		}
 		body, _ = json.Marshal(payload)
 	}
@@ -561,7 +566,8 @@ func TestGatewayRequiresOutputTokenLimit(t *testing.T) {
 		{"chat without max_tokens", "/v1/chat/completions", `{"model":"gpt-6-sol","messages":[{"role":"user","content":"hi"}]}`, "max_tokens is required"},
 		{"chat with zero max_tokens", "/v1/chat/completions", `{"model":"gpt-6-sol","max_tokens":0,"messages":[{"role":"user","content":"hi"}]}`, "max_tokens must be a positive integer"},
 		{"responses without max_output_tokens", "/v1/responses", `{"model":"gpt-6-sol","input":"hi"}`, "max_output_tokens is required"},
-		{"responses with the chat field only", "/v1/responses", `{"model":"gpt-6-sol","max_tokens":64,"input":"hi"}`, "max_output_tokens is required"},
+		// The chat field is not a Responses member: the closed list refuses it.
+		{"responses with the chat field only", "/v1/responses", `{"model":"gpt-6-sol","max_tokens":64,"input":"hi"}`, `member \"max_tokens\" is not one`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)

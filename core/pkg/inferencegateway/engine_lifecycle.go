@@ -58,8 +58,8 @@ func (e *Engine) ReserveForDispatch(res *QuoteResult) (*Reservation, error) {
 
 	var decision economic.SpendAuthorityDecision
 	var receipt *economic.BudgetVerdictReceipt
-	reservation, err := e.cfg.Ledger.reserveDispatch(quote.ID, res.env, quote.MaxAmountCents, now, func(consumed int64) (string, error) {
-		decision = effectiveEnvelope(res.env, consumed).EvaluateSpend(quote.MaxAmountCents, quote.SelectedProviderID, quote.SelectedModelID)
+	reservation, err := e.cfg.Ledger.reserveDispatch(quote.ID, res.env, quote.MaxAmountCents, now, func(state envelopeSpend) (string, error) {
+		decision = decideSpend(res.env, state, quote.MaxAmountCents, quote.SelectedProviderID, quote.SelectedModelID)
 		if decision.Verdict != economic.BudgetVerdictAllow {
 			return "", quoteErr(decision.Verdict, decision.ReasonCode, decision.Reason)
 		}

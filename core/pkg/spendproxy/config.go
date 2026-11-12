@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
@@ -50,11 +51,15 @@ type Config struct {
 	// is restarted against a re-captured price config.
 	PriceTTLHours int64 `json:"price_ttl_hours"`
 
-	Balance   BalanceConfig   `json:"balance"`
-	Defaults  RequestDefaults `json:"request_defaults"`
-	Providers []ProviderCfg   `json:"providers"`
-	Prices    []PriceCfg      `json:"prices"`
-	Envelopes []EnvelopeCfg   `json:"envelopes"`
+	Balance  BalanceConfig   `json:"balance"`
+	Defaults RequestDefaults `json:"request_defaults"`
+	// Callers bind caller credentials to the identities they may use. With
+	// none, the proxy serves exactly one principal and the headers pick among
+	// its envelopes (helm-tracker#313 r1, F4).
+	Callers   []CallerCfg   `json:"callers,omitempty"`
+	Providers []ProviderCfg `json:"providers"`
+	Prices    []PriceCfg    `json:"prices"`
+	Envelopes []EnvelopeCfg `json:"envelopes"`
 }
 
 // BalanceConfig funds the governed balance account backing settlements.
@@ -75,6 +80,20 @@ type RequestDefaults struct {
 	AgentID     string `json:"agent_id,omitempty"`
 	PrincipalID string `json:"principal_id,omitempty"`
 	EnvelopeID  string `json:"envelope_id,omitempty"`
+}
+
+// CallerCfg binds one caller credential, a bearer token, to the agent, the
+// envelopes and the workspaces a request under it may name. The config holds
+// the token's SHA-256 only, as 64 hex digits, never the token. A request
+// under the credential that names another agent, envelope or workspace is
+// refused; one that names none gets the caller's agent, its first envelope
+// and its first workspace (none when Workspaces is empty).
+type CallerCfg struct {
+	ID          string   `json:"id"`
+	TokenSHA256 string   `json:"token_sha256"`
+	AgentID     string   `json:"agent_id"`
+	Envelopes   []string `json:"envelopes"`
+	Workspaces  []string `json:"workspaces,omitempty"`
 }
 
 // ProviderCfg declares a provider terms profile (legal/commercial boundary).
@@ -241,6 +260,9 @@ func (c *Config) Validate() error {
 		}
 		envIDs[e.ID] = struct{}{}
 	}
+	if err := c.validateCallers(); err != nil {
+		return err
+	}
 	if c.Defaults.EnvelopeID != "" {
 		if _, ok := envIDs[c.Defaults.EnvelopeID]; !ok {
 			return fmt.Errorf("request_defaults.envelope_id %q is not a declared envelope", c.Defaults.EnvelopeID)
@@ -253,6 +275,61 @@ func (c *Config) Validate() error {
 		for _, e := range c.Envelopes {
 			if e.ID == c.Defaults.EnvelopeID && c.Defaults.PrincipalID != "" && c.Defaults.PrincipalID != e.PrincipalID {
 				return fmt.Errorf("request_defaults.principal_id %q is not the principal_id %q of envelope %q", c.Defaults.PrincipalID, e.PrincipalID, e.ID)
+			}
+		}
+	}
+	return nil
+}
+
+// validateCallers binds each caller to declared envelopes of its own agent,
+// under a distinct token hash. Without callers the headers pick the envelope,
+// so every envelope must name the same principal: the proxy then serves that
+// one principal, and a header can choose none other.
+func (c *Config) validateCallers() error {
+	envAgent := make(map[string]string, len(c.Envelopes))
+	principals := map[string]bool{}
+	for _, e := range c.Envelopes {
+		envAgent[e.ID] = e.AgentID
+		principals[e.PrincipalID] = true
+	}
+	if len(c.Callers) == 0 {
+		if len(principals) > 1 {
+			return fmt.Errorf("the envelopes name %d principals, and without callers a request header would choose which one a signed receipt names: configure callers, or one principal_id", len(principals))
+		}
+		return nil
+	}
+	if c.Defaults != (RequestDefaults{}) {
+		return errors.New("request_defaults cannot be set with callers: a caller's credential names its identity")
+	}
+	ids, hashes := map[string]bool{}, map[string]bool{}
+	for i, caller := range c.Callers {
+		if caller.ID == "" || caller.AgentID == "" || len(caller.Envelopes) == 0 {
+			return fmt.Errorf("callers[%d]: id, agent_id and envelopes are required", i)
+		}
+		if ids[caller.ID] {
+			return fmt.Errorf("callers[%d]: the id %q is repeated", i, caller.ID)
+		}
+		ids[caller.ID] = true
+		digest, err := hex.DecodeString(caller.TokenSHA256)
+		if err != nil || len(digest) != sha256.Size || caller.TokenSHA256 != strings.ToLower(caller.TokenSHA256) {
+			return fmt.Errorf("callers[%d]: token_sha256 must be the token's SHA-256 as 64 lowercase hex digits; the config never holds the token itself", i)
+		}
+		if hashes[caller.TokenSHA256] {
+			return fmt.Errorf("callers[%d]: token_sha256 is another caller's: each caller needs its own token", i)
+		}
+		hashes[caller.TokenSHA256] = true
+		for _, id := range caller.Envelopes {
+			agent, declared := envAgent[id]
+			if !declared {
+				return fmt.Errorf("callers[%d]: the envelope %q is not declared", i, id)
+			}
+			if agent != caller.AgentID {
+				return fmt.Errorf("callers[%d]: the envelope %q belongs to agent %q, not the caller's %q", i, id, agent, caller.AgentID)
+			}
+		}
+		for _, ws := range caller.Workspaces {
+			if ws == "" {
+				return fmt.Errorf("callers[%d]: a workspace id cannot be empty", i)
 			}
 		}
 	}

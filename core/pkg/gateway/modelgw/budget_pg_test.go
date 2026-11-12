@@ -278,7 +278,9 @@ func budgetMessage(name string, maxTokens int64) string {
 	if maxTokens > 0 {
 		cap = fmt.Sprintf(`,"max_tokens":%d`, maxTokens)
 	}
-	return fmt.Sprintf(`{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":%q}]%s}`, name, cap)
+	// The body names the standard tier, which the gateway would otherwise
+	// set, so the quote of the forwarded request is the quote of this body.
+	return fmt.Sprintf(`{"model":"claude-sonnet-5-5","service_tier":"standard_only","messages":[{"role":"user","content":%q}]%s}`, name, cap)
 }
 
 func budgetUsage(outputTokens int64) string {

@@ -33,8 +33,13 @@ const (
 	CostCapEscalate CostCapPolicy = "ESCALATE"
 	// CostCapDebitActual debits the actual cost even above the ceiling and
 	// reports the difference as SettleResult.OverageCents, which the caller
-	// must record and alert on. Use it when the provider has already been
-	// paid: clamping would under-debit and escalating would debit nothing.
+	// must record and alert on. The usage receipt of such a settlement says
+	// ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT with the overage, the ceiling and
+	// the envelope it closed (metadata overage_cents, quote_ceiling_cents,
+	// envelope_closed), and the envelope's window takes no further dispatch
+	// until its next period. Use it when the provider has already been paid:
+	// clamping would under-debit and escalating would debit nothing. It is
+	// never the default.
 	CostCapDebitActual CostCapPolicy = "DEBIT_ACTUAL"
 )
 
@@ -248,9 +253,10 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	}
 
 	// The envelope as it stands in this period: its limit less what its
-	// requests have reserved and used. ReserveForDispatch decides again, in one
-	// step with the reservation.
-	effective := effectiveEnvelope(env, e.cfg.Ledger.envelopeConsumed(env, now))
+	// requests have reserved and used, or closed. ReserveForDispatch decides
+	// again, in one step with the reservation.
+	state := e.cfg.Ledger.envelopeState(env, now)
+	effective := effectiveEnvelope(env, addSaturating(state.reserved, state.used))
 	outputTokens := req.EstimatedOutputTokens
 	if req.ClampOutputToMandate {
 		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, mandateCeilingCents(effective, route))
@@ -271,7 +277,7 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		}
 	}
 
-	decision := effective.EvaluateSpend(maxCents, route.ProviderID, route.ModelID)
+	decision := decideSpend(env, state, maxCents, route.ProviderID, route.ModelID)
 	evidenceRef := evidencePackRef(req.TenantID, req.IdempotencyKey, snapshot.ContentHash)
 	intentID := spendIntentID(req.TenantID, req.IdempotencyKey)
 
@@ -495,8 +501,17 @@ func (e *Engine) settle(quote *economic.RouteQuote, u Usage, fee int64, atHold b
 		}
 	}
 	if overage > 0 {
+		// The provider billed above the hold the envelope authorized: the
+		// receipt does not say the envelope covered it, and the envelope's
+		// window closes when the debit books against its reservation
+		// (helm-tracker#313 r1, F2).
+		usage.BudgetVerdict = economic.BudgetVerdictEscalate
+		usage.ReasonCode = economic.SpendReasonPerRequestLimit
 		usage.Metadata["overage_cents"] = strconv.FormatInt(overage, 10)
 		usage.Metadata["quote_ceiling_cents"] = strconv.FormatInt(quote.MaxAmountCents, 10)
+		if e.cfg.Ledger.hasOpenReservation(quote.ID) {
+			usage.Metadata["envelope_closed"] = quote.EnvelopeID
+		}
 	}
 
 	settlement := e.buildSettlement(quote, usage)

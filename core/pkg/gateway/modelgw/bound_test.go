@@ -9,6 +9,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelbound"
 )
 
 // A one-pixel PNG, inline. Its bytes are far fewer than the tokens a provider
@@ -219,14 +220,14 @@ func TestHiddenToolDefinitionsAreInTheHold(t *testing.T) {
 		extra     int64
 	}{
 		"responses: local_shell and apply_patch": {effectargs.APIOpenAIResponses,
-			`{"model":"gpt-6-sol","max_output_tokens":1,"input":"x","tools":[{"type":"local_shell"},{"type":"apply_patch"},{"type":"function","name":"f","parameters":{}}]}`, 2 * hiddenToolTokens},
+			`{"model":"gpt-6-sol","max_output_tokens":1,"input":"x","tools":[{"type":"local_shell"},{"type":"apply_patch"},{"type":"function","name":"f","parameters":{}}]}`, 2 * modelbound.HiddenToolTokens},
 		"messages: a custom tool": {effectargs.APIAnthropicMessages,
-			`{"model":"claude-sonnet-5-5","max_tokens":1,"messages":[{"role":"user","content":"x"}],"tools":[{"name":"f","input_schema":{}}]}`, anthropicToolSystemTokens},
+			`{"model":"claude-sonnet-5-5","max_tokens":1,"messages":[{"role":"user","content":"x"}],"tools":[{"name":"f","input_schema":{}}]}`, modelbound.AnthropicToolSystemTokens},
 		"messages: bash and an image in a tool result": {effectargs.APIAnthropicMessages,
 			`{"model":"claude-sonnet-5-5","max_tokens":1,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` + tinyPNG + `"}}]}]}],"tools":[{"type":"bash_20250124","name":"bash"}]}`,
-			anthropicToolSystemTokens + hiddenToolTokens + anthropicImageTokens},
+			modelbound.AnthropicToolSystemTokens + modelbound.HiddenToolTokens + modelbound.AnthropicImageTokens},
 		"chat: two inline images": {effectargs.APIOpenAIChat,
-			`{"model":"gpt-6-sol","max_tokens":1,"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,` + tinyPNG + `"}},{"type":"image_url","image_url":"data:image/png;base64,` + tinyPNG + `"}]}]}`, 2 * openAIImageTokens},
+			`{"model":"gpt-6-sol","max_tokens":1,"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,` + tinyPNG + `"}},{"type":"image_url","image_url":"data:image/png;base64,` + tinyPNG + `"}]}]}`, 2 * modelbound.OpenAIImageTokens},
 	} {
 		c, err := inspectFor(t, test.api, test.body)
 		if err != nil {

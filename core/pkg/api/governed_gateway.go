@@ -5,15 +5,19 @@
 // responses / embeddings call:
 //
 //  1. parses the HELM governance headers (workspace, agent, spend envelope,
-//     idempotency, route policy) and the output-token ceiling (max_tokens,
-//     max_completion_tokens or max_output_tokens), which is required on routes
-//     that bill output tokens;
+//     idempotency, route policy), reads the body against the model gateway's
+//     closed list for its route (core/pkg/gateway/modelbound: stored state,
+//     remote media, hosted tools, routing members, unknown members and the
+//     like are refused with 400), and reads the output-token ceiling
+//     (max_tokens, max_completion_tokens or max_output_tokens), which is
+//     required on routes that bill output tokens;
 //  2. answers an already-settled idempotency key from the committed result,
 //     without quoting or dispatching again;
 //  3. asks the RouteQuote engine for an expiring quote BEFORE dispatch — a
 //     non-ALLOW verdict (deny, escalate, stale price, terms block) returns
-//     without ever calling a provider — with the output ceiling clamped to
-//     what the spend envelope can pay for;
+//     without ever calling a provider — on one input token per byte of the
+//     request it forwards plus the image and tool floors, with the output
+//     ceiling clamped to what the spend envelope can pay for;
 //  4. reserves the quote ceiling against the spend envelope and the balance in
 //     one step (exclusive per idempotency key), which issues the budget-verdict
 //     receipt, then dispatches with the authorized output ceiling;
@@ -43,6 +47,7 @@ import (
 	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelbound"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
@@ -151,13 +156,6 @@ func (g *GovernedGateway) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/models", g.handleModels)
 }
 
-// inferenceBody is the minimal OpenAI-shaped request the gateway reads. The
-// full body is forwarded to the provider with only the output-token ceiling
-// rewritten to the authorized value.
-type inferenceBody struct {
-	Model string `json:"model"`
-}
-
 // GatewayMetadata is the HELM receipt block attached to every governed response.
 type GatewayMetadata struct {
 	Governed          bool                           `json:"governed"`
@@ -216,6 +214,12 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, "failed to read request body")
 		return
 	}
+	// A key repeated at any depth is refused before the privacy scan rewrites
+	// the body: the provider may read the other value than the one inspected.
+	if err := modelbound.CheckNoDuplicateKeys(body); err != nil {
+		WriteBadRequest(w, "the request body "+err.Error())
+		return
+	}
 	protectedBody, _, err := privacy.ProtectModelRequestJSON(r.Context(), json.RawMessage(body))
 	if err != nil {
 		if errors.Is(err, privacy.ErrDataEgressInvalid) {
@@ -226,23 +230,24 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		return
 	}
 	body = protectedBody
-	var parsed inferenceBody
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		WriteBadRequest(w, "invalid request body")
+	// The request is read against the model gateway's closed list for its
+	// route (core/pkg/gateway/modelbound): what the quote cannot price is
+	// refused before any quote, hold or dispatch, naming it (helm-tracker#313).
+	// The upstream speaks OpenAI's wire format for another account, so an auto
+	// service tier is refused rather than named.
+	fieldList, bound, refusal := modelbound.CheckBody(routeAPI(r.URL.Path), body, modelbound.Options{})
+	if refusal != nil {
+		WriteBadRequest(w, refusal.Message)
 		return
 	}
-	if parsed.Model == "" {
+	model, _ := modelbound.String(fieldOf(fieldList, "model"))
+	if model == "" {
 		WriteBadRequest(w, "model is required")
 		return
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		WriteBadRequest(w, "invalid request body")
-		return
-	}
-	if err := refuseUngovernedMembers(fields); err != nil {
-		WriteBadRequest(w, err.Error())
-		return
+	fields := make(map[string]json.RawMessage, len(fieldList))
+	for _, f := range fieldList {
+		fields[f.Key] = f.Raw
 	}
 	limitFields := outputLimitFields(r.URL.Path)
 	outputLimit, err := requestedOutputLimit(fields, limitFields)
@@ -250,6 +255,15 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, err.Error())
 		return
 	}
+	// The members the closed list sets (store false on Responses) are part of
+	// the request the hold is quoted on.
+	set := map[string]json.RawMessage{}
+	var setOrder []string
+	for _, f := range bound.Set {
+		set[f.Key] = f.Raw
+		setOrder = append(setOrder, f.Key)
+	}
+	quoted := modelbound.Rebuild(fieldList, set, setOrder)
 
 	env, ok := g.resolver(tenantID, hdr.SpendEnvelope)
 	if !ok {
@@ -266,14 +280,14 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	estInput, estOutput := estimateTokens(body, outputLimit)
+	estInput, estOutput := holdTokens(quoted, bound.ExtraInputTokens, outputLimit)
 	quoteRes, qErr := g.engine.Quote(env, inferencegateway.RouteRequest{
 		TenantID:              tenantID,
 		WorkspaceID:           hdr.WorkspaceID,
 		AgentID:               hdr.AgentID,
 		PrincipalID:           hdr.PrincipalID,
 		IdempotencyKey:        hdr.IdempotencyKey,
-		RequestedModelID:      parsed.Model,
+		RequestedModelID:      model,
 		EstimatedInputTokens:  estInput,
 		EstimatedOutputTokens: estOutput,
 		ClampOutputToMandate:  len(limitFields) > 0,
@@ -304,9 +318,12 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	}
 	quote = quoteRes.Quote
 
-	dispatchBody, err := withOutputLimit(body, fields, limitFields, quote.OutputTokens)
-	if err != nil {
+	dispatchBody := withOutputLimit(fieldList, set, setOrder, limitFields, quote.OutputTokens)
+	if len(dispatchBody) > len(quoted) {
+		// The hold rests on the bytes it was quoted on; a larger forwarded
+		// request could bill above it. Nothing has left the process.
 		_, _ = g.engine.ReleaseReservation(quote)
+		err = fmt.Errorf("api: the forwarded request is %d bytes, above the %d its hold was quoted on", len(dispatchBody), len(quoted))
 		WriteInternalR(w, r, err)
 		return
 	}
@@ -343,9 +360,15 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// A settlement above the hold says so: its usage receipt carries
+	// ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT, not the reservation's ALLOW.
+	verdict := economic.BudgetVerdictAllow
+	if settleRes.UsageReceipt != nil && settleRes.UsageReceipt.BudgetVerdict != "" {
+		verdict = settleRes.UsageReceipt.BudgetVerdict
+	}
 	meta := GatewayMetadata{
 		Governed:          true,
-		Verdict:           economic.BudgetVerdictAllow,
+		Verdict:           verdict,
 		ReasonCode:        settleRes.ReasonCode,
 		Quote:             quoteRes.Quote,
 		RouteReceipt:      quoteRes.Receipt,
@@ -569,39 +592,31 @@ func statusForVerdict(verdict economic.BudgetVerdict) int {
 	}
 }
 
-// estimateTokens derives a pre-dispatch token estimate from the request body.
-// Input is approximated from body size (~4 bytes/token); output is the
-// client's output ceiling, which the gateway forwards so the provider cannot
-// exceed it. Settlement always uses the provider's actual reported usage.
-func estimateTokens(body []byte, outputLimit int64) (int64, int64) {
-	in := int64(len(body)) / 4
-	if in < 1 {
-		in = 1
-	}
-	return in, outputLimit
+// holdTokens is the pre-dispatch bound the hold is quoted on: one input
+// token per byte of the request the gateway forwards, which bounds the tokens
+// of the text it carries, plus the floors of the inline images and hidden tool
+// definitions bytes do not bound (modelbound), and the output ceiling the
+// gateway forwards so the provider cannot exceed it. Settlement uses the
+// provider's reported usage.
+func holdTokens(body []byte, extraInput, outputLimit int64) (int64, int64) {
+	return max(int64(len(body))+extraInput, 1), outputLimit
 }
 
-// ungovernedMembers are request members that let the upstream choose the
-// billed model or provider (OpenRouter's models, provider, plugins and route)
-// or bill more completions than one: the quote prices one completion of the
-// quoted model, so the gateway refuses them (helm-tracker#313, audit M18).
-var ungovernedMembers = []string{"models", "provider", "plugins", "route"}
+// routeAPI names the API a route's requests are read for.
+func routeAPI(path string) string {
+	switch path {
+	case "/v1/responses":
+		return modelbound.APIOpenAIResponses
+	case "/v1/embeddings":
+		return modelbound.APIOpenAIEmbeddings
+	default:
+		return modelbound.APIOpenAIChat
+	}
+}
 
-// refuseUngovernedMembers refuses a request the quote cannot price: a routing
-// member, or n other than 1.
-func refuseUngovernedMembers(fields map[string]json.RawMessage) error {
-	for _, name := range ungovernedMembers {
-		if raw, ok := fields[name]; ok && string(raw) != "null" {
-			return fmt.Errorf("the request member %q lets the upstream choose the billed model or provider; the governed gateway quotes one model and refuses it", name)
-		}
-	}
-	if raw, ok := fields["n"]; ok && string(raw) != "null" {
-		var n int64
-		if err := json.Unmarshal(raw, &n); err != nil || n != 1 {
-			return fmt.Errorf("the request member \"n\" must be 1: the governed gateway quotes and settles one completion per request")
-		}
-	}
-	return nil
+func fieldOf(fields []modelbound.Field, key string) json.RawMessage {
+	raw, _ := modelbound.Lookup(fields, key)
+	return raw
 }
 
 // outputLimitFields names the request fields that cap billable output tokens
@@ -644,22 +659,23 @@ func requestedOutputLimit(fields map[string]json.RawMessage, names []string) (in
 	return limit, nil
 }
 
-// withOutputLimit sets every output-limit field the client sent to the
-// authorized ceiling, so the provider can bill no more than was quoted and
-// reserved. The body is returned unchanged when it already carries that value.
-func withOutputLimit(body []byte, fields map[string]json.RawMessage, names []string, limit int64) ([]byte, error) {
+// withOutputLimit builds the forwarded request: the client's members in
+// their order, the members the closed list sets, and every output-limit field
+// the client sent set to the authorized ceiling, so the provider can bill no
+// more than was quoted and reserved. The authorized ceiling is at most the
+// client's, so the forwarded request is no larger than the one quoted.
+func withOutputLimit(fields []modelbound.Field, set map[string]json.RawMessage, setOrder, names []string, limit int64) []byte {
+	edit := make(map[string]json.RawMessage, len(set)+len(names))
+	for k, v := range set {
+		edit[k] = v
+	}
 	value := json.RawMessage(strconv.FormatInt(limit, 10))
-	changed := false
 	for _, name := range names {
-		if raw, ok := fields[name]; ok && string(raw) != "null" && string(raw) != string(value) {
-			fields[name] = value
-			changed = true
+		if raw, ok := modelbound.Lookup(fields, name); ok && !modelbound.IsNull(raw) {
+			edit[name] = value
 		}
 	}
-	if !changed {
-		return body, nil
-	}
-	return json.Marshal(fields)
+	return modelbound.Rebuild(fields, edit, setOrder)
 }
 
 // requestScope fingerprints what an idempotency key was used for: tenant,

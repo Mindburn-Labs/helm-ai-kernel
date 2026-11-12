@@ -1609,12 +1609,16 @@
       "id": "CTL-016",
       "title": "Spend proxy quotes before dispatch",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "In `helm-ai-kernel spend-proxy`, an inference request is dispatched only after an allowing quote, and a replayed idempotency key never reaches the provider. The quote's ceiling is reserved against the spend envelope's max_amount_cents for its period and the balance in one step, so concurrent requests cannot both take the last cents; settlement moves the reservation to used, and the budget-verdict receipt (OK_WITHIN_ENVELOPE) exists only when that reservation succeeded. A dispatch that may have reached the provider is debited at its hold and its key is spent; only an error before the upstream connection opened releases it. A dispatch journalled before its provider call and never settled is held again on start. Routing members (models, provider, plugins, route) and n other than 1 are refused; an answer from another model is debited at the dearer price. The principal in a spend receipt is the envelope's, never a header. `spend-proxy export` reports a signature verified only when it checked it against a --public-key from outside the receipts directory (helm-tracker#313).",
+      "claim": "In `helm-ai-kernel spend-proxy`, an inference request is dispatched only after an allowing quote, and a replayed idempotency key never reaches the provider. A request is read against the model gateway's closed list for its route (core/pkg/gateway/modelbound) and refused with 400 when its bill could escape the quote, and the hold counts one input token per byte of the forwarded request plus the image and tool floors and the output ceiling. The hold is reserved against the spend envelope's max_amount_cents for its period and the balance in one step, so concurrent requests cannot both take the last cents; settlement moves the reservation to used, and the budget-verdict receipt (OK_WITHIN_ENVELOPE) exists only when that reservation succeeded. A settlement above the hold is debited as billed, its usage receipt says ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT, and the envelope takes no further dispatch that period; a released reservation cannot be settled, and an unreserved settlement is decided against its envelope. A dispatch that may have reached the provider is debited at its hold and its key is spent; only an error before the upstream connection opened releases it. A dispatch journalled before its provider call without a committed settlement is held again on start until `spend-proxy reconcile` settles or releases it in a signed line. An answer is priced by the model it names. The principal in a spend receipt is the envelope's, and with caller credentials configured each request's agent, envelope and workspace are its credential's; without them the proxy serves one principal. A receipt-log line carries exactly the payload its kind names, and `spend-proxy export` reports a signature verified only when it checked it against a --public-key from outside the receipts directory (helm-tracker#313).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
         {
           "symbol": "core/pkg/api.GovernedGateway.handleInference",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/modelbound.CheckBody",
           "reachability": "reachable"
         },
         {
@@ -1626,6 +1630,10 @@
           "reachability": "reachable"
         },
         {
+          "symbol": "core/pkg/inferencegateway.Engine.SettleUsage",
+          "reachability": "reachable"
+        },
+        {
           "symbol": "core/pkg/inferencegateway.Engine.SettleAtHold",
           "reachability": "reachable"
         },
@@ -1634,11 +1642,23 @@
           "reachability": "reachable"
         },
         {
+          "symbol": "core/pkg/spendproxy.Server.bindCaller",
+          "reachability": "reachable"
+        },
+        {
           "symbol": "core/pkg/spendproxy.Upstream.Dispatch",
           "reachability": "reachable"
         },
         {
+          "symbol": "core/pkg/spendproxy.LoadRecords",
+          "reachability": "reachable"
+        },
+        {
           "symbol": "core/pkg/spendproxy.RestorePendingDispatches",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/spendproxy.Reconcile",
           "reachability": "reachable"
         },
         {
@@ -1649,28 +1669,31 @@
       "gates": [],
       "config": [
         "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)",
-        "The spend-proxy config's envelopes (max_amount_cents per UTC day, per_request_max_cents, principal_id) and request_defaults.principal_id, which must be the default envelope's.",
-        "spend-proxy export --public-key: the issuer's Ed25519 public key, printed at start and served as signing_public_key by /helm/spend/health."
+        "The spend-proxy config's envelopes (max_amount_cents per UTC day, per_request_max_cents, principal_id; one principal across them unless callers are configured) and request_defaults.principal_id, which must be the default envelope's.",
+        "The spend-proxy config's callers: id, token_sha256 (the SHA-256 of the bearer token, never the token), agent_id, envelopes, workspaces.",
+        "spend-proxy export --public-key: the issuer's Ed25519 public key, printed at start and served as signing_public_key by /helm/spend/health.",
+        "spend-proxy reconcile --intent with --settle-cents or --release, --reason, and --sign (the proxy's own seed)."
       ],
       "protected_operations": [
         "Inference requests through the spend proxy.",
         "Reserving, settling and releasing a dispatch against its envelope and the balance.",
-        "Restarting the spend proxy on an existing receipt log.",
+        "Restarting the spend proxy on an existing receipt log, and reconciling a pending dispatch.",
         "Exporting spend EvidencePacks with signature verification."
       ],
       "bypass_assumptions": [
-        "The ledger is a JSONL file, not Postgres (R5); envelope spend is rebuilt from it on start.",
-        "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration. The principal comes from the envelope; the workspace header is attribution only.",
+        "The ledger is a JSONL file, not Postgres (R5); envelope spend, closed envelopes and pending holds are rebuilt from it on start. A receipt-log writer can delete lines; the log is not a hash chain.",
+        "The listener binds loopback only; any process on the host can reach it. Caller credentials are bearer tokens on plain HTTP, and without them headers pick among the envelopes of the one configured principal. The tenant comes from configuration.",
         "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch.",
-        "The spend proxy's input estimate is the request size divided by four; settlement debits the actual cost above the hold (DEBIT_ACTUAL) and records the overage, so an envelope can be exceeded by one request's overage.",
-        "A held dispatch is reconciled by no command yet: its cents stay reserved until the log carries its settlement or release.",
-        "Without --public-key export checks no signature. A receipt-log writer can delete lines; the log is not a hash chain."
+        "The hold bounds the bill under the model gateway's assumptions (docs/architecture/model-gateway.md): one token per byte, the image and tool floors, an honoured output maximum, the configured price at the upstream's tier when no service_tier is named. A bill above the hold anyway passes the envelope's limit by at most the overages of the dispatches in flight when it settles; the envelope then closes for its period.",
+        "Reconcile appends lines to the log of a stopped proxy; a running proxy does not see them until it restarts.",
+        "Without --public-key export checks no signature."
       ],
       "tests": {
         "allowed": [
           "core/pkg/spendproxy.TestGovernedRouteEndToEnd",
           "core/pkg/spendproxy.TestExportEvidencePacksOfflineVerifiable",
           "core/pkg/spendproxy.TestDispatchThatNeverLeftReleasesTheHold",
+          "core/pkg/spendproxy.TestReconcileReleasesAPendingHold",
           "core/pkg/api.TestGatewayDispatchNeverSentReleases",
           "core/pkg/api.TestGatewayAnswerWithoutUsageSettlesAtTheHold",
           "core/pkg/inferencegateway.TestReleaseFreesTheEnvelopeAndTheNextPeriodResets",
@@ -1689,15 +1712,46 @@
           "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice",
           "core/pkg/spendproxy.TestHeaderCannotAssertTheSealedPrincipal",
           "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck",
+          "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice",
+          "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope",
+          "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored",
+          "core/pkg/spendproxy.TestAnswerModelRule",
+          "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall",
+          "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity",
+          "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal",
+          "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered",
+          "core/pkg/spendproxy.TestCallerConfigRefusesWhatItCannotBind",
+          "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes",
+          "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind",
+          "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind",
+          "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord",
+          "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart",
+          "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch",
+          "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance",
+          "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine",
+          "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse",
+          "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines",
+          "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey",
           "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed",
           "core/pkg/inferencegateway.TestConcurrentRequestsCannotBothTakeTheLastCents",
           "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved",
           "core/pkg/inferencegateway.TestRestoredPendingDispatchHoldsTheEnvelope",
           "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes",
+          "core/pkg/inferencegateway.TestReleasedReservationCannotSettle",
+          "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope",
+          "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope",
+          "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine",
+          "core/pkg/inferencegateway.TestRemainingCentsCannotWrap",
+          "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap",
           "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed",
           "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold",
           "core/pkg/api.TestGatewayRefusesRoutingMembers",
-          "core/cmd/helm-ai-kernel.TestSpendProxyExportRefusesAMalformedPublicKey"
+          "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice",
+          "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors",
+          "core/pkg/api.TestGatewayResponsesAreNotStored",
+          "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope",
+          "core/cmd/helm-ai-kernel.TestSpendProxyExportRefusesAMalformedPublicKey",
+          "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold"
         ],
         "removal": [
           "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider",
@@ -1710,9 +1764,39 @@
           "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved",
           "core/pkg/api.TestGatewayRefusesRoutingMembers",
           "core/pkg/spendproxy.TestRoutingMembersAreRefused",
+          "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice",
+          "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice",
+          "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors",
+          "core/pkg/api.TestGatewayResponsesAreNotStored",
+          "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored",
+          "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope",
+          "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope",
+          "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope",
+          "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind",
+          "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind",
+          "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck",
+          "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord",
           "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice",
+          "core/pkg/spendproxy.TestAnswerModelRule",
           "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes",
-          "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
+          "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity",
+          "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered",
+          "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal",
+          "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes",
+          "core/pkg/inferencegateway.TestReleasedReservationCannotSettle",
+          "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope",
+          "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap",
+          "core/pkg/inferencegateway.TestRemainingCentsCannotWrap",
+          "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart",
+          "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch",
+          "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance",
+          "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse",
+          "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine",
+          "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine",
+          "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall",
+          "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines",
+          "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold",
+          "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey"
         ],
         "bypass": []
       },
@@ -1759,8 +1843,67 @@
         {
           "file": "core/pkg/api/governed_gateway.go",
           "tests": [
+            "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice",
             "core/pkg/api.TestGatewayRefusesRoutingMembers",
+            "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice",
             "core/pkg/spendproxy.TestRoutingMembersAreRefused"
+          ]
+        },
+        {
+          "file": "core/pkg/api/governed_gateway.go",
+          "tests": [
+            "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors"
+          ]
+        },
+        {
+          "file": "core/pkg/api/governed_gateway.go",
+          "tests": [
+            "core/pkg/api.TestGatewayResponsesAreNotStored",
+            "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/envelope.go",
+          "tests": [
+            "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope",
+            "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope",
+            "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/engine.go",
+          "tests": [
+            "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/export.go",
+          "tests": [
+            "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/export.go",
+          "tests": [
+            "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord"
           ]
         },
         {
@@ -1770,9 +1913,21 @@
           ]
         },
         {
-          "file": "core/pkg/inferencegateway/engine.go",
+          "file": "core/pkg/spendproxy/dispatch.go",
           "tests": [
-            "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+            "core/pkg/spendproxy.TestAnswerModelRule"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/dispatch.go",
+          "tests": [
+            "core/pkg/spendproxy.TestAnswerModelRule"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/dispatch.go",
+          "tests": [
+            "core/pkg/spendproxy.TestAnswerModelRule"
           ]
         },
         {
@@ -1782,9 +1937,113 @@
           ]
         },
         {
-          "file": "core/pkg/spendproxy/export.go",
+          "file": "core/pkg/inferencegateway/engine.go",
           "tests": [
-            "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
+            "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/caller.go",
+          "tests": [
+            "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/caller.go",
+          "tests": [
+            "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/caller.go",
+          "tests": [
+            "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/config.go",
+          "tests": [
+            "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/config.go",
+          "tests": [
+            "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/store.go",
+          "tests": [
+            "core/pkg/inferencegateway.TestReleasedReservationCannotSettle"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/store.go",
+          "tests": [
+            "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope"
+          ]
+        },
+        {
+          "file": "core/pkg/contracts/economic/spend_authority.go",
+          "tests": [
+            "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap",
+            "core/pkg/inferencegateway.TestRemainingCentsCannotWrap"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/engine_lifecycle.go",
+          "tests": [
+            "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/envelope.go",
+          "tests": [
+            "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/server.go",
+          "tests": [
+            "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/engine_lifecycle.go",
+          "tests": [
+            "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/server.go",
+          "tests": [
+            "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/reconcile.go",
+          "tests": [
+            "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines",
+            "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/reconcile.go",
+          "tests": [
+            "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey"
           ]
         }
       ]
@@ -2224,7 +2483,7 @@
       "id": "CTL-026",
       "title": "Non-loopback listeners require auth",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer. The spend-proxy has no caller credential, so it never binds beyond loopback.",
+      "claim": "The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer. The spend-proxy never binds beyond loopback: its caller credentials (CTL-016) are bearer tokens on plain HTTP, and it spends the upstream provider key.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -5414,7 +5673,7 @@
       "id": "CTL-066",
       "title": "A model call's hold bounds what the provider can bill",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway's model gateway quotes a call at one token per request byte plus a token floor for each inline image and each tool definition the provider adds, and the clamped output maximum at the route's price, and refuses with 400, before any attempt exists, every request form whose bill that quote does not bound: a member, input item, content part, block or media source outside a closed list per API (so a stored conversation, a stored prompt, store true, remote or uploaded media, PDFs, audio, predicted outputs, routing members, priority tiers and Anthropic's speed and inference_geo), and an anthropic-beta of context-1m (helm-tracker#313).",
+      "claim": "helm-gateway's model gateway quotes a call at one token per request byte plus a token floor for each inline image and each tool definition the provider adds, and the clamped output maximum at the route's price, and refuses with 400, before any attempt exists, every request form whose bill that quote does not bound: a member, input item, content part, block, media source or nested member of reasoning, text, thinking, output_config, output_format or context_management outside a closed list per API (core/pkg/gateway/modelbound), so a stored conversation, a stored prompt, store true, a reasoning item without its encrypted content, an item named by its id alone, remote or uploaded media, a data URL that is not an image, PDFs, cited documents, audio, predicted outputs, routing members, priority tiers, compaction and Anthropic's speed and inference_geo, and an anthropic-beta outside its allowlist. It forwards a Responses request with store false unless it names it, and on a vendor route the standard service tier when the request names none or auto (helm-tracker#313).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -5433,42 +5692,69 @@
         {
           "symbol": "core/pkg/gateway/modelgw.Route.Quote",
           "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/modelbound.Check",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/modelbound.BetaRefusal",
+          "reachability": "reachable"
         }
       ],
       "gates": [],
       "config": [
-        "HELM_GATEWAY_MODEL_ROUTES_FILE: each route's price and output maximum."
+        "HELM_GATEWAY_MODEL_ROUTES_FILE: each route's price, output maximum and provider kind (openai and anthropic get the standard service tier named)."
       ],
       "protected_operations": [
         "Every model call on helm-gateway serve's /v1/responses, /v1/chat/completions and /v1/messages, on the main and the worker listener."
       ],
       "bypass_assumptions": [
-        "Bytes bound tokens because the providers' tokenizers emit at most one token per byte.",
+        "Bytes bound tokens because the providers' tokenizers emit at most one token per byte, and chat templates and tool definitions rendered from a request's JSON cost no more tokens than their bytes.",
         "The image and tool floors are at or above the costs the providers document (docs/architecture/model-gateway.md); a provider that bills more for an image or a hidden tool definition than documented is not bounded.",
-        "The provider honours the output maximum, and the route's price is the provider's highest for a request of max_request_bytes; a provider that charges more above a context length, or an OpenAI project whose default service tier is priority, bills above the quote.",
-        "Headers other than an anthropic-beta of context-1m are forwarded unchecked.",
+        "The provider honours the output maximum, and the route's price is the provider's highest for a request of max_request_bytes at the tier the gateway sends; on an openai-compatible route an absent service tier is assumed to bill at the route's price.",
+        "An input item that carries its content is billed for that content, not for a stored item of the same id.",
+        "Headers other than anthropic-beta change nothing the provider bills.",
         "A provider that bills above the hold anyway is recorded: the confirmed amount stays on the budget counter and billable is capped at the hold."
       ],
       "tests": {
         "allowed": [
           "core/pkg/gateway/modelgw.TestRequestsTheQuoteUnderstandsStillPass",
-          "core/pkg/gateway/modelgw.TestHiddenToolDefinitionsAreInTheHold"
+          "core/pkg/gateway/modelgw.TestHiddenToolDefinitionsAreInTheHold",
+          "core/pkg/gateway/modelgw.TestResponsesAreNotStored"
         ],
         "forbidden": [
           "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused",
           "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill",
-          "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+          "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused",
+          "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted",
+          "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused",
+          "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier",
+          "core/pkg/gateway/modelgw.TestNestedMembersAreClosed",
+          "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused",
+          "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage",
+          "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed",
+          "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
         ],
         "removal": [
           "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused",
           "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill",
-          "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+          "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused",
+          "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted",
+          "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused",
+          "core/pkg/gateway/modelgw.TestResponsesAreNotStored",
+          "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier",
+          "core/pkg/gateway/modelgw.TestNestedMembersAreClosed",
+          "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused",
+          "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage",
+          "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed",
+          "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
         ],
         "bypass": []
       },
       "removal_proofs": [
         {
-          "file": "core/pkg/gateway/modelgw/bound.go",
+          "file": "core/pkg/gateway/modelbound/bound.go",
           "tests": [
             "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
           ]
@@ -5486,9 +5772,64 @@
           ]
         },
         {
-          "file": "core/pkg/gateway/modelgw/bound.go",
+          "file": "core/pkg/gateway/modelgw/request.go",
           "tests": [
-            "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+            "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused",
+            "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestResponsesAreNotStored"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/modelbound/bound.go",
+          "tests": [
+            "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed"
           ]
         }
       ]

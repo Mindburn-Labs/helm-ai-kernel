@@ -711,7 +711,9 @@ func TestReplayedKeyNeverReachesProvider(t *testing.T) {
 	cfg := strings.Replace(testConfigJSON, `"opening_cents": 2000`, `"opening_cents": 1`, 1)
 	f := newProxyFixtureWithConfig(t, cfg)
 
-	first := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil)
+	// mini-model: its hold, one input token per request byte since
+	// helm-tracker#313 r1, still fits the 1-cent balance.
+	first := f.post(t, "/v1/chat/completions", "mini-model", "env-direct", "K", nil)
 	firstBody := readBody(t, first)
 	if first.StatusCode != http.StatusOK || f.server.BalanceCents() != 0 {
 		t.Fatalf("first status = %d, balance = %d; want 200 and 0", first.StatusCode, f.server.BalanceCents())
@@ -723,7 +725,7 @@ func TestReplayedKeyNeverReachesProvider(t *testing.T) {
 	}
 
 	// An identical replay returns the stored response.
-	replay := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil)
+	replay := f.post(t, "/v1/chat/completions", "mini-model", "env-direct", "K", nil)
 	if body := readBody(t, replay); replay.StatusCode != http.StatusOK || !bytes.Equal(body, firstBody) {
 		t.Fatalf("identical replay: status = %d, body = %s; want 200 with the stored response %s", replay.StatusCode, body, firstBody)
 	}
@@ -739,7 +741,7 @@ func TestReplayedKeyNeverReachesProvider(t *testing.T) {
 	}
 
 	f.restart(t)
-	if resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil); resp.StatusCode != http.StatusConflict {
+	if resp := f.post(t, "/v1/chat/completions", "mini-model", "env-direct", "K", nil); resp.StatusCode != http.StatusConflict {
 		t.Fatalf("replay after restart: status = %d, want 409", resp.StatusCode)
 	}
 
@@ -766,7 +768,9 @@ func TestOutputLimitRequiredClampedAndForwarded(t *testing.T) {
 	}{
 		{"chat max_tokens", "/v1/chat/completions", "max_tokens", map[string]any{"max_tokens": 40000}},
 		{"chat max_completion_tokens", "/v1/chat/completions", "max_completion_tokens", map[string]any{"max_tokens": nil, "max_completion_tokens": 40000}},
-		{"responses max_output_tokens", "/v1/responses", "max_output_tokens", map[string]any{"max_tokens": nil, "max_output_tokens": 40000}},
+		// A Responses request carries input, not messages: the closed list
+		// refuses a chat member on it (helm-tracker#313 r1).
+		{"responses max_output_tokens", "/v1/responses", "max_output_tokens", map[string]any{"max_tokens": nil, "messages": nil, "input": "hello governed world", "max_output_tokens": 40000}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newProxyFixture(t)
@@ -790,7 +794,7 @@ func TestOutputLimitRequiredClampedAndForwarded(t *testing.T) {
 		extra      map[string]any
 	}{
 		{"chat without a ceiling", "/v1/chat/completions", map[string]any{"max_tokens": nil}},
-		{"responses without a ceiling", "/v1/responses", map[string]any{"max_tokens": nil}},
+		{"responses without a ceiling", "/v1/responses", map[string]any{"max_tokens": nil, "messages": nil, "input": "hello governed world"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newProxyFixture(t)

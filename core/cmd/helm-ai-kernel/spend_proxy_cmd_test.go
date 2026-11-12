@@ -6,6 +6,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +83,7 @@ func TestSpendProxyRefusesNonLoopbackBind(t *testing.T) {
 
 	for _, addr := range []string{"0.0.0.0", "::", "", "10.0.0.5", "example.com"} {
 		code, msg := run(addr)
-		if code != 2 || !strings.Contains(msg, "not loopback") || !strings.Contains(msg, "no caller credential") {
+		if code != 2 || !strings.Contains(msg, "not loopback") || !strings.Contains(msg, "loopback only") {
 			t.Fatalf("--addr %q: exit = %d, stderr = %q, want a refusal that says why", addr, code, msg)
 		}
 	}
@@ -244,5 +248,145 @@ func TestSpendProxyExportRefusesAMalformedPublicKey(t *testing.T) {
 	code := runSpendProxyExport([]string{"--receipts-dir", t.TempDir(), "--out", t.TempDir(), "--public-key", "ed25519:abcd"}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "--public-key") {
 		t.Fatalf("exit = %d, stderr = %q; want 2 naming --public-key", code, stderr.String())
+	}
+}
+
+// reconcileConfig is a one-envelope spend-proxy config for the reconcile
+// tests.
+const reconcileConfig = `{
+  "tenant_id": "tenant-test", "treasury_id": "treasury-test", "route_policy_id": "test-policy-v1",
+  "currency": "USD", "platform_fee_bps": 0, "quote_ttl_seconds": 300, "price_ttl_hours": 24,
+  "balance": {"account_id": "balance-test", "opening_cents": 2000},
+  "providers": [{"id": "mockai", "account_mode": "DIRECT", "terms_version": "2026-08-17", "legal_review_ref": "test"}],
+  "prices": [{"provider_id": "mockai", "model_id": "base-model", "input_token_micro_cents": 5000, "output_token_micro_cents": 10000}],
+  "envelopes": [{"id": "env-direct", "agent_id": "agent-live", "principal_id": "principal-test", "budget_id": "budget-direct",
+    "max_amount_cents": 1000, "per_request_max_cents": 50, "allowed_providers": ["mockai"], "allowed_models": ["base-model"],
+    "fallback_routes": [{"provider_id": "mockai", "model_id": "base-model"}]}]
+}`
+
+const reconcileSeed = "0202020202020202020202020202020202020202020202020202020202020202"
+
+// pendingDispatch runs one request through a spend proxy and cuts the receipt
+// log back to its pre-dispatch journal line, as if the process stopped while
+// the provider worked. It returns the config path, the receipts dir, the
+// intent and its hold.
+func pendingDispatch(t *testing.T) (string, string, string, int64) {
+	t.Helper()
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(config, []byte(reconcileConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"c1","model":"base-model","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}`)
+	}))
+	defer upstream.Close()
+	receipts := filepath.Join(dir, "receipts")
+	cfg, sourceHash, err := spendproxy.LoadConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := spendproxy.NewServer(spendproxy.ServerOptions{Config: cfg, SourceHash: sourceHash, ReceiptsDir: receipts,
+		UpstreamBaseURL: upstream.URL + "/v1", UpstreamAPIKey: "k", SigningSecret: reconcileSeed, Logf: t.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"base-model","max_tokens":4000,"messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("X-HELM-Agent", "agent-live")
+	req.Header.Set("X-HELM-Spend-Envelope", "env-direct")
+	req.Header.Set("X-HELM-Idempotency-Key", "idem-pending")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	_ = server.Close()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	logPath := filepath.Join(receipts, spendproxy.ReceiptLogName)
+	records, err := spendproxy.LoadRecords(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range records {
+		if r.Kind == spendproxy.RecordRouteQuote && r.Note == spendproxy.NoteDispatchJournal {
+			line, _ := json.Marshal(r)
+			if err := os.WriteFile(logPath, append(line, '\n'), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return config, receipts, r.SpendIntentID, r.RouteQuote.MaxAmountCents
+		}
+	}
+	t.Fatal("no journal line")
+	return "", "", "", 0
+}
+
+// restarted opens a spend proxy on receipts and reports what it holds and has
+// debited.
+func restarted(t *testing.T, config, receipts string) (pending int, held, debited int64) {
+	t.Helper()
+	cfg, sourceHash, err := spendproxy.LoadConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := spendproxy.NewServer(spendproxy.ServerOptions{Config: cfg, SourceHash: sourceHash, ReceiptsDir: receipts,
+		UpstreamBaseURL: "http://127.0.0.1:9/v1", UpstreamAPIKey: "k", SigningSecret: reconcileSeed, Logf: t.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	summary := server.ReplaySummary()
+	return summary.PendingDispatches, summary.PendingCents, 2000 - server.BalanceCents()
+}
+
+// TestSpendProxyReconcileClearsAPendingHold (helm-tracker#313 r1, F11): an
+// operator settles a pending hold at a stated amount, or releases it with a
+// reason; either is journalled and signed, and the next start honours it.
+func TestSpendProxyReconcileClearsAPendingHold(t *testing.T) {
+	for _, action := range []string{"settle", "release"} {
+		t.Run(action, func(t *testing.T) {
+			config, receipts, intent, hold := pendingDispatch(t)
+			if pending, held, _ := restarted(t, config, receipts); pending != 1 || held != hold {
+				t.Fatalf("before reconcile: pending %d holding %d, want 1 holding %d", pending, held, hold)
+			}
+			args := []string{"reconcile", "--config", config, "--receipts-dir", receipts, "--intent", intent,
+				"--reason", "provider console shows the call", "--sign", reconcileSeed}
+			if action == "settle" {
+				args = append(args, "--settle-cents", "3")
+			} else {
+				args = append(args, "--release")
+			}
+			var stdout, stderr bytes.Buffer
+			if code := runSpendProxyCmd(args, &stdout, &stderr); code != 0 {
+				t.Fatalf("reconcile exit %d: %s", code, stderr.String())
+			}
+			pending, held, debited := restarted(t, config, receipts)
+			want := int64(3)
+			if action == "release" {
+				want = 0
+			}
+			if pending != 0 || held != 0 || debited != want {
+				t.Fatalf("after reconcile: pending %d holding %d debited %d, want 0, 0, %d", pending, held, debited, want)
+			}
+			records, err := spendproxy.LoadRecords(filepath.Join(receipts, spendproxy.ReceiptLogName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var signedReason bool
+			for _, r := range records[1:] {
+				raw, _ := json.Marshal(r)
+				if r.PayloadSignature != "" && strings.Contains(string(raw), "provider console shows the call") {
+					signedReason = true
+				}
+			}
+			if !signedReason {
+				t.Fatalf("no signed record carries the operator's reason: %d records", len(records))
+			}
+			// A second reconcile of the same intent finds nothing pending.
+			if code := runSpendProxyCmd(args, &stdout, &stderr); code == 0 {
+				t.Fatal("a reconciled intent was reconciled again")
+			}
+		})
 	}
 }

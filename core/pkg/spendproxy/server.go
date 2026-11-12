@@ -58,12 +58,105 @@ type Server struct {
 	keys       *TrustedKeys
 	gatewayMux *http.ServeMux
 	replay     *ReplaySummary
+	prices     *inferencegateway.MemoryPriceBook
+	pending    []PendingDispatch
 	logf       func(format string, args ...any)
 }
 
 // NewServer composes the full governed spend path. Startup replays the durable
 // receipt log so the balance and the idempotency index survive restarts.
 func NewServer(opts ServerOptions) (*Server, error) {
+	s, err := openServer(opts)
+	if err != nil {
+		return nil, err
+	}
+	upstream, err := NewUpstream(opts.UpstreamBaseURL, opts.UpstreamAPIKey, s.prices)
+	if err != nil {
+		s.store.Close()
+		return nil, err
+	}
+	s.upstream = upstream
+	gw, err := api.NewGovernedGateway(api.GovernedGatewayConfig{
+		Engine:       s.engine,
+		Resolver:     s.resolveEnvelope,
+		Dispatch:     s.governedDispatch,
+		TenantID:     func(*http.Request) string { return s.cfg.TenantID },
+		Models:       s.modelList(),
+		OnSettlement: s.persistOutcome,
+	})
+	if err != nil {
+		s.store.Close()
+		return nil, fmt.Errorf("spendproxy: governed gateway: %w", err)
+	}
+	s.gatewayMux = http.NewServeMux()
+	gw.Register(s.gatewayMux)
+	return s, nil
+}
+
+// openServer rebuilds the proxy's state from its config and receipt log
+// (rebuildState) and opens its receipt store and issuer. It serves nothing
+// and calls no provider; NewServer and Reconcile build on it.
+func openServer(opts ServerOptions) (*Server, error) {
+	st, err := rebuildState(opts)
+	if err != nil {
+		return nil, err
+	}
+	store, err := OpenFileStore(opts.ReceiptsDir)
+	if err != nil {
+		return nil, err
+	}
+	issuer, derivedFromPassphrase, err := NewIssuer(opts.SigningSecret)
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	if derivedFromPassphrase {
+		st.logf("spend-proxy: WARNING: signing secret is not a 32-byte seed; derived one by hashing it")
+	}
+	keys, err := OpenTrustedKeys(opts.ReceiptsDir)
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	if err := keys.Register(issuer.KeyID(), issuer.PublicKey()); err != nil {
+		store.Close()
+		return nil, err
+	}
+	for _, p := range st.pending {
+		st.logf("spend-proxy: ALERT: dispatch %s (intent %s) was journalled before its provider call and never settled; %d cents stay reserved until `spend-proxy reconcile --intent %s` settles or releases it",
+			p.Key, p.Quote.SpendIntentID, p.AmountCents, p.Quote.SpendIntentID)
+	}
+	return &Server{
+		cfg:        opts.Config,
+		sourceHash: opts.SourceHash,
+		engine:     st.engine,
+		ledger:     st.ledger,
+		envelopes:  st.envelopes,
+		prices:     st.prices,
+		store:      store,
+		issuer:     issuer,
+		keys:       keys,
+		replay:     st.replay,
+		pending:    st.pending,
+		logf:       st.logf,
+	}, nil
+}
+
+// proxyState is what the receipt log and the config rebuild.
+type proxyState struct {
+	prices    *inferencegateway.MemoryPriceBook
+	envelopes map[string]*economic.AgentSpendEnvelope
+	ledger    *inferencegateway.BalanceLedger
+	engine    *inferencegateway.Engine
+	replay    *ReplaySummary
+	pending   []PendingDispatch
+	logf      func(format string, args ...any)
+}
+
+// rebuildState rebuilds the books, the ledger with what the log debited, the
+// envelopes' use, the engine and the dispatches held again pending
+// reconciliation. It writes nothing.
+func rebuildState(opts ServerOptions) (*proxyState, error) {
 	if opts.Config == nil {
 		return nil, errors.New("spendproxy: config is required")
 	}
@@ -126,40 +219,14 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		QuoteTTL:      time.Duration(cfg.QuoteTTLSeconds) * time.Second,
 		StalePrice:    inferencegateway.StalePriceFailClosed,
 		// The provider has already been paid when settlement runs: debit the
-		// actual cost and alert on any overage instead of clamping it away.
+		// actual cost. A cost above the hold is recorded on the usage receipt
+		// (ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT, overage_cents), alerted
+		// on, and closes the envelope for the rest of its period.
 		CostCap:        inferencegateway.CostCapDebitActual,
 		PlatformFeeBps: cfg.PlatformFeeBps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("spendproxy: engine: %w", err)
-	}
-
-	store, err := OpenFileStore(opts.ReceiptsDir)
-	if err != nil {
-		return nil, err
-	}
-	issuer, derivedFromPassphrase, err := NewIssuer(opts.SigningSecret)
-	if err != nil {
-		store.Close()
-		return nil, err
-	}
-	if derivedFromPassphrase {
-		logf("spend-proxy: WARNING: signing secret is not a 32-byte seed; derived one by hashing it")
-	}
-	keys, err := OpenTrustedKeys(opts.ReceiptsDir)
-	if err != nil {
-		store.Close()
-		return nil, err
-	}
-	if err := keys.Register(issuer.KeyID(), issuer.PublicKey()); err != nil {
-		store.Close()
-		return nil, err
-	}
-
-	upstream, err := NewUpstream(opts.UpstreamBaseURL, opts.UpstreamAPIKey, prices)
-	if err != nil {
-		store.Close()
-		return nil, err
 	}
 
 	// A dispatch journalled before its provider call that never settled and
@@ -168,44 +235,13 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	// again (helm-tracker#313, audit M18).
 	pending, err := RestorePendingDispatches(records, engine, envelopes)
 	if err != nil {
-		store.Close()
 		return nil, err
 	}
 	replay.PendingDispatches = len(pending)
 	for _, p := range pending {
 		replay.PendingCents += p.AmountCents
-		logf("spend-proxy: ALERT: dispatch %s was journalled before its provider call and never settled; %d cents stay reserved pending reconciliation", p.Key, p.AmountCents)
 	}
-
-	s := &Server{
-		cfg:        cfg,
-		sourceHash: opts.SourceHash,
-		engine:     engine,
-		ledger:     ledger,
-		envelopes:  envelopes,
-		upstream:   upstream,
-		store:      store,
-		issuer:     issuer,
-		keys:       keys,
-		replay:     replay,
-		logf:       logf,
-	}
-
-	gw, err := api.NewGovernedGateway(api.GovernedGatewayConfig{
-		Engine:       engine,
-		Resolver:     s.resolveEnvelope,
-		Dispatch:     s.governedDispatch,
-		TenantID:     func(*http.Request) string { return cfg.TenantID },
-		Models:       s.modelList(),
-		OnSettlement: s.persistOutcome,
-	})
-	if err != nil {
-		store.Close()
-		return nil, fmt.Errorf("spendproxy: governed gateway: %w", err)
-	}
-	s.gatewayMux = http.NewServeMux()
-	gw.Register(s.gatewayMux)
-	return s, nil
+	return &proxyState{prices: prices, envelopes: envelopes, ledger: ledger, engine: engine, replay: replay, pending: pending, logf: logf}, nil
 }
 
 // Close releases the receipt store.
@@ -277,14 +313,27 @@ func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, b
 	if err != nil && errors.Is(err, api.ErrDispatchNotSent) {
 		// The gateway releases the hold; journal that, so a restart does not
 		// hold it again.
-		s.appendOrLog(&ReceiptRecord{
-			Kind:          RecordDispatchReleased,
-			TenantID:      quote.TenantID,
-			SpendIntentID: quote.SpendIntentID,
-			Note:          "released: no byte of the request left the proxy",
-		})
+		s.appendOrLog(releaseRecord(quote, "no byte of the request left the proxy"))
 	}
 	return outcome, err
+}
+
+// releaseRecord is the signed journal line of a released hold: the dispatch's
+// route quote, whose metadata says why it was released.
+func releaseRecord(quote *economic.RouteQuote, reason string) *ReceiptRecord {
+	released := *quote
+	released.Metadata = make(map[string]string, len(quote.Metadata)+1)
+	for k, v := range quote.Metadata {
+		released.Metadata[k] = v
+	}
+	released.Metadata[MetadataReleaseReason] = reason
+	return &ReceiptRecord{
+		Kind:          RecordDispatchReleased,
+		TenantID:      quote.TenantID,
+		SpendIntentID: quote.SpendIntentID,
+		Note:          "released: " + reason,
+		RouteQuote:    &released,
+	}
 }
 
 // RegisterRoutes mounts the proxy's HTTP surface on mux.
@@ -294,7 +343,7 @@ func (s *Server) RegisterRoutes(mux interface {
 	mux.HandleFunc("/v1/chat/completions", s.handleInference)
 	mux.HandleFunc("/v1/responses", s.handleInference)
 	mux.HandleFunc("/v1/embeddings", s.handleInference)
-	mux.HandleFunc("/v1/models", s.gatewayMux.ServeHTTP)
+	mux.HandleFunc("/v1/models", s.requireCaller(s.gatewayMux.ServeHTTP))
 	mux.HandleFunc("/helm/spend/health", s.handleHealth)
 }
 
@@ -314,6 +363,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed", "invalid_request_error", "")
+		return
+	}
+	if refused := s.bindCaller(r); refused != nil {
+		code := "helm_caller_scope"
+		if refused.status == http.StatusUnauthorized {
+			code = "helm_caller_credential"
+			w.Header().Set("WWW-Authenticate", `Bearer realm="helm-spend-proxy"`)
+		}
+		writeJSONError(w, refused.status, refused.message, refused.errType, code)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
@@ -456,30 +514,16 @@ func (s *Server) persistOutcome(meta *api.GatewayMetadata) {
 		if meta.OverageCents > 0 {
 			note = fmt.Sprintf("overage: actual %d cents exceeds the quote ceiling by %d cents",
 				meta.ActualAmountCents, meta.OverageCents)
+			if closed := meta.UsageReceipt.Metadata["envelope_closed"]; closed != "" {
+				note += fmt.Sprintf("; envelope %s takes no further dispatch this period", closed)
+			}
 			s.logf("spend-proxy: ALERT: %s for %s", note, meta.UsageReceipt.SpendIntentID)
 		}
-		s.appendOrLog(&ReceiptRecord{
-			Kind:              RecordUsage,
-			TenantID:          meta.UsageReceipt.TenantID,
-			SpendIntentID:     meta.UsageReceipt.SpendIntentID,
-			BalanceAfterCents: meta.BalanceAfterCents,
-			Note:              note,
-			Usage:             meta.UsageReceipt,
-		})
-	}
-	if meta.SettlementReceipt != nil {
-		intentID := ""
-		if meta.UsageReceipt != nil {
-			intentID = meta.UsageReceipt.SpendIntentID
-		} else if meta.Quote != nil {
-			intentID = meta.Quote.SpendIntentID
+		if meta.SettlementReceipt != nil {
+			for _, rec := range settlementRecords(meta.UsageReceipt, meta.SettlementReceipt, meta.BalanceAfterCents, note) {
+				s.appendOrLog(rec)
+			}
 		}
-		s.appendOrLog(&ReceiptRecord{
-			Kind:          RecordSettlement,
-			TenantID:      meta.SettlementReceipt.TenantID,
-			SpendIntentID: intentID,
-			Settlement:    meta.SettlementReceipt,
-		})
 	}
 }
 
@@ -518,21 +562,6 @@ func statusForVerdict(verdict economic.BudgetVerdict) int {
 	default:
 		return http.StatusOK
 	}
-}
-
-// estimateTokens mirrors the governed gateway's pre-dispatch estimate: input
-// from body size (~4 bytes/token), output from max_tokens or a conservative
-// default. Settlement always uses actual reported usage.
-func estimateTokens(body []byte, maxTokens *int) (int64, int64) {
-	in := int64(len(body)) / 4
-	if in < 1 {
-		in = 1
-	}
-	var out int64 = 256
-	if maxTokens != nil && *maxTokens > 0 {
-		out = int64(*maxTokens)
-	}
-	return in, out
 }
 
 // bufferedResponse captures the governed gateway's response for unwrapping.

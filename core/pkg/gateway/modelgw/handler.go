@@ -289,9 +289,9 @@ func (p *pending) input(n int) admission.ProposeInput {
 	}
 }
 
-// price fixes the call's arguments and its worst-case quote in usd_micros, with
-// a zero amount for every other unit the chain sums (a sum limit needs an
-// amount for its unit), and the mandate that covers the route.
+// price fixes the call's arguments and the quote that bounds its bill, in
+// usd_micros, with a zero amount for every other unit the chain sums (a sum
+// limit needs an amount for its unit), and the mandate that covers the route.
 func (p *pending) price(grants admission.Grants) *apiError {
 	held, err := p.route.Quote(p.call.inputBound(p.call.Body), p.call.MaxOutputTokens, p.call.MayWriteCache)
 	if err != nil {

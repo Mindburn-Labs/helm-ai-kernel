@@ -35,24 +35,54 @@ effect only through the gateway's own tools, which the sandbox's network rules
 enforce.
 
 A request is also read against a closed list of what the quote understands
-(`core/pkg/gateway/modelgw/bound.go`); anything outside it is refused with 400
-before any attempt exists, and the error names it:
+(`core/pkg/gateway/modelbound`, which the spend proxy's governed gateway reads
+requests through too); anything outside it is refused with 400 before any
+attempt exists, and the error names it:
 
 | API | Members the quote understands | Content the quote understands |
 |---|---|---|
-| Responses | `model`, `input`, `instructions`, `max_output_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `top_logprobs`, `tools`, `tool_choice`, `parallel_tool_calls`, `max_tool_calls`, `reasoning`, `text`, `include`, `metadata`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier` (`auto`, `default`, `flex`), `truncation`, `store` (`false`), `background` (`false`) | input items `message`, `function_call(_output)`, `custom_tool_call(_output)`, `local_shell_call(_output)`, `apply_patch_call(_output)`, `reasoning`; parts `input_text`, `output_text`, `refusal`, `summary_text`, `reasoning_text`, and `input_image` with an inline `data:` URL |
-| Chat Completions | `model`, `messages`, `max_tokens`, `max_completion_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `n` (1), `stop`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `seed`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `response_format`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `reasoning_effort`, `verbosity`, `metadata`, `store` (`false`), `service_tier` (`auto`, `default`, `flex`), `modalities` (`text` only) | message members `role`, `content`, `name`, `tool_calls`, `tool_call_id`, `function_call`, `refusal`; parts `text`, `refusal`, and `image_url` with an inline `data:` URL |
-| Messages | `model`, `messages`, `max_tokens`, `system`, `stream`, `temperature`, `top_p`, `top_k`, `stop_sequences`, `metadata`, `tools`, `tool_choice`, `thinking`, `context_management`, `service_tier` (`auto`, `standard_only`), `output_config`, `output_format` | blocks `text`, `tool_use`, `tool_result`, `thinking`, `redacted_thinking`, `image` with a `base64` source, `document` with a `text` or `content` source |
+| Responses | `model`, `input`, `instructions`, `max_output_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `top_logprobs`, `tools`, `tool_choice`, `parallel_tool_calls`, `max_tool_calls`, `reasoning` (`effort`, `summary`, `generate_summary`), `text` (`verbosity`, `format` of type `text`, `json_object` or `json_schema`), `include`, `metadata`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier` (`default`, `flex`, `auto`), `truncation`, `store` (`false`), `background` (`false`) | input items `message`, `function_call(_output)`, `custom_tool_call(_output)`, `local_shell_call(_output)`, `apply_patch_call(_output)`, and `reasoning` with its `encrypted_content`; an item that names an `id` must carry its content (a message its `content`, a call its `call_id`, `name` and arguments or input, an output its `output`); parts `input_text`, `output_text`, `refusal`, `summary_text`, `reasoning_text`, and `input_image` with an inline `data:image/` URL |
+| Chat Completions | `model`, `messages`, `max_tokens`, `max_completion_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `n` (1), `stop`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `seed`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `response_format`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `reasoning_effort`, `verbosity`, `metadata`, `store` (`false`), `service_tier` (`default`, `flex`, `auto`), `modalities` (`text` only) | message members `role`, `content`, `name`, `tool_calls`, `tool_call_id`, `function_call`, `refusal`; parts `text`, `refusal`, and `image_url` with an inline `data:image/` URL |
+| Messages | `model`, `messages`, `max_tokens`, `system`, `stream`, `temperature`, `top_p`, `top_k`, `stop_sequences`, `metadata`, `tools`, `tool_choice`, `thinking` (`type` `enabled`, `disabled` or `adaptive`; `budget_tokens`; `display`), `context_management` (`edits` of type `clear_tool_uses_*` or `clear_thinking_*` only, with `trigger`, `keep`, `clear_at_least`, `exclude_tools`, `clear_tool_inputs`), `service_tier` (`standard_only`, `auto`), `output_config` (`effort`, `format` of type `json_schema`), `output_format` (type `json_schema`) | blocks `text`, `tool_use`, `tool_result`, `thinking`, `redacted_thinking`, `image` with a `base64` source, `document` with a `text` or `content` source and no `citations` enabled |
+| Embeddings (spend proxy only) | `model`, `input`, `encoding_format`, `dimensions`, `user` | `input` a string, a list of strings, a list of token ids or a list of token-id lists |
 
 So `previous_response_id`, `conversation`, a stored `prompt`, `store: true`, an
-`item_reference`, a chat message's stored `audio`, remote or uploaded media in
-every spelling (an image or file URL, a `file_id`, `input_file`, a chat `file`
-part, a `url` or `file` source), PDFs (`input_file`, a chat `file`, a `base64`
-document), audio input and output, predicted outputs, the routing members
-`models`, `provider`, `plugins` and `route`, priority and scale service tiers,
-Anthropic's `speed` and `inference_geo`, server tool blocks and any member,
-item, part or block the list does not name are refused. An `anthropic-beta`
-of `context-1m-*` is refused too: it bills a long request at a premium.
+`item_reference`, a reasoning item without `encrypted_content`, an input item
+that names an `id` without carrying its content, a chat message's stored
+`audio`, remote or uploaded media in every spelling (an image or file URL, a
+`file_id`, `input_file`, a chat `file` part, a `url` or `file` source), a data
+URL that is not an image (video and audio bill by duration), PDFs
+(`input_file`, a chat `file`, a `base64` document), a document with citations
+enabled (Anthropic bills tokens for chunking it), audio input and output,
+predicted outputs, the routing members `models`, `provider`, `plugins` and
+`route`, priority and scale service tiers, Anthropic's `speed` and
+`inference_geo`, a compaction edit and any other `context_management` edit that
+does not remove content, server tool blocks, a key repeated at any depth, and
+any member, item, part, block or nested member the lists do not name are
+refused.
+
+Two members are set by the gateway rather than left to the provider's account:
+
+- A Responses request that names no `store` is sent with `store: false`:
+  OpenAI stores a response by default, and a stored item can be billed again
+  by reference.
+- On a route whose provider is the vendor's own API (`kind` `openai` or
+  `anthropic`), a request that names no `service_tier`, or `auto`, is sent with
+  the standard tier, `default` (OpenAI) or `standard_only` (Anthropic): an
+  absent or auto tier bills at the tier the account defaults to, which can be
+  priority. On an `openai-compatible` route the tier's meaning is the
+  upstream's, so `auto` is refused and an absent tier is left absent.
+
+Only these `anthropic-beta` values are forwarded; any other is refused with
+400, naming it (so `context-1m-*`, compaction, the Files API, MCP servers, code
+execution and betas the gateway does not know): `claude-code-20250219`,
+`oauth-2025-04-20`, `interleaved-thinking-2025-05-14`,
+`fine-grained-tool-streaming-2025-05-14`, `token-efficient-tools-2025-02-19`,
+`context-management-2025-06-27`, `prompt-caching-2024-07-31`,
+`extended-cache-ttl-2025-04-11`, `output-128k-2025-02-19`,
+`computer-use-2024-10-22`, `computer-use-2025-01-24`,
+`computer-use-2025-11-24`, `structured-outputs-2025-11-13`,
+`effort-2025-11-24`, `model-context-window-exceeded-2025-08-26`.
 
 ## One call, one `model.inference` attempt
 
@@ -77,10 +107,9 @@ content holds a digest and a size, never a prompt.
    an image to); 600 tokens for Anthropic's tool-use system prompt when a
    request declares tools; and 2,000 tokens for each client tool whose
    definition the provider supplies (`bash_*`, `text_editor_*`, `computer_*`,
-   `memory_*`, `local_shell`, `apply_patch`). Since everything else is refused,
-   the quote is the worst case of the call at the route's price, provided the
-   provider honours the output maximum and the route's price is the provider's
-   highest for a request of `max_request_bytes`. When the request may write a
+   `memory_*`, `local_shell`, `apply_patch`). Everything else is refused, so
+   the quote bounds the call's bill at the route's price under the assumptions
+   listed below. When the request may write a
    prompt cache (any decoded JSON key of it is `cache_control`, so an escaped
    spelling cannot avoid this), the input rate is the dearest of the input and
    cache-write prices. The quote names a zero amount for every other unit the
@@ -92,6 +121,37 @@ content holds a digest and a size, never a prompt.
 5. Claim the permit, inject the provider key (only the gateway holds it), send
    the request, stream the response back while keeping a copy, and settle the
    usage the provider reports against the reservation.
+
+### The bound and what it rests on
+
+The hold is an upper bound of what the provider can bill for the call, at the
+route's price, when each of these holds; a request that breaks none of them
+and bills above its hold is a bug:
+
+- The provider's tokenizer emits at most one token per byte of the text a
+  request carries, and the provider bills no input the request does not
+  carry beyond the floors (the closed list refuses every form known to make
+  it do so). Chat templates, tool definitions rendered from their JSON and
+  the JSON a request carries around its text are assumed to cost no more
+  tokens than their bytes.
+- An inline image costs at most its floor: 48,169 tokens on the OpenAI APIs
+  and 8,000 on Anthropic's. A model that bills more for one image is not
+  bounded.
+- A hidden tool definition costs at most 2,000 tokens, and Anthropic's
+  tool-use system prompt at most 600.
+- The provider honours the output maximum the gateway forwards, reasoning and
+  thinking tokens included.
+- The route's price is the provider's highest for a request of
+  `max_request_bytes` on the tier the gateway sends or leaves: a provider that
+  charges more above a context length needs that price on the route, and on
+  an `openai-compatible` route an absent service tier is assumed to bill at
+  the route's price.
+- An input item that carries its content is billed for that content, not for
+  a stored item of the same id.
+- Headers other than `anthropic-beta` change nothing the provider bills.
+
+A provider that bills above the hold anyway is recorded: the confirmed amount
+stays on the budget counter and billable is capped at the hold.
 
 Settlement is recorded in `authority_model_calls` and returned as
 `EffectAttempt.model_call` (`ModelCallSettlement`: route, state, currency,

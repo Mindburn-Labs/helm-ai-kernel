@@ -1,3 +1,7 @@
+// quantum_posture: budget-verdict receipts are sealed and verified with
+// classical Ed25519 over SHA-256 content hashes; no post-quantum primitive is
+// used in this file and no post-quantum claim is made.
+
 // Package economic - Mindburn Spend Authority contracts.
 //
 // These contracts bind AI compute spend to a fail-closed budget verdict before
@@ -111,16 +115,24 @@ func NewAgentSpendEnvelope(id, tenantID, agentID, principalID, budgetID, currenc
 	return e
 }
 
-// RemainingCents returns unspent and unreserved cents. Negative balances clamp to zero.
+// RemainingCents returns unspent and unreserved cents. Negative balances clamp
+// to zero, and so does used or reserved spend at the int64 limit: the
+// subtraction never wraps (helm-tracker#313 r1, F12).
 func (e *AgentSpendEnvelope) RemainingCents() int64 {
 	if e == nil {
 		return 0
 	}
-	remaining := e.MaxAmountCents - e.UsedAmountCents - e.ReservedAmountCents
-	if remaining < 0 {
-		return 0
+	remaining := e.MaxAmountCents
+	for _, spent := range []int64{e.UsedAmountCents, e.ReservedAmountCents} {
+		switch {
+		case spent <= 0:
+		case spent >= remaining:
+			return 0
+		default:
+			remaining -= spent
+		}
 	}
-	return remaining
+	return max(remaining, 0)
 }
 
 // RequiresApproval reports whether the amount crosses the envelope's approval gate.
@@ -212,7 +224,7 @@ func (e *AgentSpendEnvelope) Validate() error {
 	if e.ReservedAmountCents < 0 {
 		return errors.New("agent_spend_envelope: reserved_amount_cents cannot be negative")
 	}
-	if e.UsedAmountCents+e.ReservedAmountCents > e.MaxAmountCents {
+	if e.UsedAmountCents > e.MaxAmountCents || e.ReservedAmountCents > e.MaxAmountCents-e.UsedAmountCents {
 		return errors.New("agent_spend_envelope: used plus reserved exceeds max_amount_cents")
 	}
 	if e.PerRequestMaxCents <= 0 {

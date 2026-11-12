@@ -112,10 +112,10 @@ type BalanceLedger struct {
 	movements    map[string]*economic.UsageLedgerEntry // movement idempotency key -> posted entry
 	reservations map[string]*Reservation               // reservation key -> open hold
 	// envelopeSpend is what each envelope window has reserved and used;
-	// envelopePeriods is each evaluated envelope's period (envelope.go).
-	envelopeSpend   map[envelopeWindow]*envelopeSpend
-	envelopePeriods map[string]economic.SpendPeriod
-	nextEntryID     int64
+	// envelopes is each envelope this ledger evaluated (envelope.go).
+	envelopeSpend map[envelopeWindow]*envelopeSpend
+	envelopes     map[string]*economic.AgentSpendEnvelope
+	nextEntryID   int64
 	// allowNegativeBalance permits the balance to go below zero. It is only set
 	// when enterprise invoicing (deferred billing) is enabled for the account.
 	allowNegativeBalance bool
@@ -171,7 +171,7 @@ func NewBalanceLedger(account *economic.BalanceAccount) (*BalanceLedger, error) 
 		movements:            make(map[string]*economic.UsageLedgerEntry),
 		reservations:         make(map[string]*Reservation),
 		envelopeSpend:        make(map[envelopeWindow]*envelopeSpend),
-		envelopePeriods:      make(map[string]economic.SpendPeriod),
+		envelopes:            make(map[string]*economic.AgentSpendEnvelope),
 		accrualEntryIDs:      make(map[string]struct{}),
 		allowNegativeBalance: account.Type == economic.BalanceAccountInvoiceAccrual,
 	}, nil
@@ -294,7 +294,11 @@ func (l *BalanceLedger) RestoreSettlement(usage *economic.UsageReceipt, settleme
 // funds count as available, and it is consumed only when the debit posts, so
 // a failed commit leaves the hold in place. The debit is also booked as used
 // on the envelope that authorized it, in the reservation's window or, without
-// one, in the window that contains now.
+// one, in the window that contains now. A released reservation cannot be
+// settled: its provider was never called. A debit no reservation backs is
+// decided against its envelope first, as a reservation would have been
+// (helm-tracker#313 r1, F9); a debit above its reservation closes the
+// reservation's envelope window, also when the debit then fails.
 func (l *BalanceLedger) commit(
 	idempotencyKey string,
 	usage *economic.UsageReceipt,
@@ -333,10 +337,16 @@ func (l *BalanceLedger) commit(
 	if l.account.Status != economic.BalanceAccountActive {
 		return nil, fmt.Errorf("inferencegateway: balance account is %s, debit refused", l.account.Status)
 	}
+	if res, ok := l.reservations[reservationKey]; ok && res.Released {
+		return nil, errors.New("inferencegateway: the dispatch's reservation was released because its provider was never called; it cannot be settled")
+	}
 	available := l.account.AvailableCents()
 	reservation := l.openReservationLocked(reservationKey)
 	if reservation != nil {
 		available += reservation.AmountCents
+		l.closeAboveHoldLocked(reservation, debit)
+	} else if err := l.decideUnreservedLocked(usage, debit, now); err != nil {
+		return nil, err
 	}
 	if debit > available {
 		return nil, errors.New("inferencegateway: balance debit exceeds available funds")
@@ -380,4 +390,21 @@ func (l *BalanceLedger) commit(
 	}
 	l.settled[idempotencyKey] = rec
 	return rec, nil
+}
+
+// decideUnreservedLocked decides a debit no reservation backs against the
+// envelope its usage names, in the window that contains now: the envelope must
+// be one this ledger evaluated, and the debit must fit what it has left.
+// Callers must hold l.mu.
+func (l *BalanceLedger) decideUnreservedLocked(usage *economic.UsageReceipt, debit int64, now time.Time) error {
+	env := l.envelopes[usage.EnvelopeID]
+	if env == nil {
+		return fmt.Errorf("inferencegateway: no reservation backs the settlement and the ledger has not evaluated envelope %q; it cannot be decided", usage.EnvelopeID)
+	}
+	w, _ := l.unreservedWindowLocked(env.ID, now)
+	decision := decideSpend(env, *l.envelopeSpendLocked(w), debit, usage.ProviderID, usage.ModelID)
+	if decision.Verdict != economic.BudgetVerdictAllow {
+		return quoteErr(decision.Verdict, decision.ReasonCode, "a settlement no reservation backs: "+decision.Reason)
+	}
+	return nil
 }

@@ -15,6 +15,10 @@ import (
 // (helm-tracker#313). A reservation is checked and placed in one critical
 // section of the ledger, so two concurrent dispatches cannot both take the
 // last cents; a settlement moves its reservation to used; a release frees it.
+// A settlement above its reservation (a provider that billed more than the
+// hold the quote bounded) closes its window: the envelope takes no further
+// dispatch until its next period, so it passes its limit by at most the
+// overages of the dispatches already in flight when the first one settled.
 
 // envelopeWindow names one period of one envelope.
 type envelopeWindow struct {
@@ -22,10 +26,12 @@ type envelopeWindow struct {
 	window     string
 }
 
-// envelopeSpend is what one envelope window has reserved and used, in cents.
+// envelopeSpend is what one envelope window has reserved and used, in cents,
+// and whether a settlement above its hold closed it.
 type envelopeSpend struct {
 	reserved int64
 	used     int64
+	closed   bool
 }
 
 // periodWindow is the period of p that contains t, in UTC: a day, an ISO
@@ -57,6 +63,21 @@ func effectiveEnvelope(env *economic.AgentSpendEnvelope, consumedCents int64) *e
 	return &eff
 }
 
+// errEnvelopeClosed is the refusal of an envelope window a settlement above
+// its hold closed.
+var errEnvelopeClosed = quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonEnvelopeInactive,
+	"the spend envelope is closed for this period: a provider billed a dispatch above its hold")
+
+// decideSpend is the verdict on amountCents against env as it stands in a
+// window: what its requests reserved and used, and whether it is closed.
+func decideSpend(env *economic.AgentSpendEnvelope, state envelopeSpend, amountCents int64, providerID, modelID string) economic.SpendAuthorityDecision {
+	effective := effectiveEnvelope(env, addSaturating(state.reserved, state.used))
+	if state.closed {
+		return refusal(errEnvelopeClosed, effective.RemainingCents(), env.ContentHash)
+	}
+	return effective.EvaluateSpend(amountCents, providerID, modelID)
+}
+
 func addSaturating(a, b int64) int64 {
 	if b > 0 && a > math.MaxInt64-b {
 		return math.MaxInt64
@@ -64,10 +85,10 @@ func addSaturating(a, b int64) int64 {
 	return a + b
 }
 
-// envelopeWindowLocked registers env's period and returns its window at now.
-// Callers must hold l.mu.
+// envelopeWindowLocked registers env and returns its window at now. Callers
+// must hold l.mu.
 func (l *BalanceLedger) envelopeWindowLocked(env *economic.AgentSpendEnvelope, now time.Time) envelopeWindow {
-	l.envelopePeriods[env.ID] = env.Period
+	l.envelopes[env.ID] = env
 	return envelopeWindow{envelopeID: env.ID, window: periodWindow(env.Period, now)}
 }
 
@@ -82,19 +103,19 @@ func (l *BalanceLedger) envelopeSpendLocked(w envelopeWindow) *envelopeSpend {
 	return s
 }
 
-// envelopeConsumed is what env's requests have reserved and used in the window
-// that contains now.
-func (l *BalanceLedger) envelopeConsumed(env *economic.AgentSpendEnvelope, now time.Time) int64 {
+// envelopeState is what env's requests have reserved and used in the window
+// that contains now, and whether it is closed.
+func (l *BalanceLedger) envelopeState(env *economic.AgentSpendEnvelope, now time.Time) envelopeSpend {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	s := l.envelopeSpendLocked(l.envelopeWindowLocked(env, now))
-	return addSaturating(s.reserved, s.used)
+	return *l.envelopeSpendLocked(l.envelopeWindowLocked(env, now))
 }
 
 // RestoreEnvelopeUse re-applies a settlement committed in a previous process
 // run to its envelope's window, so a restarted engine does not hand the same
-// limit out again. Call it beside RestoreSettlement.
-func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at time.Time, cents int64) {
+// limit out again; aboveHold marks a settlement above its hold, which closes
+// the window again. Call it beside RestoreSettlement.
+func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at time.Time, cents int64, aboveHold bool) {
 	if env == nil || cents <= 0 {
 		return
 	}
@@ -102,6 +123,7 @@ func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at 
 	defer l.mu.Unlock()
 	s := l.envelopeSpendLocked(l.envelopeWindowLocked(env, at))
 	s.used = addSaturating(s.used, cents)
+	s.closed = s.closed || aboveHold
 }
 
 // reserveDispatch is admission's one step: under the ledger lock it refuses a
@@ -109,7 +131,7 @@ func (l *BalanceLedger) RestoreEnvelopeUse(env *economic.AgentSpendEnvelope, at 
 // envelope has left in its window, and on an allowing decision places the
 // balance hold and the envelope reservation together. issue returns the hash
 // the hold is bound to (the budget-verdict receipt it issued).
-func (l *BalanceLedger) reserveDispatch(key string, env *economic.AgentSpendEnvelope, amountCents int64, now time.Time, issue func(consumedCents int64) (string, error)) (*Reservation, error) {
+func (l *BalanceLedger) reserveDispatch(key string, env *economic.AgentSpendEnvelope, amountCents int64, now time.Time, issue func(state envelopeSpend) (string, error)) (*Reservation, error) {
 	if key == "" || amountCents <= 0 || env == nil {
 		return nil, fmt.Errorf("inferencegateway: a dispatch reservation needs a key, a positive amount and an envelope")
 	}
@@ -120,7 +142,7 @@ func (l *BalanceLedger) reserveDispatch(key string, env *economic.AgentSpendEnve
 	}
 	window := l.envelopeWindowLocked(env, now)
 	spend := l.envelopeSpendLocked(window)
-	receiptHash, err := issue(addSaturating(spend.reserved, spend.used))
+	receiptHash, err := issue(*spend)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +192,9 @@ func (l *BalanceLedger) releaseEnvelopeLocked(res *Reservation) {
 }
 
 // settleEnvelopeLocked books a debit on the envelope that authorized it: the
-// reservation's window when there is one (its reserved cents become used), the
-// current window of the usage's envelope otherwise. Callers must hold l.mu.
+// reservation's window when there is one (its reserved cents become used; a
+// debit above them closed the window, closeAboveHoldLocked), the current
+// window of the usage's envelope otherwise. Callers must hold l.mu.
 func (l *BalanceLedger) settleEnvelopeLocked(res *Reservation, envelopeID string, debitCents int64, now time.Time) {
 	if res != nil && res.EnvelopeID != "" {
 		spend := l.envelopeSpendLocked(envelopeWindow{envelopeID: res.EnvelopeID, window: res.EnvelopeWindow})
@@ -179,13 +202,28 @@ func (l *BalanceLedger) settleEnvelopeLocked(res *Reservation, envelopeID string
 		spend.used = addSaturating(spend.used, debitCents)
 		return
 	}
-	if envelopeID == "" {
-		return
+	if w, ok := l.unreservedWindowLocked(envelopeID, now); ok {
+		spend := l.envelopeSpendLocked(w)
+		spend.used = addSaturating(spend.used, debitCents)
 	}
-	period, ok := l.envelopePeriods[envelopeID]
-	if !ok {
-		period = "" // never evaluated here: one lifetime window
+}
+
+// closeAboveHoldLocked closes the window of a reservation whose debit goes
+// above it, even when the debit then fails: the bound the hold rested on did
+// not hold. Callers must hold l.mu.
+func (l *BalanceLedger) closeAboveHoldLocked(res *Reservation, debitCents int64) {
+	if res != nil && res.EnvelopeID != "" && debitCents > res.AmountCents {
+		l.envelopeSpendLocked(envelopeWindow{envelopeID: res.EnvelopeID, window: res.EnvelopeWindow}).closed = true
 	}
-	spend := l.envelopeSpendLocked(envelopeWindow{envelopeID: envelopeID, window: periodWindow(period, now)})
-	spend.used = addSaturating(spend.used, debitCents)
+}
+
+// unreservedWindowLocked is the window a debit without a reservation is booked
+// in: the current window of its envelope, as this ledger evaluated it.
+// Callers must hold l.mu.
+func (l *BalanceLedger) unreservedWindowLocked(envelopeID string, now time.Time) (envelopeWindow, bool) {
+	env := l.envelopes[envelopeID]
+	if env == nil {
+		return envelopeWindow{}, false
+	}
+	return envelopeWindow{envelopeID: envelopeID, window: periodWindow(env.Period, now)}, true
 }

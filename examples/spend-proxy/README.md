@@ -43,15 +43,45 @@ helm-ai-kernel spend-proxy \
 ```
 
 The proxy listens on `127.0.0.1:9095`. `--addr` takes a loopback address only:
-the proxy has no caller credential and spends the upstream key for any caller
-that reaches it, so it refuses to start on a non-loopback address
-(`controls.yaml` CTL-026).
+the proxy serves plain HTTP and spends the upstream key, so it refuses to start
+on a non-loopback address, with or without caller credentials (`controls.yaml`
+CTL-026).
 
 Point any OpenAI-compatible client at the proxy:
 
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:9095/v1
 ```
+
+### Who a request acts for
+
+Without caller credentials the proxy serves exactly one principal: every
+envelope in the config must name the same `principal_id` (a config with more
+does not load), the `X-HELM-*` headers pick among its envelopes, and the only
+`X-HELM-Workspace` a request may name is `request_defaults.workspace_id`
+(another gets 403, so a header value never reaches a signed quote).
+
+To serve several principals, bind each caller to its identity with `callers`
+(and leave `request_defaults` out). The config holds the SHA-256 of each
+caller's token, never the token; a caller presents the token as its bearer
+(`OPENAI_API_KEY=<token>` in an OpenAI SDK):
+
+```json
+"callers": [
+  {"id": "ci", "token_sha256": "<sha256 hex of the token>", "agent_id": "agent-live-traffic",
+   "envelopes": ["env-baseline"], "workspaces": ["ws-dogfood"]}
+]
+```
+
+```bash
+printf %s "$TOKEN" | shasum -a 256   # the token_sha256 value
+```
+
+A request without a configured token gets 401 (`helm_caller_credential`). An
+`X-HELM-Agent`, `X-HELM-Spend-Envelope` or `X-HELM-Workspace` its caller does
+not cover gets 403 (`helm_caller_scope`); an absent one takes the caller's
+agent, its first envelope and its first workspace. `/v1/models` needs the
+token too; `/helm/spend/health` does not.
 
 Requests without `X-HELM-*` headers are governed under the config's
 `request_defaults` envelope. To capture the paired baseline-vs-substitute run,
@@ -78,15 +108,36 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
 
 Every chat request must set `max_tokens` (or `max_completion_tokens`), and
 `/v1/responses` must set `max_output_tokens`; requests without one get 400.
-`n` must be 1, and the routing members `models`, `provider`, `plugins` and
-`route` are refused with 400: the quote prices one completion of one model.
-The proxy lowers the ceiling to what the envelope can still pay for, reserves
-the quoted amount against the envelope's `max_amount_cents` for the day and the
-balance in one step, and forwards the ceiling to the provider; a request the
-envelope can no longer cover gets 403 `ERR_BALANCE_INSUFFICIENT`. Output beyond
-the quote is still debited at actual cost and logged as an `ALERT`, and an
-answer from another model than the quoted one is debited at the dearer of the
-two prices, with `response_model` recorded on its usage receipt.
+A request is read against the model gateway's closed list for its route
+(`core/pkg/gateway/modelbound`, listed in `docs/architecture/model-gateway.md`):
+stored state (`previous_response_id`, `conversation`, a stored `prompt`,
+`store: true`, a reasoning item without `encrypted_content`, an input item
+named by its id alone), remote or uploaded media, a data URL that is not an
+image, hosted tools, `web_search_options`, `background: true`, `n` other than
+1, the routing members `models`, `provider`, `plugins` and `route`, a
+`service_tier` other than `default` or `flex` (`auto` too: its meaning is the
+upstream account's), a repeated key and any member the list does not name are
+refused with 400, naming it. A Responses request that names no `store` is sent
+with `store: false`.
+
+The hold counts one input token per byte of the forwarded request, plus a
+floor for each inline image and each tool definition the provider adds, and
+the output ceiling. The proxy lowers the ceiling to what the envelope can still
+pay for, reserves the hold against the envelope's `max_amount_cents` for the
+day and the balance in one step, and forwards the ceiling to the provider; a
+request the envelope can no longer cover gets 403 `ERR_BALANCE_INSUFFICIENT`.
+A provider that bills above the hold anyway is debited what it billed: the
+usage receipt says `ESCALATE` / `ERR_SPEND_PER_REQUEST_LIMIT` with
+`overage_cents` and `envelope_closed`, an `ALERT` is logged, and the envelope
+refuses further requests (403 `ERR_SPEND_ENVELOPE_INACTIVE`) until the next UTC
+day, also across a restart.
+
+An answer is priced by the model it names: the quoted model, or its id with a
+dated suffix (`-2024-07-18`, `-20250514`), at its usage; no model, or the quoted
+id with another suffix, at its usage too, recording `model_mismatch`
+(`no_model`, `version_suffix`); another model at the dearer of the two prices,
+or at least the hold when the price book does not have it, recording
+`response_model` and `model_mismatch: true`.
 
 A dispatch that may have reached the provider is never released: a transport
 error after the connection opened, a timeout, an error status, a body cut after
@@ -95,7 +146,29 @@ the status line or usage the proxy cannot read is debited at its whole hold
 cancel the provider call; it settles on what the provider reports. Only a
 failure before any request byte left the proxy frees the hold. A dispatch
 journalled before its provider call and never settled, because the process
-stopped, is held again on the next start, pending reconciliation.
+stopped (or whose usage line never reached the log), is held again on the next
+start, pending reconciliation, and the start banner prints `pending:` with an
+`ALERT` naming its intent.
+
+To clear a pending hold, stop the proxy, check the provider's console for the
+call, and reconcile it with the proxy's own signing seed:
+
+```bash
+helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir>   # lists pending intents
+helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir> \
+  --intent <si-...> --settle-cents 3 --reason "provider console shows the call"
+helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir> \
+  --intent <si-...> --release --reason "the provider has no such request"
+```
+
+`--settle-cents` settles the dispatch at that provider cost (the platform fee
+is added), as usage and settlement lines whose usage receipt carries
+`reconciled_by` and `reconcile_reason`; `--release` frees the hold with a
+`dispatch_released` line whose route quote carries `release_reason`. Both are
+signed by the issuer key, which must be the one that signed the dispatch
+(`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`), and the next start replays them.
+Exit 0 on success, 2 on a usage or config error, 1 when the intent is not
+pending or a line cannot be signed and appended.
 
 An `X-HELM-Idempotency-Key` that already settled, or is held, is never sent
 upstream again: an identical retry gets the original response while the proxy
@@ -105,8 +178,8 @@ The principal a spend receipt names is the envelope's `principal_id`. An
 `X-HELM-Principal` header may repeat it; a request that names another principal
 is refused with 403.
 
-Streaming (`"stream": true`) is supported on `/v1/chat/completions`; the SSE
-bytes pass through verbatim and settlement uses the final usage chunk.
+Streaming is not served: a request with `"stream": true` is refused with 403
+(`helm_data_egress_blocked`); the proxy returns buffered responses only.
 
 ## Evidence
 

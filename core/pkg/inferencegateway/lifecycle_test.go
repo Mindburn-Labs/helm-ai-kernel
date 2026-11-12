@@ -317,10 +317,14 @@ func TestEngine_FailedRunReleasesReservation(t *testing.T) {
 	if h.ledger.BalanceCents() != openBal {
 		t.Fatalf("balance moved on failed run: %d != %d", h.ledger.BalanceCents(), openBal)
 	}
-	// After the reservation is released, a later settle still succeeds (consume
-	// is a no-op) and posts the real debit.
-	if _, err := h.engine.Settle(q.Quote, "prov-req-fail", 2, 1000, 480); err != nil {
-		t.Fatalf("settle after release: %v", err)
+	// A released reservation means the provider was never called: a later
+	// settle of its quote is refused and debits nothing (helm-tracker#313 r1,
+	// F9).
+	if _, err := h.engine.Settle(q.Quote, "prov-req-fail", 2, 1000, 480); err == nil {
+		t.Fatal("settle after release succeeded")
+	}
+	if h.ledger.BalanceCents() != openBal {
+		t.Fatalf("balance moved on a settle after release: %d != %d", h.ledger.BalanceCents(), openBal)
 	}
 }
 

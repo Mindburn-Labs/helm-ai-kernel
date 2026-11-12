@@ -976,7 +976,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/skillpacks writeExclusiveManage
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy Upstream.DispatchStream
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy VerifySavingsPackDir
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy ensureIncludeUsage
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy estimateTokens
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy parseSSELine
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy statusForVerdict
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store AirgapStore.Get

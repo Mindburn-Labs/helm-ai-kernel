@@ -132,8 +132,8 @@ func notSent(err error) error { return fmt.Errorf("%w: %w", api.ErrDispatchNotSe
 // status line) is a dispatch that may have reached the provider, which the
 // gateway debits at its hold (helm-tracker#313, audit H8). An answer whose
 // usage cannot be read or priced is returned with UsageUnknown set, for the
-// same settlement. An answer from another model than the quoted one is priced
-// at the dearer of the two, and the mismatch is recorded (audit M18).
+// same settlement. An answer is priced by the model it names (answerCost), and
+// a mismatch with the quoted model is recorded (audit M18).
 func (u *Upstream) Dispatch(ctx context.Context, inboundPath string, quote *economic.RouteQuote, body []byte) (api.DispatchOutcome, error) {
 	payload, err := rewriteModel(body, quote)
 	if err != nil {
@@ -187,12 +187,60 @@ func (u *Upstream) Dispatch(ctx context.Context, inboundPath string, quote *econ
 		outcome.UsageUnknown = true
 		return outcome, nil
 	}
-	if responded := stringOrEmpty(parsed.Model); !sameModel(responded, quote.SelectedModelID) {
-		cost = u.mismatchCost(quote, responded, cost, in, out)
-		outcome.Notes = map[string]string{"response_model": responded, "model_mismatch": "true"}
-	}
+	cost, outcome.Notes = u.answerCost(quote, stringOrEmpty(parsed.Model), cost, in, out)
 	outcome.ProviderCostCents, outcome.InputTokens, outcome.OutputTokens = cost, in, out
 	return outcome, nil
+}
+
+// The model_mismatch values a usage receipt records.
+const (
+	// MismatchNoModel: the answer named no model; it is priced at its usage.
+	MismatchNoModel = "no_model"
+	// MismatchVersion: the answer named the quoted id with a suffix that is
+	// not a date, such as an alias answered by a versioned id.
+	MismatchVersion = "version_suffix"
+	// MismatchOther: the answer named another model.
+	MismatchOther = "true"
+)
+
+// answerCost prices an answer by the model it names (helm-tracker#313 r1, F8):
+//
+//   - the quoted model, or the quoted id with a dated snapshot suffix: the
+//     usage at the quoted price, nothing recorded;
+//   - no model, or the quoted id with another suffix: the usage at the dearer
+//     of the quoted price and the answered model's when the price book has
+//     it, else at the quoted price; the mismatch is recorded;
+//   - another model: the usage at the dearer of the two prices when the price
+//     book has it, else at least the hold, since the quote never saw its
+//     price; the mismatch is recorded.
+func (u *Upstream) answerCost(quote *economic.RouteQuote, responded string, quotedCost, in, out int64) (int64, map[string]string) {
+	quoted := quote.SelectedModelID
+	switch {
+	case sameModel(responded, quoted):
+		return quotedCost, nil
+	case responded == "":
+		return quotedCost, map[string]string{"model_mismatch": MismatchNoModel}
+	case strings.HasPrefix(responded, quoted+"-"):
+		cost, _ := u.answeredCost(quote, responded, in, out)
+		return max(quotedCost, cost), map[string]string{"response_model": responded, "model_mismatch": MismatchVersion}
+	default:
+		cost, priced := u.answeredCost(quote, responded, in, out)
+		if !priced {
+			cost = quote.MaxAmountCents
+		}
+		return max(quotedCost, cost), map[string]string{"response_model": responded, "model_mismatch": MismatchOther}
+	}
+}
+
+// answeredCost prices the usage at the answered model's price for the quoted
+// provider, when the price book has it.
+func (u *Upstream) answeredCost(quote *economic.RouteQuote, responded string, in, out int64) (int64, bool) {
+	snap, ok := u.Prices.Snapshot(quote.SelectedProviderID, responded)
+	if !ok {
+		return 0, false
+	}
+	cost, err := snap.QuoteCents(in, out)
+	return cost, err == nil
 }
 
 func stringOrEmpty(s *string) string {
@@ -216,20 +264,6 @@ func sameModel(responded, quoted string) bool {
 	}
 	rest, ok := strings.CutPrefix(responded, quoted)
 	return ok && datedSnapshot.MatchString(rest)
-}
-
-// mismatchCost prices an answer from another model than the quoted one at the
-// dearer of the two: the responded model's price when the price book has it
-// for the quoted provider, or, for a model it cannot price, at least the hold.
-func (u *Upstream) mismatchCost(quote *economic.RouteQuote, responded string, quotedCost, in, out int64) int64 {
-	if responded != "" {
-		if snap, ok := u.Prices.Snapshot(quote.SelectedProviderID, responded); ok {
-			if cost, err := snap.QuoteCents(in, out); err == nil {
-				return max(quotedCost, cost)
-			}
-		}
-	}
-	return max(quotedCost, quote.MaxAmountCents)
 }
 
 // StreamOutcome is what a completed (or interrupted) SSE stream yields for

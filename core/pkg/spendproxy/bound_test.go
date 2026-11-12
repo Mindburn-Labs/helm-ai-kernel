@@ -417,7 +417,7 @@ func TestRestoreHoldsAJournalAfterARelease(t *testing.T) {
 	other.Reseal()
 	retried := []*ReceiptRecord{
 		{Kind: RecordRouteQuote, SpendIntentID: other.SpendIntentID, Note: NoteDispatchJournal, RouteQuote: &other},
-		{Kind: RecordDispatchReleased, SpendIntentID: other.SpendIntentID},
+		releaseRecord(&other, "no byte of the request left the proxy"),
 		{Kind: RecordRouteQuote, SpendIntentID: other.SpendIntentID, Note: NoteDispatchJournal, RouteQuote: &other},
 	}
 	held, err := RestorePendingDispatches(append(f.records(t), retried...), f.server.engine, f.server.envelopes)

@@ -127,11 +127,11 @@ func TestVerifyCLIRequireCheckFailsWhenTheCheckDidNotRun(t *testing.T) {
 	}
 }
 
-// The published schema for `verify --json` forbids unknown fields, so it must
-// describe every field the command prints.
-func TestVerifyCLIJSONMatchesPublishedSchema(t *testing.T) {
-	schemaPath := filepath.Join("..", "..", "..", "protocols", "json-schemas", "cli", "helm_cli_schema.json")
-	schemaData, err := os.ReadFile(schemaPath)
+var verifyCLISchemaPath = filepath.Join("..", "..", "..", "protocols", "json-schemas", "cli", "helm_cli_schema.json")
+
+func compileVerifyCLISchema(t *testing.T) *jsonschema.Schema {
+	t.Helper()
+	schemaData, err := os.ReadFile(verifyCLISchemaPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +143,13 @@ func TestVerifyCLIJSONMatchesPublishedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile schema: %v", err)
 	}
+	return schema
+}
+
+// The published schema for `verify --json` forbids unknown fields, so it must
+// describe every field the command prints.
+func TestVerifyCLIJSONMatchesPublishedSchema(t *testing.T) {
+	schema := compileVerifyCLISchema(t)
 
 	dataDir := t.TempDir()
 	t.Setenv("HELM_DATA_DIR", dataDir)
@@ -158,7 +165,7 @@ func TestVerifyCLIJSONMatchesPublishedSchema(t *testing.T) {
 			}
 			_, report, raw := verifyJSONReport(t, args...)
 			if err := schema.Validate(report); err != nil {
-				t.Fatalf("verify --json does not match %s: %v\n%s", schemaPath, err, raw)
+				t.Fatalf("verify --json does not match %s: %v\n%s", verifyCLISchemaPath, err, raw)
 			}
 			if name == "unverifiable" && report["outcome"] != "UNVERIFIABLE" {
 				t.Fatalf("outcome = %v, want UNVERIFIABLE", report["outcome"])

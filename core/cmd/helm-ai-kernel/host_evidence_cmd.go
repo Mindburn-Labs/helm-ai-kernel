@@ -45,7 +45,7 @@ func runVerifyExternalReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	report, err := externalhost.VerifyFile(chainPath, externalhost.VerifyOptions{PublicKeyHex: keyHex, RequireKey: true})
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
+		writeText(stderr, "Error: %s\n", err)
 		return 2
 	}
 	if jsonOutput {
@@ -68,12 +68,13 @@ func runVerifyExternalReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		if report.Verified {
 			fmt.Fprintf(stdout, "VERIFIED external host receipt chain (%d receipts)\n", report.ReceiptCount)
-			fmt.Fprintf(stdout, "Chain hash: %s\n", report.ChainHash)
+			writeText(stdout, "Chain hash: %s\n", report.ChainHash)
 		} else {
 			fmt.Fprintf(stdout, "FAILED external host receipt chain (%d receipts)\n", report.ReceiptCount)
 			for _, check := range report.Checks {
 				if check.Status != externalhost.StatusVerified && check.Status != externalhost.StatusNotRun {
-					fmt.Fprintf(stdout, "  - %s: %s\n", check.Name, check.Reason)
+					// A reason quotes receipt ids out of the chain file.
+					writeText(stdout, "  - %s: %s\n", check.Name, check.Reason)
 				}
 			}
 		}

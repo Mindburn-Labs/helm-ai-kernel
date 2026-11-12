@@ -163,3 +163,66 @@ func replaceHooks() func() {
 		receiptVerifyFile = originalVerifyFile
 	}
 }
+
+func writeHostFile(t *testing.T, root, rel, content string) string {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("WriteFile %s: %v", path, err)
+	}
+	return path
+}
+
+// A file named like a correlation or verification report is skipped as a
+// chain only when it parses as a report. Garbage in it is a failed check, not
+// an absent file.
+func TestVerifyBundleFailsADamagedReportFile(t *testing.T) {
+	for name, content := range map[string]string{
+		"binary garbage":     "\x00\x01\x02",
+		"truncated JSON":     `{"verified": tr`,
+		"empty file":         "",
+		"two JSON documents": "{}\n{}",
+		"a JSON string":      `"verified"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeHostFile(t, root, "host_evidence/chain-verification.json", content)
+
+			report := VerifyBundle(root)
+			if !report.Found {
+				t.Fatalf("a damaged file under host_evidence/ was reported as no host evidence: %#v", report)
+			}
+			if len(report.Checks) != 1 {
+				t.Fatalf("checks = %#v, want one failed check", report.Checks)
+			}
+			check := report.Checks[0]
+			if check.Name != "external_host:report_file" || check.Pass || check.Status != externalhost.StatusFailed {
+				t.Fatalf("check = %#v, want a FAILED external_host:report_file", check)
+			}
+			if !strings.Contains(check.Reason, "host_evidence/chain-verification.json") {
+				t.Fatalf("reason does not name the file: %q", check.Reason)
+			}
+			if len(report.ChainFiles) != 0 {
+				t.Fatalf("a damaged report file was listed as a chain file: %v", report.ChainFiles)
+			}
+		})
+	}
+}
+
+// Receipts are a chain whatever the file is called.
+func TestFindChainFilesKeepsAChainNamedLikeAReport(t *testing.T) {
+	root := t.TempDir()
+	chain := writeHostFile(t, root, "host_evidence/chain-verification.json", `{"receipts":[{"receipt_id":"host-1"}]}`)
+	list := writeHostFile(t, root, "host_evidence/list-correlation.json", `[{"receipt_id":"host-1"}]`)
+	single := writeHostFile(t, root, "host_evidence/one-verification.json", `{"receipt_id":"host-1"}`)
+	writeHostFile(t, root, "host_evidence/verification.json", `{"verified":true}`)
+
+	got := FindChainFiles(root)
+	want := []string{chain, list, single}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("FindChainFiles = %v, want %v", got, want)
+	}
+}

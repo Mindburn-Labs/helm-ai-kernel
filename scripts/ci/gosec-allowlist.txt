@@ -91,7 +91,6 @@ G122 core/pkg/launchpad/importer/fetcher.go 63904c6e10a8
 G122 core/pkg/launchpad/receipts/evidence_pack.go dbfffc239169
 G122 core/pkg/skillpacks/scanner.go dbfffc239169
 G122 core/pkg/spendproxy/savings.go dbfffc239169
-G122 core/pkg/verifier/eu_ai_act.go 661d7f65d05f
 G122 core/pkg/verifier/verifier.go 661d7f65d05f
 G204 core/cmd/helm-ai-kernel/conform_managed_agents.go 6e1fb5c399bd
 G204 core/cmd/helm-ai-kernel/local_console.go 0ff08e3be111
@@ -353,13 +352,10 @@ G304 core/pkg/spendproxy/savings.go dbfffc239169
 G304 core/pkg/spendproxy/store.go 3717c7c84648
 G304 core/pkg/spendproxy/store.go 378b1b60131a
 G304 core/pkg/tape/manifest.go dbfffc239169
-G304 core/pkg/verifier/eu_ai_act.go 661d7f65d05f
 G304 core/pkg/verifier/verifier.go 3b3534841bf3
 G304 core/pkg/verifier/verifier.go 661d7f65d05f
 G304 core/pkg/verifier/verifier.go 6d3ab38598d3
-G304 core/pkg/verifier/verifier.go 8f70a892e44a
 G304 core/pkg/verifier/verifier.go 9095846e5c44
-G304 core/pkg/verifier/verifier.go a1b386629370
 G304 core/pkg/verifier/verifier.go a5bf205a4aab
 G304 core/pkg/verifier/verifier.go a92d877ddf6d
 G304 core/pkg/verifier/verifier.go c0ebc20b63e6

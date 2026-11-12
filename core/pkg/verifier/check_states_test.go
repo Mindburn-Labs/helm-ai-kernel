@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -429,6 +430,119 @@ func TestCheckRegistry_IndexOnlyPackRunsOnlyIndexChecks(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Packs that hold an index or a manifest which lists nothing. The file is
+// there, so structure holds; the checks that would read the listed hashes have
+// none to read and must say NOT_RUN. A check that turned that into VERIFIED
+// would pass on a pack that proves nothing.
+func TestCheckRegistry_PacksThatListNothingRunOnlyStructure(t *testing.T) {
+	const (
+		emptyIndexReason    = "00_INDEX.json lists no entries"
+		noFileHashesReason  = "manifest.json declares no file_hashes"
+		noIndexReason       = "pack has no 00_INDEX.json"
+		noManifestReason    = "pack has no manifest.json"
+		indexName, rootName = "index_integrity", "roots"
+	)
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		// wantReason maps a check to a fragment its NOT_RUN reason must carry.
+		wantReason map[string]string
+	}{
+		{
+			name:       "index with no entries",
+			files:      map[string]string{"00_INDEX.json": `{"version":"1.0.0","entries":[]}`},
+			wantReason: map[string]string{indexName: emptyIndexReason, rootName: emptyIndexReason, "file_hashes": noManifestReason},
+		},
+		{
+			name:       "index without an entries field",
+			files:      map[string]string{"00_INDEX.json": `{"version":"1.0.0"}`},
+			wantReason: map[string]string{indexName: emptyIndexReason, rootName: emptyIndexReason, "file_hashes": noManifestReason},
+		},
+		{
+			name:       "manifest with an empty file_hashes",
+			files:      map[string]string{"manifest.json": `{"session_id":"s","file_hashes":{}}`},
+			wantReason: map[string]string{indexName: noIndexReason, rootName: noIndexReason, "file_hashes": noFileHashesReason},
+		},
+		{
+			name:       "manifest without file_hashes",
+			files:      map[string]string{"manifest.json": `{"session_id":"s"}`},
+			wantReason: map[string]string{indexName: noIndexReason, rootName: noIndexReason, "file_hashes": noFileHashesReason},
+		},
+		{
+			name: "empty index and empty manifest",
+			files: map[string]string{
+				"00_INDEX.json": `{"entries":[]}`,
+				"manifest.json": `{"file_hashes":{}}`,
+			},
+			wantReason: map[string]string{indexName: emptyIndexReason, rootName: emptyIndexReason, "file_hashes": noFileHashesReason},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for rel, content := range tc.files {
+				if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			seen := map[string]bool{}
+			for _, check := range checkRegistry {
+				run := &checkRun{bundlePath: dir, opts: VerifyOptions{AllowSelfAttested: true}, report: &VerifyReport{}}
+				for _, result := range check.results(run) {
+					if result.Status == CheckVerified && check.name != "structure" {
+						t.Errorf("%s passed on a pack that lists nothing: %q", result.Name, result.Detail)
+					}
+					want, pinned := tc.wantReason[result.Name]
+					if !pinned {
+						continue
+					}
+					seen[result.Name] = true
+					if result.Status != CheckNotRun || result.Pass {
+						t.Errorf("%s = %s (pass=%v), want NOT_RUN", result.Name, result.Status, result.Pass)
+					}
+					if !strings.Contains(result.Reason, want) {
+						t.Errorf("%s reason = %q, want it to contain %q", result.Name, result.Reason, want)
+					}
+				}
+			}
+			for name := range tc.wantReason {
+				if !seen[name] {
+					t.Errorf("check %s reported no result under its own name", name)
+				}
+			}
+		})
+	}
+}
+
+// An index that cannot be read or parsed declares nothing either way. That is
+// a failure of replay_determinism, not a pack that claims no replay evidence.
+func TestReplayDeterminism_UnreadableIndexFails(t *testing.T) {
+	t.Run("does not parse", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "00_INDEX.json"), []byte(`{"gates":["G2"`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result := checkReplayDeterminism(dir).normalized()
+		if result.Status != CheckFailed || !strings.Contains(result.Reason, "cannot parse the gates 00_INDEX.json declares") {
+			t.Fatalf("result = %s %q, want FAILED naming the unparseable index", result.Status, result.Reason)
+		}
+	})
+	t.Run("cannot be read", func(t *testing.T) {
+		if os.Geteuid() == 0 || runtime.GOOS == "windows" {
+			t.Skip("file modes do not stop this user from reading")
+		}
+		dir := t.TempDir()
+		path := filepath.Join(dir, "00_INDEX.json")
+		if err := os.WriteFile(path, []byte(`{"gates":["G0"]}`), 0o000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+		result := checkReplayDeterminism(dir).normalized()
+		if result.Status != CheckFailed || !strings.Contains(result.Reason, "cannot read the gates 00_INDEX.json declares") {
+			t.Fatalf("result = %s %q, want FAILED naming the unreadable index", result.Status, result.Reason)
+		}
+	})
 }
 
 func TestConclude(t *testing.T) {

@@ -85,6 +85,10 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 
 	// Build allowed set
 	allowed := map[string]bool{
+		// manifest.json is where the verifier's file_hashes check reads the
+		// hashes a pack declares. Rejecting it here failed every pack that
+		// gave that check input.
+		"manifest.json":        true,
 		"00_INDEX.json":        true,
 		"00_INDEX.json.sig":    true,
 		"01_SCORE.json":        true,

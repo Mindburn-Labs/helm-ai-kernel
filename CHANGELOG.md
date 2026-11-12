@@ -99,19 +99,44 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `pass: false` entries as failures must read `status`, `outcome` or
   `check_counts` instead. `verified` and the exit code are unchanged for packs
   that verified before, except a pack whose `manifest.json` does not parse
-  (see Fixed). `verifier_version` is `0.3.0`.
+  (see Fixed) and the packs named in the notes below. `verifier_version` is
+  `0.3.0`.
 - `helm-ai-kernel replay` now exits 1 for a tape with a missing entry, a
-  changed value, a manifest that disagrees with the tape, or no entries. It
-  used to exit 0 for all of these unless `--verify` was passed. The hash and
-  sequence checks always run; `--verify` now only adds the `data_class`
-  requirement. `--json` gains `entries_replayed`, and `replay_status` can be
-  `NOT_RUN`.
+  changed value, entry files out of sequence order, a manifest that disagrees
+  with the tape on any field it carries, or no entries. It used to exit 0 for
+  all of these unless `--verify` was passed. The hash and sequence checks
+  always run; `--verify` now only adds the `data_class` requirement. A
+  symbolic link in place of `08_TAPES`, the manifest or an entry file exits 2.
+  `--json` gains `entries_replayed` and `seal_checked` (always `false`), and
+  `replay_status` can be `NOT_RUN`.
+- `helm-ai-kernel verify` validates evidence a pack carries even when nothing
+  requires it, so these packs no longer verify: a
+  `02_PROOFGRAPH/determinism_manifest.json` with diverging or missing hashes
+  in a pack that does not declare gate `G2`; a `gates` value that is not a
+  list of gate names; an invalid `eu_ai_act_profile` in a JSON file over
+  2 MiB, in a later document of a line-delimited file or under a repeated
+  key; a file under `host_evidence/` or `11_HOST_EVIDENCE/` named like a
+  correlation or verification report that does not hold one JSON object or
+  array, or that holds a failing receipt chain; and an `00_INDEX.json` or
+  `manifest.json` path that is absolute, contains `..` or resolves outside
+  the pack through a symbolic link.
+- `helm-ai-kernel evidence inspect` exits 1 when the outcome is `FAILED` or
+  `UNVERIFIABLE`, in `--json` mode too; `--json` used to exit 0 whatever the
+  outcome. It now applies the pack layout check `verify` applies, so a pack
+  with an unexpected top-level entry or a missing mandatory directory is
+  `FAILED` there as well.
+- `verify --require-check` with an empty value, or with a name that is not a
+  check, exits 2.
+- `protocols/json-schemas/cli/helm_cli_schema.json` requires `outcome`,
+  `check_counts` and `checks[].status`. A report from a verifier older than
+  `0.3.0` does not validate against it.
 
 ### Added
 
 - `helm-ai-kernel verify --require-check <names>` fails the pack when a named
   check did not run, for example `--require-check chain_integrity` for a pack
-  that must carry a receipt chain.
+  that must carry a receipt chain. Repeat the flag or separate names with
+  commas; every named check is required.
 - `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
   `check_counts` and a `status` on every check. `evidence inspect --json`
   carries `outcome` and `check_counts` too.
@@ -140,8 +165,37 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `helm-ai-kernel replay` printed `Replay complete: N entries verified`
   without replaying anything. It now serves every recorded entry back through
   the tape replayer and reports tape misses, values that do not match their
-  recorded hash and manifest mismatches. It states that it replays recorded
-  inputs and does not re-execute the run.
+  recorded hash, entry files out of sequence order and every field on which
+  the manifest and the tape disagree (`type`, `key`, `size_bytes`,
+  `component_id` and any other field the manifest carries, not `sha256`
+  alone). It states what `COMPLETE` establishes, that it replays recorded
+  inputs and does not re-execute the run, and that it does not check the pack
+  seal: a tape and manifest rewritten together replay as `COMPLETE`.
+- `verify` reported evidence that is present as absent and left the pack
+  `VERIFIED`: replay material in a pack whose `gates` omit or misspell `G2`,
+  an EU AI Act profile in a file over 2 MiB, and a damaged report file under
+  the host evidence directories. Each is now validated or failed, and a
+  `NOT_RUN` reason says what was looked for. A tape manifest alone states no
+  replay result, so `replay_determinism` stays `NOT_RUN` on it and says so.
+- `verify` hashed files outside the pack: a `manifest.json` `file_hashes` key
+  such as `../../outside.txt` was `VERIFIED`. Manifest and index paths are
+  now held to one containment rule and are not read outside the pack.
+- `verify` and `evidence inspect` disagreed on one pack: a sealed pack with a
+  valid `manifest.json` was `FAILED` by `verify` (`unexpected top-level
+  entry: manifest.json`) and `VERIFIED` by `evidence inspect`, so
+  `--require-check file_hashes` could not be satisfied. Both commands now
+  reach the verdict through the same code, and `manifest.json` is a legal
+  top-level entry.
+- `verify --require-check` given twice kept only the last value, so
+  `--require-check chain_integrity --require-check structure` verified a pack
+  without a receipt chain.
+- Text output of `verify`, `evidence inspect` and `replay` printed
+  pack-controlled strings raw: an `envelope_id` with line breaks added a
+  forged `VERIFIED` line below the real verdict. Control characters, line
+  breaks and terminal escapes are now shown as visible escapes; `--json`
+  keeps the raw value.
+- `roots` was `VERIFIED` on an `00_INDEX.json` that lists no entries while
+  `index_integrity` was `NOT_RUN`. Both are `NOT_RUN` there.
 
 ## [0.12.0]
 

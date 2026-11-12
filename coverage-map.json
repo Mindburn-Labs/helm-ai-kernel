@@ -1290,7 +1290,7 @@
       "id": "CTL-009",
       "title": "Evidence bundle verification",
       "owner": "Mindburn Labs core team (conformance)",
-      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed.",
+      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a file the bundle names is read only from inside the bundle.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1302,13 +1302,17 @@
       "gates": [],
       "config": [],
       "protected_operations": [
-        "`helm-ai-kernel verify` over an EvidencePack bundle."
+        "`helm-ai-kernel verify` over an EvidencePack bundle.",
+        "`helm-ai-kernel evidence inspect` over an EvidencePack bundle; it reaches its verdict through the same code as `verify`."
       ],
       "bypass_assumptions": [
         "A self-attested seal is rejected by default; a caller that opts into accepting one gets weaker evidence.",
         "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check.",
         "A bundle that omits optional evidence (a receipt chain, manifest file hashes, connector evidence, an EU AI Act profile, host evidence, a replay gate, signed receipts) still verifies: those checks are NOT_RUN, and VERIFIED covers only the checks that ran. A caller that needs one of them must name it with `--require-check`.",
-        "The field-presence checks (policy_decision_hashes, connector_evidence, eu_ai_act_profile, replay_determinism) recompute nothing; their details say so."
+        "The field-presence checks (policy_decision_hashes, connector_evidence, eu_ai_act_profile, replay_determinism) recompute nothing; their details say so.",
+        "Replay material is validated without gate G2 (a determinism manifest with diverging hashes fails), but the files in 05_DIFFS are read as replay differences only under G2, and a tape manifest alone states no replay result and leaves replay_determinism NOT_RUN.",
+        "Under the host evidence directories a file named like a correlation or verification report that parses as one is not verified as a receipt chain; one that holds receipts is, and one that does not parse fails.",
+        "`helm-ai-kernel replay` is outside this control: it replays the tape and does not check the bundle seal."
       ],
       "tests": {
         "allowed": [
@@ -1317,15 +1321,21 @@
         "forbidden": [
           "core/pkg/verifier.TestVerifyBundle_HashMismatch",
           "core/pkg/verifier.TestChainIntegrity_DetectsTamperedReceiptBody",
-          "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures"
+          "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures",
+          "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2",
+          "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack"
         ],
         "removal": [
           "core/pkg/verifier.TestVerifyBundle_HashMismatch",
-          "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
+          "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput",
+          "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack",
+          "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2"
         ],
         "bypass": [
           "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault",
-          "core/pkg/verifier.TestVerifyBundle_RequireChecksFailsACheckThatDidNotRun"
+          "core/pkg/verifier.TestVerifyBundle_RequireChecksFailsACheckThatDidNotRun",
+          "core/pkg/verifier.TestHostEvidence_ChainNamedLikeAReportIsVerified",
+          "core/pkg/verifier.TestEUAIActProfile_LargeFilesAreRead"
         ]
       },
       "removal_proofs": [
@@ -1339,6 +1349,18 @@
           "file": "core/pkg/verifier/verifier.go",
           "tests": [
             "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2"
           ]
         }
       ]

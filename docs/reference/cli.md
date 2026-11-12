@@ -135,14 +135,26 @@ helm-ai-kernel replay --evidence <pack-dir>
 check the pack gives no input to is `NOT_RUN` and is never counted as passed.
 Exit 0 means `VERIFIED`: no check failed and every required check ran and
 held; checks that did not run are listed with the reason. Exit 1 means
-`FAILED` or `UNVERIFIABLE`; exit 2 means no verdict. `--require-check` takes a
-comma-separated list of check names and fails the pack when a named check did
-not run. See [Receipts](../VERIFICATION.md#what-the-result-covers) for each
-check and what requires it.
+`FAILED` or `UNVERIFIABLE`; exit 2 means no verdict. `--require-check` names
+checks that must have run and fails the pack when one did not. Repeat the flag
+or separate names with commas; every named check is required, and a name that
+is not a check exits 2. Evidence that is present is validated whether or not
+anything requires it. See
+[Receipts](../VERIFICATION.md#what-the-result-covers) for each check and what
+requires it.
+
+`evidence inspect <pack>` reaches the same verdict through the same code and
+exits the same way, in text and `--json` mode. Text output of these commands
+shows control characters and line breaks from the pack as visible escapes;
+`--json` keeps the raw values.
 
 `replay` serves an EvidencePack's recorded tape (`08_TAPES`) back through the
 tape replayer and reports `COMPLETE`, `DIVERGED` or `NOT_RUN`. Exit 0 only
-for `COMPLETE`. It replays recorded inputs; it does not re-execute the run.
+for `COMPLETE`: the entry files are in sequence order, every entry was served
+and matches its recorded hash, and every field the tape manifest carries for
+an entry equals that entry. It replays recorded inputs; it does not re-execute
+the run, and it does not check the pack seal, so run `verify` on the pack as
+well. A symbolic link in place of the tape directory or a tape file exits 2.
 
 ## Doctor
 

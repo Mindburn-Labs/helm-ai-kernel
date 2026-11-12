@@ -43,7 +43,7 @@ bundle:
 | `--profile` | `dev-local`, `team`, `customer`, `high-assurance` |
 | `--require-eidas` | requires eIDAS-labelled anchor metadata and declared-time freshness; it does not cryptographically verify RFC 3161 or EU Trusted List qualification |
 | `--require-tee` | requires declared TEE attestation metadata for the selected platform |
-| `--require-check` | names checks that must have run; a named check the pack gives no input to fails instead of being reported as not run |
+| `--require-check` | names checks that must have run; a named check the pack gives no input to fails instead of being reported as not run. Repeat the flag or separate names with commas |
 
 The accepted pack above prints `checks: 5 passed, 0 failed, 8 not run`: a
 check the pack gives no input to (no receipt chain, no connector evidence, no

@@ -17,8 +17,11 @@ helm-ai-kernel verify evidence-pack.tar
 Each check ends `VERIFIED`, `FAILED`, `UNVERIFIABLE` or `NOT_RUN`. A check the
 pack gives no input to is `NOT_RUN`, never passed, and the result states the
 passed, failed and not-run counts separately. Exit 0 means no check failed and
-every required check held; it does not mean every check ran. The checks and
-what requires each are listed in
+every required check held; it does not mean every check ran. Evidence a pack
+carries is validated whether or not anything requires it, and a file the pack
+names is read only from inside the pack. `helm-ai-kernel evidence inspect`
+reaches the same verdict through the same code and exits the same way. The
+checks and what requires each are listed in
 [Receipts](../VERIFICATION.md#what-the-result-covers).
 
 ## API Routes

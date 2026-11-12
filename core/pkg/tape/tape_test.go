@@ -127,3 +127,76 @@ func TestManifest_FileOnDisk(t *testing.T) {
 	_, err := os.Stat(filepath.Join(dir, "tape_manifest.json"))
 	require.NoError(t, err)
 }
+
+// A manifest row built in memory is compared on every field it marshals to,
+// not on sha256 alone: a wrong type, key or size used to pass.
+func TestManifest_EveryTypedFieldIsCompared(t *testing.T) {
+	r := NewRecorder("run-1")
+	r.Record(EntryTypeNetwork, "connector", "https://example.test", []byte("response"))
+	entries := r.Entries()
+
+	for name, tc := range map[string]struct {
+		mutate func(item *ManifestItem)
+		want   string
+	}{
+		"type":       {func(item *ManifestItem) { item.Type = EntryTypeTime }, `seq=1 manifest field "type" is "TIME", tape entry has "NETWORK"`},
+		"key":        {func(item *ManifestItem) { item.Key = "other" }, `seq=1 manifest field "key" is "other", tape entry has "https://example.test"`},
+		"size_bytes": {func(item *ManifestItem) { item.SizeBytes = 99 }, `seq=1 manifest field "size_bytes" is 99, tape entry value is 8 bytes`},
+		"sha256":     {func(item *ManifestItem) { item.SHA256 = "tampered" }, "seq=1 hash mismatch: expected tampered"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			manifest := r.BuildManifest()
+			tc.mutate(&manifest.Entries[0])
+			issues := VerifyManifestIntegrity(entries, manifest)
+			require.Len(t, issues, 1)
+			require.Contains(t, issues[0], tc.want)
+		})
+	}
+}
+
+// A row read from tape_manifest.json keeps the fields this package does not
+// declare, and they are compared with the entry too.
+func TestManifest_FieldsOutsideTheStructAreCompared(t *testing.T) {
+	r := NewRecorder("run-1")
+	r.Record(EntryTypeToolOutput, "executor", "tool", []byte("out"))
+	entries := r.Entries()
+	entries[0].DataClass = "PUBLIC"
+	sum := entries[0].ValueHash
+
+	read := func(t *testing.T, row string) *Manifest {
+		t.Helper()
+		dir := t.TempDir()
+		doc := `{"run_id":"run-1","entries":[` + row + `]}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tape_manifest.json"), []byte(doc), 0o600))
+		manifest, err := ReadManifest(dir)
+		require.NoError(t, err)
+		return manifest
+	}
+	base := `"seq":1,"type":"TOOL_OUTPUT","key":"tool","sha256":"` + sum + `","size_bytes":3`
+
+	require.Empty(t, VerifyManifestIntegrity(entries, read(t, `{`+base+`}`)))
+	require.Empty(t, VerifyManifestIntegrity(entries, read(t, `{`+base+`,"component_id":"executor","data_class":"PUBLIC"}`)))
+
+	issues := VerifyManifestIntegrity(entries, read(t, `{`+base+`,"component_id":"someone-else"}`))
+	require.Equal(t, []string{`seq=1 manifest field "component_id" is "someone-else", tape entry has "executor"`}, issues)
+
+	issues = VerifyManifestIntegrity(entries, read(t, `{`+base+`,"approved_by":"nobody"}`))
+	require.Equal(t, []string{`seq=1 manifest field "approved_by" has no counterpart on the tape entry, so it cannot be compared`}, issues)
+
+	// A row that leaves a field out makes no statement about it.
+	require.Empty(t, VerifyManifestIntegrity(entries, read(t, `{"seq":1,"sha256":"`+sum+`"}`)))
+}
+
+func TestManifest_RowListedTwiceAndRowWithoutEntry(t *testing.T) {
+	r := NewRecorder("run-1")
+	r.Record(EntryTypeTime, "k", "t", []byte("now"))
+	entries := r.Entries()
+	manifest := r.BuildManifest()
+	manifest.Entries = append(manifest.Entries, manifest.Entries[0], ManifestItem{Seq: 7})
+
+	issues := VerifyManifestIntegrity(entries, manifest)
+	require.Equal(t, []string{
+		"seq=1 is listed 2 times in tape_manifest.json",
+		"seq=7 referenced in manifest but not in entries",
+	}, issues)
+}

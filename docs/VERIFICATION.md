@@ -125,16 +125,16 @@ checks: 5 passed, 0 failed, 8 not run; this result covers only the checks that r
 | --- | --- | --- |
 | `structure` | The pack is a directory that holds `00_INDEX.json` or `manifest.json`. | Never; a missing pack fails. |
 | `index_integrity` | Every file listed in `00_INDEX.json` is present and matches its SHA-256. | The pack has no `00_INDEX.json`, or it lists no entries. |
-| `roots` | The manifest root hash and Merkle root were derived from `00_INDEX.json`. The seal check compares them. | The pack has no `00_INDEX.json`. |
+| `roots` | The manifest root hash and Merkle root were derived from the entries `00_INDEX.json` lists. The seal check compares them. | The pack has no `00_INDEX.json`, or it lists no entries. |
 | `evidence_pack_seal` | The seal signature verifies under your trust root (with `--allow-self-attested`, under the key the seal carries), the seal matches the pack inventory with no unindexed file, and the anchor and storage rules of the trust profile hold. | Never; a missing seal fails. |
-| `file_hashes` (reported as `hash:<file>`) | Every file named in `manifest.json` `file_hashes` matches its SHA-256. | The pack has no `manifest.json`, or it declares no `file_hashes`. |
-| `eu_ai_act_profile` | Each embedded `eu_ai_act_profile` carries the fields its role and risk category require. The referenced records are not resolved. | No JSON file in the pack carries one. |
+| `file_hashes` (reported as `hash:<file>`) | Every file named in `manifest.json` `file_hashes` is inside the pack and matches its SHA-256. | The pack has no `manifest.json`, or it declares no `file_hashes`. |
+| `eu_ai_act_profile` | Each embedded `eu_ai_act_profile` carries the fields its role and risk category require. The referenced records are not resolved. | No `.json` file in the pack carries one. Files of any size are read; the reason counts the files that do not parse as JSON. |
 | `connector_evidence` | Each connector evidence record declares the required `sha256:` hashes and references. The hashes are not recomputed. | The pack has no `connector_evidence.json`. |
 | `chain_integrity` | Receipts link from genesis to head through `prev_hash` with no fork, gap or cycle. | No receipt carries a `prev_hash`: the pack asserts no chain. |
 | `lamport_monotonicity` | Along each chain the Lamport clock starts at 1 and increases by one. | No receipt carries a `prev_hash`. |
 | `policy_decision_hashes` | Every MCP policy receipt carries `output_hash`, `args_hash` and `signature`, or, in a pack without such receipts, at least one receipt carries a `decision_hash`; the detail gives the count. Presence only; the hashes are not recomputed. | Never; a pack in which no receipt carries a binding fails. |
-| `replay_determinism` | The replay evidence gate `G2` names is present and consistent with itself: `08_TAPES/tape_manifest.json` parses, `02_PROOFGRAPH/determinism_manifest.json` states equal `live_hash` and `replay_hash`, and `05_DIFFS` holds no files. Nothing is replayed, and the two hashes are the pack's own statements. | `00_INDEX.json` `gates` does not declare `G2`. |
-| `host_evidence` (reported per chain file as `<file>:external_host:<check>`) | Host receipt chains parse, hash, link and verify under `--external-host-public-key`. | The pack has no chain file under `host_evidence/` or `11_HOST_EVIDENCE/`. |
+| `replay_determinism` | The replay evidence the pack declares or carries is consistent with itself: `02_PROOFGRAPH/determinism_manifest.json` states equal `live_hash` and `replay_hash`, and `08_TAPES/tape_manifest.json` parses; under gate `G2` both must be present and `05_DIFFS` must hold no files. Nothing is replayed, and the two hashes are the pack's own statements. The detail names which files were read. | `00_INDEX.json` `gates` does not declare `G2` and the pack carries no `determinism_manifest.json`. A `tape_manifest.json` alone states no replay result: it is parsed and named in the reason, and fails if it does not parse. |
+| `host_evidence` (reported per chain file as `<file>:external_host:<check>`) | Host receipt chains parse, hash, link and verify under `--external-host-public-key`. | The pack has no chain file under `host_evidence/` or `11_HOST_EVIDENCE/`. The reason names report files it did not read as chains. |
 | `embedded_signature_trust` | Signatures declared on receipts and attestations verify against configured trust roots, or, under `dev-local`, against keys the sealed pack carries, which the result names as self-attested. Witness signatures are checked only against witness keys the caller configures. | No receipt or attestation declares a signature. |
 
 Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
@@ -144,18 +144,48 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
   `FAILED`.
 - What the pack declares about itself: `G2` in `00_INDEX.json` `gates`
   requires the replay evidence; a receipt with a `prev_hash` claims a chain,
-  and then every receipt must link. Evidence that is present must validate.
+  and then every receipt must link.
+- What the pack carries: evidence that is present must validate, whether or
+  not anything requires it. A check is `NOT_RUN` only when the pack holds
+  nothing for it to compare, and its reason says what was looked for and what
+  was found:
+  - Replay material is validated without `G2`. A
+    `determinism_manifest.json` is the replay result: one whose hashes differ,
+    that leaves a hash out or that does not parse fails, and one whose hashes
+    are equal is `VERIFIED`. A `tape_manifest.json` that does not parse fails;
+    one that parses, in a pack with no determinism manifest, states no replay
+    result, so the check stays `NOT_RUN` and its reason names the manifest.
+    Without `G2` the files in `05_DIFFS` are not read: producers keep
+    placeholders and other artifacts there, and only `G2` makes them replay
+    differences. A `gates` value that is not a list of gate names is
+    malformed and fails.
+  - An `eu_ai_act_profile` is found in a `.json` file of any size, in every
+    document of a line-delimited file, and in each repeat of the key. A file
+    that carries a profile and does not parse fails.
+  - Under `host_evidence/` and `11_HOST_EVIDENCE/`, a `.json` file named like
+    a correlation or verification report is left out of chain verification
+    only when it parses as one JSON object or array. If it holds receipts it
+    is verified as a chain; if it holds anything else it fails.
+  - A path named by `00_INDEX.json` or by `manifest.json` `file_hashes` must
+    stay inside the pack: an absolute path, a path with a `..` segment, or one
+    that resolves outside the pack directory through a symbolic link fails
+    and is not read.
 - The trust profile: `customer` and `high-assurance` require anchor and
   storage receipts, checked inside `evidence_pack_seal`.
 - What you require: `--require-check <names>` turns a named check that would
   be `NOT_RUN` into `FAILED`; `--require-eidas` and `--require-tee` add their
-  own checks.
+  own checks. Repeat `--require-check` or separate names with commas: every
+  named check is required. A name that is not a check, or a value that names
+  none, stops the command with exit code `2`.
 
 Everything else is optional, and a pack without it leaves the check `NOT_RUN`.
 
 ```bash
 helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml> \
   --require-check chain_integrity,connector_evidence
+
+helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml> \
+  --require-check chain_integrity --require-check file_hashes
 ```
 
 Exit code `0` means `VERIFIED`: no check failed and every required check ran
@@ -166,7 +196,21 @@ missing path, an unreadable archive, an unknown flag or check name).
 `--json` reports the same result as `outcome`, `check_counts` and a `status`
 on every entry of `checks`. `pass` is `true` only for a `VERIFIED` check, so
 read `status` to tell a failure from a check that did not run. The schema is
-`protocols/json-schemas/cli/helm_cli_schema.json`.
+`protocols/json-schemas/cli/helm_cli_schema.json`; it requires those three
+fields.
+
+Text output prints strings the pack controls, such as the envelope id, file
+names and check reasons. Line breaks, control characters and terminal escapes
+in them are shown as visible escapes (`\n`, `\x1b`), so a pack cannot add a
+line that reads like the verdict. `--json` keeps each value as the pack states
+it.
+
+`helm-ai-kernel evidence inspect <pack>` reaches its verdict through the same
+code as `verify`: the same checks, the same statuses and the same exit codes
+(`0` `VERIFIED`, `1` `FAILED` or `UNVERIFIABLE`, `2` no verdict), in text and
+`--json` mode. It adds the launchpad manifest and evidence graph summary. A
+`manifest.json` at the top of a pack is part of the layout: `file_hashes`
+reads it.
 
 Offline verification is the default. If a pack has no public anchor, HELM
 reports that directly; it does not invent one. Under the `customer` and
@@ -216,12 +260,27 @@ helm-ai-kernel replay --evidence <evidence-pack-dir>
 
 `replay` reads `08_TAPES/tape_manifest.json` and the `entry_*.json` files
 beside it, and serves the recorded entries back through the tape replayer in
-sequence. It reports `COMPLETE` (exit 0) only when every entry was served with
-no tape miss, each served value matches the hash recorded on its entry, and
-the tape and the manifest name the same entries with the same hashes.
+sequence. It reports `COMPLETE` (exit 0) only when all of this holds:
+
+- `08_TAPES`, the manifest and every entry file are real files, not symbolic
+  links. A symbolic link is refused with exit code `2`.
+- The entry files, in name order, carry strictly increasing sequence numbers.
+- Every entry was served in sequence from 1 with no tape miss, and each served
+  value matches the `value_hash` recorded on its entry.
+- The manifest lists every entry exactly once, and every field it carries for
+  an entry equals that entry: `type`, `key`, `sha256`, `size_bytes`, and any
+  other field such as `component_id`. A manifest field the entry has no
+  counterpart for cannot be compared and is reported.
+
 Anything else is `DIVERGED` (exit 1) with the issues listed. A tape with no
 entries is `NOT_RUN` (exit 1): nothing was replayed. `--verify` also requires
 `data_class` on every entry.
+
+`COMPLETE` says the tape agrees with itself and with its manifest. It does not
+say who wrote the tape: `replay` does not check the pack seal, so a tape and
+manifest that were rewritten together replay as `COMPLETE`, and `--json`
+carries `"seal_checked": false`. Run `helm-ai-kernel verify` on the pack to
+check the seal and the hashes of the tape files the pack indexes.
 
 This replays recorded inputs only. The command has the tape, not the code and
 policy that consumed it, so it does not re-execute the run or compare

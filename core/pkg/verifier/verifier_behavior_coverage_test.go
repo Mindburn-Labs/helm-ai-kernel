@@ -71,8 +71,8 @@ func TestVerifyBundle_WithTapesDirectory(t *testing.T) {
 	}
 }
 
-// A pack whose gates omit G2 claims no replay evidence. The check then has
-// nothing to read: it is NOT_RUN with the reason, and it is not a pass.
+// A pack whose gates omit G2 and that carries no replay material gives the
+// check nothing to read: it is NOT_RUN with the reason, and it is not a pass.
 func TestVerifyBundle_ReplayDeterminismNotRunWhenG2OutOfScope(t *testing.T) {
 	dir := createValidBundleFixture(t)
 	r, _ := VerifyBundle(dir)
@@ -86,7 +86,7 @@ func TestVerifyBundle_ReplayDeterminismNotRunWhenG2OutOfScope(t *testing.T) {
 		if c.Pass || c.Status != CheckNotRun {
 			t.Fatalf("replay_determinism should be NOT_RUN when G2 is omitted: %+v", c)
 		}
-		if c.Reason != "00_INDEX.json gates do not declare G2, so the pack claims no replay evidence" {
+		if c.Reason != "00_INDEX.json gates do not declare G2, and the pack carries no replay material (no 08_TAPES/tape_manifest.json and no 02_PROOFGRAPH/determinism_manifest.json)" {
 			t.Fatalf("unexpected replay_determinism reason: %q", c.Reason)
 		}
 		return

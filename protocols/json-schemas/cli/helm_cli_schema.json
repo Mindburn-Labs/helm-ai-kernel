@@ -2,13 +2,15 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://mindburn.org/schemas/helm-kernel-cli/v1",
     "title": "HELM AI Kernel Verification Output",
-    "description": "JSON Schema for the output of `helm-ai-kernel verify --json` command. Exit code 0 = outcome VERIFIED, 1 = outcome FAILED or UNVERIFIABLE, 2 = no verdict (runtime or usage error). A check with status NOT_RUN had nothing to read and is never counted as passed. The fields outcome, check_counts and checks[].status are always present from verifier_version 0.3.0.",
+    "description": "JSON Schema for the output of `helm-ai-kernel verify --json` command. Exit code 0 = outcome VERIFIED, 1 = outcome FAILED or UNVERIFIABLE, 2 = no verdict (runtime or usage error). A check with status NOT_RUN had nothing to read and is never counted as passed. The fields outcome, check_counts and checks[].status are always present from verifier_version 0.3.0 and are required here, so a report from an older verifier, which lacks them, does not validate.",
     "type": "object",
     "required": [
         "bundle",
         "verified",
+        "outcome",
         "timestamp",
         "checks",
+        "check_counts",
         "summary",
         "issue_count",
         "verifier_version"
@@ -45,7 +47,7 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["name", "pass"],
+                "required": ["name", "pass", "status"],
                 "properties": {
                     "name": { "type": "string" },
                     "pass": {

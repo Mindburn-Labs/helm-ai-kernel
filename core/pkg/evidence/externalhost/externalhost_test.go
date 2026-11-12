@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -807,4 +808,58 @@ func computeHashOnly(r contracts.ExternalHostReceipt) (contracts.ExternalHostRec
 	}
 	r.ReceiptHash = hash
 	return r, nil
+}
+
+// An unsigned receipt, with no key supplied and none required, has no
+// signature to check. That is NOT_RUN: reporting it as a pass would count a
+// signature check on a receipt nobody signed.
+func TestVerifyChain_UnsignedReceiptWithoutARequiredKeyIsNotRun(t *testing.T) {
+	// Any fixed instant: the receipt hash covers it, nothing compares it.
+	ts := time.Unix(1_700_000_000, 0).UTC()
+	receipt, err := computeHashOnly(testReceipt("host-unsigned", "", ts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.SignatureAlgorithm = ""
+	receipt.SigningKeyID = ""
+	receipt, err = computeHashOnly(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "chain-unsigned",
+		Receipts:      []contracts.ExternalHostReceipt{receipt},
+	}
+
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, check := range report.Checks {
+		if check.Name != "external_host:signature" {
+			continue
+		}
+		found = true
+		if status := checkStatus(t, check); status != "NOT_RUN" {
+			t.Fatalf("signature status = %s, want NOT_RUN for an unsigned receipt with no key required", status)
+		}
+		if check.Pass {
+			t.Fatal("an unsigned receipt is counted as a passed signature check")
+		}
+		if !strings.Contains(check.Reason, "unsigned") {
+			t.Fatalf("reason does not say the receipt is unsigned: %q", check.Reason)
+		}
+	}
+	if !found {
+		t.Fatalf("no signature check reported: %+v", report.Checks)
+	}
+
+	// The same receipt under a required key is a failure, not a skipped check.
+	required, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: strings.Repeat("0", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFailedCheck(t, required, "external_host:signature")
 }

@@ -193,7 +193,7 @@ checks:
   replay:
     - id: replay.bit_identical_match
       axis: 6
-      title: "The tape replayer serves recorded entries back, fails closed on a tape miss, and manifest hashes detect a changed entry; helm-ai-kernel replay reports what the replayer found and does not re-execute decisions"
+      title: "helm-ai-kernel replay reproduces every decision bit-identically; any divergence is an invariant breach"
       verification:
         kind: go_test
         target: "./core/pkg/tape/..."

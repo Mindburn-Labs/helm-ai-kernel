@@ -109,18 +109,18 @@ func runVerifyReceiptCmd(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintf(stdout, "%sADMISSIBLE — receipt.v5 signature verifies under the caller-supplied key%s\n", ColorGreen, ColorReset)
 		}
 		_, _ = fmt.Fprintf(stdout, "%sKernel receipt.v5 offline verification%s\n", ColorBold, ColorReset)
-		_, _ = fmt.Fprintf(stdout, "  receipt:   %s\n", receiptPath)
-		_, _ = fmt.Fprintf(stdout, "  id:        %s\n", receipt.ReceiptID)
+		writeText(stdout, "  receipt:   %s\n", receiptPath)
+		writeText(stdout, "  id:        %s\n", receipt.ReceiptID)
 		if admissible {
-			_, _ = fmt.Fprintf(stdout, "  verdict:   %s\n", receipt.Verdict)
+			writeText(stdout, "  verdict:   %s\n", receipt.Verdict)
 		} else {
-			_, _ = fmt.Fprintf(stdout, "  verdict:   %s (unverified — claimed by the receipt, not established)\n", receipt.Verdict)
+			writeText(stdout, "  verdict:   %s (unverified — claimed by the receipt, not established)\n", receipt.Verdict)
 		}
-		_, _ = fmt.Fprintf(stdout, "  reason:    %s\n", receipt.ReasonCode)
-		_, _ = fmt.Fprintf(stdout, "  version:   %s\n", receipt.SignatureVersion)
-		_, _ = fmt.Fprintf(stdout, "  integrity: %v\n", integrityValid)
-		_, _ = fmt.Fprintf(stdout, "  trusted:   %v\n", signerTrusted)
-		_, _ = fmt.Fprintf(stdout, "  anchor:    %s\n", trustedPublicKeyFile)
+		writeText(stdout, "  reason:    %s\n", receipt.ReasonCode)
+		writeText(stdout, "  version:   %s\n", receipt.SignatureVersion)
+		writeText(stdout, "  integrity: %v\n", integrityValid)
+		writeText(stdout, "  trusted:   %v\n", signerTrusted)
+		writeText(stdout, "  anchor:    %s\n", trustedPublicKeyFile)
 	}
 	if !integrityValid || !signerTrusted {
 		return 1

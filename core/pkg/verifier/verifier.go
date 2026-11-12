@@ -14,10 +14,12 @@ package verifier
 // post-quantum assurance is claimed by this verifier path.
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -911,11 +913,10 @@ func checkIndex(bundlePath string) CheckResult {
 		if entry.Path == "" {
 			return failed(name, "index entry path is required")
 		}
-		clean := filepath.Clean(entry.Path)
-		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
-			return failed(name, fmt.Sprintf("index entry escapes bundle: %s", entry.Path))
+		data, err := readPackFile(bundlePath, entry.Path)
+		if errors.Is(err, errOutsidePack) {
+			return failed(name, fmt.Sprintf("index entry escapes bundle: %v", err))
 		}
-		data, err := os.ReadFile(filepath.Join(bundlePath, clean))
 		if err != nil {
 			return failed(name, fmt.Sprintf("indexed file missing %s: %v", entry.Path, err))
 		}
@@ -928,6 +929,8 @@ func checkIndex(bundlePath string) CheckResult {
 
 // checkRoots derives the manifest root hash and Merkle root from the hashes
 // 00_INDEX.json lists. It compares them with nothing: the seal check does that.
+// An index that lists no entries leaves it NOT_RUN, as it leaves
+// index_integrity.
 func checkRoots(bundlePath string, report *VerifyReport) CheckResult {
 	const name = "roots"
 	if !fileExists(filepath.Join(bundlePath, "00_INDEX.json")) {
@@ -936,6 +939,11 @@ func checkRoots(bundlePath string, report *VerifyReport) CheckResult {
 	roots, err := computeIndexRoots(bundlePath)
 	if err != nil {
 		return failed(name, err.Error())
+	}
+	if roots.EntryCount == 0 {
+		// The same state index_integrity reports for this index: roots over
+		// no entries are derived from nothing, and say nothing about a file.
+		return notRun(name, "00_INDEX.json lists no entries, so there are no indexed hashes to derive roots from")
 	}
 	if roots.ManifestRootHash == "" {
 		return failed(name, "00_INDEX.json yielded no manifest root hash")
@@ -967,6 +975,54 @@ func computeIndexRoots(bundlePath string) (VerifyRoots, error) {
 		MerkleRoot:       roots.MerkleRoot,
 		EntryCount:       roots.EntryCount,
 	}, nil
+}
+
+// errOutsidePack marks a path a pack file names that does not stay inside the
+// pack directory.
+var errOutsidePack = errors.New("path is outside the pack")
+
+// packFilePath resolves a path that a pack file names (an 00_INDEX.json entry
+// or a manifest.json file_hashes key) to the file to read. It is the one
+// containment rule for both: the path must be relative, must not contain a
+// ".." segment, and must still be inside the pack directory once symbolic
+// links are resolved. A path that breaks the rule returns an error wrapping
+// errOutsidePack; any other error means the file could not be found.
+//
+// Without it a manifest naming "../../outside.txt" had that file hashed and
+// reported as a verified pack file.
+func packFilePath(bundlePath, name string) (string, error) {
+	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" || strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) {
+		return "", fmt.Errorf("%w: %q is absolute, and a pack names its files relative to its own directory", errOutsidePack, name)
+	}
+	for _, segment := range strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if segment == ".." {
+			return "", fmt.Errorf("%w: %q contains a \"..\" segment", errOutsidePack, name)
+		}
+	}
+	root, err := filepath.EvalSymlinks(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve the pack directory: %v", err)
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(bundlePath, filepath.FromSlash(name)))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("%w: %q resolves through a symbolic link to a file that is not in the pack directory", errOutsidePack, name)
+	}
+	return resolved, nil
+}
+
+// readPackFile reads a file the pack names, after packFilePath has held the
+// name inside the pack directory. index_integrity and file_hashes both read
+// through it, so neither can be pointed at a file the pack does not hold.
+func readPackFile(bundlePath, name string) ([]byte, error) {
+	resolved, err := packFilePath(bundlePath, name)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(resolved) // #nosec G304 -- packFilePath resolved the path and refused any that leaves the pack directory
 }
 
 func checkFileHashes(bundlePath string) []CheckResult {
@@ -1001,8 +1057,11 @@ func checkFileHashes(bundlePath string) []CheckResult {
 
 		for _, name := range keys {
 			expectedHash := manifest.FileHashes[name]
-			filePath := filepath.Join(bundlePath, name)
-			content, err := os.ReadFile(filePath)
+			content, err := readPackFile(bundlePath, name)
+			if errors.Is(err, errOutsidePack) {
+				results = append(results, failed(fmt.Sprintf("hash:%s", name), fmt.Sprintf("manifest path is outside the pack, so it was not read: %v", err)))
+				continue
+			}
 			if err != nil {
 				results = append(results, CheckResult{
 					Name: fmt.Sprintf("hash:%s", name), Pass: false,
@@ -1575,84 +1634,123 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 	return verified("policy_decision_hashes", fmt.Sprintf("%d of %d receipts carry a decision_hash field; presence only, the hash is not recomputed", legacyVerified, legacyTotal))
 }
 
-// checkReplayDeterminism runs when 00_INDEX.json declares gate G2. It checks
-// that the replay evidence the gate names is present and consistent with
-// itself. It replays nothing: live_hash and replay_hash are the pack's own
+// checkReplayDeterminism checks the replay evidence a pack declares or
+// carries. The rule:
+//
+//   - A pack that declares gate G2 in 00_INDEX.json claims replay evidence, so
+//     all of it is required: 08_TAPES/tape_manifest.json and
+//     02_PROOFGRAPH/determinism_manifest.json must be present and valid, and
+//     05_DIFFS must hold no files. Anything missing is FAILED.
+//   - A pack that does not declare G2 is still checked on the replay material
+//     it carries. A determinism manifest is the replay result: when present it
+//     must parse and state equal live_hash and replay_hash, so diverging
+//     hashes fail whether or not G2 is listed. A tape manifest must parse.
+//     05_DIFFS is not read here: producers keep placeholders and other
+//     artifacts in it, and only G2 makes its files replay differences.
+//   - NOT_RUN only when G2 is not declared and the pack carries no
+//     determinism manifest. A tape manifest alone states no replay result, so
+//     it does not make the check run; it is still parsed, fails if it does not
+//     parse, and is named in the reason.
+//   - A gates value that is not a list of gate names is malformed input and
+//     FAILED: it cannot be read as "G2 is not declared".
+//
+// It replays nothing: live_hash and replay_hash are the pack's own
 // statements, and the tape is not served back.
 func checkReplayDeterminism(bundlePath string) CheckResult {
 	const name = "replay_determinism"
-	required, reason, err := replayDeterminismRequired(bundlePath)
+	declared, undeclared, err := replayGateDeclared(bundlePath)
 	if err != nil {
 		return failed(name, err.Error())
 	}
-	if !required {
-		return notRun(name, reason)
-	}
 
 	tapesDir := filepath.Join(bundlePath, "08_TAPES")
-	if !dirExists(tapesDir) {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 08_TAPES directory — replay evidence required"}
-	}
-
 	manifestPath := filepath.Join(tapesDir, "tape_manifest.json")
-	if !fileExists(manifestPath) {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 08_TAPES/tape_manifest.json — replay evidence required"}
-	}
-
-	manifestData, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("cannot read tape manifest: %v", err)}
-	}
-	var tapeManifest map[string]any
-	if err := json.Unmarshal(manifestData, &tapeManifest); err != nil {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("invalid tape manifest JSON: %v", err)}
-	}
-
 	detManifestPath := filepath.Join(bundlePath, "02_PROOFGRAPH", "determinism_manifest.json")
-	if !fileExists(detManifestPath) {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 02_PROOFGRAPH/determinism_manifest.json — replay hash proof required"}
-	}
-	detManifestData, err := os.ReadFile(detManifestPath)
-	if err != nil {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("cannot read determinism manifest: %v", err)}
-	}
-	var detManifest map[string]any
-	if err := json.Unmarshal(detManifestData, &detManifest); err != nil {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("invalid determinism manifest JSON: %v", err)}
+	hasTapeManifest := fileExists(manifestPath)
+	hasDetManifest := fileExists(detManifestPath)
+
+	// established lists what was read and held.
+	var established []string
+
+	switch {
+	case hasTapeManifest:
+		manifestData, err := os.ReadFile(manifestPath)
+		if err != nil {
+			return failed(name, fmt.Sprintf("cannot read tape manifest: %v", err))
+		}
+		var tapeManifest map[string]any
+		if err := json.Unmarshal(manifestData, &tapeManifest); err != nil {
+			return failed(name, fmt.Sprintf("invalid tape manifest JSON: %v", err))
+		}
+		entryCount := 0
+		if entries, ok := tapeManifest["entries"].([]any); ok {
+			entryCount = len(entries)
+		}
+		established = append(established, fmt.Sprintf("tape_manifest.json parses and lists %d entries (not replayed)", entryCount))
+	case !declared:
+	case !dirExists(tapesDir):
+		return failed(name, "missing 08_TAPES directory — replay evidence required")
+	default:
+		return failed(name, "missing 08_TAPES/tape_manifest.json — replay evidence required")
 	}
 
-	liveHash, liveOK := detManifest["live_hash"].(string)
-	replayHash, replayOK := detManifest["replay_hash"].(string)
-	if !liveOK || liveHash == "" || !replayOK || replayHash == "" {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "determinism manifest must declare live_hash and replay_hash"}
+	switch {
+	case hasDetManifest:
+		detManifestData, err := os.ReadFile(detManifestPath)
+		if err != nil {
+			return failed(name, fmt.Sprintf("cannot read determinism manifest: %v", err))
+		}
+		var detManifest map[string]any
+		if err := json.Unmarshal(detManifestData, &detManifest); err != nil {
+			return failed(name, fmt.Sprintf("invalid determinism manifest JSON: %v", err))
+		}
+		liveHash, liveOK := detManifest["live_hash"].(string)
+		replayHash, replayOK := detManifest["replay_hash"].(string)
+		if !liveOK || liveHash == "" || !replayOK || replayHash == "" {
+			return failed(name, "determinism manifest must declare live_hash and replay_hash")
+		}
+		if liveHash != replayHash {
+			return failed(name, fmt.Sprintf("replay hash divergence: live=%s replay=%s", liveHash, replayHash))
+		}
+		established = append(established, "determinism_manifest.json states equal live_hash and replay_hash (declared by the pack, not recomputed)")
+	case !declared:
+		// No replay result to compare. Say what is and is not there, so the
+		// reason is true of a pack that carries a tape manifest.
+		if !hasTapeManifest {
+			return notRun(name, undeclared+", and the pack carries no replay material (no 08_TAPES/tape_manifest.json and no 02_PROOFGRAPH/determinism_manifest.json)")
+		}
+		return notRun(name, fmt.Sprintf("%s, and the pack carries no 02_PROOFGRAPH/determinism_manifest.json, so it states no replay result to compare; 08_TAPES/%s",
+			undeclared, established[0]))
+	default:
+		return failed(name, "missing 02_PROOFGRAPH/determinism_manifest.json — replay hash proof required")
 	}
-	if liveHash != replayHash {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("replay hash divergence: live=%s replay=%s", liveHash, replayHash)}
+
+	if !declared {
+		notRead := "05_DIFFS is read as replay differences only under gate G2"
+		if !hasTapeManifest {
+			notRead = "the pack carries no 08_TAPES/tape_manifest.json; " + notRead
+		}
+		return verified(name, fmt.Sprintf("gate G2 is not declared; the replay material the pack carries is consistent with itself: %s. Not read: %s",
+			strings.Join(established, "; "), notRead))
 	}
 
 	diffsDir := filepath.Join(bundlePath, "05_DIFFS")
 	if entries, err := os.ReadDir(diffsDir); err == nil && len(entries) > 0 {
-		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "05_DIFFS contains replay differences"}
+		return failed(name, "05_DIFFS contains replay differences")
 	}
-
-	entryCount := 0
-	if entries, ok := tapeManifest["entries"].([]any); ok {
-		entryCount = len(entries)
-	}
-
-	return verified(name, fmt.Sprintf("gate G2 evidence is present: tape_manifest.json parses and lists %d entries (not replayed); "+
-		"determinism_manifest.json states equal live_hash and replay_hash (declared by the pack, not recomputed); 05_DIFFS holds no files", entryCount))
+	established = append(established, "05_DIFFS holds no files")
+	return verified(name, "gate G2 evidence is present: "+strings.Join(established, "; "))
 }
 
-// replayDeterminismRequired reports whether 00_INDEX.json declares gate G2,
-// which is how a pack states that it carries replay evidence. When it does
-// not, the returned reason says why the check has nothing to read. An index
-// that cannot be read or parsed declares nothing either way, so that is an
-// error and not "not required".
-func replayDeterminismRequired(bundlePath string) (bool, string, error) {
+// replayGateDeclared reports whether 00_INDEX.json declares gate G2, which is
+// how a pack states that it carries replay evidence. When it does not, the
+// returned text says what the index declares instead. An index that cannot be
+// read or parsed declares nothing either way, and neither does a gates value
+// that is not a list of gate names: both are errors, not "G2 is not declared".
+func replayGateDeclared(bundlePath string) (bool, string, error) {
 	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
 	if !fileExists(indexPath) {
-		return false, "pack has no 00_INDEX.json, so it declares no gates and claims no replay evidence", nil
+		return false, "pack has no 00_INDEX.json, so it declares no gates", nil
 	}
 
 	data, err := os.ReadFile(indexPath)
@@ -1660,23 +1758,24 @@ func replayDeterminismRequired(bundlePath string) (bool, string, error) {
 		return false, "", fmt.Errorf("cannot read the gates 00_INDEX.json declares: %v", err)
 	}
 
-	var document map[string]any
+	var document map[string]json.RawMessage
 	if err := json.Unmarshal(data, &document); err != nil {
 		return false, "", fmt.Errorf("cannot parse the gates 00_INDEX.json declares: %v", err)
 	}
 
-	gates, ok := document["gates"].([]any)
-	if !ok {
-		return false, "00_INDEX.json declares no gates, so the pack claims no replay evidence", nil
+	raw, present := document["gates"]
+	// Producers that hold the gates in a nil list write null.
+	if !present || string(bytes.TrimSpace(raw)) == "null" {
+		return false, "00_INDEX.json declares no gates", nil
 	}
-
-	for _, gate := range gates {
-		if value, ok := gate.(string); ok && value == "G2" {
-			return true, "", nil
-		}
+	var gates []string
+	if err := json.Unmarshal(raw, &gates); err != nil {
+		return false, "", fmt.Errorf("00_INDEX.json gates must be a list of gate names such as [\"G0\",\"G2\"]; it is malformed, so the gates the pack declares cannot be read: %v", err)
 	}
-
-	return false, "00_INDEX.json gates do not declare G2, so the pack claims no replay evidence", nil
+	if slices.Contains(gates, "G2") {
+		return true, "", nil
+	}
+	return false, "00_INDEX.json gates do not declare G2", nil
 }
 
 // checkHostEvidence verifies external host receipt chains when the pack
@@ -1684,7 +1783,14 @@ func replayDeterminismRequired(bundlePath string) (bool, string, error) {
 func checkHostEvidence(bundlePath string, opts VerifyOptions) []CheckResult {
 	hostEvidence := externalreceipt.VerifyBundleWithOptions(bundlePath, externalreceipt.VerifyOptions{PublicKeyHex: opts.ExternalHostKeyHex})
 	if !hostEvidence.Found {
-		return []CheckResult{notRun("host_evidence", "pack has no receipt chain files under host_evidence/ or 11_HOST_EVIDENCE/")}
+		reason := "pack has no receipt chain files under host_evidence/ or 11_HOST_EVIDENCE/"
+		if len(hostEvidence.ReportFiles) > 0 {
+			// Named like a correlation or verification report and parsing as
+			// one: present, but not a chain to verify.
+			reason += fmt.Sprintf("; %d report file(s) there are not receipt chains and were not verified: %s",
+				len(hostEvidence.ReportFiles), strings.Join(hostEvidence.ReportFiles, ", "))
+		}
+		return []CheckResult{notRun("host_evidence", reason)}
 	}
 	results := make([]CheckResult, 0, len(hostEvidence.Checks))
 	for _, check := range hostEvidence.Checks {

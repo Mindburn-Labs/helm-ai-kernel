@@ -275,6 +275,10 @@ pub const STAGE_CEILING_EXCEEDED: &str = "STAGE_CEILING_EXCEEDED";
 /// DENY: A narrowing plan cannot raise an organization's stage; a higher stage is a provision plan,
 /// which a distinct human approves
 pub const STAGE_RAISE_REQUIRES_PROVISION: &str = "STAGE_RAISE_REQUIRES_PROVISION";
+/// DENY: Granting or widening authority needs the approver's own passkey assertion, verified by the
+/// gateway against a credential enrolled at the tenant's genesis or by an approved plan; the
+/// request carried none, or one that did not verify
+pub const OWNER_ASSERTION_REQUIRED: &str = "OWNER_ASSERTION_REQUIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -404,6 +408,7 @@ pub const ALL: &[&str] = &[
     PERMIT_EXPIRED,
     STAGE_CEILING_EXCEEDED,
     STAGE_RAISE_REQUIRES_PROVISION,
+    OWNER_ASSERTION_REQUIRED,
 ];
 
 /// Whether `code` is in the registry.

@@ -1551,9 +1551,28 @@ type ApproveRequest struct {
 	// so that it can be verified again against the issuer's keys.
 	// Without a valid proof the approval is permission_denied
 	// [reason_code: STEP_UP_REQUIRED] and the attempt stays ESCALATED.
-	StepUpProof   string `protobuf:"bytes,4,opt,name=step_up_proof,json=stepUpProof,proto3" json:"step_up_proof,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	//
+	// Deprecated for helm.authority.* widenings: the issuer that signs it is
+	// the Control Plane's, not the approver's. With
+	// HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, the gateway does not accept it
+	// for them, and owner_assertion is required instead.
+	StepUpProof string `protobuf:"bytes,4,opt,name=step_up_proof,json=stepUpProof,proto3" json:"step_up_proof,omitempty"`
+	// The approver's own WebAuthn assertion (helm-tracker#334), which the
+	// gateway verifies itself in the approval's transaction against the passkey
+	// the approver registered (at the tenant's genesis or through an approved
+	// provision plan): clientDataJSON type "webauthn.get" whose challenge is
+	// EffectAttempt.pending_approval.owner_challenge for this approver, an
+	// rpIdHash that is SHA-256 of the credential's rp_id, the user-present and
+	// user-verified flags, a signature over authenticatorData ||
+	// SHA-256(clientDataJSON) by the credential's key, and a signature counter
+	// that never goes backwards. The same signed assertion is accepted once. It
+	// satisfies step-up wherever step_up_proof does, and the approval record
+	// keeps it. Optional; one that is present and does not verify is
+	// permission_denied [reason_code: OWNER_ASSERTION_REQUIRED] and the attempt
+	// stays ESCALATED.
+	OwnerAssertion *OwnerAssertion `protobuf:"bytes,5,opt,name=owner_assertion,json=ownerAssertion,proto3" json:"owner_assertion,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ApproveRequest) Reset() {
@@ -1614,6 +1633,90 @@ func (x *ApproveRequest) GetStepUpProof() string {
 	return ""
 }
 
+func (x *ApproveRequest) GetOwnerAssertion() *OwnerAssertion {
+	if x != nil {
+		return x.OwnerAssertion
+	}
+	return nil
+}
+
+// OwnerAssertion is a WebAuthn authentication assertion
+// (navigator.credentials.get), exactly as the authenticator and the browser
+// produced it.
+type OwnerAssertion struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The credential's id (PublicKeyCredential.rawId), 1 to 1023 bytes.
+	CredentialId []byte `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	// AuthenticatorAssertionResponse.authenticatorData: at least 37 bytes.
+	AuthenticatorData []byte `protobuf:"bytes,2,opt,name=authenticator_data,json=authenticatorData,proto3" json:"authenticator_data,omitempty"`
+	// AuthenticatorAssertionResponse.clientDataJSON, as the browser serialized
+	// it; at most 4096 bytes.
+	ClientDataJson []byte `protobuf:"bytes,3,opt,name=client_data_json,json=clientDataJson,proto3" json:"client_data_json,omitempty"`
+	// AuthenticatorAssertionResponse.signature: ASN.1 DER ECDSA for ES256, 64
+	// bytes for EdDSA.
+	Signature     []byte `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OwnerAssertion) Reset() {
+	*x = OwnerAssertion{}
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OwnerAssertion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OwnerAssertion) ProtoMessage() {}
+
+func (x *OwnerAssertion) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OwnerAssertion.ProtoReflect.Descriptor instead.
+func (*OwnerAssertion) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *OwnerAssertion) GetCredentialId() []byte {
+	if x != nil {
+		return x.CredentialId
+	}
+	return nil
+}
+
+func (x *OwnerAssertion) GetAuthenticatorData() []byte {
+	if x != nil {
+		return x.AuthenticatorData
+	}
+	return nil
+}
+
+func (x *OwnerAssertion) GetClientDataJson() []byte {
+	if x != nil {
+		return x.ClientDataJson
+	}
+	return nil
+}
+
+func (x *OwnerAssertion) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
 // ApproveResponse returns the attempt after the approval.
 type ApproveResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1627,7 +1730,7 @@ type ApproveResponse struct {
 
 func (x *ApproveResponse) Reset() {
 	*x = ApproveResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[13]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1639,7 +1742,7 @@ func (x *ApproveResponse) String() string {
 func (*ApproveResponse) ProtoMessage() {}
 
 func (x *ApproveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[13]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1652,7 +1755,7 @@ func (x *ApproveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveResponse.ProtoReflect.Descriptor instead.
 func (*ApproveResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{13}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ApproveResponse) GetAttempt() *EffectAttempt {
@@ -1685,7 +1788,7 @@ type RejectRequest struct {
 
 func (x *RejectRequest) Reset() {
 	*x = RejectRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[14]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1697,7 +1800,7 @@ func (x *RejectRequest) String() string {
 func (*RejectRequest) ProtoMessage() {}
 
 func (x *RejectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[14]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1710,7 +1813,7 @@ func (x *RejectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectRequest.ProtoReflect.Descriptor instead.
 func (*RejectRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{14}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RejectRequest) GetAttemptId() string {
@@ -1747,7 +1850,7 @@ type RejectResponse struct {
 
 func (x *RejectResponse) Reset() {
 	*x = RejectResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[15]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1862,7 @@ func (x *RejectResponse) String() string {
 func (*RejectResponse) ProtoMessage() {}
 
 func (x *RejectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[15]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1875,7 @@ func (x *RejectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectResponse.ProtoReflect.Descriptor instead.
 func (*RejectResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{15}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RejectResponse) GetAttempt() *EffectAttempt {
@@ -1800,7 +1903,7 @@ type CancelRequest struct {
 
 func (x *CancelRequest) Reset() {
 	*x = CancelRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[16]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1812,7 +1915,7 @@ func (x *CancelRequest) String() string {
 func (*CancelRequest) ProtoMessage() {}
 
 func (x *CancelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[16]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1825,7 +1928,7 @@ func (x *CancelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRequest.ProtoReflect.Descriptor instead.
 func (*CancelRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{16}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CancelRequest) GetAttemptId() string {
@@ -1849,7 +1952,7 @@ type CancelResponse struct {
 
 func (x *CancelResponse) Reset() {
 	*x = CancelResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[17]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1861,7 +1964,7 @@ func (x *CancelResponse) String() string {
 func (*CancelResponse) ProtoMessage() {}
 
 func (x *CancelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[17]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1874,7 +1977,7 @@ func (x *CancelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelResponse.ProtoReflect.Descriptor instead.
 func (*CancelResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{17}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CancelResponse) GetAttempt() *EffectAttempt {
@@ -1902,7 +2005,7 @@ type DispatchRequest struct {
 
 func (x *DispatchRequest) Reset() {
 	*x = DispatchRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[18]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1914,7 +2017,7 @@ func (x *DispatchRequest) String() string {
 func (*DispatchRequest) ProtoMessage() {}
 
 func (x *DispatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[18]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1927,7 +2030,7 @@ func (x *DispatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DispatchRequest.ProtoReflect.Descriptor instead.
 func (*DispatchRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{18}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DispatchRequest) GetAttemptId() string {
@@ -1951,7 +2054,7 @@ type DispatchResponse struct {
 
 func (x *DispatchResponse) Reset() {
 	*x = DispatchResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[19]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1963,7 +2066,7 @@ func (x *DispatchResponse) String() string {
 func (*DispatchResponse) ProtoMessage() {}
 
 func (x *DispatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[19]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1976,7 +2079,7 @@ func (x *DispatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DispatchResponse.ProtoReflect.Descriptor instead.
 func (*DispatchResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{19}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DispatchResponse) GetAttempt() *EffectAttempt {
@@ -2004,7 +2107,7 @@ type ObserveRequest struct {
 
 func (x *ObserveRequest) Reset() {
 	*x = ObserveRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[20]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2016,7 +2119,7 @@ func (x *ObserveRequest) String() string {
 func (*ObserveRequest) ProtoMessage() {}
 
 func (x *ObserveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[20]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2029,7 +2132,7 @@ func (x *ObserveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObserveRequest.ProtoReflect.Descriptor instead.
 func (*ObserveRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{20}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ObserveRequest) GetAttemptId() string {
@@ -2052,7 +2155,7 @@ type ObserveResponse struct {
 
 func (x *ObserveResponse) Reset() {
 	*x = ObserveResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[21]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2167,7 @@ func (x *ObserveResponse) String() string {
 func (*ObserveResponse) ProtoMessage() {}
 
 func (x *ObserveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[21]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2180,7 @@ func (x *ObserveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObserveResponse.ProtoReflect.Descriptor instead.
 func (*ObserveResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{21}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ObserveResponse) GetAttempt() *EffectAttempt {
@@ -2105,7 +2208,7 @@ type GetAttemptRequest struct {
 
 func (x *GetAttemptRequest) Reset() {
 	*x = GetAttemptRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[22]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2117,7 +2220,7 @@ func (x *GetAttemptRequest) String() string {
 func (*GetAttemptRequest) ProtoMessage() {}
 
 func (x *GetAttemptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[22]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2130,7 +2233,7 @@ func (x *GetAttemptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptRequest.ProtoReflect.Descriptor instead.
 func (*GetAttemptRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{22}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetAttemptRequest) GetAttemptId() string {
@@ -2151,7 +2254,7 @@ type GetAttemptResponse struct {
 
 func (x *GetAttemptResponse) Reset() {
 	*x = GetAttemptResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[23]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2163,7 +2266,7 @@ func (x *GetAttemptResponse) String() string {
 func (*GetAttemptResponse) ProtoMessage() {}
 
 func (x *GetAttemptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[23]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2176,7 +2279,7 @@ func (x *GetAttemptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptResponse.ProtoReflect.Descriptor instead.
 func (*GetAttemptResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{23}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetAttemptResponse) GetAttempt() *EffectAttempt {
@@ -2197,7 +2300,7 @@ type GetAttemptContentRequest struct {
 
 func (x *GetAttemptContentRequest) Reset() {
 	*x = GetAttemptContentRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[24]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2312,7 @@ func (x *GetAttemptContentRequest) String() string {
 func (*GetAttemptContentRequest) ProtoMessage() {}
 
 func (x *GetAttemptContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[24]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2325,7 @@ func (x *GetAttemptContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptContentRequest.ProtoReflect.Descriptor instead.
 func (*GetAttemptContentRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{24}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetAttemptContentRequest) GetAttemptId() string {
@@ -2246,7 +2349,7 @@ type GetAttemptContentResponse struct {
 
 func (x *GetAttemptContentResponse) Reset() {
 	*x = GetAttemptContentResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[25]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2258,7 +2361,7 @@ func (x *GetAttemptContentResponse) String() string {
 func (*GetAttemptContentResponse) ProtoMessage() {}
 
 func (x *GetAttemptContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[25]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2271,7 +2374,7 @@ func (x *GetAttemptContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptContentResponse.ProtoReflect.Descriptor instead.
 func (*GetAttemptContentResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{25}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetAttemptContentResponse) GetAttemptId() string {
@@ -2326,7 +2429,7 @@ type ListAttemptsRequest struct {
 
 func (x *ListAttemptsRequest) Reset() {
 	*x = ListAttemptsRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[26]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2338,7 +2441,7 @@ func (x *ListAttemptsRequest) String() string {
 func (*ListAttemptsRequest) ProtoMessage() {}
 
 func (x *ListAttemptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[26]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2351,7 +2454,7 @@ func (x *ListAttemptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttemptsRequest.ProtoReflect.Descriptor instead.
 func (*ListAttemptsRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{26}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAttemptsRequest) GetStates() []EffectAttemptState {
@@ -2469,7 +2572,7 @@ type ListAttemptsResponse struct {
 
 func (x *ListAttemptsResponse) Reset() {
 	*x = ListAttemptsResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[27]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2481,7 +2584,7 @@ func (x *ListAttemptsResponse) String() string {
 func (*ListAttemptsResponse) ProtoMessage() {}
 
 func (x *ListAttemptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[27]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2494,7 +2597,7 @@ func (x *ListAttemptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttemptsResponse.ProtoReflect.Descriptor instead.
 func (*ListAttemptsResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{27}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListAttemptsResponse) GetAttempts() []*EffectAttempt {
@@ -2538,7 +2641,7 @@ type StopRequest struct {
 
 func (x *StopRequest) Reset() {
 	*x = StopRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[28]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2550,7 +2653,7 @@ func (x *StopRequest) String() string {
 func (*StopRequest) ProtoMessage() {}
 
 func (x *StopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[28]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2563,7 +2666,7 @@ func (x *StopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopRequest.ProtoReflect.Descriptor instead.
 func (*StopRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{28}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *StopRequest) GetIdempotencyKey() string {
@@ -2614,7 +2717,7 @@ type StopResponse struct {
 
 func (x *StopResponse) Reset() {
 	*x = StopResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[29]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2626,7 +2729,7 @@ func (x *StopResponse) String() string {
 func (*StopResponse) ProtoMessage() {}
 
 func (x *StopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[29]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2639,7 +2742,7 @@ func (x *StopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopResponse.ProtoReflect.Descriptor instead.
 func (*StopResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{29}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *StopResponse) GetStop() *Stop {
@@ -2666,7 +2769,7 @@ type GetStopOutcomeRequest struct {
 
 func (x *GetStopOutcomeRequest) Reset() {
 	*x = GetStopOutcomeRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[30]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2678,7 +2781,7 @@ func (x *GetStopOutcomeRequest) String() string {
 func (*GetStopOutcomeRequest) ProtoMessage() {}
 
 func (x *GetStopOutcomeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[30]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2691,7 +2794,7 @@ func (x *GetStopOutcomeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStopOutcomeRequest.ProtoReflect.Descriptor instead.
 func (*GetStopOutcomeRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{30}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetStopOutcomeRequest) GetStopId() string {
@@ -2726,7 +2829,7 @@ type GetStopOutcomeResponse struct {
 
 func (x *GetStopOutcomeResponse) Reset() {
 	*x = GetStopOutcomeResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2738,7 +2841,7 @@ func (x *GetStopOutcomeResponse) String() string {
 func (*GetStopOutcomeResponse) ProtoMessage() {}
 
 func (x *GetStopOutcomeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2751,7 +2854,7 @@ func (x *GetStopOutcomeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStopOutcomeResponse.ProtoReflect.Descriptor instead.
 func (*GetStopOutcomeResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{31}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetStopOutcomeResponse) GetStop() *Stop {
@@ -2819,7 +2922,7 @@ type LiftRequest struct {
 
 func (x *LiftRequest) Reset() {
 	*x = LiftRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +2934,7 @@ func (x *LiftRequest) String() string {
 func (*LiftRequest) ProtoMessage() {}
 
 func (x *LiftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +2947,7 @@ func (x *LiftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LiftRequest.ProtoReflect.Descriptor instead.
 func (*LiftRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{32}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *LiftRequest) GetIdempotencyKey() string {
@@ -2881,7 +2984,7 @@ type LiftResponse struct {
 
 func (x *LiftResponse) Reset() {
 	*x = LiftResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2893,7 +2996,7 @@ func (x *LiftResponse) String() string {
 func (*LiftResponse) ProtoMessage() {}
 
 func (x *LiftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2906,7 +3009,7 @@ func (x *LiftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LiftResponse.ProtoReflect.Descriptor instead.
 func (*LiftResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{33}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *LiftResponse) GetAttempt() *EffectAttempt {
@@ -2941,7 +3044,7 @@ type EffectDescriptor struct {
 
 func (x *EffectDescriptor) Reset() {
 	*x = EffectDescriptor{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2953,7 +3056,7 @@ func (x *EffectDescriptor) String() string {
 func (*EffectDescriptor) ProtoMessage() {}
 
 func (x *EffectDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2966,7 +3069,7 @@ func (x *EffectDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectDescriptor.ProtoReflect.Descriptor instead.
 func (*EffectDescriptor) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{34}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EffectDescriptor) GetEffectType() string {
@@ -3004,7 +3107,7 @@ type ResourceAmount struct {
 
 func (x *ResourceAmount) Reset() {
 	*x = ResourceAmount{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[35]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3016,7 +3119,7 @@ func (x *ResourceAmount) String() string {
 func (*ResourceAmount) ProtoMessage() {}
 
 func (x *ResourceAmount) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[35]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3029,7 +3132,7 @@ func (x *ResourceAmount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceAmount.ProtoReflect.Descriptor instead.
 func (*ResourceAmount) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{35}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ResourceAmount) GetUnit() string {
@@ -3059,7 +3162,7 @@ type DistinctValue struct {
 
 func (x *DistinctValue) Reset() {
 	*x = DistinctValue{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[36]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3071,7 +3174,7 @@ func (x *DistinctValue) String() string {
 func (*DistinctValue) ProtoMessage() {}
 
 func (x *DistinctValue) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[36]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3084,7 +3187,7 @@ func (x *DistinctValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DistinctValue.ProtoReflect.Descriptor instead.
 func (*DistinctValue) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{36}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DistinctValue) GetUnit() string {
@@ -3194,7 +3297,7 @@ type EffectAttempt struct {
 
 func (x *EffectAttempt) Reset() {
 	*x = EffectAttempt{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[37]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3206,7 +3309,7 @@ func (x *EffectAttempt) String() string {
 func (*EffectAttempt) ProtoMessage() {}
 
 func (x *EffectAttempt) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[37]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3219,7 +3322,7 @@ func (x *EffectAttempt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectAttempt.ProtoReflect.Descriptor instead.
 func (*EffectAttempt) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{37}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *EffectAttempt) GetAttemptId() string {
@@ -3483,7 +3586,7 @@ type ReceiptRef struct {
 
 func (x *ReceiptRef) Reset() {
 	*x = ReceiptRef{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[38]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3495,7 +3598,7 @@ func (x *ReceiptRef) String() string {
 func (*ReceiptRef) ProtoMessage() {}
 
 func (x *ReceiptRef) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[38]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3508,7 +3611,7 @@ func (x *ReceiptRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReceiptRef.ProtoReflect.Descriptor instead.
 func (*ReceiptRef) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{38}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ReceiptRef) GetChainId() string {
@@ -3562,7 +3665,7 @@ type SignedReceipt struct {
 
 func (x *SignedReceipt) Reset() {
 	*x = SignedReceipt{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[39]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3574,7 +3677,7 @@ func (x *SignedReceipt) String() string {
 func (*SignedReceipt) ProtoMessage() {}
 
 func (x *SignedReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[39]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3587,7 +3690,7 @@ func (x *SignedReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignedReceipt.ProtoReflect.Descriptor instead.
 func (*SignedReceipt) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{39}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SignedReceipt) GetRef() *ReceiptRef {
@@ -3636,7 +3739,7 @@ type GetAttemptReceiptsRequest struct {
 
 func (x *GetAttemptReceiptsRequest) Reset() {
 	*x = GetAttemptReceiptsRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[40]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3648,7 +3751,7 @@ func (x *GetAttemptReceiptsRequest) String() string {
 func (*GetAttemptReceiptsRequest) ProtoMessage() {}
 
 func (x *GetAttemptReceiptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[40]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3661,7 +3764,7 @@ func (x *GetAttemptReceiptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptReceiptsRequest.ProtoReflect.Descriptor instead.
 func (*GetAttemptReceiptsRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{40}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetAttemptReceiptsRequest) GetAttemptId() string {
@@ -3685,7 +3788,7 @@ type GetAttemptReceiptsResponse struct {
 
 func (x *GetAttemptReceiptsResponse) Reset() {
 	*x = GetAttemptReceiptsResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[41]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3697,7 +3800,7 @@ func (x *GetAttemptReceiptsResponse) String() string {
 func (*GetAttemptReceiptsResponse) ProtoMessage() {}
 
 func (x *GetAttemptReceiptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[41]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3710,7 +3813,7 @@ func (x *GetAttemptReceiptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttemptReceiptsResponse.ProtoReflect.Descriptor instead.
 func (*GetAttemptReceiptsResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{41}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetAttemptReceiptsResponse) GetAttemptId() string {
@@ -3744,7 +3847,7 @@ type ExportReceiptChainRequest struct {
 
 func (x *ExportReceiptChainRequest) Reset() {
 	*x = ExportReceiptChainRequest{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[42]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3756,7 +3859,7 @@ func (x *ExportReceiptChainRequest) String() string {
 func (*ExportReceiptChainRequest) ProtoMessage() {}
 
 func (x *ExportReceiptChainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[42]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3769,7 +3872,7 @@ func (x *ExportReceiptChainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportReceiptChainRequest.ProtoReflect.Descriptor instead.
 func (*ExportReceiptChainRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{42}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ExportReceiptChainRequest) GetWorkspaceId() string {
@@ -3815,7 +3918,7 @@ type ExportReceiptChainResponse struct {
 
 func (x *ExportReceiptChainResponse) Reset() {
 	*x = ExportReceiptChainResponse{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[43]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3827,7 +3930,7 @@ func (x *ExportReceiptChainResponse) String() string {
 func (*ExportReceiptChainResponse) ProtoMessage() {}
 
 func (x *ExportReceiptChainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[43]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3840,7 +3943,7 @@ func (x *ExportReceiptChainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportReceiptChainResponse.ProtoReflect.Descriptor instead.
 func (*ExportReceiptChainResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{43}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ExportReceiptChainResponse) GetChainId() string {
@@ -3889,7 +3992,7 @@ type EpisodeRef struct {
 
 func (x *EpisodeRef) Reset() {
 	*x = EpisodeRef{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[44]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3901,7 +4004,7 @@ func (x *EpisodeRef) String() string {
 func (*EpisodeRef) ProtoMessage() {}
 
 func (x *EpisodeRef) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[44]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3914,7 +4017,7 @@ func (x *EpisodeRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EpisodeRef.ProtoReflect.Descriptor instead.
 func (*EpisodeRef) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{44}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *EpisodeRef) GetEpisodeId() string {
@@ -3954,14 +4057,22 @@ type PendingApproval struct {
 	// When the escalation expires and the attempt becomes EXPIRED. Always
 	// whole seconds: the gateway truncates it to the second on write, so a
 	// database round-trip cannot change the approval digest.
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The WebAuthn challenge the approver's passkey signs for
+	// ApproveRequest.owner_assertion, 32 bytes (helm-tracker#334): SHA-256 over,
+	// in order, the domain tag "helm.gateway.v1.owner-assertion.v1", the
+	// tenant, the approver's principal id, attempt_id and approval_digest, each
+	// prefixed with its length as a big-endian uint64. It is computed for the
+	// principal of the token that read the attempt, so an approver reads it with
+	// its own token, or computes it from the same inputs.
+	OwnerChallenge []byte `protobuf:"bytes,3,opt,name=owner_challenge,json=ownerChallenge,proto3" json:"owner_challenge,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PendingApproval) Reset() {
 	*x = PendingApproval{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[45]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3973,7 +4084,7 @@ func (x *PendingApproval) String() string {
 func (*PendingApproval) ProtoMessage() {}
 
 func (x *PendingApproval) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[45]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3986,7 +4097,7 @@ func (x *PendingApproval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendingApproval.ProtoReflect.Descriptor instead.
 func (*PendingApproval) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{45}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PendingApproval) GetApprovalDigest() []byte {
@@ -3999,6 +4110,13 @@ func (x *PendingApproval) GetApprovalDigest() []byte {
 func (x *PendingApproval) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *PendingApproval) GetOwnerChallenge() []byte {
+	if x != nil {
+		return x.OwnerChallenge
 	}
 	return nil
 }
@@ -4021,13 +4139,17 @@ type Approval struct {
 	// act.sub of the decide token (RFC 8693). Empty when the approver's own
 	// session called the gateway directly.
 	ApproverActorId string `protobuf:"bytes,6,opt,name=approver_actor_id,json=approverActorId,proto3" json:"approver_actor_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The credential of the owner assertion the gateway verified for this
+	// approval; empty when the approval carried none. The approval record keeps
+	// the assertion itself.
+	OwnerCredentialId []byte `protobuf:"bytes,7,opt,name=owner_credential_id,json=ownerCredentialId,proto3" json:"owner_credential_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Approval) Reset() {
 	*x = Approval{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[46]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4039,7 +4161,7 @@ func (x *Approval) String() string {
 func (*Approval) ProtoMessage() {}
 
 func (x *Approval) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[46]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4052,7 +4174,7 @@ func (x *Approval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Approval.ProtoReflect.Descriptor instead.
 func (*Approval) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{46}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *Approval) GetApproverPrincipalId() string {
@@ -4097,6 +4219,13 @@ func (x *Approval) GetApproverActorId() string {
 	return ""
 }
 
+func (x *Approval) GetOwnerCredentialId() []byte {
+	if x != nil {
+		return x.OwnerCredentialId
+	}
+	return nil
+}
+
 // Permit is the single-use authorization admission issues. The dispatch
 // claim consumes it once, or voids it.
 type Permit struct {
@@ -4124,7 +4253,7 @@ type Permit struct {
 
 func (x *Permit) Reset() {
 	*x = Permit{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[47]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4136,7 +4265,7 @@ func (x *Permit) String() string {
 func (*Permit) ProtoMessage() {}
 
 func (x *Permit) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[47]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4149,7 +4278,7 @@ func (x *Permit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Permit.ProtoReflect.Descriptor instead.
 func (*Permit) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{47}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *Permit) GetPermitId() string {
@@ -4217,7 +4346,7 @@ type AuthorityVersion struct {
 
 func (x *AuthorityVersion) Reset() {
 	*x = AuthorityVersion{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[48]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4229,7 +4358,7 @@ func (x *AuthorityVersion) String() string {
 func (*AuthorityVersion) ProtoMessage() {}
 
 func (x *AuthorityVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[48]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4242,7 +4371,7 @@ func (x *AuthorityVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorityVersion.ProtoReflect.Descriptor instead.
 func (*AuthorityVersion) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{48}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *AuthorityVersion) GetKind() AuthorityRowKind {
@@ -4283,7 +4412,7 @@ type Exposure struct {
 
 func (x *Exposure) Reset() {
 	*x = Exposure{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[49]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4295,7 +4424,7 @@ func (x *Exposure) String() string {
 func (*Exposure) ProtoMessage() {}
 
 func (x *Exposure) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[49]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4308,7 +4437,7 @@ func (x *Exposure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Exposure.ProtoReflect.Descriptor instead.
 func (*Exposure) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{49}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *Exposure) GetLimitId() string {
@@ -4364,7 +4493,7 @@ type ModelCallSettlement struct {
 
 func (x *ModelCallSettlement) Reset() {
 	*x = ModelCallSettlement{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[50]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4376,7 +4505,7 @@ func (x *ModelCallSettlement) String() string {
 func (*ModelCallSettlement) ProtoMessage() {}
 
 func (x *ModelCallSettlement) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[50]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4389,7 +4518,7 @@ func (x *ModelCallSettlement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelCallSettlement.ProtoReflect.Descriptor instead.
 func (*ModelCallSettlement) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{50}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ModelCallSettlement) GetRoute() string {
@@ -4481,7 +4610,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[51]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4493,7 +4622,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[51]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4506,7 +4635,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{51}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Observation) GetSource() string {
@@ -4647,7 +4776,7 @@ type ArtifactResult struct {
 
 func (x *ArtifactResult) Reset() {
 	*x = ArtifactResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[52]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4659,7 +4788,7 @@ func (x *ArtifactResult) String() string {
 func (*ArtifactResult) ProtoMessage() {}
 
 func (x *ArtifactResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[52]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4672,7 +4801,7 @@ func (x *ArtifactResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtifactResult.ProtoReflect.Descriptor instead.
 func (*ArtifactResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{52}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ArtifactResult) GetSchemaId() string {
@@ -4724,7 +4853,7 @@ type GitHubRepositoryResult struct {
 
 func (x *GitHubRepositoryResult) Reset() {
 	*x = GitHubRepositoryResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[53]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4736,7 +4865,7 @@ func (x *GitHubRepositoryResult) String() string {
 func (*GitHubRepositoryResult) ProtoMessage() {}
 
 func (x *GitHubRepositoryResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[53]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4749,7 +4878,7 @@ func (x *GitHubRepositoryResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRepositoryResult.ProtoReflect.Descriptor instead.
 func (*GitHubRepositoryResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{53}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GitHubRepositoryResult) GetDefaultBranch() string {
@@ -4819,7 +4948,7 @@ type GitHubPullRequestResult struct {
 
 func (x *GitHubPullRequestResult) Reset() {
 	*x = GitHubPullRequestResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[54]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4831,7 +4960,7 @@ func (x *GitHubPullRequestResult) String() string {
 func (*GitHubPullRequestResult) ProtoMessage() {}
 
 func (x *GitHubPullRequestResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[54]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4844,7 +4973,7 @@ func (x *GitHubPullRequestResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullRequestResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullRequestResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{54}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GitHubPullRequestResult) GetUrl() string {
@@ -4941,7 +5070,7 @@ type GitHubBranchResult struct {
 
 func (x *GitHubBranchResult) Reset() {
 	*x = GitHubBranchResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[55]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4953,7 +5082,7 @@ func (x *GitHubBranchResult) String() string {
 func (*GitHubBranchResult) ProtoMessage() {}
 
 func (x *GitHubBranchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[55]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4966,7 +5095,7 @@ func (x *GitHubBranchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubBranchResult.ProtoReflect.Descriptor instead.
 func (*GitHubBranchResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{55}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GitHubBranchResult) GetRef() string {
@@ -5023,7 +5152,7 @@ type Stop struct {
 
 func (x *Stop) Reset() {
 	*x = Stop{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[56]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5035,7 +5164,7 @@ func (x *Stop) String() string {
 func (*Stop) ProtoMessage() {}
 
 func (x *Stop) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[56]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5048,7 +5177,7 @@ func (x *Stop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stop.ProtoReflect.Descriptor instead.
 func (*Stop) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{56}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *Stop) GetStopId() string {
@@ -5171,13 +5300,19 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\bwork_ref\"g\n" +
 	"\x0fProposeResponse\x128\n" +
 	"\aattempt\x18\x01 \x01(\v2\x1e.helm.gateway.v1.EffectAttemptR\aattempt\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"\x94\x01\n" +
+	"\bexisting\x18\x02 \x01(\bR\bexisting\"\xde\x01\n" +
 	"\x0eApproveRequest\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12'\n" +
 	"\x0fapproval_digest\x18\x02 \x01(\fR\x0eapprovalDigest\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\"\n" +
-	"\rstep_up_proof\x18\x04 \x01(\tR\vstepUpProof\"g\n" +
+	"\rstep_up_proof\x18\x04 \x01(\tR\vstepUpProof\x12H\n" +
+	"\x0fowner_assertion\x18\x05 \x01(\v2\x1f.helm.gateway.v1.OwnerAssertionR\x0eownerAssertion\"\xac\x01\n" +
+	"\x0eOwnerAssertion\x12#\n" +
+	"\rcredential_id\x18\x01 \x01(\fR\fcredentialId\x12-\n" +
+	"\x12authenticator_data\x18\x02 \x01(\fR\x11authenticatorData\x12(\n" +
+	"\x10client_data_json\x18\x03 \x01(\fR\x0eclientDataJson\x12\x1c\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\"g\n" +
 	"\x0fApproveResponse\x128\n" +
 	"\aattempt\x18\x01 \x01(\v2\x1e.helm.gateway.v1.EffectAttemptR\aattempt\x12\x1a\n" +
 	"\bexisting\x18\x02 \x01(\bR\bexisting\"o\n" +
@@ -5355,11 +5490,12 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12 \n" +
 	"\fwork_item_id\x18\x02 \x01(\tR\n" +
 	"workItemId\x126\n" +
-	"\x17organization_version_id\x18\x03 \x01(\tR\x15organizationVersionId\"u\n" +
+	"\x17organization_version_id\x18\x03 \x01(\tR\x15organizationVersionId\"\x9e\x01\n" +
 	"\x0fPendingApproval\x12'\n" +
 	"\x0fapproval_digest\x18\x01 \x01(\fR\x0eapprovalDigest\x129\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xa5\x02\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12'\n" +
+	"\x0fowner_challenge\x18\x03 \x01(\fR\x0eownerChallenge\"\xd5\x02\n" +
 	"\bApproval\x122\n" +
 	"\x15approver_principal_id\x18\x01 \x01(\tR\x13approverPrincipalId\x12=\n" +
 	"\bdecision\x18\x02 \x01(\x0e2!.helm.gateway.v1.ApprovalDecisionR\bdecision\x12'\n" +
@@ -5367,7 +5503,8 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\n" +
 	"decided_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdecidedAt\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12*\n" +
-	"\x11approver_actor_id\x18\x06 \x01(\tR\x0fapproverActorId\"\xdd\x02\n" +
+	"\x11approver_actor_id\x18\x06 \x01(\tR\x0fapproverActorId\x12.\n" +
+	"\x13owner_credential_id\x18\a \x01(\fR\x11ownerCredentialId\"\xdd\x02\n" +
 	"\x06Permit\x12\x1b\n" +
 	"\tpermit_id\x18\x01 \x01(\tR\bpermitId\x12'\n" +
 	"\x0fargument_digest\x18\x02 \x01(\fR\x0eargumentDigest\x12P\n" +
@@ -5553,7 +5690,7 @@ func file_helm_gateway_v1_gateway_proto_rawDescGZIP() []byte {
 }
 
 var file_helm_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_helm_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
+var file_helm_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_helm_gateway_v1_gateway_proto_goTypes = []any{
 	(EffectAttemptState)(0),                // 0: helm.gateway.v1.EffectAttemptState
 	(EffectOutcome)(0),                     // 1: helm.gateway.v1.EffectOutcome
@@ -5577,51 +5714,52 @@ var file_helm_gateway_v1_gateway_proto_goTypes = []any{
 	(*ProposeRequest)(nil),                 // 19: helm.gateway.v1.ProposeRequest
 	(*ProposeResponse)(nil),                // 20: helm.gateway.v1.ProposeResponse
 	(*ApproveRequest)(nil),                 // 21: helm.gateway.v1.ApproveRequest
-	(*ApproveResponse)(nil),                // 22: helm.gateway.v1.ApproveResponse
-	(*RejectRequest)(nil),                  // 23: helm.gateway.v1.RejectRequest
-	(*RejectResponse)(nil),                 // 24: helm.gateway.v1.RejectResponse
-	(*CancelRequest)(nil),                  // 25: helm.gateway.v1.CancelRequest
-	(*CancelResponse)(nil),                 // 26: helm.gateway.v1.CancelResponse
-	(*DispatchRequest)(nil),                // 27: helm.gateway.v1.DispatchRequest
-	(*DispatchResponse)(nil),               // 28: helm.gateway.v1.DispatchResponse
-	(*ObserveRequest)(nil),                 // 29: helm.gateway.v1.ObserveRequest
-	(*ObserveResponse)(nil),                // 30: helm.gateway.v1.ObserveResponse
-	(*GetAttemptRequest)(nil),              // 31: helm.gateway.v1.GetAttemptRequest
-	(*GetAttemptResponse)(nil),             // 32: helm.gateway.v1.GetAttemptResponse
-	(*GetAttemptContentRequest)(nil),       // 33: helm.gateway.v1.GetAttemptContentRequest
-	(*GetAttemptContentResponse)(nil),      // 34: helm.gateway.v1.GetAttemptContentResponse
-	(*ListAttemptsRequest)(nil),            // 35: helm.gateway.v1.ListAttemptsRequest
-	(*ListAttemptsResponse)(nil),           // 36: helm.gateway.v1.ListAttemptsResponse
-	(*StopRequest)(nil),                    // 37: helm.gateway.v1.StopRequest
-	(*StopResponse)(nil),                   // 38: helm.gateway.v1.StopResponse
-	(*GetStopOutcomeRequest)(nil),          // 39: helm.gateway.v1.GetStopOutcomeRequest
-	(*GetStopOutcomeResponse)(nil),         // 40: helm.gateway.v1.GetStopOutcomeResponse
-	(*LiftRequest)(nil),                    // 41: helm.gateway.v1.LiftRequest
-	(*LiftResponse)(nil),                   // 42: helm.gateway.v1.LiftResponse
-	(*EffectDescriptor)(nil),               // 43: helm.gateway.v1.EffectDescriptor
-	(*ResourceAmount)(nil),                 // 44: helm.gateway.v1.ResourceAmount
-	(*DistinctValue)(nil),                  // 45: helm.gateway.v1.DistinctValue
-	(*EffectAttempt)(nil),                  // 46: helm.gateway.v1.EffectAttempt
-	(*ReceiptRef)(nil),                     // 47: helm.gateway.v1.ReceiptRef
-	(*SignedReceipt)(nil),                  // 48: helm.gateway.v1.SignedReceipt
-	(*GetAttemptReceiptsRequest)(nil),      // 49: helm.gateway.v1.GetAttemptReceiptsRequest
-	(*GetAttemptReceiptsResponse)(nil),     // 50: helm.gateway.v1.GetAttemptReceiptsResponse
-	(*ExportReceiptChainRequest)(nil),      // 51: helm.gateway.v1.ExportReceiptChainRequest
-	(*ExportReceiptChainResponse)(nil),     // 52: helm.gateway.v1.ExportReceiptChainResponse
-	(*EpisodeRef)(nil),                     // 53: helm.gateway.v1.EpisodeRef
-	(*PendingApproval)(nil),                // 54: helm.gateway.v1.PendingApproval
-	(*Approval)(nil),                       // 55: helm.gateway.v1.Approval
-	(*Permit)(nil),                         // 56: helm.gateway.v1.Permit
-	(*AuthorityVersion)(nil),               // 57: helm.gateway.v1.AuthorityVersion
-	(*Exposure)(nil),                       // 58: helm.gateway.v1.Exposure
-	(*ModelCallSettlement)(nil),            // 59: helm.gateway.v1.ModelCallSettlement
-	(*Observation)(nil),                    // 60: helm.gateway.v1.Observation
-	(*ArtifactResult)(nil),                 // 61: helm.gateway.v1.ArtifactResult
-	(*GitHubRepositoryResult)(nil),         // 62: helm.gateway.v1.GitHubRepositoryResult
-	(*GitHubPullRequestResult)(nil),        // 63: helm.gateway.v1.GitHubPullRequestResult
-	(*GitHubBranchResult)(nil),             // 64: helm.gateway.v1.GitHubBranchResult
-	(*Stop)(nil),                           // 65: helm.gateway.v1.Stop
-	(*timestamppb.Timestamp)(nil),          // 66: google.protobuf.Timestamp
+	(*OwnerAssertion)(nil),                 // 22: helm.gateway.v1.OwnerAssertion
+	(*ApproveResponse)(nil),                // 23: helm.gateway.v1.ApproveResponse
+	(*RejectRequest)(nil),                  // 24: helm.gateway.v1.RejectRequest
+	(*RejectResponse)(nil),                 // 25: helm.gateway.v1.RejectResponse
+	(*CancelRequest)(nil),                  // 26: helm.gateway.v1.CancelRequest
+	(*CancelResponse)(nil),                 // 27: helm.gateway.v1.CancelResponse
+	(*DispatchRequest)(nil),                // 28: helm.gateway.v1.DispatchRequest
+	(*DispatchResponse)(nil),               // 29: helm.gateway.v1.DispatchResponse
+	(*ObserveRequest)(nil),                 // 30: helm.gateway.v1.ObserveRequest
+	(*ObserveResponse)(nil),                // 31: helm.gateway.v1.ObserveResponse
+	(*GetAttemptRequest)(nil),              // 32: helm.gateway.v1.GetAttemptRequest
+	(*GetAttemptResponse)(nil),             // 33: helm.gateway.v1.GetAttemptResponse
+	(*GetAttemptContentRequest)(nil),       // 34: helm.gateway.v1.GetAttemptContentRequest
+	(*GetAttemptContentResponse)(nil),      // 35: helm.gateway.v1.GetAttemptContentResponse
+	(*ListAttemptsRequest)(nil),            // 36: helm.gateway.v1.ListAttemptsRequest
+	(*ListAttemptsResponse)(nil),           // 37: helm.gateway.v1.ListAttemptsResponse
+	(*StopRequest)(nil),                    // 38: helm.gateway.v1.StopRequest
+	(*StopResponse)(nil),                   // 39: helm.gateway.v1.StopResponse
+	(*GetStopOutcomeRequest)(nil),          // 40: helm.gateway.v1.GetStopOutcomeRequest
+	(*GetStopOutcomeResponse)(nil),         // 41: helm.gateway.v1.GetStopOutcomeResponse
+	(*LiftRequest)(nil),                    // 42: helm.gateway.v1.LiftRequest
+	(*LiftResponse)(nil),                   // 43: helm.gateway.v1.LiftResponse
+	(*EffectDescriptor)(nil),               // 44: helm.gateway.v1.EffectDescriptor
+	(*ResourceAmount)(nil),                 // 45: helm.gateway.v1.ResourceAmount
+	(*DistinctValue)(nil),                  // 46: helm.gateway.v1.DistinctValue
+	(*EffectAttempt)(nil),                  // 47: helm.gateway.v1.EffectAttempt
+	(*ReceiptRef)(nil),                     // 48: helm.gateway.v1.ReceiptRef
+	(*SignedReceipt)(nil),                  // 49: helm.gateway.v1.SignedReceipt
+	(*GetAttemptReceiptsRequest)(nil),      // 50: helm.gateway.v1.GetAttemptReceiptsRequest
+	(*GetAttemptReceiptsResponse)(nil),     // 51: helm.gateway.v1.GetAttemptReceiptsResponse
+	(*ExportReceiptChainRequest)(nil),      // 52: helm.gateway.v1.ExportReceiptChainRequest
+	(*ExportReceiptChainResponse)(nil),     // 53: helm.gateway.v1.ExportReceiptChainResponse
+	(*EpisodeRef)(nil),                     // 54: helm.gateway.v1.EpisodeRef
+	(*PendingApproval)(nil),                // 55: helm.gateway.v1.PendingApproval
+	(*Approval)(nil),                       // 56: helm.gateway.v1.Approval
+	(*Permit)(nil),                         // 57: helm.gateway.v1.Permit
+	(*AuthorityVersion)(nil),               // 58: helm.gateway.v1.AuthorityVersion
+	(*Exposure)(nil),                       // 59: helm.gateway.v1.Exposure
+	(*ModelCallSettlement)(nil),            // 60: helm.gateway.v1.ModelCallSettlement
+	(*Observation)(nil),                    // 61: helm.gateway.v1.Observation
+	(*ArtifactResult)(nil),                 // 62: helm.gateway.v1.ArtifactResult
+	(*GitHubRepositoryResult)(nil),         // 63: helm.gateway.v1.GitHubRepositoryResult
+	(*GitHubPullRequestResult)(nil),        // 64: helm.gateway.v1.GitHubPullRequestResult
+	(*GitHubBranchResult)(nil),             // 65: helm.gateway.v1.GitHubBranchResult
+	(*Stop)(nil),                           // 66: helm.gateway.v1.Stop
+	(*timestamppb.Timestamp)(nil),          // 67: google.protobuf.Timestamp
 }
 var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	9,  // 0: helm.gateway.v1.RecoveryFence.binding:type_name -> helm.gateway.v1.RecoveryBinding
@@ -5632,105 +5770,106 @@ var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	9,  // 5: helm.gateway.v1.BindRecoveryCheckpointRequest.binding:type_name -> helm.gateway.v1.RecoveryBinding
 	10, // 6: helm.gateway.v1.BindRecoveryCheckpointResponse.fence:type_name -> helm.gateway.v1.RecoveryFence
 	9,  // 7: helm.gateway.v1.ListRecoveryAttemptsRequest.binding:type_name -> helm.gateway.v1.RecoveryBinding
-	43, // 8: helm.gateway.v1.ProposeRequest.effect:type_name -> helm.gateway.v1.EffectDescriptor
-	44, // 9: helm.gateway.v1.ProposeRequest.quote:type_name -> helm.gateway.v1.ResourceAmount
-	45, // 10: helm.gateway.v1.ProposeRequest.distinct_values:type_name -> helm.gateway.v1.DistinctValue
-	66, // 11: helm.gateway.v1.ProposeRequest.approval_expires_at:type_name -> google.protobuf.Timestamp
-	46, // 12: helm.gateway.v1.ProposeResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 13: helm.gateway.v1.ApproveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 14: helm.gateway.v1.RejectResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 15: helm.gateway.v1.CancelResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 16: helm.gateway.v1.DispatchResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 17: helm.gateway.v1.ObserveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	46, // 18: helm.gateway.v1.GetAttemptResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	0,  // 19: helm.gateway.v1.ListAttemptsRequest.states:type_name -> helm.gateway.v1.EffectAttemptState
-	66, // 20: helm.gateway.v1.ListAttemptsRequest.updated_after:type_name -> google.protobuf.Timestamp
-	46, // 21: helm.gateway.v1.ListAttemptsResponse.attempts:type_name -> helm.gateway.v1.EffectAttempt
-	66, // 22: helm.gateway.v1.ListAttemptsResponse.settled_before:type_name -> google.protobuf.Timestamp
-	8,  // 23: helm.gateway.v1.StopRequest.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	66, // 24: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
-	65, // 25: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
-	65, // 26: helm.gateway.v1.GetStopOutcomeResponse.stop:type_name -> helm.gateway.v1.Stop
-	46, // 27: helm.gateway.v1.LiftResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	3,  // 28: helm.gateway.v1.EffectAttempt.risk_class:type_name -> helm.gateway.v1.RiskClass
-	44, // 29: helm.gateway.v1.EffectAttempt.quote:type_name -> helm.gateway.v1.ResourceAmount
-	0,  // 30: helm.gateway.v1.EffectAttempt.state:type_name -> helm.gateway.v1.EffectAttemptState
-	1,  // 31: helm.gateway.v1.EffectAttempt.outcome:type_name -> helm.gateway.v1.EffectOutcome
-	2,  // 32: helm.gateway.v1.EffectAttempt.outcome_basis:type_name -> helm.gateway.v1.OutcomeBasis
-	54, // 33: helm.gateway.v1.EffectAttempt.pending_approval:type_name -> helm.gateway.v1.PendingApproval
-	55, // 34: helm.gateway.v1.EffectAttempt.approval:type_name -> helm.gateway.v1.Approval
-	56, // 35: helm.gateway.v1.EffectAttempt.permit:type_name -> helm.gateway.v1.Permit
-	58, // 36: helm.gateway.v1.EffectAttempt.exposures:type_name -> helm.gateway.v1.Exposure
-	59, // 37: helm.gateway.v1.EffectAttempt.model_call:type_name -> helm.gateway.v1.ModelCallSettlement
-	60, // 38: helm.gateway.v1.EffectAttempt.latest_observation:type_name -> helm.gateway.v1.Observation
-	66, // 39: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
-	66, // 40: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
-	53, // 41: helm.gateway.v1.EffectAttempt.episode:type_name -> helm.gateway.v1.EpisodeRef
-	47, // 42: helm.gateway.v1.EffectAttempt.receipts:type_name -> helm.gateway.v1.ReceiptRef
-	47, // 43: helm.gateway.v1.SignedReceipt.ref:type_name -> helm.gateway.v1.ReceiptRef
-	48, // 44: helm.gateway.v1.GetAttemptReceiptsResponse.receipts:type_name -> helm.gateway.v1.SignedReceipt
-	47, // 45: helm.gateway.v1.ExportReceiptChainResponse.receipts:type_name -> helm.gateway.v1.ReceiptRef
-	66, // 46: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
-	4,  // 47: helm.gateway.v1.Approval.decision:type_name -> helm.gateway.v1.ApprovalDecision
-	66, // 48: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
-	57, // 49: helm.gateway.v1.Permit.authority_versions:type_name -> helm.gateway.v1.AuthorityVersion
-	66, // 50: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
-	66, // 51: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
-	5,  // 52: helm.gateway.v1.AuthorityVersion.kind:type_name -> helm.gateway.v1.AuthorityRowKind
-	66, // 53: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
-	6,  // 54: helm.gateway.v1.Exposure.kind:type_name -> helm.gateway.v1.ExposureKind
-	7,  // 55: helm.gateway.v1.ModelCallSettlement.state:type_name -> helm.gateway.v1.SettlementState
-	1,  // 56: helm.gateway.v1.Observation.outcome:type_name -> helm.gateway.v1.EffectOutcome
-	66, // 57: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
-	63, // 58: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
-	64, // 59: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
-	62, // 60: helm.gateway.v1.Observation.github_repository:type_name -> helm.gateway.v1.GitHubRepositoryResult
-	61, // 61: helm.gateway.v1.Observation.artifact:type_name -> helm.gateway.v1.ArtifactResult
-	8,  // 62: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	66, // 63: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
-	66, // 64: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
-	66, // 65: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
-	19, // 66: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
-	21, // 67: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
-	23, // 68: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
-	25, // 69: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
-	27, // 70: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
-	29, // 71: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
-	31, // 72: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
-	33, // 73: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
-	35, // 74: helm.gateway.v1.EffectGatewayService.ListAttempts:input_type -> helm.gateway.v1.ListAttemptsRequest
-	37, // 75: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
-	39, // 76: helm.gateway.v1.EffectGatewayService.GetStopOutcome:input_type -> helm.gateway.v1.GetStopOutcomeRequest
-	41, // 77: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
-	11, // 78: helm.gateway.v1.EffectGatewayService.FenceRecovery:input_type -> helm.gateway.v1.FenceRecoveryRequest
-	13, // 79: helm.gateway.v1.EffectGatewayService.GetRecoveryFence:input_type -> helm.gateway.v1.GetRecoveryFenceRequest
-	15, // 80: helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint:input_type -> helm.gateway.v1.BindRecoveryCheckpointRequest
-	17, // 81: helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts:input_type -> helm.gateway.v1.ListRecoveryAttemptsRequest
-	49, // 82: helm.gateway.v1.EffectGatewayService.GetAttemptReceipts:input_type -> helm.gateway.v1.GetAttemptReceiptsRequest
-	51, // 83: helm.gateway.v1.EffectGatewayService.ExportReceiptChain:input_type -> helm.gateway.v1.ExportReceiptChainRequest
-	20, // 84: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
-	22, // 85: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
-	24, // 86: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
-	26, // 87: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
-	28, // 88: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
-	30, // 89: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
-	32, // 90: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
-	34, // 91: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
-	36, // 92: helm.gateway.v1.EffectGatewayService.ListAttempts:output_type -> helm.gateway.v1.ListAttemptsResponse
-	38, // 93: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
-	40, // 94: helm.gateway.v1.EffectGatewayService.GetStopOutcome:output_type -> helm.gateway.v1.GetStopOutcomeResponse
-	42, // 95: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
-	12, // 96: helm.gateway.v1.EffectGatewayService.FenceRecovery:output_type -> helm.gateway.v1.FenceRecoveryResponse
-	14, // 97: helm.gateway.v1.EffectGatewayService.GetRecoveryFence:output_type -> helm.gateway.v1.GetRecoveryFenceResponse
-	16, // 98: helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint:output_type -> helm.gateway.v1.BindRecoveryCheckpointResponse
-	18, // 99: helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts:output_type -> helm.gateway.v1.ListRecoveryAttemptsResponse
-	50, // 100: helm.gateway.v1.EffectGatewayService.GetAttemptReceipts:output_type -> helm.gateway.v1.GetAttemptReceiptsResponse
-	52, // 101: helm.gateway.v1.EffectGatewayService.ExportReceiptChain:output_type -> helm.gateway.v1.ExportReceiptChainResponse
-	84, // [84:102] is the sub-list for method output_type
-	66, // [66:84] is the sub-list for method input_type
-	66, // [66:66] is the sub-list for extension type_name
-	66, // [66:66] is the sub-list for extension extendee
-	0,  // [0:66] is the sub-list for field type_name
+	44, // 8: helm.gateway.v1.ProposeRequest.effect:type_name -> helm.gateway.v1.EffectDescriptor
+	45, // 9: helm.gateway.v1.ProposeRequest.quote:type_name -> helm.gateway.v1.ResourceAmount
+	46, // 10: helm.gateway.v1.ProposeRequest.distinct_values:type_name -> helm.gateway.v1.DistinctValue
+	67, // 11: helm.gateway.v1.ProposeRequest.approval_expires_at:type_name -> google.protobuf.Timestamp
+	47, // 12: helm.gateway.v1.ProposeResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	22, // 13: helm.gateway.v1.ApproveRequest.owner_assertion:type_name -> helm.gateway.v1.OwnerAssertion
+	47, // 14: helm.gateway.v1.ApproveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	47, // 15: helm.gateway.v1.RejectResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	47, // 16: helm.gateway.v1.CancelResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	47, // 17: helm.gateway.v1.DispatchResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	47, // 18: helm.gateway.v1.ObserveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	47, // 19: helm.gateway.v1.GetAttemptResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	0,  // 20: helm.gateway.v1.ListAttemptsRequest.states:type_name -> helm.gateway.v1.EffectAttemptState
+	67, // 21: helm.gateway.v1.ListAttemptsRequest.updated_after:type_name -> google.protobuf.Timestamp
+	47, // 22: helm.gateway.v1.ListAttemptsResponse.attempts:type_name -> helm.gateway.v1.EffectAttempt
+	67, // 23: helm.gateway.v1.ListAttemptsResponse.settled_before:type_name -> google.protobuf.Timestamp
+	8,  // 24: helm.gateway.v1.StopRequest.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
+	67, // 25: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
+	66, // 26: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
+	66, // 27: helm.gateway.v1.GetStopOutcomeResponse.stop:type_name -> helm.gateway.v1.Stop
+	47, // 28: helm.gateway.v1.LiftResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	3,  // 29: helm.gateway.v1.EffectAttempt.risk_class:type_name -> helm.gateway.v1.RiskClass
+	45, // 30: helm.gateway.v1.EffectAttempt.quote:type_name -> helm.gateway.v1.ResourceAmount
+	0,  // 31: helm.gateway.v1.EffectAttempt.state:type_name -> helm.gateway.v1.EffectAttemptState
+	1,  // 32: helm.gateway.v1.EffectAttempt.outcome:type_name -> helm.gateway.v1.EffectOutcome
+	2,  // 33: helm.gateway.v1.EffectAttempt.outcome_basis:type_name -> helm.gateway.v1.OutcomeBasis
+	55, // 34: helm.gateway.v1.EffectAttempt.pending_approval:type_name -> helm.gateway.v1.PendingApproval
+	56, // 35: helm.gateway.v1.EffectAttempt.approval:type_name -> helm.gateway.v1.Approval
+	57, // 36: helm.gateway.v1.EffectAttempt.permit:type_name -> helm.gateway.v1.Permit
+	59, // 37: helm.gateway.v1.EffectAttempt.exposures:type_name -> helm.gateway.v1.Exposure
+	60, // 38: helm.gateway.v1.EffectAttempt.model_call:type_name -> helm.gateway.v1.ModelCallSettlement
+	61, // 39: helm.gateway.v1.EffectAttempt.latest_observation:type_name -> helm.gateway.v1.Observation
+	67, // 40: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
+	67, // 41: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
+	54, // 42: helm.gateway.v1.EffectAttempt.episode:type_name -> helm.gateway.v1.EpisodeRef
+	48, // 43: helm.gateway.v1.EffectAttempt.receipts:type_name -> helm.gateway.v1.ReceiptRef
+	48, // 44: helm.gateway.v1.SignedReceipt.ref:type_name -> helm.gateway.v1.ReceiptRef
+	49, // 45: helm.gateway.v1.GetAttemptReceiptsResponse.receipts:type_name -> helm.gateway.v1.SignedReceipt
+	48, // 46: helm.gateway.v1.ExportReceiptChainResponse.receipts:type_name -> helm.gateway.v1.ReceiptRef
+	67, // 47: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
+	4,  // 48: helm.gateway.v1.Approval.decision:type_name -> helm.gateway.v1.ApprovalDecision
+	67, // 49: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
+	58, // 50: helm.gateway.v1.Permit.authority_versions:type_name -> helm.gateway.v1.AuthorityVersion
+	67, // 51: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
+	67, // 52: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
+	5,  // 53: helm.gateway.v1.AuthorityVersion.kind:type_name -> helm.gateway.v1.AuthorityRowKind
+	67, // 54: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
+	6,  // 55: helm.gateway.v1.Exposure.kind:type_name -> helm.gateway.v1.ExposureKind
+	7,  // 56: helm.gateway.v1.ModelCallSettlement.state:type_name -> helm.gateway.v1.SettlementState
+	1,  // 57: helm.gateway.v1.Observation.outcome:type_name -> helm.gateway.v1.EffectOutcome
+	67, // 58: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
+	64, // 59: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
+	65, // 60: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
+	63, // 61: helm.gateway.v1.Observation.github_repository:type_name -> helm.gateway.v1.GitHubRepositoryResult
+	62, // 62: helm.gateway.v1.Observation.artifact:type_name -> helm.gateway.v1.ArtifactResult
+	8,  // 63: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
+	67, // 64: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
+	67, // 65: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
+	67, // 66: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
+	19, // 67: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
+	21, // 68: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
+	24, // 69: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
+	26, // 70: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
+	28, // 71: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
+	30, // 72: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
+	32, // 73: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
+	34, // 74: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
+	36, // 75: helm.gateway.v1.EffectGatewayService.ListAttempts:input_type -> helm.gateway.v1.ListAttemptsRequest
+	38, // 76: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
+	40, // 77: helm.gateway.v1.EffectGatewayService.GetStopOutcome:input_type -> helm.gateway.v1.GetStopOutcomeRequest
+	42, // 78: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
+	11, // 79: helm.gateway.v1.EffectGatewayService.FenceRecovery:input_type -> helm.gateway.v1.FenceRecoveryRequest
+	13, // 80: helm.gateway.v1.EffectGatewayService.GetRecoveryFence:input_type -> helm.gateway.v1.GetRecoveryFenceRequest
+	15, // 81: helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint:input_type -> helm.gateway.v1.BindRecoveryCheckpointRequest
+	17, // 82: helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts:input_type -> helm.gateway.v1.ListRecoveryAttemptsRequest
+	50, // 83: helm.gateway.v1.EffectGatewayService.GetAttemptReceipts:input_type -> helm.gateway.v1.GetAttemptReceiptsRequest
+	52, // 84: helm.gateway.v1.EffectGatewayService.ExportReceiptChain:input_type -> helm.gateway.v1.ExportReceiptChainRequest
+	20, // 85: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
+	23, // 86: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
+	25, // 87: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
+	27, // 88: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
+	29, // 89: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
+	31, // 90: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
+	33, // 91: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
+	35, // 92: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
+	37, // 93: helm.gateway.v1.EffectGatewayService.ListAttempts:output_type -> helm.gateway.v1.ListAttemptsResponse
+	39, // 94: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
+	41, // 95: helm.gateway.v1.EffectGatewayService.GetStopOutcome:output_type -> helm.gateway.v1.GetStopOutcomeResponse
+	43, // 96: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
+	12, // 97: helm.gateway.v1.EffectGatewayService.FenceRecovery:output_type -> helm.gateway.v1.FenceRecoveryResponse
+	14, // 98: helm.gateway.v1.EffectGatewayService.GetRecoveryFence:output_type -> helm.gateway.v1.GetRecoveryFenceResponse
+	16, // 99: helm.gateway.v1.EffectGatewayService.BindRecoveryCheckpoint:output_type -> helm.gateway.v1.BindRecoveryCheckpointResponse
+	18, // 100: helm.gateway.v1.EffectGatewayService.ListRecoveryAttempts:output_type -> helm.gateway.v1.ListRecoveryAttemptsResponse
+	51, // 101: helm.gateway.v1.EffectGatewayService.GetAttemptReceipts:output_type -> helm.gateway.v1.GetAttemptReceiptsResponse
+	53, // 102: helm.gateway.v1.EffectGatewayService.ExportReceiptChain:output_type -> helm.gateway.v1.ExportReceiptChainResponse
+	85, // [85:103] is the sub-list for method output_type
+	67, // [67:85] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_gateway_proto_init() }
@@ -5742,16 +5881,16 @@ func file_helm_gateway_v1_gateway_proto_init() {
 		(*ProposeRequest_CommitmentId)(nil),
 		(*ProposeRequest_CaseId)(nil),
 	}
-	file_helm_gateway_v1_gateway_proto_msgTypes[26].OneofWrappers = []any{
+	file_helm_gateway_v1_gateway_proto_msgTypes[27].OneofWrappers = []any{
 		(*ListAttemptsRequest_CommitmentId)(nil),
 		(*ListAttemptsRequest_CaseId)(nil),
 	}
-	file_helm_gateway_v1_gateway_proto_msgTypes[37].OneofWrappers = []any{
+	file_helm_gateway_v1_gateway_proto_msgTypes[38].OneofWrappers = []any{
 		(*EffectAttempt_CommitmentId)(nil),
 		(*EffectAttempt_CaseId)(nil),
 	}
-	file_helm_gateway_v1_gateway_proto_msgTypes[50].OneofWrappers = []any{}
-	file_helm_gateway_v1_gateway_proto_msgTypes[51].OneofWrappers = []any{
+	file_helm_gateway_v1_gateway_proto_msgTypes[51].OneofWrappers = []any{}
+	file_helm_gateway_v1_gateway_proto_msgTypes[52].OneofWrappers = []any{
 		(*Observation_GithubPullRequest)(nil),
 		(*Observation_GithubBranch)(nil),
 		(*Observation_GithubRepository)(nil),
@@ -5763,7 +5902,7 @@ func file_helm_gateway_v1_gateway_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_gateway_v1_gateway_proto_rawDesc), len(file_helm_gateway_v1_gateway_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   57,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

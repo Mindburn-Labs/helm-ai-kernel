@@ -952,6 +952,14 @@
       "domain": "approval",
       "description": "A narrowing plan cannot raise an organization's stage; a higher stage is a provision plan, which a distinct human approves",
       "since": "1.9.0"
+    },
+    {
+      "code": "OWNER_ASSERTION_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "Granting or widening authority needs the approver's own passkey assertion, verified by the gateway against a credential enrolled at the tenant's genesis or by an approved plan; the request carried none, or one that did not verify",
+      "since": "1.9.0",
+      "finality": "ungranted"
     }
   ]
 }

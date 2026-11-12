@@ -152,8 +152,14 @@ service EffectGatewayService {
   //   - approval_digest must equal the pending approval's digest, or the call
   //     is failed_precondition.
   //   - Approvals that need step-up (§10.1: risk class high or irreversible,
-  //     authority widening) need the step_up_proof and fail closed without a
-  //     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
+  //     authority widening) need the step_up_proof or the owner_assertion and
+  //     fail closed without a valid one, with permission_denied
+  //     [reason_code: STEP_UP_REQUIRED]. An owner_assertion that is present is
+  //     verified by the gateway whatever the effect, and one that does not
+  //     verify is permission_denied [reason_code: OWNER_ASSERTION_REQUIRED].
+  //     With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, a step_up_proof does not
+  //     satisfy step-up for a helm.authority.* widening: only the approver's
+  //     verified owner_assertion does [reason_code: OWNER_ASSERTION_REQUIRED].
   //
   // An attempt that is no longer ESCALATED is returned unchanged with
   // existing true.
@@ -534,7 +540,42 @@ message ApproveRequest {
   // so that it can be verified again against the issuer's keys.
   // Without a valid proof the approval is permission_denied
   // [reason_code: STEP_UP_REQUIRED] and the attempt stays ESCALATED.
+  //
+  // Deprecated for helm.authority.* widenings: the issuer that signs it is
+  // the Control Plane's, not the approver's. With
+  // HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, the gateway does not accept it
+  // for them, and owner_assertion is required instead.
   string step_up_proof = 4;
+  // The approver's own WebAuthn assertion (helm-tracker#334), which the
+  // gateway verifies itself in the approval's transaction against the passkey
+  // the approver registered (at the tenant's genesis or through an approved
+  // provision plan): clientDataJSON type "webauthn.get" whose challenge is
+  // EffectAttempt.pending_approval.owner_challenge for this approver, an
+  // rpIdHash that is SHA-256 of the credential's rp_id, the user-present and
+  // user-verified flags, a signature over authenticatorData ||
+  // SHA-256(clientDataJSON) by the credential's key, and a signature counter
+  // that never goes backwards. The same signed assertion is accepted once. It
+  // satisfies step-up wherever step_up_proof does, and the approval record
+  // keeps it. Optional; one that is present and does not verify is
+  // permission_denied [reason_code: OWNER_ASSERTION_REQUIRED] and the attempt
+  // stays ESCALATED.
+  OwnerAssertion owner_assertion = 5;
+}
+
+// OwnerAssertion is a WebAuthn authentication assertion
+// (navigator.credentials.get), exactly as the authenticator and the browser
+// produced it.
+message OwnerAssertion {
+  // The credential's id (PublicKeyCredential.rawId), 1 to 1023 bytes.
+  bytes credential_id = 1;
+  // AuthenticatorAssertionResponse.authenticatorData: at least 37 bytes.
+  bytes authenticator_data = 2;
+  // AuthenticatorAssertionResponse.clientDataJSON, as the browser serialized
+  // it; at most 4096 bytes.
+  bytes client_data_json = 3;
+  // AuthenticatorAssertionResponse.signature: ASN.1 DER ECDSA for ES256, 64
+  // bytes for EdDSA.
+  bytes signature = 4;
 }
 
 // ApproveResponse returns the attempt after the approval.
@@ -1073,6 +1114,14 @@ message PendingApproval {
   // whole seconds: the gateway truncates it to the second on write, so a
   // database round-trip cannot change the approval digest.
   google.protobuf.Timestamp expires_at = 2;
+  // The WebAuthn challenge the approver's passkey signs for
+  // ApproveRequest.owner_assertion, 32 bytes (helm-tracker#334): SHA-256 over,
+  // in order, the domain tag "helm.gateway.v1.owner-assertion.v1", the
+  // tenant, the approver's principal id, attempt_id and approval_digest, each
+  // prefixed with its length as a big-endian uint64. It is computed for the
+  // principal of the token that read the attempt, so an approver reads it with
+  // its own token, or computes it from the same inputs.
+  bytes owner_challenge = 3;
 }
 
 // Approval is a recorded decision on an escalated attempt. There is at most
@@ -1092,6 +1141,10 @@ message Approval {
   // act.sub of the decide token (RFC 8693). Empty when the approver's own
   // session called the gateway directly.
   string approver_actor_id = 6;
+  // The credential of the owner assertion the gateway verified for this
+  // approval; empty when the approval carried none. The approval record keeps
+  // the assertion itself.
+  bytes owner_credential_id = 7;
 }
 
 // ApprovalDecision is an approver's decision.

@@ -495,6 +495,12 @@ const StageCeilingExceeded = "STAGE_CEILING_EXCEEDED"
 // human approves
 const StageRaiseRequiresProvision = "STAGE_RAISE_REQUIRES_PROVISION"
 
+// OwnerAssertionRequired DENY: Granting or widening authority needs the
+// approver's own passkey assertion, verified by the gateway against a
+// credential enrolled at the tenant's genesis or by an approved plan; the
+// request carried none, or one that did not verify
+const OwnerAssertionRequired = "OWNER_ASSERTION_REQUIRED"
+
 var all = [...]string{
 	PolicyViolation,
 	NoPolicyDefined,
@@ -622,6 +628,7 @@ var all = [...]string{
 	PermitExpired,
 	StageCeilingExceeded,
 	StageRaiseRequiresProvision,
+	OwnerAssertionRequired,
 }
 
 // All returns every registered reason code, in registry order.

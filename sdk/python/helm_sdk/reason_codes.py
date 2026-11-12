@@ -417,6 +417,11 @@ STAGE_RAISE_REQUIRES_PROVISION = "STAGE_RAISE_REQUIRES_PROVISION"
 # DENY: A narrowing plan cannot raise an organization's stage; a higher stage is a
 # provision plan, which a distinct human approves
 
+OWNER_ASSERTION_REQUIRED = "OWNER_ASSERTION_REQUIRED"
+# DENY: Granting or widening authority needs the approver's own passkey assertion,
+# verified by the gateway against a credential enrolled at the tenant's genesis or by an
+# approved plan; the request carried none, or one that did not verify
+
 ALL: frozenset[str] = frozenset(
     {
         POLICY_VIOLATION,
@@ -545,6 +550,7 @@ ALL: frozenset[str] = frozenset(
         PERMIT_EXPIRED,
         STAGE_CEILING_EXCEEDED,
         STAGE_RAISE_REQUIRES_PROVISION,
+        OWNER_ASSERTION_REQUIRED,
     }
 )
 

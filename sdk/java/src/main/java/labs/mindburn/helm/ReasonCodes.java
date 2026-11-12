@@ -410,6 +410,11 @@ public final class ReasonCodes {
     /** plan, which a distinct human approves */
     public static final String STAGE_RAISE_REQUIRES_PROVISION = "STAGE_RAISE_REQUIRES_PROVISION";
 
+    /** DENY: Granting or widening authority needs the approver's own passkey assertion, verified by
+    /** the gateway against a credential enrolled at the tenant's genesis or by an approved plan;
+    /** the request carried none, or one that did not verify */
+    public static final String OWNER_ASSERTION_REQUIRED = "OWNER_ASSERTION_REQUIRED";
+
     /** Every registered reason code. */
     public static final Set<String> ALL = Set.of(
             POLICY_VIOLATION,
@@ -537,7 +542,8 @@ public final class ReasonCodes {
             AUTHORITY_CHANGED,
             PERMIT_EXPIRED,
             STAGE_CEILING_EXCEEDED,
-            STAGE_RAISE_REQUIRES_PROVISION);
+            STAGE_RAISE_REQUIRES_PROVISION,
+            OWNER_ASSERTION_REQUIRED);
 
     /** Whether {@code code} is in the registry. */
     public static boolean isRegistered(String code) {

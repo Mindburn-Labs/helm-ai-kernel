@@ -132,6 +132,7 @@ var registeredReasonCodes = [...]ReasonCode{
 	"PERMIT_EXPIRED",
 	"STAGE_CEILING_EXCEEDED",
 	"STAGE_RAISE_REQUIRES_PROVISION",
+	"OWNER_ASSERTION_REQUIRED",
 }
 
 // CoreReasonCodes returns the full normative core reason-code registry.

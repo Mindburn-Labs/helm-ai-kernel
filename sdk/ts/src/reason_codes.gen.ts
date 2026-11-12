@@ -277,6 +277,10 @@ export const ReasonCodes = {
   /** DENY: A narrowing plan cannot raise an organization's stage; a higher stage is a provision
   /** plan, which a distinct human approves */
   STAGE_RAISE_REQUIRES_PROVISION: "STAGE_RAISE_REQUIRES_PROVISION",
+  /** DENY: Granting or widening authority needs the approver's own passkey assertion, verified by
+  /** the gateway against a credential enrolled at the tenant's genesis or by an approved plan; the
+  /** request carried none, or one that did not verify */
+  OWNER_ASSERTION_REQUIRED: "OWNER_ASSERTION_REQUIRED",
 } as const;
 
 export type RegisteredReasonCode = (typeof ReasonCodes)[keyof typeof ReasonCodes];

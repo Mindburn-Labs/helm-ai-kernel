@@ -110,6 +110,7 @@ const (
 	// ── Authority plan stage (helm-tracker#334) ─────────────
 	ReasonStageCeilingExceeded        ReasonCode = "STAGE_CEILING_EXCEEDED"
 	ReasonStageRaiseRequiresProvision ReasonCode = "STAGE_RAISE_REQUIRES_PROVISION"
+	ReasonOwnerAssertionRequired      ReasonCode = "OWNER_ASSERTION_REQUIRED"
 
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"

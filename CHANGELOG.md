@@ -93,13 +93,11 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - Managed policy patterns are matched against a canonical request that gained
   members. `effect_class_source`, and `effect_class_declared` when the kernel
   bound a class other than the declared one, now sit directly after
-  `effect_class` in the context. Deny and escalate patterns are also matched
-  against the request without those two members, so a pattern such as
-  `"effect_class":"E1","principal_id":"..."` keeps restricting. Allow patterns
-  are matched against the full request only: one that relied on `effect_class`
-  being followed by the next context member no longer matches and the request
-  is denied. Name `effect_class_source` in the pattern, or match the members
-  separately in a class or action rule.
+  `effect_class` in the context. Every pattern is also matched against the
+  request without those two members, so a pattern such as
+  `"effect_class":"E1","principal_id":"..."` keeps matching. In that reading
+  `effect_class` is the class the kernel bound, which for a catalogued effect
+  is the catalog's class and not the declared one.
 - A CEL or PRG expression that restricted on a caller's label for a catalogued
   effect must read `effect_class_declared`: `effect_class` now holds the
   catalog's class there.

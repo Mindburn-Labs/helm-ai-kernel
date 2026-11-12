@@ -161,8 +161,8 @@ func TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass(t *testing.T) {
 // effect_class_source and effect_class_declared sort directly after
 // effect_class in the canonical text a pattern is matched against. A deny or
 // escalate pattern written when effect_class was followed by the next context
-// member must keep matching, whoever bound the class; an allow pattern reads
-// the full text only.
+// member must keep matching, whoever bound the class. An allow pattern keeps
+// matching the bound class too, and never the declaration.
 func TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers(t *testing.T) {
 	bundle := managedTestBundle(t, func(b *ManagedPolicyBundle) {
 		b.KernelRuntime.Rules = append(b.KernelRuntime.Rules,
@@ -191,7 +191,7 @@ func TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers(t 
 		{"the declared class matches the pattern as well", map[string]any{"effect_class": "E2", "effect_class_source": "effect_catalog", "effect_class_declared": "E1", "principal_id": "principal-1"}, false, string(contracts.ReasonPDPDeny)},
 		{"escalate pattern", map[string]any{"effect_class": "E2", "effect_class_source": "caller_declared", "principal_id": "principal-1"}, false, string(contracts.ReasonApprovalRequired)},
 		{"another principal is not restricted", map[string]any{"effect_class": "E1", "effect_class_source": "caller_declared", "principal_id": "principal-2"}, true, ""},
-		{"an allow pattern is not matched without the members", map[string]any{"effect_class": "ticket.read", "effect_class_source": "caller_declared", "principal_id": "principal-1"}, false, string(contracts.ReasonPDPDeny)},
+		{"an allow pattern written before the members matches the bound class", map[string]any{"effect_class": "ticket.read", "effect_class_source": "caller_declared", "principal_id": "principal-1"}, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := p.Evaluate(context.Background(), &DecisionRequest{Action: "local.echo", Context: tc.context})

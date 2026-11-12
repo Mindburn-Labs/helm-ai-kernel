@@ -1362,16 +1362,16 @@ removal_proofs:
       - "core/cmd/helm-ai-kernel.TestActivationGateLeavesTheTransportBoundEffectClass"
   - control: CTL-063
     file: core/pkg/pdp/managed_policy.go
-    find: "\t\tif !matched && rule.Verdict != contracts.VerdictAllow {\n"
-    replace: "\t\tif false && !matched && rule.Verdict != contracts.VerdictAllow {\n"
+    find: "\t\t\tfor _, view := range otherViews {\n"
+    replace: "\t\t\tfor _, view := range otherViews[:0] {\n"
     tests:
       - "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows"
       - "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
       - "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches"
   - control: CTL-063
     file: core/pkg/pdp/managed_policy.go
-    find: "\t\tif !matched && rule.Verdict != contracts.VerdictAllow {\n"
-    replace: "\t\tif !matched {\n"
+    find: "\t\t\t\tif view.asDeclared && rule.Verdict == contracts.VerdictAllow {\n"
+    replace: "\t\t\t\tif false && view.asDeclared && rule.Verdict == contracts.VerdictAllow {\n"
     tests:
       - "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
 
@@ -4899,12 +4899,12 @@ controls:
       label and never makes the class effect_catalog. A declaration that was
       not bound is kept as effect_class_declared. The organization-runtime
       route checks the activation ceiling against the bound class and attests
-      the submitted one. ManagedPolicyPDP matches allow rules against the
-      request as bound only. Deny and escalate rules are also matched against
-      the request without effect_class_source and effect_class_declared, and
-      against the request as declared, so a declaration can add a restriction
-      and never lift one, and a pattern written before those members existed
-      still restricts. The MCP path marks its class tool_catalog and the
+      the submitted one. ManagedPolicyPDP matches every rule against the
+      request as bound, with and without effect_class_source and
+      effect_class_declared. Deny and escalate rules are also matched
+      against the request as declared, and allow rules never are, so a
+      declaration can add a restriction and never lift one, and a pattern
+      written before those members existed still matches. The MCP path marks its class tool_catalog and the
       governed proxy kernel_route. effect_class, effect_class_source and
       effect_class_declared are reserved and stripped from caller input
       (CTL-022).
@@ -4913,7 +4913,7 @@ controls:
       - "core/pkg/guardian.boundActionID"
       - "core/pkg/guardian.bindRequestTool"
       - "core/cmd/helm-ai-kernel.resolveEffectClass"
-      - "core/pkg/pdp.managedPolicyRestrictingViews"
+      - "core/pkg/pdp.managedPolicyOtherViews"
     config: []
     protected_operations:
       - "Policy rule selection and execution intent issuance for every Guardian decision."
@@ -4924,7 +4924,7 @@ controls:
       - "On the evaluate route the tool itself is caller-declared: the kernel decides and signs for the tool the request names and does not dispatch it."
       - "An in-process caller that builds an Effect of a tool-call type sets params.tool_name itself and is trusted to; only the evaluated-request path replaces or removes it."
       - "Only ManagedPolicyPDP matches restricting rules against the kept declaration. A CEL or PRG expression that reads context.effect_class sees the bound class; one that restricted on a caller's label for a catalogued effect must read effect_class_declared."
-      - "A ManagedPolicyPDP allow pattern is matched against the full canonical request only, where effect_class_source (and effect_class_declared) now follow effect_class: an allow pattern that relied on effect_class being followed by the next context member no longer matches, and the request is denied. A pattern is an unanchored regular expression over that text, so an allow pattern that does not name the member it reads can match effect_class_declared or any other caller-supplied context value."
+      - "A ManagedPolicyPDP pattern is an unanchored regular expression over the canonical request, so an allow pattern that does not name the member it reads can match effect_class_declared or any other caller-supplied context value."
       - "The signed ext-authz response echoes the request's effect_class and risk_class as submitted and carries neither the bound class nor its source: when the kernel evaluated a higher class, a verifier of that response alone does not learn it. The evaluated class is in the decision's effect. Carrying it in the response is a contract change that has not been made."
       - "The organization-runtime decision attestation carries the submitted effect class, because the control plane verifies that member against the effect_level it sent. The class the ceiling was checked against, its source and the declaration are in the decision record's input context, which the attestation does not sign."
       - "The plan adapter (core/pkg/effectgraph) passes a step id as the request resource, so an EXECUTE_TOOL plan step selects the rule named by its step id; a CALL_TOOL step is evaluated as CALL_TOOL."

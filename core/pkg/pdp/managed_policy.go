@@ -234,10 +234,12 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	if err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
-	// A restricting rule is also matched against the other readings of the
-	// request. They can only add a match, so allow rules never see them: a
-	// declaration can add a restriction and never lift one.
-	restrictingViews, err := managedPolicyRestrictingViews(req)
+	// A rule is also matched against the other readings of the request. Every
+	// rule reads it as bound without the provenance members, so a pattern
+	// written before they existed matches as it did. Only a restricting rule
+	// reads it as declared: a declaration can add a restriction and never
+	// lift one.
+	otherViews, err := managedPolicyOtherViews(req)
 	if err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
@@ -245,8 +247,11 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	matchedEscalate := false
 	for _, rule := range p.rules {
 		matched := rule.matches(req, candidate)
-		if !matched && rule.Verdict != contracts.VerdictAllow {
-			for _, view := range restrictingViews {
+		if !matched {
+			for _, view := range otherViews {
+				if view.asDeclared && rule.Verdict == contracts.VerdictAllow {
+					continue
+				}
 				if rule.matches(view.request, view.candidate) {
 					matched = true
 					break
@@ -292,22 +297,28 @@ func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
 type managedPolicyView struct {
 	request   *DecisionRequest
 	candidate []byte
+	// asDeclared marks the reading that carries the caller's own class. An
+	// allow rule must not be matched against it.
+	asDeclared bool
 }
 
-// managedPolicyRestrictingViews returns the readings of a request that deny
-// and escalate rules are matched against besides the request as it was bound.
-// It returns none when no transport bound where the class came from.
+// managedPolicyOtherViews returns the readings of a request that rules are
+// matched against besides the request as it was bound. It returns none when
+// no transport bound where the class came from.
 //
 // As bound, without effect_class_source and effect_class_declared. Those two
 // members sort directly after effect_class in the canonical text, so a pattern
 // written when effect_class was followed by the next context member would
-// stop matching once a transport binds them, and a restriction would lapse.
+// stop matching once a transport binds them: a restriction would lapse and an
+// allow would turn into a denial. effect_class is the bound class in this
+// reading, so an allow rule that matches it grants nothing the bound class
+// does not.
 //
 // As declared, when the transport kept the caller's own value under
 // effect_class_declared because it bound a different class: the same reading
 // with effect_class holding that value, so a rule that restricts on what the
-// caller declared still applies.
-func managedPolicyRestrictingViews(req *DecisionRequest) ([]managedPolicyView, error) {
+// caller declared still applies. Allow rules are not matched against it.
+func managedPolicyOtherViews(req *DecisionRequest) ([]managedPolicyView, error) {
 	_, hasSource := req.Context["effect_class_source"]
 	_, hasDeclared := req.Context["effect_class_declared"]
 	if !hasSource && !hasDeclared {
@@ -337,6 +348,7 @@ func managedPolicyRestrictingViews(req *DecisionRequest) ([]managedPolicyView, e
 		if err != nil {
 			return nil, err
 		}
+		asDeclared.asDeclared = true
 		views = append(views, asDeclared)
 	}
 	return views, nil

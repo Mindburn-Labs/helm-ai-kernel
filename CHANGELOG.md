@@ -88,6 +88,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Security
+
+- The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
+  build images and the workflows. Go 1.26.10 carries GO-2026-6859 (an HTTP/1
+  server crash in `net/http`), which `govulncheck` reports as reachable. Every
+  module now declares `go 1.26.11`, so consumers need Go 1.26.11 or newer.
+
 ### Changed
 
 - CLI and served text now state what the code does. `helm-ai-kernel proxy`

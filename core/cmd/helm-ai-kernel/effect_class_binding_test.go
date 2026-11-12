@@ -45,6 +45,7 @@ func TestResolveEffectClass(t *testing.T) {
 		{"catalogued action declared above its class", contracts.EffectTypeSendChatMessage, "E3", "E3", "E3", declaredByCaller, ""},
 		{"catalogued effect named as the resource of EXECUTE_TOOL", "EXECUTE_TOOL", contracts.EffectTypeExecutePayment, "E0", "E4", fromCatalog, "E0"},
 		{"catalogued effect named as the resource of EXECUTE_TOOL on the evaluate route", "EXECUTE_TOOL", contracts.EffectTypeInfraDestroy, contracts.EffectTypeInfraDestroy, "E4", fromCatalog, contracts.EffectTypeInfraDestroy},
+		{"the resource of EXECUTE_TOOL is trimmed before the catalog lookup", "EXECUTE_TOOL", " " + contracts.EffectTypeInfraDestroy, "E0", "E4", fromCatalog, "E0"},
 		{"a reserved preview effect is known to the kernel", contracts.EffectTypeProviderTeardown, "E0", "E0", "E4", fromCatalog, "E0"},
 		// The resource of an action other than EXECUTE_TOOL.
 		{"a catalogued resource does not raise the declared class of CALL_TOOL", contracts.EffectTypeCallTool, contracts.EffectTypeInfraDestroy, "E0", "E0", declaredByCaller, ""},

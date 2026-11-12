@@ -90,19 +90,30 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Upgrade notes
 
-- Managed policy patterns are matched against a canonical request that gained
-  members. `effect_class_source`, and `effect_class_declared` when the kernel
-  bound a class other than the declared one, now sort after `effect_class` in
-  the context, with nothing between them but a member whose name begins with
-  `effect_class`. Every pattern is also matched against the
-  request without those two members, so a pattern such as
-  `"effect_class":"E1","principal_id":"..."` keeps matching. In that reading
-  `effect_class` is the class the kernel bound, which for a catalogued effect
-  is the catalog's class and not the declared one. A pattern is matched
-  against the whole request, so it also matches a member of one of these
-  names, or of `tool_name`, that the caller nested in `args` or in another
-  context member; only the `effect_class`, `action` and `resource` selectors
-  read the bound values and nothing else.
+- The request context gained members that managed policy patterns never
+  read at the top level. `effect_class_source`, and `effect_class_declared`
+  when the kernel bound a class other than the declared one, sort after
+  `effect_class` in the canonical request, with nothing between them but a
+  member whose name begins with `effect_class`. Every pattern is matched
+  against the request without those two members, the text it was written
+  for, so a pattern such as `"effect_class":"E1","principal_id":"..."` matches
+  as it did. In that reading `effect_class` is the class the kernel bound,
+  which for a catalogued effect is the catalog's class and not the declared
+  one; deny and escalate rules are also matched against it with
+  `effect_class` holding the kept declaration. A pattern that names
+  `effect_class_source` or `effect_class_declared` matches only a member of
+  that name the caller nested, so it neither admits nor refuses on the source
+  or the declaration the kernel bound; a policy that refuses caller-declared
+  classes reads `effect_class_source` from the effect's params in a PRG
+  expression. A pattern is matched against the whole request, so it also
+  matches a member named `effect_class` or `tool_name` that the caller nested
+  in `args` or in another context member. The `effect_class`, `action` and
+  `resource` selectors read the bound values, and for deny and escalate rules
+  also the kept declaration.
+- A class-keyed allow rule now admits a catalogued action sent with a label in
+  place of its class: on ext-authz or the evaluate route, `SEND_EMAIL` with
+  the effect class `ticket.read` is evaluated as the catalog's `E2`, so a rule
+  that allows `E2` admits it, where before the label selected no class rule.
 - A CEL or PRG expression that restricted on a caller's label for a catalogued
   effect must read `effect_class_declared`: `effect_class` now holds the
   catalog's class there.
@@ -158,11 +169,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   evaluated as `CALL_TOOL`. `POST /api/v1/evaluate` and the governed OpenAI
   proxy previously evaluated the rule named by a caller's `tool_name` and
   signed an ALLOW for a different tool. A managed-policy pattern is still
-  matched against the whole request: a pattern that names `tool_name`,
-  `effect_class`, `effect_class_source` or `effect_class_declared` also
-  matches a member of that name the caller nested in `args` or in another
-  context member. Only the `effect_class`, `action` and `resource` selectors
-  read the bound values and nothing else.
+  matched against the whole request, caller args included: a pattern that
+  names `tool_name`, `effect_class`, `effect_class_source` or
+  `effect_class_declared` also matches a member of that name the caller
+  nested in `args` or in another context member. The `effect_class`,
+  `action` and `resource` selectors read the bound values, and for deny and
+  escalate rules also the kept declaration.
 - On `POST /api/v1/evaluate`, the organization-runtime evaluate route and
   ext-authz, the request's effect class is recorded as a declaration and can
   no longer talk a catalogued effect under a policy ceiling. When the kernel's
@@ -179,12 +191,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   on MCP, `kernel_route` on the governed proxy, and `caller_declared` when the
   bound class is the one the caller declared. When the kernel bound a
   class other than the declared one, the caller's own value is kept as
-  `effect_class_declared`. Managed policy matches deny and escalate rules
-  against the request as declared as well as the request as bound, and never
-  matches an allow rule against the request as declared, so an allow rule's
-  `effect_class` selector reads only the bound class. The request as bound
-  carries `effect_class_declared`, so an allow pattern that names that member,
-  or that does not name the member it reads, can match the declaration.
+  `effect_class_declared`. Managed policy matches every rule against the
+  request as bound without `effect_class_source` and `effect_class_declared`,
+  and deny and escalate rules also against the request as declared, where
+  `effect_class` holds the declaration. It never matches an allow rule
+  against the request as declared, and no pattern against the top-level
+  provenance members, so neither an allow rule's `effect_class` selector nor
+  its pattern reads the declaration.
 
 ### Fixed
 

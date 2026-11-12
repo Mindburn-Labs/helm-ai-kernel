@@ -266,7 +266,8 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	return resp, nil
 }
 
-// managedPolicyCandidate is the canonical text pattern rules match.
+// managedPolicyCandidate is the canonical text of a request. Pattern rules
+// match it without the provenance members (managedPolicyReadings).
 func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
 	return canonicalize.JCS(struct {
 		Action   string         `json:"action"`
@@ -278,17 +279,18 @@ func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
 // managedPolicyReadings are the readings of one request that a rule is
 // matched against. A rule matches the request when it matches one of them.
 //
-// As bound: the request as the transport bound it.
-//
-// Without the provenance members: the request as bound without
-// effect_class_source and effect_class_declared, when a transport bound
-// either. Those two members sort right after effect_class in the canonical
-// text (only a member whose name begins with effect_class can come between),
-// so a pattern written when effect_class was followed by the next context
-// member would stop matching once a transport binds them: a restriction
-// would lapse and an allow would turn into a denial. effect_class is the bound
-// class in this reading, so an allow rule that matches it grants nothing the
-// bound class does not.
+// Without the provenance members: the request as the transport bound it,
+// without effect_class_source and effect_class_declared. This is the text a
+// pattern written before those members existed was written for. They sort
+// right after effect_class in the canonical text (only a member whose name
+// begins with effect_class can come between), so in the text as bound a
+// pattern written when effect_class was followed by the next context member
+// would stop matching: a restriction would lapse and an allow would turn into
+// a denial. No pattern is matched against the text as bound, so none reads
+// either member at the top level: an allow pattern cannot match the
+// declaration the caller chose or the source the kernel bound, and a pattern
+// that names one matches only a member of that name the caller nested.
+// effect_class is the bound class in this reading.
 //
 // As declared: when the transport kept the caller's own value under
 // effect_class_declared because it bound a different class, the reading
@@ -296,17 +298,18 @@ func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
 // rule that restricts on what the caller declared still applies. Allow rules
 // are never matched against it.
 //
-// Selectors read effect_class, the action and the resource as values, and the
-// reading without the provenance members has the same three, so only a
-// pattern needs its text. The text of the other readings is built when the
-// first pattern needs it, cut from the canonical text of the request as bound.
+// Selectors read effect_class, the action and the resource as values, so only
+// a pattern needs a reading's text. Where a transport bound a provenance
+// member, the text is built when the first pattern needs it, cut from the
+// canonical text of the request as bound.
 type managedPolicyReadings struct {
 	req           *DecisionRequest
 	candidate     []byte
 	boundClass    string
 	hasBoundClass bool
 	// provenance: a transport bound effect_class_source or
-	// effect_class_declared, so the reading without them exists.
+	// effect_class_declared, so the reading without them is not the text as
+	// bound.
 	provenance bool
 	// declaredClass is the caller's own value the transport kept; the reading
 	// as declared exists only when it is set.
@@ -336,17 +339,15 @@ func (r *managedPolicyReadings) bind(req *DecisionRequest) error {
 // matches reports whether rule matches one of the readings of the request.
 func (r *managedPolicyReadings) matches(rule compiledManagedPolicyRule) (bool, error) {
 	if rule.matchesSelectors(r.req, r.boundClass, r.hasBoundClass) {
-		if rule.pattern == nil || rule.pattern.Match(r.candidate) {
+		if rule.pattern == nil {
 			return true, nil
 		}
-		if r.provenance {
-			text, err := r.withoutProvenanceText()
-			if err != nil {
-				return false, err
-			}
-			if rule.pattern.Match(text) {
-				return true, nil
-			}
+		text, err := r.withoutProvenanceText()
+		if err != nil {
+			return false, err
+		}
+		if rule.pattern.Match(text) {
+			return true, nil
 		}
 	}
 	// Allow rules are never matched against the request as declared, so a
@@ -367,7 +368,13 @@ func (r *managedPolicyReadings) matches(rule compiledManagedPolicyRule) (bool, e
 	return rule.pattern.Match(text), nil
 }
 
+// withoutProvenanceText returns the text of the reading without the
+// provenance members, which is the text as bound when a transport bound
+// neither.
 func (r *managedPolicyReadings) withoutProvenanceText() ([]byte, error) {
+	if !r.provenance {
+		return r.candidate, nil
+	}
 	if r.withoutProvenance == nil {
 		text, ok := r.cutReading(false)
 		if !ok {

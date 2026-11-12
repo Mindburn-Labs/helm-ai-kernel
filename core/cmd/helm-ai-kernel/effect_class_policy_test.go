@@ -105,6 +105,33 @@ func effectClassPolicyServices(t *testing.T, extra ...pdp.ManagedPolicyRule) (*S
 	}, policy
 }
 
+// kernelClassifiedOnlyServices decides with a PRG rule for each action that
+// admits only a class the kernel classified: it reads effect_class_source from
+// the effect's params. The capturing PDP admits everything and keeps what
+// policy received.
+func kernelClassifiedOnlyServices(t *testing.T, actions ...string) (*Services, *evaluateRouteCapturingPDP) {
+	t.Helper()
+	graph := prg.NewGraph()
+	for _, action := range actions {
+		if err := graph.AddRule(action, prg.RequirementSet{
+			ID: "kernel-classified-" + action, Logic: prg.AND,
+			Requirements: []prg.Requirement{{ID: "kernel-classified", Expression: `input.effect.params.effect_class_source != "caller_declared"`}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	signer, err := helmcrypto.NewEd25519Signer("kernel-classified-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturing := &evaluateRouteCapturingPDP{}
+	return &Services{
+		Guardian:      guardian.NewGuardian(signer, graph, artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
+		ReceiptStore:  &captureReceiptStore{},
+		ReceiptSigner: signer,
+	}, capturing
+}
+
 func evaluateWithEffectClassPolicy(t *testing.T, svc *Services, body string) api.EvaluateResponse {
 	t.Helper()
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
@@ -128,7 +155,7 @@ func evaluateWithEffectClassPolicy(t *testing.T, svc *Services, body string) api
 	return response
 }
 
-func extAuthzWithEffectClassPolicy(t *testing.T, svc *Services, policy *recordingManagedPolicy, action, toolURN, class string) extauthz.AuthorizationResponse {
+func extAuthzWithEffectClassPolicy(t *testing.T, svc *Services, policy interface{ PolicyHash() string }, action, toolURN, class string) extauthz.AuthorizationResponse {
 	t.Helper()
 	fixture := extAuthzRouteFixture("req-effect-class-policy", "tenant-a", "")
 	fixture.PolicyHash = policy.PolicyHash()
@@ -194,20 +221,39 @@ func TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow(t *testing.
 		}
 	})
 	// A policy that admits only kernel-classified effects refuses every one of
-	// these: none of them is.
+	// these: none of them is. It reads effect_class_source from the effect, as
+	// a PRG expression does; a managed pattern never reads the member the
+	// transport bound.
 	t.Run("a rule that refuses caller_declared refuses them all", func(t *testing.T) {
 		for _, level := range []string{"E1", contracts.EffectTypeCreateTask} {
-			svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest, denyCallerDeclaredForEffectClassTest)
+			svc, capturing := kernelClassifiedOnlyServices(t, "db.drop_database")
 			response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"db.drop_database","effect_level":"`+level+`","session_id":"s-1"}`)
-			policy.requireEffectClass(t, level, declaredByCaller, nil)
+			if capturing.request == nil {
+				t.Fatal("the request did not reach the policy decision point; the case proves nothing")
+			}
+			requireEffectClassBinding(t, capturing.request.Context, level, declaredByCaller, nil)
 			if response.Verdict != string(contracts.VerdictDeny) {
 				t.Fatalf("effect_level=%s: verdict=%s, want DENY from the caller_declared rule", level, response.Verdict)
 			}
 		}
-		svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest, denyCallerDeclaredForEffectClassTest)
-		response := extAuthzWithEffectClassPolicy(t, svc, policy, "db.drop_database", contracts.EffectTypeCreateTask, "E1")
+		svc, capturing := kernelClassifiedOnlyServices(t, "db.drop_database")
+		response := extAuthzWithEffectClassPolicy(t, svc, capturing, "db.drop_database", contracts.EffectTypeCreateTask, "E1")
+		if capturing.request == nil {
+			t.Fatal("the request did not reach the policy decision point; the case proves nothing")
+		}
+		requireEffectClassBinding(t, capturing.request.Context, "E1", declaredByCaller, nil)
 		if response.Verdict != extauthz.VerdictDeny {
 			t.Fatalf("ext-authz verdict=%s, want DENY from the caller_declared rule", response.Verdict)
+		}
+		// The same rule admits a class the catalog assigned, so the refusals
+		// above are the source's.
+		svc, _ = kernelClassifiedOnlyServices(t, contracts.EffectTypeSendChatMessage)
+		if response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_CHAT_MESSAGE","effect_level":"E1","session_id":"s-1"}`); response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("catalogued action: verdict=%s reason=%s, want ALLOW", response.Verdict, response.ReasonCode)
+		}
+		svc, capturing = kernelClassifiedOnlyServices(t, contracts.EffectTypeSendChatMessage)
+		if response := extAuthzWithEffectClassPolicy(t, svc, capturing, contracts.EffectTypeSendChatMessage, "local.echo", "E1"); response.Verdict != extauthz.VerdictAllow {
+			t.Fatalf("catalogued action on ext-authz: verdict=%s reason=%s, want ALLOW", response.Verdict, response.ReasonCode)
 		}
 	})
 }
@@ -282,6 +328,31 @@ func TestExecuteToolTakesTheCatalogClassOfItsTool(t *testing.T) {
 	}
 }
 
+// The bound class of a catalogued action is the catalog's, so a class-keyed
+// allow rule admits the action sent with a label in place of its class. When
+// the label was bound as the class, it selected no class rule.
+func TestAClassAllowRuleAdmitsACataloguedActionSentWithALabel(t *testing.T) {
+	allowE2 := pdp.ManagedPolicyRule{
+		ID: "p1-e2", Layer: pdp.ManagedPolicyLayerP1, EffectClass: "E2", Verdict: contracts.VerdictAllow, Reason: "bounded effects are allowed",
+	}
+	t.Run("evaluate", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, allowE2)
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"ticket.read","session_id":"s-1"}`)
+		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceEffectCatalog, "ticket.read")
+		if response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("verdict=%s reason=%s, want ALLOW from the E2 rule", response.Verdict, response.ReasonCode)
+		}
+	})
+	t.Run("ext-authz", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, allowE2)
+		response := extAuthzWithEffectClassPolicy(t, svc, policy, contracts.EffectTypeSendEmail, "local.echo", "ticket.read")
+		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceEffectCatalog, "ticket.read")
+		if response.Verdict != extauthz.VerdictAllow {
+			t.Fatalf("verdict=%s reason=%s, want ALLOW from the E2 rule", response.Verdict, response.ReasonCode)
+		}
+	})
+}
+
 // A deny pattern written when effect_class was followed by the next context
 // member still matches now that effect_class_source sorts between them.
 func TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches(t *testing.T) {
@@ -331,8 +402,9 @@ func TestEvaluateRoutePolicyNeverSeesACallersToolName(t *testing.T) {
 
 // Bypass: a pattern is matched against the whole canonical request, so it
 // also matches a member the caller nested in args or context under one of the
-// names the kernel binds at the top level. Only the effect_class, action and
-// resource selectors read the bound values.
+// names the kernel binds at the top level. The effect_class, action and
+// resource selectors read the bound values, and for deny and escalate rules
+// also the kept declaration.
 func TestManagedPolicyPatternsAlsoMatchMembersTheCallerNested(t *testing.T) {
 	t.Run("a pattern on tool_name matches args.tool_name", func(t *testing.T) {
 		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
@@ -369,14 +441,64 @@ func TestManagedPolicyPatternsAlsoMatchMembersTheCallerNested(t *testing.T) {
 			t.Fatalf("verdict=%s, want DENY: SEND_EMAIL is bound E2 and the E1 rule allows", response.Verdict)
 		}
 	})
-	t.Run("an allow pattern on effect_class_declared matches the declaration", func(t *testing.T) {
+}
+
+// A managed pattern is never matched against the request as bound, which
+// carries the top-level effect_class_source and effect_class_declared, so an
+// allow pattern that names either is satisfied neither by the caller's
+// declaration nor by the source the kernel bound.
+func TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers(t *testing.T) {
+	t.Run("an allow pattern on effect_class_declared does not match the declaration", func(t *testing.T) {
 		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
 			ID: "p1-read-label", Layer: pdp.ManagedPolicyLayerP1, Pattern: `"effect_class_declared":"ticket\.read"`, Verdict: contracts.VerdictAllow, Reason: "ticket reads are allowed",
 		})
 		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"ticket.read","session_id":"s-1"}`)
 		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceEffectCatalog, "ticket.read")
-		if response.Verdict != string(contracts.VerdictAllow) {
-			t.Fatalf("verdict=%s, want ALLOW: the pattern names the member that holds the declaration", response.Verdict)
+		if response.Verdict != string(contracts.VerdictDeny) {
+			t.Fatalf("verdict=%s, want DENY: the caller's declaration matched an allow pattern", response.Verdict)
+		}
+	})
+	t.Run("an allow pattern on effect_class_source does not match the bound source", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-attested-e2", Layer: pdp.ManagedPolicyLayerP1, Pattern: `"effect_class":"E2","effect_class_source":"effect_catalog"`, Verdict: contracts.VerdictAllow, Reason: "catalogued E2 is allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"E2","session_id":"s-1"}`)
+		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceEffectCatalog, nil)
+		if response.Verdict != string(contracts.VerdictDeny) {
+			t.Fatalf("verdict=%s, want DENY: the bound effect_class_source matched an allow pattern", response.Verdict)
+		}
+	})
+}
+
+// Bypass: a managed pattern never reads the top-level effect_class_source, so
+// managed policy cannot restrict on who asserted the class. A deny pattern on
+// caller_declared refuses only a request whose caller nested that member. A
+// policy that refuses caller-declared classes reads the source from the
+// effect's params in a PRG expression (kernelClassifiedOnlyServices).
+func TestManagedPolicyPatternsCannotRestrictOnTheBoundEffectClassSource(t *testing.T) {
+	const declaredByCaller = guardian.EffectClassSourceCallerDeclared
+	for _, tc := range []struct {
+		name, body string
+		verdict    contracts.Verdict
+	}{
+		{"the bound caller_declared is not read", `{"tool":"db.drop_database","effect_level":"E1","session_id":"s-1"}`, contracts.VerdictAllow},
+		{"a member the caller nested is", `{"tool":"db.drop_database","effect_level":"E1","session_id":"s-1","args":{"effect_class_source":"caller_declared"}}`, contracts.VerdictDeny},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest, denyCallerDeclaredForEffectClassTest)
+			response := evaluateWithEffectClassPolicy(t, svc, tc.body)
+			policy.requireEffectClass(t, "E1", declaredByCaller, nil)
+			if response.Verdict != string(tc.verdict) {
+				t.Fatalf("verdict=%s reason=%s, want %s", response.Verdict, response.ReasonCode, tc.verdict)
+			}
+		})
+	}
+	t.Run("ext-authz", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest, denyCallerDeclaredForEffectClassTest)
+		response := extAuthzWithEffectClassPolicy(t, svc, policy, "db.drop_database", contracts.EffectTypeCreateTask, "E1")
+		policy.requireEffectClass(t, "E1", declaredByCaller, nil)
+		if response.Verdict != extauthz.VerdictAllow {
+			t.Fatalf("verdict=%s reason=%s, want ALLOW: the deny pattern read the bound effect_class_source", response.Verdict, response.ReasonCode)
 		}
 	})
 }

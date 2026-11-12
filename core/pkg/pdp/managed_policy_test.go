@@ -213,6 +213,43 @@ func TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers(t 
 	}
 }
 
+// No pattern is matched against the request as bound, which carries the
+// top-level effect_class_source and effect_class_declared. So an allow
+// pattern can match neither the declaration the caller chose nor the source
+// the kernel bound, whether it names the member or only its value.
+func TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers(t *testing.T) {
+	declared := map[string]any{"effect_class": "E2", "effect_class_source": "effect_catalog", "effect_class_declared": "ticket.read", "principal_id": "principal-1"}
+	catalogued := map[string]any{"effect_class": "E2", "effect_class_source": "tool_catalog", "principal_id": "principal-1"}
+	for _, tc := range []struct {
+		name, pattern string
+		context       map[string]any
+	}{
+		{"a pattern that names the declaration", `"effect_class_declared":"ticket\.read"`, declared},
+		{"a pattern on the declared value alone", `:"ticket\.read"`, declared},
+		{"a pattern that names both members", `"effect_class_declared":"ticket\.read","effect_class_source":"effect_catalog"`, declared},
+		{"a pattern that names the bound source", `"effect_class":"E2","effect_class_source":"tool_catalog"`, catalogued},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := managedTestBundle(t, func(b *ManagedPolicyBundle) {
+				b.KernelRuntime.Rules = append(b.KernelRuntime.Rules,
+					ManagedPolicyRule{ID: "p1-pattern", Layer: ManagedPolicyLayerP1, Pattern: tc.pattern, Verdict: contracts.VerdictAllow, Reason: "allowed by pattern"},
+				)
+			})
+			p, err := NewManagedPolicyPDP(bundle, []string{managedTestSourceHash})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := p.Evaluate(context.Background(), &DecisionRequest{Action: "SEND_EMAIL", Context: tc.context})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.Allow || resp.ReasonCode != string(contracts.ReasonPDPDeny) {
+				t.Fatalf("response = %+v: the allow pattern %s read a top-level provenance member", resp, tc.pattern)
+			}
+		})
+	}
+}
+
 // The readings without the provenance members and as declared are cut from
 // the canonical text already built for the request; neither is canonicalized
 // again. Here a deny pattern that matches nothing needs both, and the request

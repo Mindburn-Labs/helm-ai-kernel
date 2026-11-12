@@ -5263,7 +5263,7 @@
       "id": "CTL-063",
       "title": "The evaluated action and its effect class come from the request tuple and the catalog",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Guardian selects the policy rule, and names an execution intent's allowed tool, from the typed request it signs (helm-tracker#304). One helper (boundActionID) serves the rule lookup and the intent, so they cannot name different tools. It reads params.tool_name only for the tool-call effect types (EXECUTE_TOOL, CALL_TOOL). On an evaluated request the context is the caller's, so bindRequestTool runs before any gate or the policy decision point reads it: for EXECUTE_TOOL it replaces the top-level tool_name of the context with the request resource, and for every other action it removes it, so the top-level tool_name that policy reads is never the caller's and a CALL_TOOL request is evaluated as CALL_TOOL. A tool_name nested in args or in another context member is left as the caller sent it. On the evaluate and ext-authz routes the request's effect class is a declaration: it is bound as effect_class with effect_class_source caller_declared, unless the kernel's effect type catalog knows the evaluated action, in which case the bound class is never below the catalog's (effect_class_source effect_catalog). The evaluated action is the request's action and, for EXECUTE_TOOL, its resource, which Guardian evaluates as the tool. The resource of any other action proves nothing about the action and does not change the class. A declaration that was not bound is kept as effect_class_declared. The organization-runtime route checks the activation ceiling against the bound class and attests the submitted one. ManagedPolicyPDP matches every rule against the request as bound, with and without effect_class_source and effect_class_declared, so a pattern written before those members existed still matches. Deny and escalate rules are also matched against the request as declared, where effect_class holds the declaration; allow rules never are, so an allow rule's effect_class selector reads only the bound class. The MCP path marks its class tool_catalog and the governed proxy kernel_route. effect_class, effect_class_source and effect_class_declared are reserved: a top-level context member or MCP argument of one of these names from the caller is removed or refused (CTL-022) before the transport binds its own, and members of these names nested deeper are left as the caller sent them.",
+      "claim": "Guardian selects the policy rule, and names an execution intent's allowed tool, from the typed request it signs (helm-tracker#304). One helper (boundActionID) serves the rule lookup and the intent, so they cannot name different tools. It reads params.tool_name only for the tool-call effect types (EXECUTE_TOOL, CALL_TOOL). On an evaluated request the context is the caller's, so bindRequestTool runs before any gate or the policy decision point reads it: for EXECUTE_TOOL it replaces the top-level tool_name of the context with the request resource, and for every other action it removes it, so the top-level tool_name that policy reads is never the caller's and a CALL_TOOL request is evaluated as CALL_TOOL. A tool_name nested in args or in another context member is left as the caller sent it. On the evaluate and ext-authz routes the request's effect class is a declaration: it is bound as effect_class with effect_class_source caller_declared, unless the kernel's effect type catalog knows the evaluated action, in which case the bound class is never below the catalog's (effect_class_source effect_catalog). The evaluated action is the request's action and, for EXECUTE_TOOL, its resource, which Guardian evaluates as the tool. The resource of any other action proves nothing about the action and does not change the class. A declaration that was not bound is kept as effect_class_declared. The organization-runtime route checks the activation ceiling against the bound class and attests the submitted one. ManagedPolicyPDP matches every rule against the request as bound without effect_class_source and effect_class_declared, the text a pattern written before those members existed was written for, so such a pattern matches as it did and no pattern reads either member at the top level. Deny and escalate rules are also matched against that reading with effect_class holding the declaration; allow rules never are, so an allow rule's effect_class selector and pattern read only the bound class. The MCP path marks its class tool_catalog and the governed proxy kernel_route. effect_class, effect_class_source and effect_class_declared are reserved: a top-level context member or MCP argument of one of these names from the caller is removed or refused (CTL-022) before the transport binds its own, and members of these names nested deeper are left as the caller sent them.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -5295,7 +5295,8 @@
         "On the evaluate route the tool itself is caller-declared: the kernel decides and signs for the tool the request names and does not dispatch it.",
         "An in-process caller that builds an Effect of a tool-call type sets params.tool_name itself and is trusted to; only the evaluated-request path replaces or removes it.",
         "Only ManagedPolicyPDP matches restricting rules against the kept declaration. A CEL or PRG expression that reads context.effect_class sees the bound class; one that restricted on a caller's label for a catalogued effect must read effect_class_declared.",
-        "A ManagedPolicyPDP pattern is an unanchored regular expression over the whole canonical request, caller args and nested context included. Any pattern, including one that names tool_name, effect_class, effect_class_source or effect_class_declared, also matches a member of that name the caller nested in args or in another context member, which no transport removes; and the request as bound carries effect_class_declared, so an allow pattern that names it, or that does not name the member it reads, can match the caller's declaration. Only the effect_class, action and resource selectors read the bound values and nothing else.",
+        "A ManagedPolicyPDP pattern is an unanchored regular expression over the whole canonical request without the top-level effect_class_source and effect_class_declared, caller args and nested context included. Any pattern, including one that names tool_name, effect_class, effect_class_source or effect_class_declared, also matches a member of that name the caller nested in args or in another context member, which no transport removes. The effect_class, action and resource selectors read the bound values, and for deny and escalate rules also the kept declaration.",
+        "A ManagedPolicyPDP pattern never reads the top-level effect_class_source, so managed policy cannot restrict on who asserted the class: a deny pattern on caller_declared refuses only a request whose caller nested that member. A policy that refuses caller-declared classes reads effect_class_source from the effect's params in a PRG expression.",
         "A pattern that relies on two context members being adjacent in the canonical text, or that matches a member name case-insensitively, depends on the caller's other members. A member the caller sends that sorts between the two (foo, or effect_class0, between effect_class and principal_id) ends the adjacency. Reserved names are removed only when the key, trimmed, is spelled exactly, and tool_name only when it is spelled exactly, so Effect_Class, EFFECT_CLASS or Tool_Name from the caller reaches policy and matches a (?i) pattern written for effect_class or tool_name.",
         "The signed ext-authz response echoes the request's effect_class and risk_class as submitted and carries neither the bound class nor its source: when the kernel evaluated a higher class, a verifier of that response alone does not learn it. The evaluated class is in the decision's effect. Carrying it in the response is a contract change that has not been made.",
         "The organization-runtime decision attestation carries the submitted effect class, because the control plane verifies that member against the effect_level it sent. The class the ceiling was checked against, its source and the declaration are in the decision record's input context, which the attestation does not sign. When the activation gate refuses the request, the decision record signed for the refusal carries no effect digest, so its signature does not cover that input context either.",
@@ -5308,7 +5309,8 @@
           "core/cmd/helm-ai-kernel.TestEvaluateRouteMarksDeclaredEffectClassAsCallerDeclared",
           "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource",
           "core/cmd/helm-ai-kernel.TestExecuteToolTakesTheCatalogClassOfItsTool",
-          "core/cmd/helm-ai-kernel.TestTheResourceDoesNotChangeTheClassOfAnotherAction"
+          "core/cmd/helm-ai-kernel.TestTheResourceDoesNotChangeTheClassOfAnotherAction",
+          "core/cmd/helm-ai-kernel.TestAClassAllowRuleAdmitsACataloguedActionSentWithALabel"
         ],
         "forbidden": [
           "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction",
@@ -5326,7 +5328,9 @@
           "core/cmd/helm-ai-kernel.TestOrganizationRuntimeChecksALabelOnACataloguedActionAgainstTheCatalogClass",
           "core/cmd/helm-ai-kernel.TestActivationGateRefusesARequestWithNoBoundEffectClass",
           "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass",
-          "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
+          "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
+          "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
         ],
         "removal": [
           "core/pkg/guardian.TestSignDecisionHonoursToolNameOnlyForExecuteTool",
@@ -5347,13 +5351,16 @@
           "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
           "core/pkg/pdp.TestManagedPolicyReadingsAreCutAsCanonicalizationWritesThem",
           "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches",
-          "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
+          "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass",
+          "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
         ],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestResolveEffectClass",
           "core/pkg/mcp.TestGovernanceFirewall_AllowsReservedNamesNestedInsideAnArgument",
           "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsAlsoMatchMembersTheCallerNested",
           "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsDependOnTheCallersOtherMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsCannotRestrictOnTheBoundEffectClassSource",
           "core/cmd/helm-ai-kernel.TestActivationRefusalSignatureDoesNotCoverTheBoundEffectClass"
         ]
       },
@@ -5406,7 +5413,15 @@
           "file": "core/pkg/pdp/managed_policy.go",
           "tests": [
             "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
-            "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches"
+            "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches",
+            "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+            "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
           ]
         },
         {

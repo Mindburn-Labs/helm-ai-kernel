@@ -103,9 +103,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `effect_class` holding the kept declaration. A pattern that names
   `effect_class_source` or `effect_class_declared` matches only a member of
   that name the caller nested, so it neither admits nor refuses on the source
-  or the declaration the kernel bound; a policy that refuses caller-declared
-  classes reads `effect_class_source` from the effect's params in a PRG
-  expression. A pattern is matched against the whole request, so it also
+  or the declaration the kernel bound. Where the PDP's ALLOW is not
+  authoritative (no PDP, or the CEL/PRG runtime policy), a PRG expression can
+  refuse caller-declared classes by reading `effect_class_source` from the
+  effect's params; under ManagedPolicyPDP an ALLOW replaces local PRG
+  evaluation, so no rule can refuse a caller-declared class until a typed
+  `effect_class_source` selector lands (helm-tracker#322). A pattern is matched against the whole request, so it also
   matches a member named `effect_class` or `tool_name` that the caller nested
   in `args` or in another context member. The `effect_class`, `action` and
   `resource` selectors read the bound values, and for deny and escalate rules

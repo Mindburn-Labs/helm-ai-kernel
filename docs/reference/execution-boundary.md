@@ -148,6 +148,17 @@ Deny paths are still proof paths: they produce a boundary record and receipt rat
 
 External envelopes can help auditors and procurement teams move evidence between systems, but they do not become the source of truth. Verification starts with HELM receipts, grant or snapshot hashes, boundary record hashes, checkpoints, and the EvidencePack manifest.
 
+`helm-ai-kernel evidence envelope verify --manifest-id <id>` checks the manifest
+and payload recorded in the local registry: native authority, the manifest
+hash, the payload hash, and the wrapper's non-authoritative role. It compares
+`--manifest-hash` and `--native-root`, when given, with the recorded manifest.
+These are hash comparisons; the wrapper payloads are unsigned and no signature
+is verified. Every check is reported as `PASS`, `FAIL`, or `SKIPPED`. A check
+with nothing to compare is `SKIPPED`: all of them when no manifest is recorded
+under that id, and `payload_hash` and `envelope_role` when the manifest has no
+recorded payload. `verified` is true, and the exit code 0, only when every
+check ran and passed.
+
 HELM can consume and correlate external host evidence produced by independent
 recorders. Imported host chains can prove that a host observed outbound network
 behavior; HELM correlation then checks whether that behavior aligns with HELM

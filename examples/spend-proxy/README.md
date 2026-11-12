@@ -42,6 +42,11 @@ helm-ai-kernel spend-proxy \
   --receipts-dir ./helm-spend-receipts
 ```
 
+The proxy listens on `127.0.0.1:9095`. `--addr` takes a loopback address only:
+the proxy has no caller credential and spends the upstream key for any caller
+that reaches it, so it refuses to start on a non-loopback address
+(`controls.yaml` CTL-026).
+
 Point any OpenAI-compatible client at the proxy:
 
 ```bash

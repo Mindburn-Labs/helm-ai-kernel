@@ -6,8 +6,8 @@
   ],
   "summary": {
     "total": 87,
-    "enforced": 48,
-    "observed_only": 25,
+    "enforced": 49,
+    "observed_only": 24,
     "unmanaged": 14,
     "retired_invariants": 13,
     "build_plane": 1
@@ -1624,14 +1624,14 @@
       ],
       "gates": [],
       "config": [
-        "spend-proxy --addr (default 127.0.0.1; a non-loopback address is not refused)"
+        "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
       ],
       "protected_operations": [
         "Inference requests through the spend proxy."
       ],
       "bypass_assumptions": [
         "The ledger is a JSONL file, not Postgres (R5).",
-        "The spend-proxy listener has no auth; the tenant comes from configuration.",
+        "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration.",
         "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
       ],
       "tests": {
@@ -2092,10 +2092,9 @@
       "id": "CTL-026",
       "title": "Non-loopback listeners require auth",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The proxy and MCP listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer.",
-      "status": "observed-only",
+      "claim": "The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer. The spend-proxy has no caller credential, so it never binds beyond loopback.",
+      "status": "enforced",
       "plane": "runtime",
-      "reason": "Reachable and tested, but deleting the check makes the listener start and block, so the refusal tests hang rather than fail. A removal proof needs a test that asserts the refusal without serving; none exists yet.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.requireListenerAuth",
@@ -2108,13 +2107,16 @@
       ],
       "gates": [],
       "config": [
-        "helm-ai-kernel proxy and mcp serve bind flags and tokens"
+        "helm-ai-kernel proxy and mcp serve bind flags and tokens",
+        "helm-ai-kernel spend-proxy --addr"
       ],
       "protected_operations": [
-        "Starting the proxy or MCP listener on a non-loopback address."
+        "Starting the proxy, MCP or spend-proxy listener on a non-loopback address.",
+        "Calling the proxy when its token is configured."
       ],
       "bypass_assumptions": [
-        "A loopback bind needs no authentication; anything on the host can reach it."
+        "A loopback bind needs no authentication; anything on the host can reach it.",
+        "Removal of the bind check is proven through the spend-proxy refusal, which fails without serving. The proxy and MCP refusal tests would start a listener and block instead of failing, so they are forbidden tests only."
       ],
       "tests": {
         "allowed": [
@@ -2122,14 +2124,31 @@
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestProxyRefusesNonLoopbackBindWithoutToken",
-          "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth"
+          "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth",
+          "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
         ],
-        "removal": [],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind",
+          "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
+        ],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestMetricsLoopbackOnlyOrAuthenticated"
         ]
       },
-      "removal_proofs": []
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/listener_auth.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/listener_auth.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-027",

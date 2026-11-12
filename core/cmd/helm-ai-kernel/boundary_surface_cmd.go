@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -1527,42 +1529,78 @@ func runEvidenceEnvelopePayload(args []string, stdout, stderr io.Writer) int {
 func runEvidenceEnvelopeVerify(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("evidence envelope verify", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	manifestID := cmd.String("manifest-id", "", "Envelope manifest id")
-	manifestHash := cmd.String("manifest-hash", "", "Manifest hash")
-	nativeRoot := cmd.String("native-root", "", "Native EvidencePack root hash")
+	manifestID := cmd.String("manifest-id", "", "Envelope manifest id recorded in the local registry (required)")
+	manifestHash := cmd.String("manifest-hash", "", "Expected manifest hash, compared with the recorded manifest")
+	nativeRoot := cmd.String("native-root", "", "Expected native EvidencePack root hash, compared with the recorded manifest")
 	envelope := cmd.String("envelope", "dsse", "Envelope type")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
+	// Nothing is verified until the supplied values have been compared with a
+	// manifest this command loaded; the supplied values alone prove nothing.
 	result := contracts.EvidenceEnvelopeVerification{
 		ManifestID:   *manifestID,
 		ManifestHash: *manifestHash,
 		Envelope:     *envelope,
-		Verified:     *manifestHash != "" && *nativeRoot != "",
 		NativeRoot:   *nativeRoot,
-		Checks:       map[string]string{"manifest_hash": "PASS", "native_root": "PASS"},
-		VerifiedAt:   time.Now().UTC(),
+		Checks: map[string]string{
+			"native_authority": evidencepkg.EnvelopeCheckSkipped,
+			"manifest_hash":    evidencepkg.EnvelopeCheckSkipped,
+			"payload_hash":     evidencepkg.EnvelopeCheckSkipped,
+			"envelope_role":    evidencepkg.EnvelopeCheckSkipped,
+		},
+		Errors:     []string{"no manifest id was given, so there is no recorded manifest to compare with: nothing was checked"},
+		VerifiedAt: time.Now().UTC(),
 	}
-	if !result.Verified {
-		result.Checks = map[string]string{"manifest_hash": "FAIL", "native_root": "FAIL"}
-		result.Errors = []string{"manifest hash and native root are required"}
+	if *nativeRoot != "" {
+		result.Checks["native_root"] = evidencepkg.EnvelopeCheckSkipped
 	}
 	if *manifestID != "" {
 		registry := newLocalSurfaceRegistry()
-		if manifest, ok := registry.GetEnvelope(*manifestID); ok {
-			payload, payloadOK := registry.GetEnvelopePayload(*manifestID)
-			if !payloadOK {
-				payload, _ = evidencepkg.BuildEnvelopePayload(manifest)
+		manifest, ok := registry.GetEnvelope(*manifestID)
+		if !ok {
+			result.Errors = []string{fmt.Sprintf("envelope manifest %q is not recorded in this local CLI registry: nothing was checked", *manifestID)}
+		} else {
+			// A payload that was not recorded is not rebuilt from the manifest:
+			// it would only match itself, and payload_hash would pass unchecked.
+			if payload, recorded := registry.GetEnvelopePayload(*manifestID); recorded {
+				result = evidencepkg.VerifyEnvelopePayload(manifest, payload)
+			} else {
+				result = evidencepkg.VerifyEnvelopeManifest(manifest)
 			}
-			result = evidencepkg.VerifyEnvelopePayload(manifest, payload)
+			if *manifestHash != "" && *manifestHash != manifest.ManifestHash {
+				result.Checks["manifest_hash"] = evidencepkg.EnvelopeCheckFail
+				result.Errors = append(result.Errors, "supplied manifest hash does not match the recorded manifest")
+			}
+			if *nativeRoot != "" {
+				result.Checks["native_root"] = evidencepkg.EnvelopeCheckPass
+				if *nativeRoot != manifest.NativeEvidenceHash {
+					result.Checks["native_root"] = evidencepkg.EnvelopeCheckFail
+					result.Errors = append(result.Errors, "supplied native root does not match the recorded manifest")
+				}
+			}
+			// Verified takes every check having run and passed; a skipped
+			// check is not a pass.
+			result.Verified = len(result.Errors) == 0
+			for _, status := range result.Checks {
+				if status != evidencepkg.EnvelopeCheckPass {
+					result.Verified = false
+				}
+			}
 		}
 	}
 	if *jsonOutput {
 		return writeSurfaceJSONResult(stdout, result, result.Verified)
 	}
 	fmt.Fprintf(stdout, "Evidence envelope verify manifest=%s verified=%t\n", result.ManifestID, result.Verified)
+	for _, check := range slices.Sorted(maps.Keys(result.Checks)) {
+		fmt.Fprintf(stdout, "  %-17s %s\n", check, result.Checks[check])
+	}
 	if !result.Verified {
+		for _, reason := range result.Errors {
+			fmt.Fprintf(stderr, "Error: %s\n", reason)
+		}
 		return 1
 	}
 	return 0

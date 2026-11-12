@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,18 +50,59 @@ type demoRunRequest struct {
 	Args     map[string]any `json:"args,omitempty"`
 }
 
-// demoVerifyRequest and demoTamperRequest keep the receipt as the bytes the
-// caller sent, for readDemoReceipt: decoding it here would let encoding/json
-// fold member names before the receipt parser sees them.
-type demoVerifyRequest struct {
-	Receipt             json.RawMessage `json:"receipt"`
-	ExpectedReceiptHash string          `json:"expected_receipt_hash"`
+// demoReceiptRequest is the body of POST /api/demo/verify and
+// POST /api/demo/tamper, as readDemoReceiptRequest reads it. The receipt is
+// kept as the bytes the caller sent, for readDemoReceipt: decoding it here
+// would let encoding/json fold member names before the receipt parser sees
+// them.
+type demoReceiptRequest struct {
+	Receipt             json.RawMessage
+	ExpectedReceiptHash string
+	Mutation            string
 }
 
-type demoTamperRequest struct {
-	Receipt             json.RawMessage `json:"receipt"`
-	ExpectedReceiptHash string          `json:"expected_receipt_hash"`
-	Mutation            string          `json:"mutation"`
+// readDemoReceiptRequest reads a demo request body by exact member name.
+//
+// encoding/json binds an object member to a struct field whatever its letter
+// case, so a body whose "receipt" says ALLOW and whose "Receipt" is the
+// genuine DENY was verified as the DENY while the page that shows the request
+// reads ALLOW (helm-tracker#305). The body must be one JSON object, nested at
+// most MaxJSONDepth levels, with no member written twice. The members named in
+// members are taken by exact name: receipt as raw bytes, the others as
+// strings. Any other member, a letter-case variant of one of them included, is
+// refused.
+func readDemoReceiptRequest(w http.ResponseWriter, r *http.Request, members ...string) (demoReceiptRequest, error) {
+	var req demoReceiptRequest
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16_384))
+	if err != nil {
+		return req, err
+	}
+	if err := receiptverify.ValidateJSONStructure(body); err != nil {
+		return req, err
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(body, &object); err != nil || object == nil {
+		return req, errors.New("the body must be a JSON object")
+	}
+	names := make([]string, 0, len(object))
+	for name := range object {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !slices.Contains(members, name) {
+			return req, fmt.Errorf("member %q is not one this route takes (%s); member names are matched exactly", name, strings.Join(members, ", "))
+		}
+	}
+	req.Receipt = object["receipt"]
+	for name, target := range map[string]*string{"expected_receipt_hash": &req.ExpectedReceiptHash, "mutation": &req.Mutation} {
+		if value, present := object[name]; present {
+			if err := json.Unmarshal(value, target); err != nil {
+				return req, fmt.Errorf("member %q must be a string", name)
+			}
+		}
+	}
+	return req, nil
 }
 
 // readDemoReceipt reads the receipt of a demo request with the parser
@@ -192,9 +236,9 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req demoVerifyRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16_384)).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
+		req, err := readDemoReceiptRequest(w, r, "receipt", "expected_receipt_hash")
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return
 		}
 		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {
@@ -215,9 +259,9 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req demoTamperRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16_384)).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
+		req, err := readDemoReceiptRequest(w, r, "receipt", "expected_receipt_hash", "mutation")
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return
 		}
 		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {

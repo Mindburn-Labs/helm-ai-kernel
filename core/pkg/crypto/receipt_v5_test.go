@@ -263,6 +263,38 @@ func TestReceiptLegacyV4StillVerifies(t *testing.T) {
 	}
 }
 
+// TestOnlyTheLegacyOptionOpensTheLegacyPreimage: AllowLegacyReceiptPreimages
+// is the one option that checks a receipt with no signature_version. The zero
+// value and any value this package does not define, such as one a newer
+// caller hands an older kernel, leave the receipt refused (helm-tracker#305
+// round 2, mutant M14).
+func TestOnlyTheLegacyOptionOpensTheLegacyPreimage(t *testing.T) {
+	signer, err := NewEd25519Signer("legacy-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := v5TestReceipt()
+	sig, err := signer.Sign([]byte(CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Signature, r.SignatureVersion = sig, ""
+	if ok, _, err := VerifyReceiptSignature(signer.PublicKey(), r, AllowLegacyReceiptPreimages); err != nil || !ok {
+		t.Fatalf("the legacy receipt does not verify under the opt-in; the cases prove nothing (ok=%v err=%v)", ok, err)
+	}
+	for _, opt := range []ReceiptVerifyOption{0, AllowLegacyReceiptPreimages + 1, -1} {
+		if _, err := ReceiptVerifyPayload(r, opt); !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("ReceiptVerifyPayload with option %d = %v, want ErrLegacyReceiptRefused", opt, err)
+		}
+		if ok, _, err := VerifyReceiptSignature(signer.PublicKey(), r, opt); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("VerifyReceiptSignature with option %d: ok=%v err=%v, want ErrLegacyReceiptRefused", opt, ok, err)
+		}
+		if _, ok, err := VerifyReceiptProfile(signer.PublicKey(), "", r, opt); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("VerifyReceiptProfile with option %d: ok=%v err=%v, want ErrLegacyReceiptRefused", opt, ok, err)
+		}
+	}
+}
+
 func TestReceiptUnknownVersionRejected(t *testing.T) {
 	signer, err := NewEd25519Signer("unk-key")
 	if err != nil {

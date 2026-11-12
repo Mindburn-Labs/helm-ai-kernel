@@ -445,7 +445,15 @@ compared exactly. A bundle that carries a receipt member beside `receipts` is
 refused, because `{"verdict":"ALLOW","receipts":[<a DENY receipt>]}` verified
 while its reader read ALLOW. `POST /api/v1/evidence/verify`,
 `helm-ai-kernel verify receipt` and `POST /api/demo/verify` read a receipt
-with the same parser (`receiptverify.ParseReceipt`). The `integrity` check,
+with the same parser (`receiptverify.ParseReceipt`), and the demo routes read
+their request body by exact member name, so a `"Receipt"` beside `"receipt"`
+is refused. The chain checks of `helm-ai-kernel verify` decode each receipt
+file into a Go struct only after `receiptverify.ValidateReceiptMemberNames`
+has refused a receipt member in another letter case: before, a team pack with
+a receipt deleted verified once `"PREV_HASH"` and `"Lamport_Clock"`, outside
+the next receipt's signature, papered over the gap. A receipt file the
+signature check refuses for nesting deeper than 64 levels counts as a
+signature that did not verify instead of being skipped. The `integrity` check,
 which compares nothing, reports `not_applicable` and no longer says the signed
 bytes are the bytes on disk.
 
@@ -458,9 +466,11 @@ Regressions: `TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt`,
 `TestOptedInReplayIsRefusedByItsReceiptID` and
 `TestLetterCaseRuleFollowsTheDecodedType` in `core/pkg/receiptverify`,
 `TestKeyRingReportsALegacyReceiptAsNotChecked` in `core/pkg/crypto`,
-`TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault` in `core/pkg/verifier`,
-and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes` in
-`core/cmd/helm-ai-kernel`.
+`TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault`,
+`TestTeamPackCannotHideADeletedReceipt` and
+`TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust` in `core/pkg/verifier`,
+and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes` and
+`TestDemoRequestMembersAreMatchedExactly` in `core/cmd/helm-ai-kernel`.
 
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 

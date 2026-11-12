@@ -391,9 +391,12 @@ func validateJSON(raw []byte, target reflect.Type) error {
 	return nil
 }
 
-// errJSONTooDeep is the nesting-limit refusal of the native path and of the
-// WASM work limits (validateJSONWork).
-var errJSONTooDeep = errors.New("JSON exceeds the 64-level nesting limit")
+// ErrJSONTooDeep is the nesting-limit refusal of the native path and of the
+// WASM work limits (validateJSONWork). A document refused with it was not
+// decoded, so ParseReceiptDocument returns no document with it: a caller that
+// counts the receipts it checks counts such a file as one that did not verify,
+// not as a file that is not a receipt.
+var ErrJSONTooDeep = errors.New("JSON exceeds the 64-level nesting limit")
 
 // checkJSONDepth refuses a document nested deeper than MaxJSONDepth. Every
 // entry point runs it before anything recursive touches the document: the
@@ -423,7 +426,7 @@ func checkJSONDepth(raw []byte) error {
 			inString = true
 		case '{', '[':
 			if depth++; depth > MaxJSONDepth {
-				return errJSONTooDeep
+				return ErrJSONTooDeep
 			}
 		case '}', ']':
 			if depth > 0 {

@@ -144,3 +144,60 @@ func TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault(t *testing.T) {
 		t.Fatalf("a receipt.v5 dev-local MCP receipt must verify with no opt-in: %+v", check)
 	}
 }
+
+// TestUncheckedLegacyReceiptIsReportedAsNotChecked is helm-tracker#305 round
+// 2 note 5. A dev-local MCP proof receipt with no signature_version is left
+// unchecked by default, and embedded_signature_trust said its signature
+// "require[s] a configured verifier; none are trusted by presence alone",
+// which reads as a missing key, not as a receipt that was never checked. The
+// reason now says that and names the opt-in. A receipt.v5 receipt whose
+// signature fails is not reported as unchecked.
+func TestUncheckedLegacyReceiptIsReportedAsNotChecked(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	devLocal := VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileDevLocal}
+
+	const effectID = "mcp_governed_effect_execution/proof.local_write"
+	legacy := map[string]any{
+		"receipt_id": "exec-001", "decision_id": "dec-001", "effect_id": effectID, "status": "APPLIED",
+		"output_hash": "sha256:out", "prev_hash": "", "lamport_clock": 1, "args_hash": "sha256:args",
+		"signature":         hex.EncodeToString(ed25519.Sign(priv, []byte("exec-001:dec-001:"+effectID+":APPLIED:sha256:out::1:sha256:args"))),
+		"signature_profile": "classical", "signature_algorithm": "ed25519",
+		"public_key_set": map[string]any{"ed25519": keyHex},
+	}
+	check := embeddedSignatureTrust(t, legacy, devLocal)
+	if check.Pass {
+		t.Fatalf("an unversioned receipt was checked without the opt-in: %+v", check)
+	}
+	if !strings.Contains(check.Reason, "not checked: no signature_version") || !strings.Contains(check.Reason, "--allow-legacy-v4-receipts") {
+		t.Fatalf("the refusal must say the receipt was not checked for want of a signature_version and name the opt-in, got %q", check.Reason)
+	}
+	if strings.Contains(check.Reason, "trusted by presence alone") {
+		t.Fatalf("the refusal must not read as a missing trust root, got %q", check.Reason)
+	}
+
+	// A receipt.v5 MCP receipt whose signature does not verify was checked.
+	signed, err := canonicalize.InteroperableJCS(receiptV5DocumentEnvelope{
+		SignatureVersion: "receipt.v5", ReceiptID: "rcpt-2", DecisionID: "dec-2", EffectID: effectID, Status: "APPLIED",
+		OutputHash: "sha256:out", ArgsHash: "sha256:args", LamportClock: 1,
+		Verdict: "DENY", ReasonCode: "POLICY_DENY", PolicyHash: "sha256:policy", SessionID: "session",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := map[string]any{
+		"signature_version": "receipt.v5", "receipt_id": "rcpt-2", "decision_id": "dec-2", "effect_id": effectID, "status": "APPLIED",
+		"output_hash": "sha256:out", "prev_hash": "", "args_hash": "sha256:args", "lamport_clock": 1,
+		"verdict": "ALLOW", "reason_code": "POLICY_DENY", "policy_hash": "sha256:policy", "session_id": "session",
+		"signature":         hex.EncodeToString(ed25519.Sign(priv, signed)),
+		"signature_profile": "classical", "signature_algorithm": "ed25519",
+		"public_key_set": map[string]any{"ed25519": keyHex},
+	}
+	check = embeddedSignatureTrust(t, tampered, devLocal)
+	if check.Pass || strings.Contains(check.Reason, "not checked") {
+		t.Fatalf("a receipt.v5 receipt whose signature fails must fail and must not be reported as unchecked: %+v", check)
+	}
+}

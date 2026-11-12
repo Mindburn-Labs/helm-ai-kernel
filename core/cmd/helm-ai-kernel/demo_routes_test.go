@@ -298,6 +298,17 @@ func TestDemoVerifyReadsTheReceiptAsItsReaderDoes(t *testing.T) {
 		}
 	}
 
+	// A signed member edited after signing: the signature fails, and no member
+	// is listed as verified.
+	edited := bytes.Replace(genuine, []byte(`"verdict":"DENY"`), []byte(`"verdict":"ALLOW"`), 1)
+	code, payload = post(edited)
+	if code != http.StatusOK || payload["valid"] != false || payload["signature_valid"] != false {
+		t.Fatalf("a receipt.v5 receipt with an edited verdict: status %d, want 200 with valid and signature_valid false: %v", code, payload)
+	}
+	if list, ok := payload["verified_fields"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("verified_fields must be present and empty when the signature does not verify, got %v", payload["verified_fields"])
+	}
+
 	// A receipt with no signature_version is not checked, and the answer says
 	// that, not that its signature failed.
 	var members map[string]any
@@ -316,5 +327,87 @@ func TestDemoVerifyReadsTheReceiptAsItsReaderDoes(t *testing.T) {
 	}
 	if !strings.Contains(reason, "not checked") || strings.Contains(reason, "verification failed") || len(fields(payload)) != 0 {
 		t.Fatalf("an unversioned receipt must be reported as not checked, with no verified_fields: reason %q, verified_fields %v", reason, payload["verified_fields"])
+	}
+}
+
+// TestDemoRequestMembersAreMatchedExactly is helm-tracker#305 round 2
+// finding 2. The demo routes decoded the request body into a Go struct, so a
+// member spelled "Receipt" stood in for "receipt": a body whose "receipt" says
+// ALLOW by exact name and whose "Receipt" is the genuine DENY came back valid.
+// The body is now read by exact member name, and any member the route does not
+// take, a letter-case variant included, is refused.
+func TestDemoRequestMembersAreMatchedExactly(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("demo-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	registerDemoRoutes(mux, &Services{ReceiptSigner: signer})
+
+	runRec := httptest.NewRecorder()
+	mux.ServeHTTP(runRec, httptest.NewRequest(http.MethodPost, "/api/demo/run", bytes.NewReader([]byte(`{"action_id":"dangerous_shell"}`))))
+	var run struct {
+		Receipt   json.RawMessage   `json:"receipt"`
+		ProofRefs map[string]string `json:"proof_refs"`
+	}
+	if err := json.Unmarshal(runRec.Body.Bytes(), &run); err != nil || runRec.Code != http.StatusOK {
+		t.Fatalf("demo run status = %d (%v) body=%s", runRec.Code, err, runRec.Body.String())
+	}
+	genuine := string(run.Receipt)
+	forged := strings.Replace(genuine, `"verdict":"DENY"`, `"verdict":"ALLOW"`, 1)
+	if forged == genuine {
+		t.Fatalf("the demo receipt has no DENY verdict to forge; the cases prove nothing: %s", genuine)
+	}
+	hash := `"` + run.ProofRefs["receipt_hash"] + `"`
+	post := func(route, body string) (int, map[string]any) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, route, strings.NewReader(body)))
+		var payload map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("%s: decode response (status %d): %v\n%s", route, rec.Code, err, rec.Body.String())
+		}
+		return rec.Code, payload
+	}
+
+	shadow := `{"receipt":` + forged + `,"expected_receipt_hash":` + hash + `,"Receipt":` + genuine + `}`
+	var exact struct {
+		Receipt map[string]any `json:"receipt"`
+	}
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(shadow), &members); err != nil || json.Unmarshal(members["receipt"], &exact.Receipt) != nil || exact.Receipt["verdict"] != "ALLOW" {
+		t.Fatalf("the planted body does not read ALLOW by exact name; the case proves nothing (%v)", err)
+	}
+
+	if code, payload := post("/api/demo/verify", `{"receipt":`+genuine+`,"expected_receipt_hash":`+hash+`}`); code != http.StatusOK || payload["valid"] != true {
+		t.Fatalf("the genuine body does not verify; the cases prove nothing: %d %v", code, payload)
+	}
+	if code, payload := post("/api/demo/tamper", `{"receipt":`+genuine+`,"expected_receipt_hash":`+hash+`,"mutation":"change_action"}`); code != http.StatusOK || payload["valid"] != false {
+		t.Fatalf("the genuine tamper body must answer 200 with valid false: %d %v", code, payload)
+	}
+
+	for _, tc := range []struct {
+		name, route, body string
+	}{
+		{"a Receipt shadow behind a forged receipt", "/api/demo/verify", shadow},
+		{"Receipt in place of receipt", "/api/demo/verify", `{"Receipt":` + genuine + `,"expected_receipt_hash":` + hash + `}`},
+		{"an Expected_Receipt_Hash variant", "/api/demo/verify", `{"receipt":` + genuine + `,"expected_receipt_hash":` + hash + `,"Expected_Receipt_Hash":"sha256:other"}`},
+		{"a member the route does not take", "/api/demo/verify", `{"receipt":` + genuine + `,"expected_receipt_hash":` + hash + `,"mutation":"change_action"}`},
+		{"receipt written twice", "/api/demo/verify", `{"receipt":` + forged + `,"expected_receipt_hash":` + hash + `,"receipt":` + genuine + `}`},
+		{"a trailing value", "/api/demo/verify", `{"receipt":` + genuine + `,"expected_receipt_hash":` + hash + `} {}`},
+		{"a non-string expected_receipt_hash", "/api/demo/verify", `{"receipt":` + genuine + `,"expected_receipt_hash":1}`},
+		{"a body that is not an object", "/api/demo/verify", `[` + genuine + `]`},
+		{"a Receipt shadow on tamper", "/api/demo/tamper", `{"receipt":` + forged + `,"expected_receipt_hash":` + hash + `,"Receipt":` + genuine + `}`},
+		{"a Mutation variant", "/api/demo/tamper", `{"receipt":` + genuine + `,"expected_receipt_hash":` + hash + `,"mutation":"change_action","Mutation":"flip_verdict"}`},
+		{"a non-string mutation", "/api/demo/tamper", `{"receipt":` + genuine + `,"expected_receipt_hash":` + hash + `,"mutation":["change_action"]}`},
+	} {
+		code, payload := post(tc.route, tc.body)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s: %s answered %d, want 400: %v", tc.name, tc.route, code, payload)
+			continue
+		}
+		if _, answered := payload["valid"]; answered {
+			t.Errorf("%s: a refused body must carry no verification result: %v", tc.name, payload)
+		}
 	}
 }

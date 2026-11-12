@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -371,7 +372,7 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 }
 
 func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
-	valid, selfAttested, total := countEmbeddedSignatureTrust(bundlePath, opts)
+	valid, selfAttested, notChecked, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	if total == 0 {
 		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
 	}
@@ -389,24 +390,32 @@ func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckRes
 			Detail: detail,
 		}
 	}
+	reason := fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total-valid, total)
+	if notChecked > 0 {
+		reason = fmt.Sprintf("%d/%d embedded receipt or witness signatures were not verified, %d of them not checked: no signature_version. "+
+			"--allow-legacy-v4-receipts checks a dev-local MCP proof receipt that has none against the legacy V4 preimage; pass it only for a pack known to predate receipt.v5",
+			total-valid, total, notChecked)
+	}
 	return CheckResult{
 		Name:   "embedded_signature_trust",
 		Pass:   false,
-		Reason: fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total-valid, total),
+		Reason: reason,
 	}
 }
 
 func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
-	valid, _, total := countEmbeddedSignatureTrust(bundlePath, opts)
+	valid, _, _, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	return valid, total
 }
 
 // countEmbeddedSignatureTrust returns how many embedded signatures verified,
-// how many of those verified only against a key carried in the pack, and the
-// total that required verification.
-func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, int, int) {
+// how many of those verified only against a key carried in the pack, how many
+// were left unchecked for want of a signature_version (legacyReceiptNotChecked),
+// and the total that required verification.
+func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, int, int, int) {
 	valid := 0
 	selfAttested := 0
+	notChecked := 0
 	total := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
@@ -422,6 +431,11 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 			}
 			document, parseErr := receiptverify.ParseReceiptDocument(data)
 			if document == nil {
+				// A file refused for its depth was not read; skipping it would
+				// pass a receipt no check looked at.
+				if errors.Is(parseErr, receiptverify.ErrJSONTooDeep) {
+					total++
+				}
 				return nil
 			}
 			signatureValue, signatureDeclared := document["signature"]
@@ -442,6 +456,8 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 						if packKey {
 							selfAttested++
 						}
+					} else if legacyReceiptNotChecked(document, opts) {
+						notChecked++
 					}
 				}
 			}
@@ -472,7 +488,7 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 			return nil
 		})
 	}
-	return valid, selfAttested, total
+	return valid, selfAttested, notChecked, total
 }
 
 // verifyEmbeddedDocumentSignature reports whether the signature verified and
@@ -544,6 +560,18 @@ func legacyV4ReceiptRefused(document map[string]any, opts VerifyOptions) bool {
 		return false
 	}
 	return !opts.AllowLegacyV4Receipts || strings.HasPrefix(firstString(document, "receipt_id"), "{")
+}
+
+// legacyReceiptNotChecked reports whether verifyEmbeddedDocumentSignature
+// left document unchecked under legacyV4ReceiptRefused because it has no
+// signature_version and the legacy opt-in is off. Managed-agent receipts have
+// no signature_version and are checked on their own branch.
+func legacyReceiptNotChecked(document map[string]any, opts VerifyOptions) bool {
+	switch firstString(document, "receipt_version") {
+	case "managed_agent_live_scenario_receipt.v1", "managed_agent_execution_receipt.v1":
+		return false
+	}
+	return !opts.AllowLegacyV4Receipts && legacyV4ReceiptRefused(document, opts)
 }
 
 // verifyEvaluateReceiptV5AgainstCallerKey checks a Kernel evaluate receipt.v5
@@ -1211,6 +1239,12 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			return fail("cannot read receipt %s: %v", entry.Name(), err)
+		}
+		// encoding/json binds a member spelled in another letter case to the
+		// field: "PREV_HASH" would link a chain whose signed prev_hash does
+		// not (helm-tracker#305).
+		if err := receiptverify.ValidateReceiptMemberNames(data); err != nil {
+			return fail("receipt %s is refused: %v", entry.Name(), err)
 		}
 		var receipt contracts.Receipt
 		if err := json.Unmarshal(data, &receipt); err != nil {

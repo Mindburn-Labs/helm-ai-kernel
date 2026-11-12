@@ -323,6 +323,11 @@ func TestVerifyReceiptCLISaysWhatTheSignatureCovers(t *testing.T) {
 			t.Fatalf("%q is listed as both signed and unsigned", name)
 		}
 	}
+	// The signature is what covers the signed members, not a claim beside
+	// them (mutant M34).
+	if unsigned["signature"] || signed["signature"] {
+		t.Fatalf("signature must be neither a signed nor an unsigned member: signed %v, unsigned %v", report["signed_members"], report["unsigned_members"])
+	}
 	scope, _ := report["integrity_scope"].(string)
 	if report["integrity_valid"] != true || !strings.Contains(scope, "signed_members") || !strings.Contains(scope, "unsigned_members") {
 		t.Fatalf("integrity_valid must come with what it covers: integrity_valid %v, integrity_scope %q", report["integrity_valid"], scope)

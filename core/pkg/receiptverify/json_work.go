@@ -56,7 +56,7 @@ func validateJSONWork(raw []byte) error {
 					return err
 				}
 				if len(stack) >= MaxJSONDepth {
-					return errJSONTooDeep
+					return ErrJSONTooDeep
 				}
 				stack = append(stack, jsonFrame{object: delimiter == '{', key: delimiter == '{'})
 			case '}', ']':

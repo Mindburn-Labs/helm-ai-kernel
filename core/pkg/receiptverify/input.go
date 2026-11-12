@@ -95,6 +95,22 @@ func ParseReceipt(raw []byte, opts ...ParseOption) (*contracts.Receipt, error) {
 	return bundle.Receipts[0], nil
 }
 
+// ValidateReceiptMemberNames applies the member-name rules of ParseReceipt to
+// a document its caller decodes into contracts.Receipt itself: a member that is
+// a receipt member, or a member of a struct a receipt holds, in another letter
+// case is refused, as are one name written twice, a trailing value and nesting
+// deeper than MaxJSONDepth. It does not apply the receipt.v5 signed-member
+// contract or ask for one receipt object.
+//
+// It is for a reader of receipts of more than one producer's schema, such as
+// the chain checks of the EvidencePack verifier, which ParseReceipt would
+// refuse for reasons that are not about member names. Without it,
+// encoding/json binds "PREV_HASH" to prev_hash while every exact-name reader
+// of the same file, the signature check included, sees two members.
+func ValidateReceiptMemberNames(raw []byte) error {
+	return validateJSON(raw, reflect.TypeFor[contracts.Receipt]())
+}
+
 // ParseOption is a caller's statement about the verifier it hands the parsed
 // receipt to.
 type ParseOption int

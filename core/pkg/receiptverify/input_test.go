@@ -366,3 +366,40 @@ func TestParseReceiptReadsExactlyOneReceipt(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateReceiptMemberNamesAppliesOnlyTheNameRules: the validator the
+// pack verifier's chain checks call before decoding a receipt file into
+// contracts.Receipt (helm-tracker#305 round 2, finding 1) refuses what
+// ParseReceipt refuses about member names, at every depth a struct is
+// decoded, and nothing about receipt schemas: a pack holds receipts of more
+// than one producer, and an unversioned or bundle-shaped file is the chain
+// checks' to judge.
+func TestValidateReceiptMemberNamesAppliesOnlyTheNameRules(t *testing.T) {
+	for name, doc := range map[string]string{
+		"a shadow of prev_hash":         `{"prev_hash":"a","PREV_HASH":"b"}`,
+		"a shadow alone":                `{"Lamport_Clock":2}`,
+		"a nested struct":               `{"provenance":{"generated_by":"a","Generated_By":"b"}}`,
+		"a struct in an array":          `{"witness_signatures":[{"witness_id":"w","Witness_ID":"x"}]}`,
+		"a kelvin sign":                 `{"` + "\u212a" + `ey_id":"b"}`,
+		"one name twice":                `{"prev_hash":"a","prev_hash":"b"}`,
+		"one name twice inside a map":   `{"metadata":{"a":1,"a":2}}`,
+		"a trailing value":              `{"prev_hash":"a"} {}`,
+		"nesting deeper than 64 levels": `{"metadata":` + strings.Repeat("[", MaxJSONDepth) + strings.Repeat("]", MaxJSONDepth) + `}`,
+	} {
+		if err := ValidateReceiptMemberNames([]byte(doc)); err == nil {
+			t.Errorf("%s: ValidateReceiptMemberNames(%s) accepted it", name, doc)
+		}
+	}
+	for name, doc := range map[string]string{
+		"an unversioned receipt":       `{"receipt_id":"r","prev_hash":"","lamport_clock":1}`,
+		"an unknown signature_version": `{"receipt_id":"r","signature_version":"receipt.v9"}`,
+		"another producer's schema":    `{"id":"r","hash":"h","lamport":3,"type":"mcp_policy_decision"}`,
+		"map keys in two letter cases": `{"metadata":{"a":1,"A":2},"public_key_set":{"ed25519":"00","ED25519":"01"}}`,
+		"a free-form subject":          `{"subject":{"verdict":"x","Verdict":"y"}}`,
+		"a member no type names":       `{"x-custom":1,"X-Custom":2}`,
+	} {
+		if err := ValidateReceiptMemberNames([]byte(doc)); err != nil {
+			t.Errorf("%s: ValidateReceiptMemberNames(%s) = %v, want nil", name, doc, err)
+		}
+	}
+}

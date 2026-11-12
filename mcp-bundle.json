@@ -16,7 +16,7 @@
   },
   "server": {
     "type": "binary",
-    "command": "./helm",
+    "command": "./helm-ai-kernel",
     "args": [
       "mcp",
       "serve",
@@ -129,10 +129,7 @@
       "profile-aware-signed-receipts",
       "schema-pep-validation",
       "proofgraph-audit-trail",
-      "typosquat-detection",
-      "trust-scoring",
-      "delegation-scope-enforcement",
-      "elicitation-support"
+      "typosquat-detection"
     ],
     "verdicts": [
       "ALLOW",
@@ -143,7 +140,7 @@
   "platform_overrides": {
     "win32": {
       "server": {
-        "command": "./helm.exe"
+        "command": "./helm-ai-kernel.exe"
       }
     }
   },

@@ -22,7 +22,7 @@ func runBundleCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "  list      List policy bundles in directory")
 		_, _ = fmt.Fprintln(stderr, "  verify    Verify bundle integrity against hash")
 		_, _ = fmt.Fprintln(stderr, "  inspect   Inspect bundle meta without activating")
-		_, _ = fmt.Fprintln(stderr, "  build     Compile a policy source (CEL, Rego, Cedar) into a signed bundle")
+		_, _ = fmt.Fprintln(stderr, "  build     Compile a Rego or Cedar policy source and print the compiled bundle's identity (no signature, no file)")
 		return 2
 	}
 
@@ -41,8 +41,9 @@ func runBundleCmd(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// runBundleBuild compiles a policy source file into a signed CompiledBundle
-// via the multi-language policybundles registry and prints the result.
+// runBundleBuild compiles a Rego or Cedar policy source through the
+// policybundles registry and prints the compiled bundle's identity as JSON. It
+// writes no file and no signature, and the registry rejects CEL.
 //
 //	helm-ai-kernel bundle build --language=rego ./policy.rego
 //	helm-ai-kernel bundle build --language=cedar --entities=./entities.json ./policy.cedar
@@ -58,7 +59,7 @@ func runBundleBuild(args []string, stdout, stderr io.Writer) int {
 		version     int
 		entitiesDoc string
 	)
-	cmd.StringVar(&language, "language", "", "Policy language: cel, rego, or cedar (default: detect from file extension)")
+	cmd.StringVar(&language, "language", "", "Policy language: rego or cedar; cel is recognised but not compiled here (default: detect from file extension)")
 	cmd.StringVar(&bundleID, "bundle-id", "", "Bundle identifier (default: file basename)")
 	cmd.StringVar(&name, "name", "", "Bundle display name")
 	cmd.IntVar(&version, "version", 1, "Bundle version")
@@ -69,7 +70,7 @@ func runBundleBuild(args []string, stdout, stderr io.Writer) int {
 	}
 	if cmd.NArg() < 1 {
 		_, _ = fmt.Fprintln(stderr, "Error: policy source file is required")
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel bundle build [--language=cel|rego|cedar] [--entities=path] <source>")
+		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel bundle build [--language=rego|cedar] [--entities=path] <source>")
 		return 2
 	}
 	srcPath := cmd.Arg(0)

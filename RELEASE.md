@@ -15,8 +15,8 @@ the enforcement source; consult it rather than this release process for its
 current configuration.
 
 The distinct-provider exact-head machine interlock remains an R&D track and is
-not current merge authority. Release tags and package publishes require an
-explicit maintainer action.
+not current merge authority. A release is cut by pushing its `v<version>` tag;
+the Release workflow then publishes without a manual approval step.
 
 ## Source target
 

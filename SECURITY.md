@@ -17,9 +17,9 @@ Security fixes are expected on the current minor version and, when practical, th
 
 | Version | Supported |
 | --- | --- |
-| `0.10.x` | Yes |
-| `0.9.x` | Best effort |
-| `0.8.x` and older | No |
+| `0.12.x` | Yes |
+| `0.11.x` | Best effort |
+| `0.10.x` and older | No |
 
 ## Verification Material
 

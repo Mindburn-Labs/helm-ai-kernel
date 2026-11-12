@@ -16,12 +16,13 @@ used by the public compatibility docs.
 
 ```bash
 make build
-./bin/helm-ai-kernel bundle build --language cel examples/policies/cel/example.cel
 ./bin/helm-ai-kernel bundle build --language rego examples/policies/rego/example.rego
 ./bin/helm-ai-kernel bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
 ```
 
-`helm-ai-kernel bundle build` accepts the policy source as the positional argument.
+`helm-ai-kernel bundle build` accepts the policy source as the positional argument,
+after its flags, and prints the compiled bundle's identity as JSON. It rejects
+`cel/example.cel`: CEL is not routed through the bundle registry.
 `--policy` belongs to `helm-ai-kernel serve` and is intentionally not accepted by this
 subcommand.
 

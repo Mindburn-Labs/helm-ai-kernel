@@ -60,12 +60,14 @@ replicas.
 
 ```bash
 helm-ai-kernel policy            # compilation and testing
-helm-ai-kernel bundle build <file> --language <cel|rego|cedar>
+helm-ai-kernel bundle build --language <rego|cedar> <file>
 ```
 
-Policy is compiled into signed bundles from CEL, Rego, or Cedar sources. There is no
-runtime policy cache to flush and no admission controller in this repo, so "reload the
-policies" is not an operation that exists — rebuild the bundle and restart.
+`bundle build` compiles a Rego or Cedar source and prints the compiled bundle's
+identity (language, hash, id, name, version). It writes no file and no signature,
+and it rejects CEL. There is no runtime policy cache to flush and no admission
+controller in this repo, so "reload the policies" is not an operation that exists —
+change the serve policy and restart.
 
 ## A note on this file
 

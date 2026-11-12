@@ -7,7 +7,7 @@ last_reviewed: 2026-06-11
 
 If your applications already speak the OpenAI chat-completions API, you can put a policy boundary in front of them without changing a line of client code. HELM AI Kernel ships a proxy that accepts OpenAI-compatible requests, forwards them to the upstream model, and decides every tool call in the response against your policy before the client sees it.
 
-Tool calls that violate policy never reach your client: they come back as a DENY or ESCALATE verdict instead, and the decision is recorded as a signed receipt either way. The request itself does reach the provider. Allowed traffic flows through with receipt metadata attached, so every model call in your fleet becomes attributable and replayable.
+Tool calls that policy does not allow never reach your client: the response comes back as `403` with `X-Helm-Status: DENIED` instead, and the decision is recorded as a hash-chained receipt either way. Receipts are signed only when the proxy starts with `--sign <seed>`; `make proxy` and the demo script do not pass it. The request itself does reach the provider. Allowed traffic flows through with receipt metadata attached, so every governed response in your fleet is attributable to a receipt.
 
 Start it with one command (`make proxy` in the repository, or the demo script below), point your existing client's base URL at it, and watch the receipt stream record what your agents actually ask for.
 
@@ -16,10 +16,11 @@ Start it with one command (`make proxy` in the repository, or the demo script be
 ```mermaid
 flowchart LR
     Client["OpenAI-compatible client"] --> Proxy["HELM proxy"]
-    Proxy --> Policy["Policy and receipt boundary"]
-    Policy --> Upstream["Upstream model when allowed"]
-    Policy --> Denial["DENY or ESCALATE"]
-    Upstream --> Receipt["Receipt metadata"]
+    Proxy --> Upstream["Upstream model"]
+    Upstream --> Policy["Policy decision on tool calls in the response"]
+    Policy --> Allowed["Response delivered"]
+    Policy --> Denial["403 DENIED"]
+    Allowed --> Receipt["Receipt metadata"]
     Denial --> Receipt
 ```
 

@@ -27,23 +27,25 @@ flowchart LR
 
 ## What Is Covered
 
-- Chat-completion calls through the OpenAI-compatible HELM boundary.
+- Chat-completion calls to `/v1/chat/completions`. `helm-ai-kernel serve`
+  denies that route before any upstream is called (`controls.yaml` CTL-047);
+  `helm-ai-kernel proxy` is the OpenAI-compatible boundary.
 - Kernel approval, ProofGraph receipt lookup, evidence export, evidence
-  verification, replay verification, and conformance routes.
+  verification, and conformance routes.
 - Execution-boundary helper methods where the language client has source for
   the corresponding OpenAPI route.
 - `evaluateDecision` / `evaluate_decision` helpers for the retained
   `/api/v1/evaluate` route.
-- TypeScript-only framework adapter helpers for LangGraph, CrewAI, OpenAI
-  Agents SDK, PydanticAI, and LlamaIndex tool-call events.
+- TypeScript-only `NativeGatewayClient`, which sends a framework's tool call
+  to the effect gateway's native MCP interface.
 
 ## What Is Not Claimed
 
 - A language package is not documented as published merely because package
   metadata exists. Registry publication must be verified against the retained
   publish workflow or the registry itself.
-- Framework adapter helpers are compatibility helpers, not vendor
-  certification and not full framework runtimes.
+- `NativeGatewayClient` is a client of the effect gateway, not vendor
+  certification and not a framework runtime.
 - External evidence envelopes are compatibility wrappers over HELM-native
   EvidencePack roots, not independent authority.
 

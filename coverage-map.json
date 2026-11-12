@@ -2359,7 +2359,7 @@
       "bypass_assumptions": [
         "The proxy forwards the request upstream and governs the tool calls in the response; the request itself is not held.",
         "A stream without tools passes through with no receipt.",
-        "The proxy's Guardian is built without the emergency-stop fence."
+        "The proxy's Guardian reads the emergency-stop fence only while HELM_EMERGENCY_STOP_FENCE_ENABLED is on, for the configured tenant and workspace (CTL-005)."
       ],
       "tests": {
         "allowed": [
@@ -3541,7 +3541,7 @@
         "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which the gateway's authority adapter and EnsurePrincipals call (CTL-046); the gateway trusts the rows it finds.",
         "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2).",
         "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR).",
-        "helm-gateway has no container image or chart yet; it is enforced where it runs, and nothing deploys it.",
+        "helm-gateway ships in the kernel container image, and the chart deploys it only when gateway.enabled is set (off by default); where no gateway runs, nothing here is enforced.",
         "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
       ],
       "tests": {

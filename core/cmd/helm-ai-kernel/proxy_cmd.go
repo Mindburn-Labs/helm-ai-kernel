@@ -624,7 +624,8 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 		}
 	}()
 
-	// Ed25519 signer (used for both receipts and KernelBridge governance).
+	// Ed25519 signer for the Guardian's decision records and, with --sign, for
+	// the proxy receipts.
 	//
 	// --sign is documented as a signing seed. It previously became the signer's
 	// key *id* while the actual keypair was generated at random, so receipts
@@ -643,15 +644,18 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 					"Supply a generated seed so receipts stay verifiable and the key is not guessable.")
 		}
 	} else {
-		// No seed supplied: ephemeral identity. Receipts signed by it cannot be
-		// verified once this process exits. Fails closed under HELM_PRODUCTION.
+		// No seed supplied: an ephemeral key signs the Guardian's decision
+		// records, which cannot be verified once this process exits, and the
+		// proxy receipts stay unsigned (signer below is nil). Fails closed under
+		// HELM_PRODUCTION.
 		kernelSigner, err = helmcrypto.NewEd25519Signer("helm-proxy")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create kernel signer: %w", err)
 		}
 	}
 
-	// Optional: separate receipt signer (same key for now)
+	// Receipt signer: the same key, and only with --sign. Without it receipts
+	// are hash-chained and carry no signature.
 	var signer *helmcrypto.Ed25519Signer
 	if cfg.signKey != "" {
 		signer = kernelSigner
@@ -1092,7 +1096,7 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 //   - Policy: tool calls are decided by the Guardian against --policy; without it every tool call is denied
 //   - Streaming: a request that offers tools must not stream; the proxy cannot parse a stream
 //   - Causal chain: receipts linked via PrevHash (SHA-256 of previous receipt)
-//   - Ed25519 signature: receipts signed if --sign is enabled
+//   - Ed25519 signature: receipts are signed only with --sign; without it they are unsigned
 //
 // Exit codes:
 //
@@ -1238,6 +1242,8 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if signer != nil {
 		_, _ = fmt.Fprintf(stdout, "  Signing:     Ed25519 (key: %s)\n", signer.KeyID)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "  Signing:     none (receipts are hash-chained, not signed; pass --sign <seed>)\n")
 	}
 	_, _ = fmt.Fprintf(stdout, "  ProofGraph: %s\n", filepath.Join(receiptsDir, "proofgraph.json"))
 	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph\n")

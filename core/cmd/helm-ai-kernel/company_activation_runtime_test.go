@@ -450,3 +450,141 @@ func sealRouteCompanyActivationRecord(t *testing.T, record *contracts.CompanyAct
 func routeActivationHash(digit string) string {
 	return "sha256:" + strings.Repeat(digit, 64)
 }
+
+// organizationRuntimeEvaluateForTest sends one organization-runtime request
+// that presents a valid E0/A0 activation record.
+func organizationRuntimeEvaluateForTest(t *testing.T, svc *Services, tool, resource, effectLevel string) api.EvaluateResponse {
+	t.Helper()
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(organizationRuntimeAPIKeyEnv, testOrganizationRuntimeAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-1")
+	t.Setenv(runtimePrincipalIDEnv, "principal-1")
+	now := time.Now().UTC()
+	record, privateKey := routeCompanyActivationRecord(t, now.Add(-time.Hour), now.Add(time.Hour))
+	svc.CompanyActivationEnvironmentID = "managed"
+	svc.CompanyActivationPublicKey = privateKey.Public().(ed25519.PublicKey)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+	body, err := json.Marshal(api.EvaluateRequest{
+		Tool: tool, Resource: resource, EffectLevel: effectLevel, SessionID: "activation-effect-class",
+		Originator: &contracts.OrganizationRuntimeOriginatorAssertion{
+			PrincipalID: "human-originator-1", AssertionSource: contracts.OrganizationRuntimeOriginatorAssertionSourceControlPlane,
+		},
+		Context: map[string]any{"autonomy_level": "A0", "company_activation_record": record},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, companyActivationOrganizationRuntimePath, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testOrganizationRuntimeAPIKey)
+	req.Header.Set(tenantHeader, "tenant-1")
+	req.Header.Set(principalHeader, "principal-1")
+	req.Header.Set(workspaceHeader, "workspace-1")
+	req.Header.Set(companyActivationExecutionProfileHeader, companyActivationOrganizationRuntimeProfile)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response api.EvaluateResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
+// The control plane verifies the attestation's effect_class against the
+// effect_level it submitted and rejects any other value as a mismatch. The
+// attestation therefore carries the submitted class, also when the kernel
+// checked the ceiling against a higher one and refused.
+func TestOrganizationRuntimeAttestationCarriesTheSubmittedEffectClass(t *testing.T) {
+	for _, tc := range []struct {
+		name, resource string
+		wantReason     contracts.ReasonCode
+	}{
+		{name: "passed: the bound class is the submitted one", resource: "connector://crm/contact-123"},
+		{name: "refused: the kernel bound the catalog's E4", resource: contracts.EffectTypeExecutePayment, wantReason: contracts.ReasonActivationCeilingExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capturing := &evaluateRouteCapturingPDP{}
+			svc, _ := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+			response := organizationRuntimeEvaluateForTest(t, svc, "EXECUTE_TOOL", tc.resource, "E0")
+			if (tc.wantReason == "") != (capturing.request != nil) || (tc.wantReason != "" && response.ReasonCode != string(tc.wantReason)) {
+				t.Fatalf("verdict=%s reason=%s reached policy=%t, want reason %q", response.Verdict, response.ReasonCode, capturing.request != nil, tc.wantReason)
+			}
+			attestation := response.OrganizationRuntimeDecisionAttestation
+			if attestation == nil {
+				t.Fatal("the response carries no organization-runtime attestation")
+			}
+			if attestation.EffectClass != "E0" {
+				t.Fatalf("attestation effect_class = %q, want the submitted E0", attestation.EffectClass)
+			}
+		})
+	}
+}
+
+// The activation gate reads the class the transport bound and changes none of
+// the three members that describe it, so a refusal and a pass sign the same
+// account of the class. What it attests is the submitted value.
+func TestActivationGateLeavesTheTransportBoundEffectClass(t *testing.T) {
+	now := time.Now().UTC()
+	record, privateKey := routeCompanyActivationRecord(t, now.Add(-time.Hour), now.Add(time.Hour))
+	svc := &Services{
+		CompanyActivationEnvironmentID: "managed",
+		CompanyActivationPublicKey:     privateKey.Public().(ed25519.PublicKey),
+	}
+	for _, tc := range []struct {
+		name                               string
+		submitted, bound, source, declared string
+		wantReason                         contracts.ReasonCode
+	}{
+		{"refused over the ceiling", "E0", "E4", guardian.EffectClassSourceEffectCatalog, "E0", contracts.ReasonActivationCeilingExceeded},
+		{"passed with the class as declared", "E0", "E0", guardian.EffectClassSourceCallerDeclared, "", ""},
+		// No catalogued effect is E0, so the transport cannot bind this pair
+		// today. The gate does not rely on that: it never writes the submitted
+		// value over the bound one.
+		{"passed with a bound class that is not the submitted value", "ticket.read", "E0", guardian.EffectClassSourceEffectCatalog, "ticket.read", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requestContext := map[string]any{
+				"autonomy_level":                  "A0",
+				"company_activation_record":       record,
+				guardian.ContextEffectClass:       tc.bound,
+				guardian.ContextEffectClassSource: tc.source,
+			}
+			var wantDeclared any
+			if tc.declared != "" {
+				requestContext[guardian.ContextEffectClassDeclared] = tc.declared
+				wantDeclared = tc.declared
+			}
+			req := &api.EvaluateRequest{Tool: "EXECUTE_TOOL", Resource: "connector://crm/contact-123", EffectLevel: tc.submitted, Context: requestContext}
+			reasonCode, _, evidence := organizationRuntimeActivationDenial(svc, req, true, "tenant-1", "workspace-1", now)
+			if reasonCode != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", reasonCode, tc.wantReason)
+			}
+			if evidence == nil || evidence.EffectClass != tc.submitted {
+				t.Fatalf("attested effect class = %+v, want the submitted %q", evidence, tc.submitted)
+			}
+			requireEffectClassBinding(t, req.Context, tc.bound, tc.source, wantDeclared)
+		})
+	}
+}
+
+// The gate has no fallback to the submitted value: a request that reaches it
+// with no bound class is refused.
+func TestActivationGateRefusesARequestWithNoBoundEffectClass(t *testing.T) {
+	now := time.Now().UTC()
+	record, privateKey := routeCompanyActivationRecord(t, now.Add(-time.Hour), now.Add(time.Hour))
+	svc := &Services{
+		CompanyActivationEnvironmentID: "managed",
+		CompanyActivationPublicKey:     privateKey.Public().(ed25519.PublicKey),
+	}
+	req := &api.EvaluateRequest{
+		Tool: "EXECUTE_TOOL", Resource: "connector://crm/contact-123", EffectLevel: "E0",
+		Context: map[string]any{"autonomy_level": "A0", "company_activation_record": record},
+	}
+	reasonCode, _, _ := organizationRuntimeActivationDenial(svc, req, true, "tenant-1", "workspace-1", now)
+	if reasonCode != contracts.ReasonActivationBindingMismatch {
+		t.Fatalf("reason = %q, want %q for a request with no bound effect class", reasonCode, contracts.ReasonActivationBindingMismatch)
+	}
+}

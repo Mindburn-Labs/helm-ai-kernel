@@ -234,11 +234,10 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	if err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
-	// When the transport bound a higher class than the caller declared, a
-	// restricting rule is also matched against the request as the caller
-	// described it. A declaration can add a restriction but never remove one;
-	// allow rules see only what was bound.
-	declared, declaredCandidate, err := managedPolicyDeclaredView(req)
+	// A restricting rule is also matched against the other readings of the
+	// request. They can only add a match, so allow rules never see them: a
+	// declaration can add a restriction and never lift one.
+	restrictingViews, err := managedPolicyRestrictingViews(req)
 	if err != nil {
 		return p.denyResponse(string(contracts.ReasonPDPError))
 	}
@@ -246,8 +245,13 @@ func (p *ManagedPolicyPDP) Evaluate(ctx context.Context, req *DecisionRequest) (
 	matchedEscalate := false
 	for _, rule := range p.rules {
 		matched := rule.matches(req, candidate)
-		if !matched && declared != nil && rule.Verdict != contracts.VerdictAllow {
-			matched = rule.matches(declared, declaredCandidate)
+		if !matched && rule.Verdict != contracts.VerdictAllow {
+			for _, view := range restrictingViews {
+				if rule.matches(view.request, view.candidate) {
+					matched = true
+					break
+				}
+			}
 		}
 		if !matched {
 			continue
@@ -283,28 +287,59 @@ func managedPolicyCandidate(req *DecisionRequest) ([]byte, error) {
 	}{Action: req.Action, Resource: req.Resource, Context: req.Context})
 }
 
-// managedPolicyDeclaredView returns the request as its caller described it:
-// effect_class holds the caller's own value, which the transport keeps under
-// effect_class_declared when it bound the kernel catalog's higher class
-// instead. It returns nil when the bound class is the declaration.
-func managedPolicyDeclaredView(req *DecisionRequest) (*DecisionRequest, []byte, error) {
-	declaredClass, ok := req.Context["effect_class_declared"].(string)
-	if !ok || declaredClass == "" {
-		return nil, nil, nil
+// managedPolicyView is one reading of a request and the canonical text that
+// pattern rules match for it.
+type managedPolicyView struct {
+	request   *DecisionRequest
+	candidate []byte
+}
+
+// managedPolicyRestrictingViews returns the readings of a request that deny
+// and escalate rules are matched against besides the request as it was bound.
+// It returns none when no transport bound where the class came from.
+//
+// As bound, without effect_class_source and effect_class_declared. Those two
+// members sort directly after effect_class in the canonical text, so a pattern
+// written when effect_class was followed by the next context member would
+// stop matching once a transport binds them, and a restriction would lapse.
+//
+// As declared, when the transport kept the caller's own value under
+// effect_class_declared because it bound a different class: the same reading
+// with effect_class holding that value, so a rule that restricts on what the
+// caller declared still applies.
+func managedPolicyRestrictingViews(req *DecisionRequest) ([]managedPolicyView, error) {
+	_, hasSource := req.Context["effect_class_source"]
+	_, hasDeclared := req.Context["effect_class_declared"]
+	if !hasSource && !hasDeclared {
+		return nil, nil
 	}
-	view := *req
-	view.Context = make(map[string]any, len(req.Context))
-	for key, value := range req.Context {
-		view.Context[key] = value
+	withoutProvenance := func(effectClass string) (managedPolicyView, error) {
+		view := *req
+		view.Context = make(map[string]any, len(req.Context))
+		for key, value := range req.Context {
+			view.Context[key] = value
+		}
+		delete(view.Context, "effect_class_source")
+		delete(view.Context, "effect_class_declared")
+		if effectClass != "" {
+			view.Context["effect_class"] = effectClass
+		}
+		candidate, err := managedPolicyCandidate(&view)
+		return managedPolicyView{request: &view, candidate: candidate}, err
 	}
-	view.Context["effect_class"] = declaredClass
-	delete(view.Context, "effect_class_declared")
-	delete(view.Context, "effect_class_source")
-	candidate, err := managedPolicyCandidate(&view)
+	asBound, err := withoutProvenance("")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return &view, candidate, nil
+	views := []managedPolicyView{asBound}
+	if declaredClass, ok := req.Context["effect_class_declared"].(string); ok && declaredClass != "" {
+		asDeclared, err := withoutProvenance(declaredClass)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, asDeclared)
+	}
+	return views, nil
 }
 
 func (r compiledManagedPolicyRule) matches(req *DecisionRequest, candidate []byte) bool {

@@ -19,9 +19,11 @@ import (
 
 // The effect class a policy ceiling selects on is authority. A request can
 // only declare one. The declaration is bound as it is and marked
-// caller_declared, unless the kernel's catalog knows the action or the
-// resource: then the bound class is never below the catalog's, and the
-// replaced declaration is kept beside it.
+// caller_declared, unless the kernel's catalog knows the evaluated action:
+// then the bound class is never below the catalog's, and the replaced
+// declaration is kept beside it. The evaluated action is the request's action,
+// or the resource of EXECUTE_TOOL. The resource of any other action is the
+// caller's description: it raises a declared class and does nothing else.
 func TestResolveEffectClass(t *testing.T) {
 	const (
 		declaredByCaller = guardian.EffectClassSourceCallerDeclared
@@ -42,9 +44,20 @@ func TestResolveEffectClass(t *testing.T) {
 		{"catalogued action declared at its class", contracts.EffectTypeSendChatMessage, "E1", "E1", "E1", fromCatalog, ""},
 		{"catalogued action declared above its class", contracts.EffectTypeSendChatMessage, "E3", "E3", "E3", declaredByCaller, ""},
 		{"catalogued effect named as the resource of EXECUTE_TOOL", "EXECUTE_TOOL", contracts.EffectTypeExecutePayment, "E0", "E4", fromCatalog, "E0"},
-		{"catalogued effect named as the resource of CALL_TOOL", contracts.EffectTypeCallTool, contracts.EffectTypeInfraDestroy, "E0", "E4", fromCatalog, "E0"},
-		{"the higher of action and resource wins", contracts.EffectTypeSendChatMessage, contracts.EffectTypeExecutePayment, "E1", "E4", fromCatalog, "E1"},
+		{"catalogued effect named as the resource of EXECUTE_TOOL on the evaluate route", "EXECUTE_TOOL", contracts.EffectTypeInfraDestroy, contracts.EffectTypeInfraDestroy, "E4", fromCatalog, contracts.EffectTypeInfraDestroy},
 		{"a reserved preview effect is known to the kernel", contracts.EffectTypeProviderTeardown, "E0", "E0", "E4", fromCatalog, "E0"},
+		// The resource of an action other than EXECUTE_TOOL.
+		{"a catalogued resource raises a lower declared class of CALL_TOOL", contracts.EffectTypeCallTool, contracts.EffectTypeInfraDestroy, "E0", "E4", declaredByCaller, "E0"},
+		{"a catalogued resource raises a lower declared class of an unknown action", "db.drop_database", contracts.EffectTypeExecutePayment, "E0", "E4", declaredByCaller, "E0"},
+		{"a catalogued resource never lowers a declared class", "db.drop_database", contracts.EffectTypeCreateTask, "E3", "E3", declaredByCaller, ""},
+		{"a catalogued resource at the declared class changes nothing", "db.drop_database", contracts.EffectTypeCreateTask, "E1", "E1", declaredByCaller, ""},
+		{"a catalogued resource never replaces a label", "db.drop_database", contracts.EffectTypeCreateTask, "ticket.write", "ticket.write", declaredByCaller, ""},
+		{"a catalogued effect id as the effect_level of an unknown action is a label", "db.drop_database", contracts.EffectTypeCreateTask, contracts.EffectTypeCreateTask, contracts.EffectTypeCreateTask, declaredByCaller, ""},
+		{"a catalogued effect id as the effect_level of CALL_TOOL is a label", contracts.EffectTypeCallTool, contracts.EffectTypeCreateTask, contracts.EffectTypeCreateTask, contracts.EffectTypeCreateTask, declaredByCaller, ""},
+		{"a catalogued resource with nothing declared binds nothing", "db.drop_database", contracts.EffectTypeCreateTask, "", "", "", ""},
+		{"a resource above the action's catalog class raises the declared class", contracts.EffectTypeSendChatMessage, contracts.EffectTypeExecutePayment, "E1", "E4", declaredByCaller, "E1"},
+		{"a resource raise below the action's catalog class leaves the catalog's", contracts.EffectTypeInfraDestroy, contracts.EffectTypeCreateTask, "E0", "E4", fromCatalog, "E0"},
+		{"a resource does not class a label on a catalogued action", contracts.EffectTypeSendChatMessage, contracts.EffectTypeExecutePayment, "invoice:42", "E1", fromCatalog, "invoice:42"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			class, source, replaced := resolveEffectClass(tc.action, tc.resource, tc.declared)
@@ -198,13 +211,19 @@ func TestExtAuthzBindsEffectClassLikeTheEvaluateRoute(t *testing.T) {
 		decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) { req.EffectClass = "ticket.write" })
 		requireEffectClassBinding(t, decisionContext, "ticket.write", guardian.EffectClassSourceCallerDeclared, nil)
 	})
-	t.Run("a catalogued effect named as the tool of a tool call takes its catalog class", func(t *testing.T) {
-		for _, action := range []string{"EXECUTE_TOOL", contracts.EffectTypeCallTool} {
-			decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) {
-				req.ActionURN, req.ToolURN, req.EffectClass = action, contracts.EffectTypeExecutePayment, "E0"
-			})
-			requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceEffectCatalog, "E0")
-		}
+	t.Run("a catalogued effect named as the tool of EXECUTE_TOOL takes its catalog class", func(t *testing.T) {
+		decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) {
+			req.ActionURN, req.ToolURN, req.EffectClass = "EXECUTE_TOOL", contracts.EffectTypeExecutePayment, "E0"
+		})
+		requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceEffectCatalog, "E0")
+	})
+	// CALL_TOOL has no tool Guardian binds: its resource raises the declared
+	// class, and the class stays the caller's.
+	t.Run("a catalogued effect named as the resource of CALL_TOOL raises the declared class", func(t *testing.T) {
+		decisionContext := extAuthzDecisionContext(t, func(req *extauthz.AuthorizationRequest) {
+			req.ActionURN, req.ToolURN, req.EffectClass = contracts.EffectTypeCallTool, contracts.EffectTypeExecutePayment, "E0"
+		})
+		requireEffectClassBinding(t, decisionContext, "E4", guardian.EffectClassSourceCallerDeclared, "E0")
 	})
 }
 

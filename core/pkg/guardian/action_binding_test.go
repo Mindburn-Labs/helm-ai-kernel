@@ -247,13 +247,57 @@ func TestBindRequestToolRunsBeforeTheContextIsRead(t *testing.T) {
 		{"EXECUTE_TOOL", "local.echo", map[string]interface{}{"tool_name": "db.drop_database"}, "local.echo", true},
 		{"EXECUTE_TOOL", "local.echo", nil, "local.echo", true},
 		{contracts.EffectTypeCallTool, "step-1", map[string]interface{}{"tool_name": "db.drop_database"}, nil, false},
-		{"LLM_INFERENCE", "model-1", map[string]interface{}{"tool_name": "kept: content, not authority"}, "kept: content, not authority", true},
+		{"LLM_INFERENCE", "model-1", map[string]interface{}{"tool_name": "local.echo"}, nil, false},
+		{"db.drop_database", "E1", map[string]interface{}{"tool_name": "local.echo"}, nil, false},
+		{"LLM_INFERENCE", "model-1", nil, nil, false},
 	} {
 		bound := bindRequestTool(tc.action, tc.resource, tc.context)
 		got, present := bound["tool_name"]
 		if present != tc.present || got != tc.want {
 			t.Fatalf("bindRequestTool(%s, %s) tool_name = %v (present %v), want %v (present %v)", tc.action, tc.resource, got, present, tc.want, tc.present)
 		}
+	}
+}
+
+// Only EXECUTE_TOOL has a tool Guardian binds. For every other action a
+// tool_name in the context is the caller's: no gate and no policy decision
+// point reads it, and it is not signed into the effect.
+func TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool(t *testing.T) {
+	for _, tc := range []struct {
+		action, resource string
+		want             any
+		present          bool
+	}{
+		{"db.drop_database", "E1", nil, false},
+		{"LLM_INFERENCE", "model-1", nil, false},
+		{contracts.EffectTypeSendEmail, "connector://mail", nil, false},
+		{contracts.EffectTypeCallTool, "step-1", nil, false},
+		{"EXECUTE_TOOL", "db.drop_database", "db.drop_database", true},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			capturing := &semanticCapturingPDP{}
+			g := NewGuardian(&testSigner{}, prg.NewGraph(), pkg_artifact.NewRegistry(newTestStore(), nil), WithPDP(capturing))
+			decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+				Principal: "agent-1",
+				Action:    tc.action,
+				Resource:  tc.resource,
+				Context:   map[string]interface{}{"tool_name": "local.echo"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if capturing.context == nil {
+				t.Fatalf("the request did not reach the policy decision point (verdict=%s reason=%s); the case proves nothing", decision.Verdict, decision.ReasonCode)
+			}
+			got, present := capturing.context["tool_name"]
+			if present != tc.present || got != tc.want {
+				t.Fatalf("policy received tool_name=%v (present %v), want %v (present %v)", got, present, tc.want, tc.present)
+			}
+			signed, present := decision.InputContext["tool_name"]
+			if present != tc.present || signed != tc.want {
+				t.Fatalf("the decision signs tool_name=%v (present %v), want %v (present %v)", signed, present, tc.want, tc.present)
+			}
+		})
 	}
 }
 

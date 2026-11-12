@@ -106,25 +106,30 @@ func organizationRuntimeActivationDenial(svc *Services, req *api.EvaluateRequest
 	autonomyLevel = strings.TrimSpace(autonomyLevel)
 	// The class checked against the activation ceiling is the one the
 	// transport bound, which is never below the kernel catalog's class for the
-	// action; the request's own value may be lower.
+	// action; the request's own value may be lower. The gate only reads it:
+	// effect_class and the two members that say where it came from stay in
+	// the context as the transport bound them, so a refusal records the same
+	// account of the class as a pass. A request with no bound class is
+	// refused: the record's binding check rejects an empty class.
 	effectClass, _ := req.Context[guardian.ContextEffectClass].(string)
-	if effectClass == "" {
-		effectClass = req.EffectLevel
-	}
 	rawRecord, ok := req.Context["company_activation_record"]
 	evidence := &organizationRuntimeActivationEvidence{
 		IdentityKind:          contracts.OrganizationRuntimeActivationIdentityPresented,
 		PresentedIdentityHash: presentedCompanyActivationIdentityHash(ok, rawRecord),
 		CompanyID:             tenantID,
-		EffectClass:           effectClass,
-		AutonomyLevel:         autonomyLevel,
+		// The attestation echoes the submitted value, not the bound class:
+		// the control plane verifies this member against the effect_level it
+		// sent and rejects any other value as a mismatch. The bound class is
+		// in the decision record's input context.
+		EffectClass:   req.EffectLevel,
+		AutonomyLevel: autonomyLevel,
 	}
 	if svc != nil {
 		evidence.EnvironmentID = svc.CompanyActivationEnvironmentID
 	}
 	for _, field := range []string{
 		"organization_runtime", "execution_profile", "company_activation_record",
-		"activation_record_ref", "activation_record_hash", "company_id", "environment_id", "effect_class", "autonomy_level",
+		"activation_record_ref", "activation_record_hash", "company_id", "environment_id", "autonomy_level",
 	} {
 		delete(req.Context, field)
 	}
@@ -164,7 +169,6 @@ func organizationRuntimeActivationDenial(svc *Services, req *api.EvaluateRequest
 		req.Context["activation_record_hash"] = record.RecordHash
 		req.Context["company_id"] = record.CompanyID
 		req.Context["environment_id"] = record.EnvironmentID
-		req.Context["effect_class"] = effectClass
 		req.Context["autonomy_level"] = autonomyLevel
 		return "", "", evidence
 	case errors.Is(err, contracts.ErrCompanyActivationBindingMismatch):

@@ -1322,8 +1322,8 @@ removal_proofs:
     find: "\tif namesToolInParams(effect.EffectType) {\n\t\tif toolName, ok := effect.Params[\"tool_name\"].(string); ok && toolName != \"\" {\n"
     replace: "\tif effect.EffectType != \"\" {\n\t\tif toolName, ok := effect.Params[\"tool_name\"].(string); ok && toolName != \"\" {\n"
     tests:
-      - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
-      - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+      - "core/pkg/guardian.TestSignDecisionHonoursToolNameOnlyForExecuteTool"
+      - "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction"
   - control: CTL-063
     file: core/pkg/guardian/guardian.go
     find: "\treq.Context = bindRequestTool(req.Action, req.Resource, req.Context)\n"
@@ -1333,18 +1333,47 @@ removal_proofs:
       - "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType"
   - control: CTL-063
     file: core/cmd/helm-ai-kernel/guardian_transport.go
-    find: "\tcase floor != \"\" && (!contracts.ValidEffectClass(declared) || declared <= floor):\n"
+    find: "\tcase floor != \"\" && (!contracts.ValidEffectClass(class) || class <= floor):\n"
     replace: "\tcase false:\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration"
       - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassForAToolCallEnvelope"
       - "core/cmd/helm-ai-kernel.TestExtAuthzBindsEffectClassLikeTheEvaluateRoute"
   - control: CTL-063
+    file: core/cmd/helm-ai-kernel/guardian_transport.go
+    find: "\t\tif action == \"EXECUTE_TOOL\" {\n"
+    replace: "\t\tif true {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow"
+      - "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource"
+  - control: CTL-063
+    file: core/pkg/guardian/guardian.go
+    find: "\t\tdelete(params, \"tool_name\")\n"
+    replace: ""
+    tests:
+      - "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool"
+      - "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName"
+  - control: CTL-063
+    file: core/cmd/helm-ai-kernel/company_activation_runtime.go
+    find: "\t\tEffectClass:   req.EffectLevel,\n"
+    replace: "\t\tEffectClass:   effectClass,\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestOrganizationRuntimeAttestationCarriesTheSubmittedEffectClass"
+      - "core/cmd/helm-ai-kernel.TestActivationGateLeavesTheTransportBoundEffectClass"
+  - control: CTL-063
     file: core/pkg/pdp/managed_policy.go
-    find: "\t\tif !matched && declared != nil && rule.Verdict != contracts.VerdictAllow {\n"
-    replace: "\t\tif false && !matched && declared != nil && rule.Verdict != contracts.VerdictAllow {\n"
+    find: "\t\tif !matched && rule.Verdict != contracts.VerdictAllow {\n"
+    replace: "\t\tif false && !matched && rule.Verdict != contracts.VerdictAllow {\n"
     tests:
       - "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows"
+      - "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
+      - "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches"
+  - control: CTL-063
+    file: core/pkg/pdp/managed_policy.go
+    find: "\t\tif !matched && rule.Verdict != contracts.VerdictAllow {\n"
+    replace: "\t\tif !matched {\n"
+    tests:
+      - "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
 
 controls:
 
@@ -4856,59 +4885,89 @@ controls:
       effect types (EXECUTE_TOOL, CALL_TOOL). On an evaluated request the
       context is the caller's, so bindRequestTool runs before any gate or the
       policy decision point reads it: for EXECUTE_TOOL it replaces tool_name
-      with the request resource, and for CALL_TOOL, which has no typed tool
-      field on a request, it removes tool_name and the request is evaluated as
-      CALL_TOOL. Every other effect is evaluated as its type. On the evaluate
-      and ext-authz routes the request's effect class is a declaration: it is
-      bound as effect_class with effect_class_source caller_declared, unless
-      the kernel's effect type catalog knows the action or the resource, in
-      which case the bound class is never below the catalog's
-      (effect_class_source effect_catalog) and the replaced declaration is kept
-      as effect_class_declared. The organization-runtime route checks the
-      activation ceiling against the bound class. ManagedPolicyPDP matches
-      deny and escalate rules against the declaration as well as the bound
-      class, and allow rules against the bound class only, so a declaration
-      can add a restriction and never lift one. The MCP path marks its class
-      tool_catalog and the governed proxy kernel_route. effect_class,
-      effect_class_source and effect_class_declared are reserved and stripped
-      from caller input (CTL-022).
+      with the request resource, and for every other action it removes
+      tool_name, so policy never reads a caller's tool_name and a CALL_TOOL
+      request is evaluated as CALL_TOOL. On the evaluate and ext-authz routes
+      the request's effect class is a declaration: it is bound as effect_class
+      with effect_class_source caller_declared, unless the kernel's effect type
+      catalog knows the evaluated action, in which case the bound class is
+      never below the catalog's (effect_class_source effect_catalog). The
+      evaluated action is the request's action and, for EXECUTE_TOOL, its
+      resource, which Guardian evaluates as the tool. The resource of any
+      other action proves nothing about the action: a catalogued effect named
+      there raises a declared class, and never lowers it, never replaces a
+      label and never makes the class effect_catalog. A declaration that was
+      not bound is kept as effect_class_declared. The organization-runtime
+      route checks the activation ceiling against the bound class and attests
+      the submitted one. ManagedPolicyPDP matches allow rules against the
+      request as bound only. Deny and escalate rules are also matched against
+      the request without effect_class_source and effect_class_declared, and
+      against the request as declared, so a declaration can add a restriction
+      and never lift one, and a pattern written before those members existed
+      still restricts. The MCP path marks its class tool_catalog and the
+      governed proxy kernel_route. effect_class, effect_class_source and
+      effect_class_declared are reserved and stripped from caller input
+      (CTL-022).
     status: enforced
     entry_points:
       - "core/pkg/guardian.boundActionID"
       - "core/pkg/guardian.bindRequestTool"
       - "core/cmd/helm-ai-kernel.resolveEffectClass"
-      - "core/pkg/pdp.managedPolicyDeclaredView"
+      - "core/pkg/pdp.managedPolicyRestrictingViews"
     config: []
     protected_operations:
       - "Policy rule selection and execution intent issuance for every Guardian decision."
       - "The effect class bound for POST /api/v1/evaluate, the organization-runtime evaluate route, ext-authz and the governed OpenAI proxy."
     bypass_assumptions:
-      - "For an action and resource the kernel's effect type catalog does not list (any tool name or URN), the class is the caller's declaration. It is recorded as caller_declared and still selects class-keyed policy rules; a server-owned class for arbitrary tool names does not exist yet (helm-tracker#319)."
+      - "For an action the kernel's effect type catalog does not list (any tool name or URN, and CALL_TOOL), the class is the caller's declaration, raised at most by a catalogued effect the caller names as the resource. It is recorded as caller_declared and still selects class-keyed policy rules; a server-owned class for arbitrary tool names does not exist yet (helm-tracker#319)."
+      - "The resource raise is not a floor. With a label declared in place of a class, the resource of an action other than EXECUTE_TOOL changes nothing: the bound class is the action's own catalog class, or the label when the catalog does not know the action."
       - "On the evaluate route the tool itself is caller-declared: the kernel decides and signs for the tool the request names and does not dispatch it."
       - "An in-process caller that builds an Effect of a tool-call type sets params.tool_name itself and is trusted to; only the evaluated-request path replaces or removes it."
       - "Only ManagedPolicyPDP matches restricting rules against the kept declaration. A CEL or PRG expression that reads context.effect_class sees the bound class; one that restricted on a caller's label for a catalogued effect must read effect_class_declared."
+      - "A ManagedPolicyPDP allow pattern is matched against the full canonical request only, where effect_class_source (and effect_class_declared) now follow effect_class: an allow pattern that relied on effect_class being followed by the next context member no longer matches, and the request is denied. A pattern is an unanchored regular expression over that text, so an allow pattern that does not name the member it reads can match effect_class_declared or any other caller-supplied context value."
+      - "The signed ext-authz response echoes the request's effect_class and risk_class as submitted and carries neither the bound class nor its source: when the kernel evaluated a higher class, a verifier of that response alone does not learn it. The evaluated class is in the decision's effect. Carrying it in the response is a contract change that has not been made."
+      - "The organization-runtime decision attestation carries the submitted effect class, because the control plane verifies that member against the effect_level it sent. The class the ceiling was checked against, its source and the declaration are in the decision record's input context, which the attestation does not sign."
       - "The plan adapter (core/pkg/effectgraph) passes a step id as the request resource, so an EXECUTE_TOOL plan step selects the rule named by its step id; a CALL_TOOL step is evaluated as CALL_TOOL."
     tests:
       allowed:
         - "core/pkg/guardian.TestEvaluateDecisionSelectsPolicyByGuardianBoundAction"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteMarksDeclaredEffectClassAsCallerDeclared"
+        - "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource"
+        - "core/cmd/helm-ai-kernel.TestExecuteToolTakesTheCatalogClassOfItsTool"
       forbidden:
         - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
         - "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType"
+        - "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool"
         - "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction"
         - "core/pkg/guardian.TestEffectClassProvenanceKeysAreReserved"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName"
+        - "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches"
         - "core/cmd/helm-ai-kernel.TestGovernedOpenAIProxyIgnoresRequestBodyToolNameForPolicyAction"
         - "core/cmd/helm-ai-kernel.TestGovernedOpenAIProxyMarksItsEffectClassAsRouteAssigned"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime"
+        - "core/cmd/helm-ai-kernel.TestActivationGateRefusesARequestWithNoBoundEffectClass"
+        - "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
+        - "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
       removal:
-        - "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction"
-        - "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction"
+        - "core/pkg/guardian.TestSignDecisionHonoursToolNameOnlyForExecuteTool"
+        - "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction"
         - "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicySeesTheBoundToolName"
         - "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType"
+        - "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassForAToolCallEnvelope"
         - "core/cmd/helm-ai-kernel.TestExtAuthzBindsEffectClassLikeTheEvaluateRoute"
+        - "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow"
+        - "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource"
+        - "core/cmd/helm-ai-kernel.TestOrganizationRuntimeAttestationCarriesTheSubmittedEffectClass"
+        - "core/cmd/helm-ai-kernel.TestActivationGateLeavesTheTransportBoundEffectClass"
         - "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows"
+        - "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches"
+        - "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
       bypass:
         - "core/cmd/helm-ai-kernel.TestResolveEffectClass"
+        - "core/pkg/mcp.TestGovernanceFirewall_AllowsReservedNamesNestedInsideAnArgument"

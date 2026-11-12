@@ -599,7 +599,9 @@ const (
 // decision was not evaluated for. tool_name is read only for the effect types
 // whose contract carries the tool in params; every other effect is named by
 // its type. On the evaluated-request path Params is the caller's context, and
-// bindRequestTool has already replaced or removed tool_name there.
+// bindRequestTool has already replaced tool_name there (EXECUTE_TOOL) or
+// removed it (every other action), so only an effect built in process can
+// name the tool of a CALL_TOOL.
 func boundActionID(effect *contracts.Effect) string {
 	if namesToolInParams(effect.EffectType) {
 		if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
@@ -616,22 +618,22 @@ func namesToolInParams(effectType string) bool {
 }
 
 // bindRequestTool leaves a request context holding only a tool_name Guardian
-// put there, and returns it. The context came from the caller. For
-// EXECUTE_TOOL the tool is the typed request resource, which the decision
-// record signs, so it replaces whatever the caller sent. Any other tool-call
-// type names no tool in a typed request field: a tool_name in its context is
-// the caller's, so it is removed and the request is evaluated as its type.
-// Every interceptor and the policy decision point read the context after this.
+// put there, and returns it. The context came from the caller. Only
+// EXECUTE_TOOL names its tool in a typed request field, the resource, which
+// the decision record signs: it replaces whatever the caller sent. No other
+// action has a tool Guardian can bind, so a tool_name in its context is the
+// caller's word and is removed. Left there, a policy that matches on
+// tool_name would decide by it, and the effect would sign it. Every
+// interceptor and the policy decision point read the context after this.
 func bindRequestTool(action, resource string, params map[string]interface{}) map[string]interface{} {
-	switch {
-	case action == "EXECUTE_TOOL":
-		if params == nil {
-			params = make(map[string]interface{})
-		}
-		params["tool_name"] = resource
-	case namesToolInParams(action):
+	if action != "EXECUTE_TOOL" {
 		delete(params, "tool_name")
+		return params
 	}
+	if params == nil {
+		params = make(map[string]interface{})
+	}
+	params["tool_name"] = resource
 	return params
 }
 

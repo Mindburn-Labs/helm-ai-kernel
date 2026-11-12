@@ -88,31 +88,74 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Managed policy patterns are matched against a canonical request that gained
+  members. `effect_class_source`, and `effect_class_declared` when the kernel
+  bound a class other than the declared one, now sit directly after
+  `effect_class` in the context. Deny and escalate patterns are also matched
+  against the request without those two members, so a pattern such as
+  `"effect_class":"E1","principal_id":"..."` keeps restricting. Allow patterns
+  are matched against the full request only: one that relied on `effect_class`
+  being followed by the next context member no longer matches and the request
+  is denied. Name `effect_class_source` in the pattern, or match the members
+  separately in a class or action rule.
+- A CEL or PRG expression that restricted on a caller's label for a catalogued
+  effect must read `effect_class_declared`: `effect_class` now holds the
+  catalog's class there.
+- A policy that matched a `tool_name` in request context for an action other
+  than `EXECUTE_TOOL` no longer sees it. Guardian removes it, because only
+  `EXECUTE_TOOL` has a tool the kernel binds.
+- MCP refuses a tool call with a top-level argument named `effect_class_source`
+  or `effect_class_declared`, as it already did for `effect_class`: tool
+  arguments become top-level members of the policy input, where those names
+  carry authority. A tool that needs such a parameter must nest it inside
+  another argument or rename it. The evaluate routes and the governed proxy
+  strip the same top-level context members and leave nested ones alone.
+- Effect digests of decisions on the evaluate routes, ext-authz, the governed
+  proxy and MCP change because of the added members.
+- The signed ext-authz response still echoes the request's `effect_class` and
+  `risk_class` as submitted. It does not carry the class the kernel bound or
+  its source, so when the kernel evaluated a higher class the response alone
+  does not say so. The evaluated class is in the decision's effect.
+- The organization-runtime decision attestation is unchanged: `effect_class`
+  is the submitted value, which the control plane verifies against what it
+  sent, also when the kernel checked the activation ceiling against a higher
+  class and refused. The decision record's input context carries the class the
+  ceiling was checked against with its source and declaration, on a refusal as
+  on a pass.
+
 ### Security
 
 - Guardian selects the policy rule, and names an execution intent's allowed
-  tool, from the evaluated request. A `tool_name` in request context is read
-  only for the tool-call effect types (`EXECUTE_TOOL`, `CALL_TOOL`), where
-  Guardian binds it from the request resource. `POST /api/v1/evaluate` and the
-  governed OpenAI proxy previously evaluated the rule named by a caller's
-  `tool_name` and signed an ALLOW for a different tool.
+  tool, from the evaluated request. Only `EXECUTE_TOOL` has a tool Guardian
+  binds: its `tool_name` is the request resource. For every other action a
+  `tool_name` in request context is removed before any gate or policy reads
+  it, so the PDP never sees the caller's `tool_name`, and a `CALL_TOOL`
+  request, which has no typed tool field, is evaluated as `CALL_TOOL`.
+  `POST /api/v1/evaluate` and the governed OpenAI proxy previously evaluated
+  the rule named by a caller's `tool_name` and signed an ALLOW for a different
+  tool.
 - On `POST /api/v1/evaluate`, the organization-runtime evaluate route and
   ext-authz, the request's effect class is recorded as a declaration and can
   no longer talk a catalogued effect under a policy ceiling. When the kernel's
-  effect type catalog knows the action or the resource, the bound
-  `effect_class` is never below the catalog's class: `INFRA_DESTROY` declared
-  as `E0`, or named as the tool of an `EXECUTE_TOOL` request, is evaluated as
-  `E4`, and the activation ceiling is checked against that class. The signed
-  effect carries `effect_class_source` (`effect_catalog`, `tool_catalog`,
-  `kernel_route` or `caller_declared`) and, when the kernel bound a different
-  class, the caller's own value as `effect_class_declared`. Managed policy
-  matches deny and escalate rules against the declaration as well, and allow
-  rules against the bound class only. A CEL or PRG expression that restricted
-  on a caller's label for a catalogued effect must read
-  `effect_class_declared`. Effect digests of decisions on these routes, the
-  governed proxy and MCP change because of the added members.
-- A `CALL_TOOL` request is evaluated as `CALL_TOOL`: it has no typed tool
-  field, so a `tool_name` in its context is removed before policy reads it.
+  effect type catalog knows the evaluated action, the bound `effect_class` is
+  never below the catalog's class: `INFRA_DESTROY` declared as `E0`, or named
+  as the tool of an `EXECUTE_TOOL` request, is evaluated as `E4`, and the
+  activation ceiling is checked against that class. The resource of any other
+  action does not class it. A catalogued effect named there raises a declared
+  class and does nothing else, so `effect_level` remains a policy resource
+  even when it is spelled like a catalogued effect id, and a caller cannot
+  pick the class of an action the catalog does not know by naming an effect
+  beside it.
+- The signed effect carries `effect_class_source`: `effect_catalog` when the
+  bound class is the catalog's class for the evaluated action, `tool_catalog`
+  on MCP, `kernel_route` on the governed proxy, and `caller_declared` for
+  everything that follows from what the caller sent. When the kernel bound a
+  class other than the declared one, the caller's own value is kept as
+  `effect_class_declared`. Managed policy matches allow rules against the
+  bound class only, and deny and escalate rules against the declaration as
+  well, so a declaration can add a restriction and never lift one.
 
 ### Fixed
 

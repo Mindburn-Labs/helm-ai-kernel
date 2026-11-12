@@ -49,16 +49,18 @@ const (
 
 // Values of ContextEffectClassSource.
 const (
-	// EffectClassSourceEffectCatalog: the kernel's effect type catalog names
-	// the class for the evaluated action.
+	// EffectClassSourceEffectCatalog: the bound class is the one the kernel's
+	// effect type catalog assigns the evaluated action.
 	EffectClassSourceEffectCatalog = "effect_catalog"
 	// EffectClassSourceToolCatalog: the operator's PEP tool catalog names it.
 	EffectClassSourceToolCatalog = "tool_catalog"
 	// EffectClassSourceKernelRoute: the route evaluates one fixed kind of
 	// effect and assigns its class itself.
 	EffectClassSourceKernelRoute = "kernel_route"
-	// EffectClassSourceCallerDeclared: the authenticated caller declared it and
-	// the kernel has no record of the action to check it against.
+	// EffectClassSourceCallerDeclared: the class follows from what the
+	// authenticated caller sent, its declared class or a higher one of a
+	// catalogued effect it named as the resource. The kernel's catalog has no
+	// record of the evaluated action, or assigns it a lower class.
 	EffectClassSourceCallerDeclared = "caller_declared"
 )
 

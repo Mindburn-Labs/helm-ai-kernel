@@ -217,8 +217,13 @@ func TestWorkstationResultEvidenceAndOperatorErrorCoverage(t *testing.T) {
 	if _, err := ExportEvidencePack(imported, outFile); err == nil {
 		t.Fatal("expected evidence pack create-dir error")
 	}
-	if err := writeCanonical(filepath.Join(t.TempDir(), "bad.json"), map[string]any{"bad": func() {}}); err == nil {
-		t.Fatal("expected writeCanonical canonicalization error")
+	badRoot, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer badRoot.Close()
+	if err := newPackWriter(badRoot).createCanonical("bad.json", map[string]any{"bad": func() {}}); err == nil {
+		t.Fatal("expected createCanonical canonicalization error")
 	}
 	if _, err := LoadEvidencePackIndex(t.TempDir()); err == nil {
 		t.Fatal("expected missing evidence index error")

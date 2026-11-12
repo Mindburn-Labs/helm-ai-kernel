@@ -89,7 +89,16 @@ directories. A search tool's glob filter (`Grep` `glob`, Hermes `file_glob`)
 is matched at any depth below the search root, and a filter or pattern whose
 last part is aimed at a key file name (`*.seed`, `workstation-ed25519.*`) is
 refused wherever the search runs; a filter that selects files in general
-(`*`, `**/*.go`) is not. A program passed to an interpreter, or to Hermes
+(`*`, `**/*.go`) is not. Brackets and braces are read as the shell and the
+search tools read them: a `]` right after `[` is a class member, a `[` that is
+never closed is itself, a `}` or `,` inside a class does not end or split a
+brace group, a group of one alternative (`{d}`) is that alternative, and a
+POSIX class (`[[:alpha:]]`) makes the rest of its path segment a wildcard. A
+pattern the guard cannot read is taken to reach the material. A search glob
+is expanded under a budget: one longer than 64 KiB, or whose brace expansion
+passes 256 alternatives, 64 KiB or 32 levels of nesting, is not expanded but
+refused, with a receipt reason that says it is too large to expand. The work
+one glob costs is linear in its length and bounded by that budget. A program passed to an interpreter, or to Hermes
 `execute_code`, is refused when its text names the path, and so is a script
 file whose content names it when the script is run.
 
@@ -142,7 +151,9 @@ When `enforce` is given a command to run (`workstation enforce [flags] -- comman
 - Every receipt for a wrapped command carries `argv_binding: jcs-sha256` and `argv_sha256`, the digest of the exact argv. `--out` receives the receipt that settled the outcome, the first denial or else the first decision; `--receipt-dir` receives all of them.
 - The command inherits the wrapper's environment, and the decision covers the variables in it that change where a client connects or what a shell runs first (see [Network egress decisions](#network-egress-decisions)).
 
-Exit codes: `126` when the command is not run, because an effect is denied, the declaration cannot be matched to the argv, a receipt cannot be written, or a receipt is not an operate-mode `ALLOW`; the command's own exit code when it runs, `128` plus the signal number when a signal ends it, and `127` when it cannot be started; `2` for a usage error.
+Exit codes: `126` when the command is not run, because an effect is denied, the declaration cannot be matched to the argv, a receipt cannot be written, or a receipt is not an operate-mode `ALLOW`; the command's own exit code when it runs, `128` plus the signal number when a signal ends it, and `127` when it cannot be started; `2` when the flags cannot be parsed or no decision can be made, because the policy profile cannot be loaded or the signing seed is unavailable. The command does not run on `2` either, and nothing is signed.
+
+A command that is refused leaves only its denials in `--out` and `--receipt-dir`, as a refused hook call does, so no `ALLOW` receipt stands for an effect of a command that never ran. Every receipt of one run carries, in its signed bytes, `call_id` (shared by the receipts of that run), `call_receipts` (how many receipts the run wrote) and `call_verdict` (its outcome), beside `argv_binding` and `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts already written for the run are removed as far as removal works; the denials stay.
 
 The command is looked up on `PATH` when it runs. The decision names the program as written, not the file that `PATH` resolves it to.
 
@@ -198,9 +209,18 @@ permission; under the default profile it is denied. The built-in default
 profile is unchanged: it allows observe- and draft-class actions and denies
 every operate-class one.
 
-The hook reads at most 4 MiB of standard input. A larger payload is not
-classified: it is denied with `TOOL_INPUT_TOO_LARGE` and a receipt that
-carries `tool_input_limit_bytes`.
+The hook decides on the first JSON value on standard input. It does not wait
+for the end of the input, so a client that leaves standard input open still
+gets its answer, and what follows the first value is not read. It reads at
+most 4 MiB. A larger payload is not classified: it is denied with
+`TOOL_INPUT_TOO_LARGE` and a receipt of effect type
+`WORKSTATION_MCP_TOOL_CALL`, the type of a call into a tool the hook cannot
+see into, that carries `tool_input_limit_bytes`. In place of the digest of
+the canonical tool input it binds the bytes the hook read:
+`tool_input_binding: payload-prefix-sha256`, `tool_input_sha256` (their
+SHA-256) and `tool_input_bytes_read`. Its `tool_id` names the tool when the
+payload names it (`tool_name`, or `toolName`) before the input that does not
+fit, as the clients do, and is `unknown` otherwise.
 
 Every effect of one call is decided before any receipt is written. When one is
 denied, only the denials are written, so no `ALLOW` receipt stands for a call
@@ -209,8 +229,9 @@ that did not run. Every receipt of a call carries, in its signed bytes,
 receipts the call wrote), `call_verdict` (the outcome of the whole call) and
 `tool_input_binding: jcs-sha256` with `tool_input_sha256`, the digest of the
 canonical tool input. If a receipt cannot be written the call is denied and
-the receipts already written for it are removed; one that cannot be removed
-still shows, through `call_receipts`, that its set is incomplete.
+the `ALLOW` receipts already written for it are removed; one that cannot be
+removed still shows, through `call_receipts`, that its set is incomplete. A
+denial already written stays: it records a refusal that did happen.
 
 Shell syntax whose meaning is only known after expansion also routes to a
 decision rather than passing unclassified: ANSI-C or locale quoting (`$'...'`,
@@ -290,7 +311,7 @@ helm-ai-kernel audit scope \
   --evidence-pack
 ```
 
-The command accepts `AgentRunReceipt` and `WorkstationPolicyDecisionReceipt` JSON files or directories. It writes `scope-audit.json`, `scope-audit.md`, `evidence-refs.json`, and, when `--evidence-pack` is set, `scope-audit-evidencepack/`. Add `--json` to print the canonical report JSON to stdout.
+The command accepts `AgentRunReceipt` and `WorkstationPolicyDecisionReceipt` JSON files or directories. It writes `scope-audit.json`, `scope-audit.md`, `evidence-refs.json`, and, when `--evidence-pack` is set, `scope-audit-evidencepack/`. Add `--json` to print the canonical report JSON to stdout. The `--out` directory must be new or empty, as `workstation evidence` requires of its output directory: a used one is refused before anything is written. Every file is created new through the opened directory, so a file or directory linked to one elsewhere is not written through.
 
 The report groups events into `mcp`, `filesystem`, `network`, `memory`, `secret`, `deploy`, `payment`, `loop`, and `shell`. It counts allowed, denied, tainted, and unknown actions; lists out-of-scope attempts; records missing controls; summarizes memory TTL/sensitivity/review state; and preserves source receipt hashes and signature presence. Secret, deploy, and payment details are metadata conventions in v1 (`secret_ref`, `lease_ref`, `redaction_ref`, `environment`, `artifact_digest`, `approval_ref`, `rollback_ref`, `verification_ref`, `amount`, `currency`, `counterparty_ref`, `spend_cap_ref`, `idempotency_key`, `ledger_ref`) so existing receipt compatibility is preserved.
 

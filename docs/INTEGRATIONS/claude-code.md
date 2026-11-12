@@ -42,10 +42,16 @@ The installed matcher routes `Bash`, `Edit`, `Write`, `MultiEdit`,
 `ListMcpResourcesTool` and `mcp__*` calls to the hook. An install made by an
 earlier release keeps its narrower matcher until
 `helm-ai-kernel setup claude-code --yes` is run again; `setup status` reports
-such a matcher as outdated (`hook_matcher_outdated`, with the tools it misses
-in `hook_matcher_missing_tools`) and exits non-zero. When the HELM hook shares
-a hook entry with another hook, setup leaves that entry's matcher alone and
-prints a warning that names the file and the matcher.
+such a matcher as outdated (`hook_matcher_outdated`, with the tools no entry
+that holds the HELM hook routes in `hook_matcher_missing_tools`), prints the
+command that upgrades that install (`hook_matcher_upgrade_command`, with its
+`--scope`, `--workspace` and `--data-dir`) and exits non-zero. It reads every
+entry that holds the HELM hook (`hook_matchers`), and reads a matcher as
+Claude Code does: one made only of letters, digits, `_` and `|` is a list of
+exact tool names, so `Edit|Write` does not route `MultiEdit`; any other
+matcher is a regular expression that may match anywhere in the name. When the
+HELM hook shares a hook entry with another hook, setup leaves that entry's
+matcher alone and prints a warning that names the file and the matcher.
 
 These tools are not routed, so the hook never sees them:
 

@@ -223,3 +223,111 @@ func TestSetupHookInstallIsIdempotent(t *testing.T) {
 		})
 	}
 }
+
+// statusJSON runs setup status for the test install and decodes its summary.
+func (m matcherTestSetup) status(t *testing.T, jsonOut bool) (int, string, map[string]any) {
+	t.Helper()
+	args := []string{"helm-ai-kernel", "setup", "status", m.opts.Target, "--scope", "project", "--workspace", m.opts.Workspace, "--data-dir", m.opts.DataDir}
+	if jsonOut {
+		args = append(args, "--json")
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(args, &stdout, &stderr)
+	if !jsonOut {
+		return code, stdout.String(), nil
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("status JSON: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+	}
+	return code, stdout.String(), summary
+}
+
+// The upgrade hint is a command that upgrades this install: for a project
+// install it names the scope, the workspace and the data directory, so it
+// does not configure another one.
+func TestSetupOutdatedMatcherHintUpgradesThisInstall(t *testing.T) {
+	m := newMatcherTestSetup(t, "claude-code")
+	writeSetupMCPTestConfig(t, "claude-code", m.summary.ClientConfigPath, m.summary.BinaryPath, m.opts.DataDir)
+	if err := upsertHookConfig(m.hookPath, olderClaudeMatcher, m.command, setupPrivateFileRoot(m.opts)); err != nil {
+		t.Fatal(err)
+	}
+	want := "helm-ai-kernel setup claude-code --scope project --workspace " + shellQuote(m.opts.Workspace) + " --yes --data-dir " + shellQuote(m.opts.DataDir)
+	_, text, _ := m.status(t, false)
+	if !strings.Contains(text, want) {
+		t.Fatalf("status text does not give the upgrade command %q:\n%s", want, text)
+	}
+	if _, _, summary := m.status(t, true); summary["hook_matcher_upgrade_command"] != want {
+		t.Fatalf("status JSON hook_matcher_upgrade_command = %v, want %q", summary["hook_matcher_upgrade_command"], want)
+	}
+}
+
+// writeClaudeHookEntries writes one PreToolUse entry per matcher, each holding
+// only the HELM hook.
+func (m matcherTestSetup) writeClaudeHookEntries(t *testing.T, matchers ...string) {
+	t.Helper()
+	entries := []any{}
+	for _, matcher := range matchers {
+		entries = append(entries, map[string]any{"matcher": matcher, "hooks": []any{map[string]any{"type": "command", "command": m.command, "timeout": 30}}})
+	}
+	raw, err := json.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": entries}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(m.hookPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(m.hookPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A tool reaches the hook when any entry that holds the HELM hook routes it,
+// so status reads every such entry, not the first.
+func TestSetupStatusReadsEveryHelmHookEntry(t *testing.T) {
+	m := newMatcherTestSetup(t, "claude-code")
+	writeSetupMCPTestConfig(t, "claude-code", m.summary.ClientConfigPath, m.summary.BinaryPath, m.opts.DataDir)
+	readers := "^(Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool)$"
+	m.writeClaudeHookEntries(t, olderClaudeMatcher, readers)
+	_, out, summary := m.status(t, true)
+	if summary["hook_matcher_outdated"] == true {
+		t.Fatalf("two entries that together route every tool were reported outdated:\n%s", out)
+	}
+	if matchers, _ := summary["hook_matchers"].([]any); len(matchers) != 2 || matchers[0] != olderClaudeMatcher || matchers[1] != readers {
+		t.Fatalf("hook_matchers = %v, want both entries", summary["hook_matchers"])
+	}
+
+	m.writeClaudeHookEntries(t, olderClaudeMatcher, "^(Read)$")
+	_, out, summary = m.status(t, true)
+	missing, _ := summary["hook_matcher_missing_tools"].([]any)
+	var names []string
+	for _, tool := range missing {
+		names = append(names, tool.(string))
+	}
+	if summary["hook_matcher_outdated"] != true || strings.Join(names, ",") != "Grep,Glob,WebFetch,ReadMcpResourceTool,ListMcpResourcesTool" {
+		t.Fatalf("missing tools = %v (outdated %v), want the tools neither entry routes:\n%s", names, summary["hook_matcher_outdated"], out)
+	}
+}
+
+// Claude Code reads a matcher of plain names as exact tool names and any other
+// matcher as a regular expression that may match anywhere in the name. setup
+// reads it the same way, so "Edit" does not count as routing MultiEdit.
+func TestSetupReadsAClaudeCodeMatcherAsClaudeCodeDoes(t *testing.T) {
+	for _, tc := range []struct {
+		matcher string
+		missing string
+	}{
+		{"Bash|Edit|Write|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool", "MultiEdit,NotebookEdit,mcp__server__tool"},
+		{"Edit", "Bash,Write,MultiEdit,NotebookEdit,Read,Grep,Glob,WebFetch,ReadMcpResourceTool,ListMcpResourcesTool,mcp__server__tool"},
+		{"Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool|mcp__github__create_issue", "mcp__server__tool"},
+		{"Bash|.*Edit|Write|Read|Grep|Glob|WebFetch|.*McpResource.*|mcp__.*", ""},
+		{"Edit|Write|Bash|Read|Gr.p|Glob|WebFetch|Mcp|mcp__", ""},
+		{"*", ""},
+		{"", ""},
+		{setupHookMatcher("claude-code"), ""},
+	} {
+		if got := strings.Join(setupHookMatcherMissing("claude-code", tc.matcher), ","); got != tc.missing {
+			t.Errorf("matcher %q misses %q, want %q", tc.matcher, got, tc.missing)
+		}
+	}
+}

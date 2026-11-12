@@ -682,13 +682,18 @@ const maxSecretGlobSegments = 64
 // wherever the search runs, selects credential material by the rules
 // SecretReadPath uses. A glob whose last segment selects files in general,
 // such as "*" or "**/*.go", is a search of the tree, not a read of a
-// credential; SecretReadPath of its literal text still applies.
+// credential; SecretReadPath of its literal text still applies. A glob too
+// large to expand is taken to select credential material.
 func SecretGlob(pattern string) bool {
 	pattern = strings.ToLower(slashPath(strings.TrimSpace(pattern)))
 	if pattern == "" {
 		return false
 	}
-	for _, alternative := range expandBraces(pattern, maxBraceAlternatives) {
+	alternatives, ok := expandBraces(pattern)
+	if !ok {
+		return true
+	}
+	for _, alternative := range alternatives {
 		segments := strings.Split(strings.Trim(path.Clean(alternative), "/"), "/")
 		if len(segments) > maxSecretGlobSegments {
 			segments = segments[len(segments)-maxSecretGlobSegments:]
@@ -1353,6 +1358,9 @@ type wordTok struct {
 // hasGlobPattern reports whether an unquoted literal holds an unescaped "*",
 // "?" or bracket expression. A lone "[" (the test builtin) is not a pattern.
 func hasGlobPattern(lit string) bool {
+	// A "[" is glob syntax when a "]" follows it anywhere; the last "]" is
+	// found once, so a word of many "[" costs one pass, not one per "[".
+	lastClose := strings.LastIndexByte(lit, ']')
 	for i := 0; i < len(lit); i++ {
 		switch lit[i] {
 		case '\\':
@@ -1360,7 +1368,7 @@ func hasGlobPattern(lit string) bool {
 		case '*', '?':
 			return true
 		case '[':
-			if strings.IndexByte(lit[i+1:], ']') >= 0 {
+			if lastClose > i {
 				return true
 			}
 		}

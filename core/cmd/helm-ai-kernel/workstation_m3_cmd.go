@@ -50,36 +50,53 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	effects, refusal := enforceEffects(flags)
-	receipts, err := decideEnforceEffects(flags, effects)
+	receipts, err := decideEnforceEffects(flags, effects, nil)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
+	denied := false
+	for _, receipt := range receipts {
+		denied = denied || receipt.Verdict == contracts.WorkstationVerdictDeny
+	}
+	if denied || refusal == "" {
+		// The receipts that are written are signed again, with the outcome of
+		// the whole command in them: a refused command keeps only its
+		// denials, as a refused hook call does.
+		if receipts, err = bindEnforceReceipts(flags, effects, receipts, denied); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 2
+		}
+	}
 	// The receipt that settles the outcome: the first denial, else the first
 	// decision. With several effects the rest go to --receipt-dir.
 	var decisive *contracts.WorkstationPolicyDecisionReceipt
-	denied := false
 	for _, receipt := range receipts {
-		if receipt.Verdict == contracts.WorkstationVerdictDeny && !denied {
-			decisive, denied = receipt, true
+		if receipt.Verdict == contracts.WorkstationVerdictDeny && decisive == nil {
+			decisive = receipt
 		}
 	}
 	if decisive == nil && len(receipts) > 0 {
 		decisive = receipts[0]
 	}
 	if denied || refusal == "" {
+		var written []string
 		for _, receipt := range receipts {
 			out := ""
 			if receipt == decisive {
 				out = flags.out
 			}
-			if _, err := writeDecisionReceipt(out, flags.receiptDir, receipt); err != nil {
+			path, err := writeDecisionReceipt(out, flags.receiptDir, receipt)
+			if err != nil {
 				// Without its receipt the decision cannot be shown, so the
 				// command does not run, and the exit code says so as a
-				// denial does.
+				// denial does. An ALLOW receipt already written would stand
+				// for a command that never ran, so it is removed.
+				removeAllowReceipts(written, receipts)
 				_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command: write decision receipt: %v\n", err)
 				return cliui.ExitDenied
 			}
+			written = append(written, path)
 		}
 		if decisive != nil {
 			if flags.jsonOut {
@@ -494,10 +511,57 @@ func enforceEnvironment(environ []string) []string {
 	return kept
 }
 
+// bindEnforceReceipts signs again the receipts of one run that are kept:
+// every one when nothing was denied, only the denials when something was.
+// Each kept receipt carries the call binding the hook writes (call_id,
+// call_receipts and call_verdict), so a reader can tell the receipts of one
+// run and its outcome from the receipts alone, and no ALLOW receipt stands
+// for a command that never ran.
+func bindEnforceReceipts(flags enforceFlags, effects []hookClassification, decided []*contracts.WorkstationPolicyDecisionReceipt, denied bool) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
+	var kept []hookClassification
+	var verdicts []string
+	for i, receipt := range decided {
+		if !denied || receipt.Verdict == contracts.WorkstationVerdictDeny {
+			kept = append(kept, effects[i])
+			verdicts = append(verdicts, receipt.Verdict)
+		}
+	}
+	id, err := newHookRandomID("enforcecall_")
+	if err != nil {
+		return nil, fmt.Errorf("generate call ID: %w", err)
+	}
+	verdict := contracts.WorkstationVerdictAllow
+	if denied {
+		verdict = contracts.WorkstationVerdictDeny
+	}
+	bound, err := decideEnforceEffects(flags, kept, hookCallBinding{id: id}.metadata(len(kept), verdict))
+	if err != nil {
+		return nil, err
+	}
+	for i, receipt := range bound {
+		if receipt.Verdict != verdicts[i] {
+			return nil, fmt.Errorf("decision for %s changed between evaluations", kept[i].Class)
+		}
+	}
+	return bound, nil
+}
+
+// removeAllowReceipts removes, as far as removal works, the ALLOW receipts
+// among those written for a command that is not run. A denial stays: it
+// records a refusal that did happen.
+func removeAllowReceipts(written []string, receipts []*contracts.WorkstationPolicyDecisionReceipt) {
+	for i, path := range written {
+		if path != "" && receipts[i].Verdict == contracts.WorkstationVerdictAllow {
+			_ = os.Remove(path)
+		}
+	}
+}
+
 // decideEnforceEffects signs one decision per effect. Every receipt for a
 // wrapped command binds the argv, so a receipt cannot be shown for a command
-// other than the one it was decided for.
-func decideEnforceEffects(flags enforceFlags, effects []hookClassification) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
+// other than the one it was decided for. callBinding, when given, binds each
+// receipt to the run it belongs to and is part of the signed bytes.
+func decideEnforceEffects(flags enforceFlags, effects []hookClassification, callBinding map[string]string) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
 	if len(effects) == 0 {
 		return nil, nil
 	}
@@ -535,12 +599,15 @@ func decideEnforceEffects(flags enforceFlags, effects []hookClassification) ([]*
 			Target:       effect.Target,
 			OccurredAt:   time.Unix(0, 0).UTC(),
 		}
-		if len(effect.Metadata)+len(argvBinding) > 0 {
+		if len(effect.Metadata)+len(argvBinding)+len(callBinding) > 0 {
 			req.Metadata = map[string]string{}
 			for key, value := range effect.Metadata {
 				req.Metadata[key] = value
 			}
 			for key, value := range argvBinding {
+				req.Metadata[key] = value
+			}
+			for key, value := range callBinding {
 				req.Metadata[key] = value
 			}
 		}

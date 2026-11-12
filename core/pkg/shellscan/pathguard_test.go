@@ -1,10 +1,13 @@
 package shellscan
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // guardFixture lays out a home directory the way a workstation signer does: a
@@ -300,5 +303,180 @@ func TestPathGuardReadsShellBracketNegation(t *testing.T) {
 		if rule, got := f.guard.MatchPattern(tc.pattern, work); got != tc.want {
 			t.Errorf("MatchPattern(%q) = %q, %v; want %v", tc.pattern, rule, got, tc.want)
 		}
+	}
+}
+
+// manyAlternatives is a brace glob of count alternatives, "{a0,a1,...}",
+// followed by last as one more.
+func manyAlternatives(count int, last string) string {
+	var b strings.Builder
+	b.WriteByte('{')
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&b, "a%d,", i)
+	}
+	b.WriteString(last)
+	b.WriteByte('}')
+	return b.String()
+}
+
+// A search glob is expanded under a budget. Past it the glob is refused as if
+// it reached trust material, so the work one glob costs never grows with the
+// square of its size: a client runs a call whose hook outlives its timeout.
+func TestPathGuardDecidesALargeBraceGlobInBoundedTimeAndMemory(t *testing.T) {
+	f := newGuardFixture(t)
+	for _, tc := range []struct {
+		name string
+		glob string
+	}{
+		{"1 MiB of two-way groups", strings.Repeat("{a,b}", (1<<20)/5)},
+		{"two-way groups just under the length budget", strings.Repeat("{a,b}", 13000)},
+		{"one group of many alternatives under the length budget", manyAlternatives(5000, "x")},
+		{"one group of many alternatives", manyAlternatives(20000, "x")},
+		{"deeply nested groups", strings.Repeat("{a,", 4000) + strings.Repeat("}", 4000)},
+		// Each alternative expands to 256 on its own; the group is refused
+		// at its 257th alternative, not after building all of them.
+		{"a group whose alternatives each expand to many", "{" + strings.Repeat("{ab,cd}{ab,cd}{ab,cd}{ab,cd}{ab,cd}{ab,cd}{ab,cd}{ab,cd},", 1140) + "x}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			type outcome struct {
+				rule          string
+				guarded, read bool
+				elapsed       time.Duration
+				allocated     uint64
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				var before, after runtime.MemStats
+				runtime.ReadMemStats(&before)
+				start := time.Now()
+				rule, guarded := f.guard.MatchSearchGlob(tc.glob, f.home, true)
+				read := SecretGlob(tc.glob)
+				elapsed := time.Since(start)
+				runtime.ReadMemStats(&after)
+				done <- outcome{rule, guarded, read, elapsed, after.TotalAlloc - before.TotalAlloc}
+			}()
+			select {
+			case got := <-done:
+				if !got.guarded || got.rule != UnexpandableSearchGlob || !got.read {
+					t.Fatalf("MatchSearchGlob = %q, %v; SecretGlob = %v; want the glob refused as %q by both", got.rule, got.guarded, got.read, UnexpandableSearchGlob)
+				}
+				if got.elapsed > 250*time.Millisecond {
+					t.Fatalf("deciding a %d-byte glob took %s, want well under a second", len(tc.glob), got.elapsed)
+				}
+				if got.allocated > 16<<20 {
+					t.Fatalf("deciding a %d-byte glob allocated %d bytes, want at most 16 MiB", len(tc.glob), got.allocated)
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("a %d-byte brace glob was not decided within a second", len(tc.glob))
+			}
+		})
+	}
+}
+
+// Brackets are read as the shell and the search tools read them: "]" first in
+// a class is a member, "[" that is never closed is itself, and a "}" or ","
+// inside a class does not end or split a brace group. A glob past the
+// alternative budget is refused rather than matched with its later groups
+// left as literal text.
+func TestPathGuardReadsBracketsAndBracesAsTheSearchToolsDo(t *testing.T) {
+	f := newGuardFixture(t)
+	for _, tc := range []struct {
+		glob string
+		want bool
+	}{
+		{"*.see[]d]", true},
+		{"**/*.see[]d]", true},
+		{"{*.seed,[}]}", true},
+		{"{*.s[e]ed,[,]}", true},
+		{"signer.see{d}", true},
+		{manyAlternatives(299, "*.s") + "{eed,zz}", true},
+		{manyAlternatives(299, ".s") + "{igner,zz}/keys/*", true},
+		{"keys/*", true}, // a filter at any depth below the home directory
+		{"**/*.go", false},
+		{"*.md", false},
+		{"{*.go,*.md}", false},
+		{"*.pub", false},
+		{"*.see[!d]", false},
+	} {
+		if rule, got := f.guard.MatchSearchGlob(tc.glob, f.home, true); got != tc.want {
+			t.Errorf("MatchSearchGlob(%q) = %q, %v; want %v", tc.glob, rule, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		glob string
+		want bool
+	}{
+		{".en[]v]", true},
+		{"{.e[n]v,[}]}", true},
+		{manyAlternatives(299, ".e") + "{nv,zz}", true},
+		{manyAlternatives(299, ".env"), true},
+		{".env.example", false},
+		{"*.pub", false},
+		{"**/*.go", false},
+		{"*.md", false},
+	} {
+		if got := SecretGlob(tc.glob); got != tc.want {
+			t.Errorf("SecretGlob(%q) = %v; want %v", tc.glob, got, tc.want)
+		}
+	}
+	// The same bracket rule holds for a path a shell command names.
+	work := t.TempDir()
+	if rule, got := f.guard.MatchPattern("~/.signer/k[]e]ys/*", work); !got {
+		t.Errorf("MatchPattern(k[]e]ys) = %q, %v; want a match", rule, got)
+	}
+	if res := ClassifyAt("cat ~/.signer/k[]e]ys/*", work, WithPathGuard(f.guard)); res.ProtectedPath == "" {
+		t.Error("cat ~/.signer/k[]e]ys/* reported no protected path")
+	}
+	if rule, got := f.guard.MatchPattern("~/.signer/k[[:alpha:]]ys/*", work); !got {
+		t.Errorf("MatchPattern(k[[:alpha:]]ys) = %q, %v; want a match", rule, got)
+	}
+}
+
+// A pattern path.Match cannot read is taken to match, never to miss, and is
+// not taken as one that selects files in general.
+func TestPathGuardTakesAPatternItCannotReadAsAMatch(t *testing.T) {
+	if !segmentMatches("[a-c-e]", "zzz", true) {
+		t.Error("an unreadable pattern was taken as no match")
+	}
+	if generalSegment("[a-c-e]") {
+		t.Error("an unreadable pattern was taken as one that selects files in general")
+	}
+	f := newGuardFixture(t)
+	if rule, got := f.guard.MatchSearchGlob("[a-c-e]", f.home, true); !got {
+		t.Errorf("MatchSearchGlob of an unreadable pattern = %q, %v; want a match", rule, got)
+	}
+}
+
+// "**" matches no directory as well as any number of them.
+func TestPathGuardReadsDoubleStarAsZeroOrMoreDirectories(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	if rule, got := f.guard.MatchPattern(filepath.Dir(f.policy)+"/**/policy.json", work); !got {
+		t.Fatalf("MatchPattern(<dir>/**/policy.json) = %q, %v; want the policy file", rule, got)
+	}
+}
+
+// A pattern longer than maxGlobSegments names no real file; it is refused,
+// not compared.
+func TestPathGuardRefusesAPatternWithTooManySegments(t *testing.T) {
+	f := newGuardFixture(t)
+	if rule, got := f.guard.MatchPattern(strings.Repeat("/zz*", maxGlobSegments+1), t.TempDir()); !got {
+		t.Fatalf("MatchPattern of %d segments = %q, %v; want it refused as a match", maxGlobSegments+1, rule, got)
+	}
+}
+
+// A wildcard aimed into a protected directory matches when it can name a file
+// the directory holds, not only a protected name.
+func TestPathGuardListsTheProtectedDirectory(t *testing.T) {
+	f := newGuardFixture(t)
+	if err := os.WriteFile(filepath.Join(f.keys, "extra.bin"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	if rule, got := f.guard.MatchPattern("~/.signer/k*/*.bin", work); !got {
+		t.Fatalf("MatchPattern(~/.signer/k*/*.bin) = %q, %v; want the file in the key directory", rule, got)
+	}
+	if rule, got := f.guard.MatchPattern("~/.signer/k*/*.absent", work); got {
+		t.Fatalf("MatchPattern(~/.signer/k*/*.absent) = %q, %v; want no match", rule, got)
 	}
 }

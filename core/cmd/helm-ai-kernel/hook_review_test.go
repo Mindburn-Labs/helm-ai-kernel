@@ -354,6 +354,11 @@ func TestHookGlobFiltersReachProtectedFiles(t *testing.T) {
 		{"wildcard glob for an env file", "Grep", map[string]any{"glob": "**/.en*", "pattern": "."}, "secret"},
 		{"file_glob for private keys", "search_files", map[string]any{"file_glob": "*.pem", "pattern": "."}, "secret"},
 		{"Glob pattern for a private key", "Glob", map[string]any{"pattern": "**/id_rsa"}, "secret"},
+		// A filter selects names at any depth below the search root, so one
+		// that names the key directory reaches it from the home directory.
+		{"glob filter for the key directory at any depth", "Grep", map[string]any{"path": env.home, "glob": "keys/*", "pattern": "."}, "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"file_glob filter for the key directory at any depth", "search_files", map[string]any{"path": env.home, "file_glob": "keys/*", "pattern": "."}, "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"include filter for the key directory at any depth", "mcp__fs__search_files", map[string]any{"path": env.home, "include": "keys/*"}, "TRUST_MATERIAL_ACCESS_DENIED"},
 
 		{"recursive glob for sources", "Glob", map[string]any{"pattern": "**/*.go"}, ""},
 		{"filter for documents", "Grep", map[string]any{"glob": "*.md", "pattern": "TODO"}, ""},

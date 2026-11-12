@@ -13,6 +13,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hash"
 	"io"
 	"maps"
 	"os"
@@ -31,6 +32,7 @@ import (
 
 var (
 	hookStdin            = io.Reader(os.Stdin)
+	hookWriteReceipt     = writeDecisionReceipt
 	hookNow              = func() time.Time { return time.Now().UTC() }
 	errHookPolicyProfile = errors.New("hook policy profile unavailable")
 	errHookInputTooLarge = errors.New("hook payload exceeds the input limit")
@@ -83,8 +85,10 @@ type hookClassification struct {
 	// trust material. It is denied under every profile.
 	TrustMaterial bool
 	// InputTooLarge marks a call whose payload exceeded hookMaxInputBytes and
-	// was not read. It is denied under every profile.
+	// was not read in full. It is denied under every profile, and InputRead
+	// says what was read.
 	InputTooLarge bool
+	InputRead     *hookOversizedPayload
 }
 
 func init() {
@@ -139,9 +143,11 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	}
 	payload, err := decodePreToolPayload(stdin)
 	var classifications []hookClassification
+	var oversized *hookOversizedPayload
 	switch {
-	case errors.Is(err, errHookInputTooLarge):
-		classifications = []hookClassification{oversizedToolCallClassification()}
+	case errors.As(err, &oversized):
+		payload = preToolPayload{ToolName: oversized.tool, ToolInput: map[string]any{}}
+		classifications = []hookClassification{oversizedToolCallClassification(oversized)}
 	case err != nil:
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
@@ -158,18 +164,22 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 }
 
 // oversizedToolCallClassification is the one decision for a call whose
-// payload exceeded hookMaxInputBytes. Nothing about the call was read, so it
-// is decided as a tool call the hook cannot see into and refused.
-func oversizedToolCallClassification() hookClassification {
+// payload exceeded hookMaxInputBytes. The call was not classified, so it is
+// decided as a call into a tool the hook cannot see into (the MCP tool-call
+// effect type) and refused. It names the tool when the payload named it
+// before the limit, and the call binding carries the digest of the bytes
+// read.
+func oversizedToolCallClassification(oversized *hookOversizedPayload) hookClassification {
 	return hookClassification{
 		ShouldDecide:  true,
 		Class:         "mcp",
 		Target:        "tool input over " + strconv.Itoa(hookMaxInputBytes) + " bytes",
 		Action:        "oversized_tool_call",
-		ToolID:        "unknown",
+		ToolID:        firstNonEmptyString(oversized.tool, "unknown"),
 		Reason:        "tool call whose input exceeds what the hook reads",
 		Metadata:      map[string]string{"tool_input_limit_bytes": strconv.Itoa(hookMaxInputBytes)},
 		InputTooLarge: true,
+		InputRead:     oversized,
 	}
 }
 
@@ -221,13 +231,17 @@ func decideHookCall(opts hookOptions, payload preToolPayload, classifications []
 	}
 	written := make([]string, 0, len(receipts))
 	for k, receipt := range receipts {
-		receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
+		receiptPath, err := hookWriteReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 		if err != nil {
-			// The call is refused, so the receipts already written for it
-			// would stand for a call that never ran. Removing them is best
-			// effort; call_receipts tells a reader the set is incomplete.
-			for _, path := range written {
-				_ = os.Remove(path)
+			// The call is refused. An ALLOW receipt already written for it
+			// would stand for a call that never ran, so it is removed, as far
+			// as removal works. A denial already written records a refusal
+			// that did happen and stays. Either way call_receipts tells a
+			// reader the set is incomplete.
+			for i, path := range written {
+				if receipts[i].Verdict == contracts.WorkstationVerdictAllow {
+					_ = os.Remove(path)
+				}
 			}
 			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, classifications[kept[k]], true, stderr)
@@ -282,12 +296,22 @@ func failHookDecision(opts hookOptions, payload preToolPayload, decision hookCla
 }
 
 // hookCallBinding is what every receipt of one call records about the call:
-// an identifier shared by its receipts and a digest of the tool input.
+// an identifier shared by its receipts and a digest of its input.
 type hookCallBinding struct {
-	id         string
-	inputSHA   string
-	inputBound bool
+	id string
+	// inputBinding names what inputSHA is the digest of: the canonical tool
+	// input (jcs-sha256) or, for a payload over the input limit, the bytes
+	// the hook read of it (payload-prefix-sha256), inputBytes of them.
+	inputBinding string
+	inputSHA     string
+	inputBytes   int
 }
+
+// Input bindings of a hook receipt.
+const (
+	hookInputBindingJCS           = "jcs-sha256"
+	hookInputBindingPayloadPrefix = "payload-prefix-sha256"
+)
 
 func newHookCallBinding(payload preToolPayload, classifications []hookClassification) (hookCallBinding, error) {
 	id, err := newHookRandomID("hookcall_")
@@ -297,7 +321,10 @@ func newHookCallBinding(payload preToolPayload, classifications []hookClassifica
 	call := hookCallBinding{id: id}
 	for _, classification := range classifications {
 		if classification.InputTooLarge {
-			// The input was not read, so there is nothing to bind.
+			// The tool input was not read in full; what was read is bound.
+			if read := classification.InputRead; read != nil {
+				call.inputBinding, call.inputSHA, call.inputBytes = hookInputBindingPayloadPrefix, read.sha256, read.bytes
+			}
 			return call, nil
 		}
 	}
@@ -305,7 +332,7 @@ func newHookCallBinding(payload preToolPayload, classifications []hookClassifica
 	if err != nil {
 		return hookCallBinding{}, fmt.Errorf("canonicalize tool input: %w", err)
 	}
-	call.inputSHA, call.inputBound = canonicalize.ComputeArtifactHash(canonicalInput), true
+	call.inputBinding, call.inputSHA = hookInputBindingJCS, canonicalize.ComputeArtifactHash(canonicalInput)
 	return call, nil
 }
 
@@ -317,9 +344,12 @@ func (c hookCallBinding) metadata(receipts int, verdict string) map[string]strin
 		"call_receipts": strconv.Itoa(receipts),
 		"call_verdict":  verdict,
 	}
-	if c.inputBound {
-		metadata["tool_input_binding"] = "jcs-sha256"
+	if c.inputBinding != "" {
+		metadata["tool_input_binding"] = c.inputBinding
 		metadata["tool_input_sha256"] = c.inputSHA
+	}
+	if c.inputBinding == hookInputBindingPayloadPrefix {
+		metadata["tool_input_bytes_read"] = strconv.Itoa(c.inputBytes)
 	}
 	return metadata
 }
@@ -780,18 +810,63 @@ func saveHookDoomLoopState(path string, state *hookDoomLoopFile) error {
 	return os.Rename(tmpName, path)
 }
 
+// hookOversizedPayload is what the hook knows of a payload over
+// hookMaxInputBytes: the SHA-256 of the bytes it read and how many there
+// were, and the tool when the payload named it within its first
+// hookOversizedToolScanBytes.
+type hookOversizedPayload struct {
+	sha256 string
+	bytes  int
+	tool   string
+}
+
+func (*hookOversizedPayload) Error() string { return errHookInputTooLarge.Error() }
+
+func (*hookOversizedPayload) Unwrap() error { return errHookInputTooLarge }
+
+// hookOversizedToolScanBytes is how much of an oversized payload is kept to
+// look for the tool name, which clients send ahead of the tool input.
+const hookOversizedToolScanBytes = 64 << 10
+
+// hookPayloadReader digests every byte the decoder reads and keeps the first
+// hookOversizedToolScanBytes of them.
+type hookPayloadReader struct {
+	source io.Reader
+	digest hash.Hash
+	head   bytes.Buffer
+	read   int
+}
+
+func (r *hookPayloadReader) Read(p []byte) (int, error) {
+	n, err := r.source.Read(p)
+	if n > 0 {
+		r.digest.Write(p[:n])
+		if room := hookOversizedToolScanBytes - r.head.Len(); room > 0 {
+			r.head.Write(p[:min(n, room)])
+		}
+		r.read += n
+	}
+	return n, err
+}
+
+// decodePreToolPayload decodes the first JSON value on standard input. It
+// reads no further than that value, so a client that leaves standard input
+// open gets its answer, and no further than hookMaxInputBytes+1 bytes: a
+// payload past the limit is reported as a *hookOversizedPayload.
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 	var payload preToolPayload
-	raw, err := io.ReadAll(io.LimitReader(stdin, hookMaxInputBytes+1))
-	if err != nil {
-		return payload, fmt.Errorf("read hook payload: %w", err)
-	}
-	if len(raw) > hookMaxInputBytes {
-		return payload, errHookInputTooLarge
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
+	reader := &hookPayloadReader{source: io.LimitReader(stdin, hookMaxInputBytes+1), digest: sha256.New()}
+	dec := json.NewDecoder(reader)
 	dec.UseNumber()
-	if err := dec.Decode(&payload); err != nil {
+	err := dec.Decode(&payload)
+	if dec.InputOffset() > hookMaxInputBytes || (err != nil && reader.read > hookMaxInputBytes) {
+		return preToolPayload{}, &hookOversizedPayload{
+			sha256: "sha256:" + hex.EncodeToString(reader.digest.Sum(nil)),
+			bytes:  reader.read,
+			tool:   payloadToolName(reader.head.Bytes()),
+		}
+	}
+	if err != nil {
 		return payload, fmt.Errorf("decode hook payload: %w", err)
 	}
 	if payload.ToolName == "" {
@@ -807,6 +882,37 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 		payload.ToolInput = map[string]any{}
 	}
 	return payload, nil
+}
+
+// payloadToolName reads the tool name from the start of a payload that may
+// be cut off: the top-level tool_name, or toolName when tool_name is absent,
+// provided it comes before the first value that does not fit.
+func payloadToolName(head []byte) string {
+	dec := json.NewDecoder(bytes.NewReader(head))
+	if token, err := dec.Token(); err != nil || token != json.Delim('{') {
+		return ""
+	}
+	camel := ""
+	for dec.More() {
+		token, err := dec.Token()
+		if err != nil {
+			break
+		}
+		key, _ := token.(string)
+		var value json.RawMessage
+		if err := dec.Decode(&value); err != nil {
+			break
+		}
+		var name string
+		if key != "tool_name" && key != "toolName" || json.Unmarshal(value, &name) != nil {
+			continue
+		}
+		if key == "tool_name" {
+			return strings.TrimSpace(name)
+		}
+		camel = strings.TrimSpace(name)
+	}
+	return camel
 }
 
 func classifyPreToolPayload(payload preToolPayload) hookClassification {

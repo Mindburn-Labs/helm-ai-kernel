@@ -96,14 +96,26 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   equivalents), Claude Code's `ReadMcpResourceTool` and
   `ListMcpResourcesTool`, and Hermes `execute_code`, `browser_navigate` and
   `vision_analyze`; an existing install keeps its narrower matcher until then.
-  `setup status` now reports such a matcher: `hook_matcher`,
-  `hook_matcher_expected`, `hook_matcher_outdated` and
-  `hook_matcher_missing_tools` in `--json`, client state `degraded` and a
-  non-zero exit. When the HELM hook shares a hook entry with another hook,
-  `setup` leaves that entry's matcher alone and prints a warning naming the
-  file and the matcher (`warnings` in `--json`). Under the built-in profile,
-  which has no egress allowlist, a routed `WebFetch` is denied like `curl`
-  already was, and `execute_code` is denied like any shell operation.
+  `setup status` now reports such a matcher: `hook_matcher` (the first
+  entry's), `hook_matchers` (every entry that holds the HELM hook),
+  `hook_matcher_expected`, `hook_matcher_outdated`,
+  `hook_matcher_missing_tools` (the tools no such entry routes) and
+  `hook_matcher_upgrade_command` (the `setup` command, with the install's
+  `--scope`, `--workspace`, `--data-dir` and `--policy-profile`, that
+  upgrades it) in `--json`, client state `degraded` and a non-zero exit. A
+  Claude Code matcher is read as Claude Code reads it: one made only of
+  letters, digits, `_` and `|` is a list of exact tool names, so `Edit` does
+  not route `MultiEdit`. Two entries that hold the same HELM hook command no
+  longer make `setup status` fail as ambiguous. When the HELM hook shares a
+  hook entry with another hook, `setup` leaves that entry's matcher alone and
+  prints a warning naming the file and the matcher (`warnings` in `--json`).
+- Under the built-in profile, which has no egress allowlist, once setup has
+  been run again: a routed `WebFetch` and Hermes `browser_navigate` are
+  denied like `curl` already was, Hermes `vision_analyze` given a URL is
+  denied as network egress, `execute_code` is denied like any shell
+  operation, and Claude Code `ReadMcpResourceTool` and `ListMcpResourcesTool`
+  are denied as MCP calls (`mcp.mutate`), except for the HELM server setup
+  installs.
 - A tool the hook has no class for is no longer passed: it is decided as a
   tool call and needs the `mcp.mutate` permission. The installed matchers do
   not route such tools; a matcher you widened yourself now does get denials
@@ -118,12 +130,27 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `tool_input_sha256`. The hook decides every effect of a call before writing
   any receipt; a denied call leaves only its denials on disk, where an
   earlier release could leave an `ALLOW` receipt for an effect decided before
-  the denial.
+  the denial. When a later receipt of a call cannot be written, the call is
+  denied and the `ALLOW` receipts already written for it are removed; a
+  denial already written stays.
+- An MCP resource receipt carries `mcp_server`, the server the call names.
 - A hook call that names more than 64 destinations is one
   `EGRESS_DESTINATION_UNDETERMINED` decision, and one that names more than 64
   credential paths is one secret read with `secret.target_count`. A hook
-  payload over 4 MiB is denied unread with the new reason code
-  `TOOL_INPUT_TOO_LARGE`, with a receipt.
+  payload over 4 MiB is not classified: it is denied with the new reason code
+  `TOOL_INPUT_TOO_LARGE` and a receipt of effect type
+  `WORKSTATION_MCP_TOOL_CALL` (a call into a tool the hook cannot see into),
+  action `oversized_tool_call`, `tool_input_limit_bytes`, and in place of the
+  input digest `tool_input_binding: payload-prefix-sha256`,
+  `tool_input_sha256` (the SHA-256 of the bytes the hook read) and
+  `tool_input_bytes_read`. Its `tool_id` and `tool` name the tool when the
+  payload names it before the limit, and are `unknown` and empty otherwise.
+- The hook decides on the first JSON value on standard input and no longer
+  reads to the end of it: a client that leaves standard input open after the
+  payload gets its answer at once, and anything after the first value is
+  ignored. A payload over 4 MiB whose JSON is malformed well before the
+  limit is now a decode error (exit 2), as a shorter malformed payload always
+  was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
 - Under the built-in profile, `ls ~/.helm-ai-kernel` and any other command
@@ -137,6 +164,21 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   (`*.pub`) and an example env file (`.env.example`, `.env.sample`,
   `.env.template`) are not credentials: reading one passes, through `Read` and
   through a shell alike.
+- Search globs are read as the search tools read them. In a bracket class a
+  `]` right after the `[` is a member, a `[` that is never closed is itself,
+  and a `}` or `,` inside a class does not end or split a brace group; a brace
+  group of one alternative (`{d}`) is that alternative; a POSIX class
+  (`[[:alpha:]]`) makes the rest of its path segment a wildcard; a pattern the
+  guard cannot read is taken to match. So `*.see[]d]`, `{*.seed,[}]}` and the
+  shell's `cat ~/.helm-ai-kernel/k[]e]ys/*` are denied with
+  `TRUST_MATERIAL_ACCESS_DENIED`, and `.en[]v]` is a secret read. A search
+  glob longer than 64 KiB, or whose brace expansion passes 256 alternatives,
+  64 KiB or 32 levels of nesting, is not expanded: it is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and its receipt reason
+  says the glob is too large to expand. An earlier release expanded it with
+  time and memory that grew with the square of the number of groups, and
+  past 256 alternatives matched a fallback that could miss the hook's key
+  files.
 - `BASH_ENV` and `ENV` set on a command line, like a connection variable, make
   its network destinations undetermined.
 - Under a profile with an egress allowlist, a command whose destinations
@@ -167,7 +209,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   undetermined. It exits with the command's own exit code (it was 1 for any
   failure), 128 plus the signal number when a signal ends it, 127 when the
   command cannot be started, and 126, not 1, when a receipt cannot be written;
-  the command does not run then.
+  the command does not run then. Exit 2 means the flags could not be parsed
+  or no decision could be made (the policy profile or the signing seed is
+  unavailable); the command does not run then either.
+- `workstation enforce` writes only the denials of a command it refuses, as
+  the hook does, so `--receipt-dir` no longer holds an `ALLOW` receipt for an
+  effect of a command that never ran, and `audit scope` over it no longer
+  counts that effect as allowed. Every `enforce` receipt now carries, in its
+  signed bytes, `call_id` (shared by the receipts of one run),
+  `call_receipts` and `call_verdict`, beside `argv_binding` and
+  `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts
+  already written for the run are removed.
 - `workstation list`, `denied`, `memory`, `loops`, `operator` and
   `audit scope` leave out a receipt that is unsigned or does not match its
   signature, and `audit scope` fails when no input is left. The Go functions
@@ -179,6 +231,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `recurring_loops`) and `verification` beside them. Every denied, memory and
   loop item carries the `signature_status` of its receipt. Read `.runs` where
   you read the array before.
+- The text output of `workstation denied`, `memory`, `loops`, `list` and
+  `operator` ends each run, denied, memory and loop row with the
+  `signature_status` of its receipt, and starts with a `Signatures:` line, a
+  line per input not counted or counted once, and a `Signer trust:` line. The
+  text output of `audit scope` gains `signatures:`, `not counted:`,
+  `duplicate, counted once:`, `signer trust:` and, when there are any,
+  `other signers:` lines, and `scope-audit.md` a `Receipts of another signer,
+  counted apart` line and the signature statements under Limitations. A
+  script that splits these lines on spaces or counts them needs updating.
 - An input file that repeats a receipt already read is counted once by the
   operator commands and `audit scope`, and named in
   `verification.duplicate_inputs`.
@@ -188,7 +249,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   only; it was in every total. The scope audit report schema gains these two
   properties.
 - `workstation evidence` refuses an output directory that is not empty; export
-  into a new or empty one.
+  into a new or empty one. So does `audit scope --out`, with or without
+  `--evidence-pack`, and the Go functions `workstation.WriteScopeAuditArtifacts`
+  and `workstation.ExportScopeAuditEvidencePack`: running an audit into the
+  directory of an earlier one now fails, so write each into a directory of
+  its own. Every file is created new through the opened directory, so a file
+  or directory linked to one elsewhere is not written through.
 - `shellscan` network facts carry the canonical destination in `Target`, and
   a command with several destinations yields several facts.
 
@@ -203,8 +269,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   the input receipts went through, and give each run a `signature_status`.
 - `shellscan.WithEnvironment` classifies a command as run with an inherited
   environment; `shellscan.SecretGlob` and `PathGuard.MatchSearchGlob` decide a
-  file-search glob; a path guard pattern reads `**` as any number of
-  directories.
+  file-search glob, under the budget `shellscan.MaxSearchGlobAlternatives`
+  and `shellscan.MaxSearchGlobBytes`, past which `MatchSearchGlob` reports
+  `shellscan.UnexpandableSearchGlob`; a path guard pattern reads `**` as any
+  number of directories.
 
 ### Fixed
 
@@ -243,7 +311,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   twice.
 - `workstation evidence` opened pack files with truncation, so a file
   hard-linked into a reused output directory was written through, and a
-  re-export left stale receipt files the index did not list.
+  re-export left stale receipt files the index did not list. `audit scope
+  --out` with `--evidence-pack` did the same with its report and pack files,
+  and wrote through a pack subdirectory linked to a directory elsewhere.
+- The hook waited for standard input to close before deciding, so a client
+  that kept it open after the payload got no answer until its timeout.
+- When a later receipt of a call could not be written, the hook removed the
+  denials it had already written with the `ALLOW` receipts.
 
 ## [0.12.0]
 

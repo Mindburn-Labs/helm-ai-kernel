@@ -440,13 +440,25 @@ func globMatch(pattern, target []string, dotGlob bool, within func(segment strin
 	return next[0]
 }
 
-// segmentMatches matches one pattern segment to one name.
+// segmentMatches matches one pattern segment to one name. A pattern that
+// path.Match cannot read is taken to match: the guard can only add a refusal,
+// so what it cannot read must not pass.
 func segmentMatches(pattern, name string, dotGlob bool) bool {
-	if !dotGlob && strings.HasPrefix(name, ".") && !strings.HasPrefix(pattern, ".") && !strings.HasPrefix(pattern, `\.`) {
-		return false
+	ok, err := segmentMatch(pattern, name, dotGlob)
+	return ok || err != nil
+}
+
+// segmentMatch is segmentMatches with the pattern error reported, for a
+// caller to which an unreadable pattern means something else.
+func segmentMatch(pattern, name string, dotGlob bool) (bool, error) {
+	translated := shellBracket(pattern)
+	if _, err := path.Match(translated, ""); err != nil {
+		return false, err
 	}
-	ok, err := path.Match(shellBracket(pattern), name)
-	return err == nil && ok
+	if !dotGlob && strings.HasPrefix(name, ".") && !strings.HasPrefix(pattern, ".") && !strings.HasPrefix(pattern, `\.`) {
+		return false, nil
+	}
+	return path.Match(translated, name)
 }
 
 // maxTreeEntries bounds how many names treeContentMatcher reads from a
@@ -496,13 +508,15 @@ func (g *PathGuard) treeNames(tree guardedPath) []string {
 // than aiming at one kind of file.
 var ordinaryFileNames = []string{"main.go", "readme.md", "index.js", "notes.txt", "makefile", "a"}
 
-// generalSegment reports whether a glob segment selects files in general.
+// generalSegment reports whether a glob segment selects files in general. A
+// segment path.Match cannot read is not taken as general: it is compared with
+// the protected names, which it is taken to match.
 func generalSegment(segment string) bool {
 	if segment == "**" {
 		return true
 	}
 	for _, name := range ordinaryFileNames {
-		if segmentMatches(segment, name, true) {
+		if ok, err := segmentMatch(segment, name, true); err == nil && ok {
 			return true
 		}
 	}
@@ -516,7 +530,8 @@ func generalSegment(segment string) bool {
 // pattern is anchored at root, as a Glob tool's pattern is. Brace
 // alternatives are tried one by one. Whatever the root, a last segment aimed
 // at a protected name, as "*.seed" is at a seed file and "*" is not, matches:
-// a copy of that file is still that file.
+// a copy of that file is still that file. A glob too large to expand under
+// the budget of expandBraces matches as UnexpandableSearchGlob.
 func (g *PathGuard) MatchSearchGlob(pattern, root string, filter bool) (string, bool) {
 	if g == nil {
 		return "", false
@@ -525,8 +540,12 @@ func (g *PathGuard) MatchSearchGlob(pattern, root string, filter bool) (string, 
 	if pattern == "" {
 		return "", false
 	}
+	alternatives, ok := expandBraces(pattern)
+	if !ok {
+		return UnexpandableSearchGlob, true
+	}
 	root = strings.TrimSuffix(slashPath(strings.TrimSpace(root)), "/")
-	for _, alternative := range expandBraces(pattern, maxBraceAlternatives) {
+	for _, alternative := range alternatives {
 		if needle, ok := g.MatchText(unescapeLit(alternative)); ok {
 			return needle, true
 		}
@@ -568,86 +587,310 @@ func anchoredPattern(pattern string) bool {
 	return false
 }
 
-// maxBraceAlternatives bounds the brace expansion of one search glob.
-const maxBraceAlternatives = 256
+// UnexpandableSearchGlob is the rule MatchSearchGlob reports for a glob too
+// large to expand. Such a glob is taken to reach trust material: the guard
+// can only add a refusal, so what it cannot read must not pass.
+const UnexpandableSearchGlob = "search glob too large to expand"
+
+// The budget of one search glob's brace expansion. Past any of these bounds
+// the glob is not expanded at all, and is refused: the work one glob costs is
+// linear in its length and never more than these bounds allow.
+const (
+	// MaxSearchGlobAlternatives bounds how many alternatives a glob expands
+	// to.
+	MaxSearchGlobAlternatives = 256
+	// MaxSearchGlobBytes bounds the glob and the total length of its
+	// alternatives. No file name or path a search selects comes near it.
+	MaxSearchGlobBytes = 64 << 10
+	// maxBraceDepth bounds how deeply brace groups nest.
+	maxBraceDepth = 32
+
+	maxBraceAlternatives   = MaxSearchGlobAlternatives
+	maxBraceExpansionBytes = MaxSearchGlobBytes
+)
 
 // expandBraces expands the "{a,b}" alternatives of a search glob, as ripgrep
-// and the other search tools read them. Past limit the group is written as
-// "*", which selects at least what its alternatives would.
-func expandBraces(pattern string, limit int) []string {
-	open := -1
-	for i := 0; i < len(pattern) && open < 0; i++ {
-		switch pattern[i] {
-		case '\\':
-			i++
-		case '{':
-			open = i
-		}
+// and the other search tools read them: groups nest, a group of one
+// alternative is that alternative, a backslash quotes the next byte, and a
+// "}" or "," inside a bracket class is a member of the class, not part of a
+// group. A "{" that is never closed and a "}" that closes nothing are
+// themselves. ok is false when the glob is past the budget above; nothing is
+// expanded then, so no fallback can match less than the glob would.
+//
+// The glob is scanned once to pair its braces and classes, and the
+// alternatives are built under the budget, so the work is linear in the
+// length of the glob and bounded by the budget.
+func expandBraces(pattern string) (alternatives []string, ok bool) {
+	if len(pattern) > maxBraceExpansionBytes {
+		return nil, false
 	}
-	if open < 0 {
-		return []string{pattern}
+	if !strings.Contains(pattern, "{") {
+		return []string{pattern}, true
 	}
-	depth, end := 0, -1
-	var commas []int
-scan:
-	for i := open; i < len(pattern); i++ {
-		switch pattern[i] {
-		case '\\':
-			i++
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				end = i
-				break scan
-			}
-		case ',':
-			if depth == 1 {
-				commas = append(commas, i)
-			}
-		}
+	groups, ok := pairBraces(pattern)
+	if !ok {
+		return nil, false
 	}
-	if end < 0 || len(commas) == 0 {
-		return []string{pattern}
+	if len(groups) == 0 {
+		return []string{pattern}, true
 	}
-	prefix, suffix := pattern[:open], pattern[end+1:]
-	start := open + 1
-	var out []string
-	for _, comma := range append(commas, end) {
-		for _, expanded := range expandBraces(prefix+pattern[start:comma]+suffix, limit) {
-			if len(out) >= limit {
-				return append(out, prefix+"*"+suffix)
-			}
-			out = append(out, expanded)
-		}
-		start = comma + 1
-	}
-	return out
+	e := braceExpander{pattern: pattern, groups: groups}
+	return e.sequence(0, len(pattern))
 }
 
-// shellBracket rewrites the shell's "[!...]" to the "[^...]" that path.Match
-// reads as a negated class. Left alone, path.Match takes "!" as a member of
-// the class, so "[!x]*" would not match a name the shell expands it to.
+// braceGroup is one "{...}" of a glob: where it closes and where its commas
+// are.
+type braceGroup struct {
+	close  int
+	commas []int
+}
+
+// pairBraces finds the groups of a glob, keyed by the offset of their "{".
+// ok is false when they nest deeper than maxBraceDepth.
+func pairBraces(pattern string) (map[int]*braceGroup, bool) {
+	classes := newBracketClasses(pattern)
+	groups := map[int]*braceGroup{}
+	var open []int
+	var commas [][]int
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '\\':
+			i++
+		case '[':
+			if end := classes.end(i); end > 0 {
+				i = end
+			}
+		case '{':
+			if len(open) == maxBraceDepth {
+				return nil, false
+			}
+			open = append(open, i)
+			commas = append(commas, nil)
+		case ',':
+			if len(open) > 0 {
+				commas[len(commas)-1] = append(commas[len(commas)-1], i)
+			}
+		case '}':
+			if len(open) > 0 {
+				last := len(open) - 1
+				groups[open[last]] = &braceGroup{close: i, commas: commas[last]}
+				open, commas = open[:last], commas[:last]
+			}
+		}
+	}
+	return groups, true
+}
+
+// braceExpander builds the alternatives of a glob under the budget.
+type braceExpander struct {
+	pattern string
+	groups  map[int]*braceGroup
+}
+
+// sequence expands pattern[start:end], which holds whole groups only.
+func (e braceExpander) sequence(start, end int) ([]string, bool) {
+	out := []string{""}
+	literal := start
+	for i := start; i < end; i++ {
+		switch e.pattern[i] {
+		case '\\':
+			i++
+		case '{':
+			group, isGroup := e.groups[i]
+			if !isGroup {
+				continue
+			}
+			var ok bool
+			if out, ok = appendLiteral(out, e.pattern[literal:i]); !ok {
+				return nil, false
+			}
+			var alternatives []string
+			from := i + 1
+			for _, to := range append(group.commas, group.close) {
+				expanded, ok := e.sequence(from, to)
+				if !ok || len(alternatives)+len(expanded) > maxBraceAlternatives {
+					return nil, false
+				}
+				alternatives = append(alternatives, expanded...)
+				from = to + 1
+			}
+			if out, ok = crossAlternatives(out, alternatives); !ok {
+				return nil, false
+			}
+			i = group.close
+			literal = i + 1
+		}
+	}
+	return appendLiteral(out, e.pattern[literal:end])
+}
+
+// expansionBytes is the total length of a set of alternatives.
+func expansionBytes(values []string) int {
+	total := 0
+	for _, value := range values {
+		total += len(value)
+	}
+	return total
+}
+
+func appendLiteral(prefixes []string, literal string) ([]string, bool) {
+	if literal == "" {
+		return prefixes, true
+	}
+	if expansionBytes(prefixes)+len(prefixes)*len(literal) > maxBraceExpansionBytes {
+		return nil, false
+	}
+	for i := range prefixes {
+		prefixes[i] += literal
+	}
+	return prefixes, true
+}
+
+// crossAlternatives joins every prefix to every alternative, refusing a
+// result past the budget before building it.
+func crossAlternatives(prefixes, alternatives []string) ([]string, bool) {
+	if len(prefixes) > maxBraceAlternatives/max(len(alternatives), 1) {
+		return nil, false
+	}
+	count := len(prefixes) * len(alternatives)
+	if count > maxBraceAlternatives || expansionBytes(prefixes)*len(alternatives)+expansionBytes(alternatives)*len(prefixes) > maxBraceExpansionBytes {
+		return nil, false
+	}
+	out := make([]string, 0, count)
+	for _, prefix := range prefixes {
+		for _, alternative := range alternatives {
+			out = append(out, prefix+alternative)
+		}
+	}
+	return out, true
+}
+
+// bracketClasses finds the bracket classes of a glob in time linear in its
+// length. A class is "[" up to the first unquoted "]" after it, where a "]"
+// right after the "[" (or after a leading "!" or "^") is a member; a "[" with
+// no such "]" after it is itself.
+type bracketClasses struct {
+	text string
+	// next[i] is the first unquoted "]" at or after i, or -1.
+	next []int
+}
+
+func newBracketClasses(text string) bracketClasses {
+	classes := bracketClasses{text: text}
+	if !strings.Contains(text, "[") {
+		return classes
+	}
+	quoted := make([]bool, len(text))
+	for i := 1; i < len(text); i++ {
+		quoted[i] = text[i-1] == '\\' && !quoted[i-1]
+	}
+	classes.next = make([]int, len(text)+1)
+	classes.next[len(text)] = -1
+	for i := len(text) - 1; i >= 0; i-- {
+		classes.next[i] = classes.next[i+1]
+		if text[i] == ']' && !quoted[i] {
+			classes.next[i] = i
+		}
+	}
+	return classes
+}
+
+// end returns the offset of the "]" that closes the class opened at open, or
+// -1 when the "[" there opens none.
+func (c bracketClasses) end(open int) int {
+	if c.next == nil || open >= len(c.text) || c.text[open] != '[' {
+		return -1
+	}
+	members := c.membersStart(open)
+	if members < len(c.text) && c.text[members] == ']' {
+		members++
+	}
+	if members >= len(c.text) {
+		return -1
+	}
+	return c.next[members]
+}
+
+// membersStart is the offset of the first member of the class opened at open,
+// past a negation.
+func (c bracketClasses) membersStart(open int) int {
+	start := open + 1
+	if start < len(c.text) && (c.text[start] == '!' || c.text[start] == '^') {
+		start++
+	}
+	return start
+}
+
+// shellBracket rewrites one pattern segment from the glob syntax of the shell
+// and the search tools into the syntax path.Match reads. They differ in
+// bracket classes: the shell and ripgrep negate a class with "[!...]" as well
+// as "[^...]", take a "]" right after the "[" as a member and a "-" at either
+// end as itself, and read a "[" that is never closed, and a trailing
+// backslash, as themselves; path.Match does none of these. A class that holds
+// a POSIX class, an equivalence class or a collating symbol ("[[:alpha:]]")
+// makes the rest of the segment "*", which matches at least what it would.
 func shellBracket(segment string) string {
-	if !strings.Contains(segment, "[!") {
+	if !strings.ContainsAny(segment, `[\`) {
 		return segment
 	}
+	classes := newBracketClasses(segment)
 	var out strings.Builder
 	for i := 0; i < len(segment); i++ {
-		switch {
-		case segment[i] == '\\' && i+1 < len(segment):
-			out.WriteByte(segment[i])
-			i++
-			out.WriteByte(segment[i])
-		case segment[i] == '[' && i+1 < len(segment) && segment[i+1] == '!':
-			out.WriteString("[^")
-			i++
+		switch c := segment[i]; {
+		case c == '\\':
+			out.WriteByte('\\')
+			if i+1 < len(segment) {
+				i++
+				out.WriteByte(segment[i])
+			} else {
+				out.WriteByte('\\')
+			}
+		case c == '[':
+			end := classes.end(i)
+			if end < 0 {
+				out.WriteString(`\[`)
+				continue
+			}
+			start := classes.membersStart(i)
+			members := segment[start:end]
+			if strings.Contains(members, "[:") || strings.Contains(members, "[=") || strings.Contains(members, "[.") {
+				out.WriteByte('*')
+				return out.String()
+			}
+			out.WriteByte('[')
+			if start > i+1 {
+				out.WriteByte('^')
+			}
+			writeClassMembers(&out, members)
+			out.WriteByte(']')
+			i = end
 		default:
-			out.WriteByte(segment[i])
+			out.WriteByte(c)
 		}
 	}
 	return out.String()
+}
+
+// writeClassMembers writes the members of a class as path.Match reads them:
+// a "-" between two members is a range, and every other character path.Match
+// treats as syntax is quoted.
+func writeClassMembers(out *strings.Builder, members string) {
+	for i := 0; i < len(members); i++ {
+		c := members[i]
+		switch {
+		case c == '\\' && i+1 < len(members):
+			out.WriteByte('\\')
+			i++
+			out.WriteByte(members[i])
+		case c == '-' && i > 0 && i < len(members)-1:
+			out.WriteByte('-')
+		case strings.IndexByte(`-]\^[!`, c) >= 0:
+			out.WriteByte('\\')
+			out.WriteByte(c)
+		default:
+			out.WriteByte(c)
+		}
+	}
 }
 
 // reachesInto reports whether a known prefix, followed by text computed at

@@ -88,7 +88,10 @@ receipt. The classifier decides `bash`, `write`, `edit`, a `read`, `grep` or
 `glob` call on a credential path, `webfetch` as network egress, and MCP names
 that start with `mcp_`. A tool it has no class for is decided as an
 unclassified tool call, which the default profile denies; the matcher above
-does not route any.
+does not route any. `setup status` reads the matcher as a regular expression
+that may match anywhere in the tool name; if the harness anchors it, or reads
+a plain name exactly, it routes no more tools than `setup status` reports and
+may route fewer.
 
 ## Coverage
 

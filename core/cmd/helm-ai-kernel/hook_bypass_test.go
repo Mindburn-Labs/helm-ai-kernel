@@ -118,7 +118,13 @@ func hasDenial(receipts []*contracts.WorkstationPolicyDecisionReceipt, reasonCod
 // TestHookBypassCorpus replays testdata/hook_bypass_corpus.tsv. A new bypass
 // form is one line in that file.
 func TestHookBypassCorpus(t *testing.T) {
-	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	granted := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	// A line marked @builtin is decided under the built-in profile, for a
+	// form whose denial is the absence of a permission rather than a rule
+	// every profile keeps. The two installations share one home directory.
+	builtin := granted
+	builtin.policy = ""
+	builtin.args = []string{"--client", "claude-code", "--data-dir", granted.dataDir}
 	file, err := os.Open(filepath.Join("testdata", "hook_bypass_corpus.tsv"))
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +142,16 @@ func TestHookBypassCorpus(t *testing.T) {
 		if len(fields) != 4 {
 			t.Fatalf("corpus line %d has %d columns, want 4: %q", line, len(fields), text)
 		}
-		want, reasonCode, tool := fields[0], fields[1], fields[2]
+		want, profile, _ := strings.Cut(fields[0], "@")
+		reasonCode, tool := fields[1], fields[2]
+		env := granted
+		switch profile {
+		case "":
+		case "builtin":
+			env = builtin
+		default:
+			t.Fatalf("corpus line %d: profile %q is not builtin", line, profile)
+		}
 		raw := env.expand(strings.ReplaceAll(fields[3], `\n`, "\n"))
 		if want != "deny" && want != "allow" {
 			t.Fatalf("corpus line %d: want %q is neither deny nor allow", line, want)
@@ -153,6 +168,14 @@ func TestHookBypassCorpus(t *testing.T) {
 		}
 		cases++
 		t.Run(fmt.Sprintf("line %d %s", line, tool), func(t *testing.T) {
+			if want == "allow" && profile == "builtin" {
+				// The built-in profile allows no operate effect, so a form
+				// it allows is one the hook passes without a decision.
+				if denied, receipts := env.run(t, tool, input); denied || len(receipts) != 0 {
+					t.Fatalf("%s %s: denied=%v receipts=[%s], want no decision under the built-in profile", tool, raw, denied, describeReceipts(receipts))
+				}
+				return
+			}
 			denied, receipts := env.run(t, tool, input)
 			if want == "allow" {
 				if denied {

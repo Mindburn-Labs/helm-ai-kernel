@@ -177,14 +177,6 @@ func ExportEvidencePack(result *ImportResult, outDir string) (EvidencePackExport
 	}, nil
 }
 
-func writeCanonical(path string, value any) error {
-	data, err := canonicalize.JCS(value)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
-}
-
 // rootIsEmpty reports whether an opened directory holds no entry.
 func rootIsEmpty(root *os.Root) (bool, error) {
 	dir, err := root.Open(".")

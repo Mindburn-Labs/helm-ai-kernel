@@ -95,13 +95,19 @@ func workstationPathGuard(dataDir, seedFile, policyProfile string) *shellscan.Pa
 // the signer's own files. It replaces every other classification of the
 // call: nothing else about it needs deciding once it is refused.
 func trustMaterialClassification(tool, target string, metadata map[string]string) []hookClassification {
+	reason := "access to HELM signing or trust material"
+	if target == shellscan.UnexpandableSearchGlob {
+		// The guard did not expand the glob, so it cannot say the glob
+		// misses the signer's files; the denial says why.
+		reason = fmt.Sprintf("a search glob too large to expand (over %d alternatives or %d bytes), taken as reaching HELM signing or trust material", shellscan.MaxSearchGlobAlternatives, shellscan.MaxSearchGlobBytes)
+	}
 	return []hookClassification{{
 		ShouldDecide:  true,
 		Class:         "secret",
 		Target:        target,
 		Action:        "trust_material_access",
 		ToolID:        firstNonEmptyString(tool, "secret.read"),
-		Reason:        "access to HELM signing or trust material",
+		Reason:        reason,
 		Metadata:      metadata,
 		TrustMaterial: true,
 	}}

@@ -89,7 +89,10 @@ These Hermes tools are not routed, so the hook never sees them:
 `cronjob_manage` and `process_manage`, which the hook has no class for; what
 they do is not decided. An install made by an earlier
 release keeps its narrower matcher until `helm-ai-kernel setup hermes --yes`
-is run again; `setup status` reports it as outdated.
+is run again; `setup status` reports it as outdated. `setup status` reads a
+Hermes matcher as a regular expression that may match anywhere in the tool
+name; if Hermes anchors the matcher, or reads a plain name exactly, it routes
+no more tools than `setup status` reports and may route fewer.
 
 ## First-use consent
 

@@ -134,10 +134,16 @@ type setupSummary struct {
 	// HookMatcherExpected the one this release installs. The matcher is
 	// outdated when it does not route a tool this release routes to the
 	// hook; HookMatcherMissingTools names them.
-	HookMatcher             string   `json:"hook_matcher,omitempty"`
-	HookMatcherExpected     string   `json:"hook_matcher_expected,omitempty"`
-	HookMatcherOutdated     bool     `json:"hook_matcher_outdated,omitempty"`
-	HookMatcherMissingTools []string `json:"hook_matcher_missing_tools,omitempty"`
+	// HookMatchers lists the matcher of every entry that holds the HELM
+	// hook, HookMatcher being the first; a tool reaches the hook when any of
+	// them routes it. HookMatcherUpgradeCommand is the setup command that
+	// upgrades this install.
+	HookMatcher               string   `json:"hook_matcher,omitempty"`
+	HookMatchers              []string `json:"hook_matchers,omitempty"`
+	HookMatcherExpected       string   `json:"hook_matcher_expected,omitempty"`
+	HookMatcherOutdated       bool     `json:"hook_matcher_outdated,omitempty"`
+	HookMatcherMissingTools   []string `json:"hook_matcher_missing_tools,omitempty"`
+	HookMatcherUpgradeCommand string   `json:"hook_matcher_upgrade_command,omitempty"`
 	// Warnings are what setup could not do for the user, such as a shared
 	// hook entry whose matcher it left alone.
 	Warnings []string `json:"warnings,omitempty"`
@@ -1489,15 +1495,21 @@ func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) erro
 			}
 		}
 	}
-	var profilePath string
+	var profilePath, matchedCommand string
 	matched := false
 	for _, command := range commands {
 		if hookCommandKey(command) != expectedKey {
 			continue
 		}
 		if matched {
+			// The same command in another entry names the same profile;
+			// only commands that differ leave the profile in doubt.
+			if command == matchedCommand {
+				continue
+			}
 			return fmt.Errorf("ambiguous matching installed hook commands")
 		}
+		matchedCommand = command
 		profile, _, custom, err := installedHookPolicyProfile(command)
 		if err != nil {
 			return fmt.Errorf("parse matching installed hook command: %w", err)
@@ -2158,6 +2170,33 @@ func setupUninstallCommand(opts setupOptions) string {
 	)
 }
 
+// setupUpgradeCommand is the setup command that installs this release's hook
+// over the install opts describes, with the same scope, workspace, data
+// directory and policy profile.
+func setupUpgradeCommand(opts setupOptions) string {
+	workspace := ""
+	if opts.Scope == "project" {
+		workspace = " --workspace " + shellQuote(opts.Workspace)
+	}
+	signingSeedFile := ""
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
+	return fmt.Sprintf(
+		"helm-ai-kernel setup %s --scope %s%s --yes --data-dir %s%s%s",
+		opts.Target,
+		opts.Scope,
+		workspace,
+		shellQuote(opts.DataDir),
+		signingSeedFile,
+		policyProfile,
+	)
+}
+
 func setupRecoveryCommand(opts setupOptions) string {
 	workspace := ""
 	if opts.Scope == "project" {
@@ -2219,8 +2258,8 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		fmt.Fprintf(stdout, "  Client state:  %s (lifecycle=%s detected=%v native_loaded=%v)\n", summary.ClientState, summary.Lifecycle, summary.ClientDetected, summary.NativeLoaded)
 	}
 	if summary.HookMatcherOutdated {
-		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. Run helm-ai-kernel setup %s --yes to upgrade it.\n",
-			summary.HookMatcher, strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, summary.Target)
+		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. Run %s to upgrade it.\n",
+			strings.Join(summary.HookMatchers, " and "), strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, summary.HookMatcherUpgradeCommand)
 	}
 	for _, warning := range summary.Warnings {
 		fmt.Fprintf(stdout, "  Warning:       %s\n", warning)
@@ -2505,20 +2544,58 @@ func setupHookMatcherTools(target string) []string {
 }
 
 // setupHookMatcherMissing lists the tools this release routes to the hook
-// that matcher does not route. An empty matcher or "*" routes every tool, as
-// the clients read it; a matcher that does not compile routes none.
+// that matcher does not route.
 func setupHookMatcherMissing(target, matcher string) []string {
-	if matcher == "" || matcher == "*" {
-		return nil
-	}
-	compiled, err := regexp.Compile(matcher)
+	return setupHookMatchersMissing(target, []string{matcher})
+}
+
+// setupHookMatchersMissing lists the tools this release routes to the hook
+// that none of matchers routes: a tool reaches the hook when any entry that
+// holds it routes the tool.
+func setupHookMatchersMissing(target string, matchers []string) []string {
 	var missing []string
 	for _, tool := range setupHookMatcherTools(target) {
-		if err != nil || !compiled.MatchString(tool) {
+		routed := false
+		for _, matcher := range matchers {
+			if setupMatcherRoutes(target, matcher, tool) {
+				routed = true
+				break
+			}
+		}
+		if !routed {
 			missing = append(missing, tool)
 		}
 	}
 	return missing
+}
+
+// claudePlainMatcher is the matcher Claude Code reads as tool names rather
+// than as a regular expression: letters, digits, "_" and "|" only.
+var claudePlainMatcher = regexp.MustCompile(`^[A-Za-z0-9_|]+$`)
+
+// setupMatcherRoutes reports whether a client sends tool to a hook entry with
+// this matcher. An empty matcher or "*" routes every tool. Claude Code reads
+// a matcher of plain names as a list of exact names separated by "|" and any
+// other matcher as a regular expression that may match anywhere in the name,
+// and setup reads a Claude Code matcher the same way. The matchers of the
+// other clients are read as regular expressions that may match anywhere in
+// the name; a client that anchors them, or reads a plain name exactly,
+// routes no more than setup reports, and may route less. A matcher that does
+// not compile routes no tool.
+func setupMatcherRoutes(target, matcher, tool string) bool {
+	if matcher == "" || matcher == "*" {
+		return true
+	}
+	if target == "claude-code" && claudePlainMatcher.MatchString(matcher) {
+		for _, name := range strings.Split(matcher, "|") {
+			if name == tool {
+				return true
+			}
+		}
+		return false
+	}
+	compiled, err := regexp.Compile(matcher)
+	return err == nil && compiled.MatchString(tool)
 }
 
 // setupHookEntry is one hook entry that holds the HELM hook: its matcher and
@@ -2589,14 +2666,25 @@ func observeSetupHookMatcher(opts setupOptions, summary *setupSummary) {
 	if len(entries) == 0 {
 		return
 	}
-	summary.HookMatcher = entries[0].matcher
+	matchers := setupHookEntryMatchers(entries)
+	summary.HookMatcher = matchers[0]
+	summary.HookMatchers = matchers
 	summary.HookMatcherExpected = setupHookMatcher(opts.Target)
-	summary.HookMatcherMissingTools = setupHookMatcherMissing(opts.Target, entries[0].matcher)
+	summary.HookMatcherMissingTools = setupHookMatchersMissing(opts.Target, matchers)
 	summary.HookMatcherOutdated = len(summary.HookMatcherMissingTools) > 0
 	if summary.HookMatcherOutdated {
+		summary.HookMatcherUpgradeCommand = setupUpgradeCommand(opts)
 		summary.ClientState = "degraded"
 		summary.Lifecycle = ""
 	}
+}
+
+func setupHookEntryMatchers(entries []setupHookEntry) []string {
+	matchers := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		matchers = append(matchers, entry.matcher)
+	}
+	return matchers
 }
 
 // setupSharedHookEntryWarnings names each hook entry that holds the HELM
@@ -2604,16 +2692,21 @@ func observeSetupHookMatcher(opts setupOptions, summary *setupSummary) {
 // setup does not rewrite such an entry: its matcher also decides which calls
 // reach the user's other hooks.
 func setupSharedHookEntryWarnings(opts setupOptions, path, bin string) []string {
+	entries := setupInstalledHookEntries(opts, path, bin)
+	// A tool another entry routes to the hook reaches it anyway, so only the
+	// tools no entry routes are named.
+	missing := setupHookMatchersMissing(opts.Target, setupHookEntryMatchers(entries))
+	if len(missing) == 0 {
+		return nil
+	}
 	var warnings []string
-	for _, entry := range setupInstalledHookEntries(opts, path, bin) {
-		if !entry.shared {
+	for _, entry := range entries {
+		if !entry.shared || len(setupHookMatcherMissing(opts.Target, entry.matcher)) == 0 {
 			continue
 		}
-		if missing := setupHookMatcherMissing(opts.Target, entry.matcher); len(missing) > 0 {
-			warnings = append(warnings, fmt.Sprintf(
-				"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; it does not route %s to HELM. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
-				path, entry.matcher, strings.Join(missing, ", "), setupHookMatcher(opts.Target)))
-		}
+		warnings = append(warnings, fmt.Sprintf(
+			"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; it does not route %s to HELM. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
+			path, entry.matcher, strings.Join(missing, ", "), setupHookMatcher(opts.Target)))
 	}
 	return warnings
 }

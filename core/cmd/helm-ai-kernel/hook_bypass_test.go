@@ -119,6 +119,20 @@ func hasDenial(receipts []*contracts.WorkstationPolicyDecisionReceipt, reasonCod
 // form is one line in that file.
 func TestHookBypassCorpus(t *testing.T) {
 	granted := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	// {{HOME}}/proj is a project that holds a credential file, and
+	// {{HOME}}/copies a directory that holds a copy of the seed, for the forms
+	// a search decides by what it can reach.
+	for path, content := range map[string]string{
+		filepath.Join(granted.home, "proj", ".env"):                                 "TOKEN=x\n",
+		filepath.Join(granted.home, "copies", "backup", workstationSigningSeedName): "00\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// A line marked @builtin is decided under the built-in profile, for a
 	// form whose denial is the absence of a permission rather than a rule
 	// every profile keeps. The two installations share one home directory.

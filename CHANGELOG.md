@@ -109,6 +109,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   longer make `setup status` fail as ambiguous. When the HELM hook shares a
   hook entry with another hook, `setup` leaves that entry's matcher alone and
   prints a warning naming the file and the matcher (`warnings` in `--json`).
+  `setup status` gives that warning, not an upgrade command, when every entry
+  that holds the HELM hook is shared, since setup would not change it; it
+  then has no `hook_matcher_upgrade_command`.
 - Under the built-in profile, which has no egress allowlist, once setup has
   been run again: a routed `WebFetch` and Hermes `browser_navigate` are
   denied like `curl` already was, Hermes `vision_analyze` given a URL is
@@ -161,24 +164,58 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   key files (`**/*.seed`, `file_glob: workstation-ed25519.*`) is denied with
   `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and one that selects
   credential files (`glob: .env`, `**/*.pem`) is a secret read. A public key
-  (`*.pub`) and an example env file (`.env.example`, `.env.sample`,
-  `.env.template`) are not credentials: reading one passes, through `Read` and
-  through a shell alike.
-- Search globs are read as the search tools read them. In a bracket class a
-  `]` right after the `[` is a member, a `[` that is never closed is itself,
-  and a `}` or `,` inside a class does not end or split a brace group; a brace
-  group of one alternative (`{d}`) is that alternative; a POSIX class
-  (`[[:alpha:]]`) makes the rest of its path segment a wildcard; a pattern the
-  guard cannot read is taken to match. So `*.see[]d]`, `{*.seed,[}]}` and the
-  shell's `cat ~/.helm-ai-kernel/k[]e]ys/*` are denied with
-  `TRUST_MATERIAL_ACCESS_DENIED`, and `.en[]v]` is a secret read. A search
-  glob longer than 64 KiB, or whose brace expansion passes 256 alternatives,
-  64 KiB or 32 levels of nesting, is not expanded: it is denied with
-  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and its receipt reason
-  says the glob is too large to expand. An earlier release expanded it with
-  time and memory that grew with the square of the number of groups, and
-  past 256 alternatives matched a fallback that could miss the hook's key
-  files.
+  and an example env file (`.env.example`, `.env.sample`, `.env.template`)
+  are not credentials: reading one passes, through `Read` and through a shell
+  alike. A search glob for every public key (`Grep` `glob: *.pub`, `Glob`
+  `**/*.pub`) is denied with `TRUST_MATERIAL_ACCESS_DENIED` under every
+  profile wherever it runs, because it names the hook's trusted public key
+  `workstation-ed25519.pub`; search for a key by its name (`id_ed25519.pub`).
+- Search and shell globs are decided in a small grammar every supported tool
+  reads alike, not by imitating each tool: `/`-separated segments of letters,
+  digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*` and `?`, a
+  whole-segment `**`, and in a search glob brace groups of two or more
+  alternatives, nested at most 4 deep. Inside the grammar the decision is
+  exact. A search reaches the hook's key files only when it starts at the
+  data directory, inside it or above it (`/` is above everything, a missing
+  `path` means the working directory, and a start that cannot be resolved is
+  taken as `/`), and then only through a glob that can name what the key
+  directory holds; `src/**/*.go` and `docs/*.md` from the home directory pass.
+  A glob outside the grammar is not read: a bracket class, a backslash, a
+  leading `/`, `!`, white space, a character outside ASCII, a brace group that
+  is unbalanced, has one alternative or nests deeper than 4, a `.` or `..`
+  segment, or `**` inside a segment. Upgrade note: such a glob is now denied
+  with `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and a reason that
+  names the construct, when the search starts at, inside or above the data
+  directory (`Grep` from the home directory with `glob: *.[ch]` or
+  `glob: !**/node_modules/**`), or when a walk of the search root (65,536
+  entries, four roots per call) finds a file named like a key file or cannot
+  finish; under the built-in profile it is a secret read when that walk finds
+  a credential file (`glob: .en[v]` in a project holding `.env`). Rewrite such
+  a glob in the grammar (`*.c` and `*.h` for `*.[ch]`) or start the search
+  below the home directory. A shell word with a bracket class
+  (`cat ~/.helm-ai-kernel/k[]e]ys/*`) is denied when the directory it starts
+  in is at, inside or above the data directory. So a search from `/`, an
+  escaped spelling of a key file name (`*.see\d`, `*.see[d\]`) and a filter
+  that starts with `/`, which ripgrep anchors at its working directory, are
+  denied.
+- Upgrade note: the globs of one call share one expansion budget, 256
+  alternatives and 64 KiB of expansion together, a glob outside the grammar
+  counting as one alternative of its own length. A call past it is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, with a reason that says
+  its globs are too large to expand; a call of many globs, each under what one
+  glob was allowed, used to be expanded glob by glob, and close to 4 MiB of
+  them held the hook past the client's timeout. The hook also stops
+  classifying a call after 10 seconds and denies it the same way.
+- Hermes `search_files` `pattern` is read as a glob only when `target` is
+  `files`; for a content search it is a regular expression and is not
+  decided as a glob, so a regular expression with many `{m,n}` quantifiers is
+  no longer refused as a glob too large to expand.
+- Through a shell, a credential path is read with a backslash taken as
+  quoting the next character, so `rg -g '.en\v'` and
+  `grep --include='.en\v'` are secret reads. A shell word whose wildcard or
+  bracket would expand to a credential file (`cat .en?`, `cat .e*`,
+  `cat .en[v]`) is still decided on its text, not on what it expands to, and
+  is not a secret read under the built-in profile.
 - `BASH_ENV` and `ENV` set on a command line, like a connection variable, make
   its network destinations undetermined.
 - Under a profile with an egress allowlist, a command whose destinations
@@ -215,7 +252,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `workstation enforce` writes only the denials of a command it refuses, as
   the hook does, so `--receipt-dir` no longer holds an `ALLOW` receipt for an
   effect of a command that never ran, and `audit scope` over it no longer
-  counts that effect as allowed. Every `enforce` receipt now carries, in its
+  counts that effect as allowed. A command whose decisions are all `ALLOW`
+  but not all in operate mode (`--class shell` decides in observe mode) is
+  refused before any receipt is written, and leaves none; it left an observe
+  `ALLOW` before. Upgrade note: every `enforce` receipt now has a random
+  `request_id`, so its `decision_id` and its file name in `--receipt-dir`
+  differ on every run, and each such file is created new, never replacing
+  one already there; two runs of the same command used to leave one receipt.
+  A script that predicted the file name must list the directory instead.
+  `--out` still replaces the file it names. Every `enforce` receipt now carries, in its
   signed bytes, `call_id` (shared by the receipts of one run),
   `call_receipts` and `call_verdict`, beside `argv_binding` and
   `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts
@@ -268,11 +313,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `--data-dir` and `--trusted-public-key-file`, print which signature checks
   the input receipts went through, and give each run a `signature_status`.
 - `shellscan.WithEnvironment` classifies a command as run with an inherited
-  environment; `shellscan.SecretGlob` and `PathGuard.MatchSearchGlob` decide a
-  file-search glob, under the budget `shellscan.MaxSearchGlobAlternatives`
-  and `shellscan.MaxSearchGlobBytes`, past which `MatchSearchGlob` reports
-  `shellscan.UnexpandableSearchGlob`; a path guard pattern reads `**` as any
-  number of directories.
+  environment. `shellscan.NewSearchCall` collects the globs of one search
+  call (`AddFilter`, `AddPathPattern`) under one budget,
+  `shellscan.MaxSearchGlobAlternatives` and `shellscan.MaxSearchGlobBytes`;
+  `PathGuard.MatchSearch` decides whether it reaches protected material and
+  `SearchCall.SecretRead` whether it selects credential files, and a call
+  past the budget is reported as `shellscan.UnexpandableSearchGlob`. A path
+  guard pattern reads `**` as any number of directories.
 
 ### Fixed
 
@@ -290,8 +337,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - A fetch tool that takes a list (`urls`) is decided on every URL in it. It
   was denied as undetermined under an allowlist profile even when every URL
   was allowed.
-- A path pattern with a negated class (`[!x]*`) is matched against the hook's
-  key directory as the shell expands it.
+- A shell path pattern with a bracket class (`[!x]*`) is no longer matched
+  as if `!` were a member: it is outside the glob grammar and is denied when
+  it starts at, inside or above the data directory.
 - The hook did not protect its own signing material. A call that reaches the
   key directory, a seed passed by flag, the policy profile, or the kernel
   command that signs or installs the hook is now denied with

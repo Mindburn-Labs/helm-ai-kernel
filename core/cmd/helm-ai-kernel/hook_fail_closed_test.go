@@ -192,6 +192,7 @@ func TestHookOversizedReceiptBindsTheBytesItRead(t *testing.T) {
 	}{
 		{"tool named first", oversized(`{"tool_name":"Bash","session_id":"big","cwd":"/repo","tool_input":{"command":"echo `, `"}}`), "Bash"},
 		{"tool named in camel case", oversized(`{"toolName":"terminal","toolInput":{"command":"echo `, `"}}`), "terminal"},
+		{"tool named both ways, tool_name first", oversized(`{"tool_name":"Bash","toolName":"terminal","tool_input":{"command":"echo `, `"}}`), "Bash"},
 		{"tool named after the limit", oversized(`{"session_id":"big","tool_input":{"command":"echo `, `"},"tool_name":"Bash"}`), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

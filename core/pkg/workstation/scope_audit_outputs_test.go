@@ -56,6 +56,26 @@ func TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty(t *testing.T) {
 	}
 }
 
+// The evidence pack is exported only into a new or empty directory, so a file
+// left there by an earlier export cannot pass for part of this one.
+func TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty(t *testing.T) {
+	report := scopeAuditReportForTest(t)
+	pack := filepath.Join(t.TempDir(), "pack")
+	if err := os.MkdirAll(pack, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(pack, "stale.txt")
+	if err := os.WriteFile(stale, []byte("earlier"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ExportScopeAuditEvidencePack(report, pack); err == nil || !strings.Contains(err.Error(), "not empty") {
+		t.Fatalf("export into a directory that is not empty = %v, want a refusal", err)
+	}
+	if entries, _ := os.ReadDir(pack); len(entries) != 1 {
+		t.Fatalf("the refused export wrote into the directory: %v", entries)
+	}
+}
+
 // A pack directory that holds a link to a directory elsewhere is refused, and
 // nothing is written there.
 func TestExportScopeAuditEvidencePackRefusesALinkedSubdirectory(t *testing.T) {

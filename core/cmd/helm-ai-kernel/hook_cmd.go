@@ -152,7 +152,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
 	default:
-		classifications = classifyPreToolPayloads(payload, workstationPathGuard(opts.DataDir, opts.SigningSeedFile, opts.PolicyProfile))
+		classifications = classifyBeforeDeadline(payload, workstationPathGuard(opts.DataDir, opts.SigningSeedFile, opts.PolicyProfile))
 	}
 	if len(classifications) == 0 {
 		// An unclassified call is successful progress, so it breaks any
@@ -161,6 +161,31 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		return 0
 	}
 	return decideHookCall(opts, payload, classifications, stdout, stderr)
+}
+
+// hookClassificationDeadline bounds how long the hook classifies one call,
+// well under the 30 s timeout setup installs: a client may run a call whose
+// hook outlives its timeout. hookClassify is the classifier, replaced in
+// tests.
+var (
+	hookClassificationDeadline = 10 * time.Second
+	hookClassify               = classifyPreToolPayloads
+)
+
+// classifyBeforeDeadline classifies a call, or refuses it as reaching trust
+// material when classifying takes longer than the deadline: what the hook
+// could not finish reading must not pass under any profile.
+func classifyBeforeDeadline(payload preToolPayload, guard *shellscan.PathGuard) []hookClassification {
+	done := make(chan []hookClassification, 1)
+	go func() { done <- hookClassify(payload, guard) }()
+	timer := time.NewTimer(hookClassificationDeadline)
+	defer timer.Stop()
+	select {
+	case classifications := <-done:
+		return classifications
+	case <-timer.C:
+		return trustMaterialClassification(strings.TrimSpace(payload.ToolName), "classification deadline", fmt.Sprintf("a call the hook did not finish classifying within %s, taken as reaching HELM signing or trust material", hookClassificationDeadline), nil)
+	}
 }
 
 // oversizedToolCallClassification is the one decision for a call whose
@@ -936,8 +961,8 @@ func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard)
 			// A command that is missing or is not a string cannot be read, so
 			// what the call would run is unknown: an opaque shell operation,
 			// after the signer's files have been looked for in all of it.
-			if target, found := guardedToolTarget(guard, hookToolUnknown, payload); found {
-				return trustMaterialClassification(tool, target, nil)
+			if target, reason, found := guardedToolTarget(guard, hookToolUnknown, payload, newSearchCall(payload)); found {
+				return trustMaterialClassification(tool, target, reason, nil)
 			}
 			return []hookClassification{opaqueShellClassification(canonicalToolInput(payload.ToolInput), "the command is missing or is not a string")}
 		}
@@ -948,8 +973,9 @@ func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard)
 		scan := shellscan.ClassifyAt(command, payload.CWD, shellscan.WithPathGuard(guard))
 		return shellClassifications(tool, command, scan)
 	}
-	if target, ok := guardedToolTarget(guard, kind, payload); ok {
-		return trustMaterialClassification(tool, target, nil)
+	search := newSearchCall(payload)
+	if target, reason, ok := guardedToolTarget(guard, kind, payload, search); ok {
+		return trustMaterialClassification(tool, target, reason, nil)
 	}
 	switch kind {
 	case hookToolMCP:
@@ -988,7 +1014,7 @@ func classifyPreToolPayloads(payload preToolPayload, guard *shellscan.PathGuard)
 		}
 		return nil
 	case hookToolRead:
-		return readToolClassifications(tool, payload)
+		return readToolClassifications(tool, payload, search)
 	case hookToolFetch:
 		return fetchToolClassifications(tool, payload)
 	case hookToolCode:

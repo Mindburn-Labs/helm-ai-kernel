@@ -2258,8 +2258,12 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		fmt.Fprintf(stdout, "  Client state:  %s (lifecycle=%s detected=%v native_loaded=%v)\n", summary.ClientState, summary.Lifecycle, summary.ClientDetected, summary.NativeLoaded)
 	}
 	if summary.HookMatcherOutdated {
-		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. Run %s to upgrade it.\n",
-			strings.Join(summary.HookMatchers, " and "), strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, summary.HookMatcherUpgradeCommand)
+		fix := "Run " + summary.HookMatcherUpgradeCommand + " to upgrade it."
+		if summary.HookMatcherUpgradeCommand == "" {
+			fix = "setup does not rewrite an entry it shares with other hooks; edit it as the warning says."
+		}
+		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. %s\n",
+			strings.Join(summary.HookMatchers, " and "), strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, fix)
 	}
 	for _, warning := range summary.Warnings {
 		fmt.Fprintf(stdout, "  Warning:       %s\n", warning)
@@ -2672,11 +2676,21 @@ func observeSetupHookMatcher(opts setupOptions, summary *setupSummary) {
 	summary.HookMatcherExpected = setupHookMatcher(opts.Target)
 	summary.HookMatcherMissingTools = setupHookMatchersMissing(opts.Target, matchers)
 	summary.HookMatcherOutdated = len(summary.HookMatcherMissingTools) > 0
-	if summary.HookMatcherOutdated {
-		summary.HookMatcherUpgradeCommand = setupUpgradeCommand(opts)
-		summary.ClientState = "degraded"
-		summary.Lifecycle = ""
+	if !summary.HookMatcherOutdated {
+		return
 	}
+	summary.ClientState = "degraded"
+	summary.Lifecycle = ""
+	// setup rewrites the matcher of an entry that holds only the HELM hook.
+	// An entry it shares with other hooks is the user's own, so for one of
+	// those the fix is an edit, which the warning names.
+	for _, entry := range entries {
+		if !entry.shared {
+			summary.HookMatcherUpgradeCommand = setupUpgradeCommand(opts)
+			return
+		}
+	}
+	summary.Warnings = append(summary.Warnings, setupSharedHookEntryWarnings(opts, summary.HookConfigPath, summary.BinaryPath)...)
 }
 
 func setupHookEntryMatchers(entries []setupHookEntry) []string {

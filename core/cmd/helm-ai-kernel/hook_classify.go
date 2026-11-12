@@ -93,13 +93,11 @@ func workstationPathGuard(dataDir, seedFile, policyProfile string) *shellscan.Pa
 
 // trustMaterialClassification is the one decision for a call that reaches
 // the signer's own files. It replaces every other classification of the
-// call: nothing else about it needs deciding once it is refused.
-func trustMaterialClassification(tool, target string, metadata map[string]string) []hookClassification {
-	reason := "access to HELM signing or trust material"
-	if target == shellscan.UnexpandableSearchGlob {
-		// The guard did not expand the glob, so it cannot say the glob
-		// misses the signer's files; the denial says why.
-		reason = fmt.Sprintf("a search glob too large to expand (over %d alternatives or %d bytes), taken as reaching HELM signing or trust material", shellscan.MaxSearchGlobAlternatives, shellscan.MaxSearchGlobBytes)
+// call: nothing else about it needs deciding once it is refused. reason, when
+// given, says why a call the hook could not read is taken as reaching them.
+func trustMaterialClassification(tool, target, reason string, metadata map[string]string) []hookClassification {
+	if reason == "" {
+		reason = "access to HELM signing or trust material"
 	}
 	return []hookClassification{{
 		ShouldDecide:  true,
@@ -183,10 +181,10 @@ const hookMaxSecretTargets = 64
 func shellClassifications(tool, command string, scan shellscan.Result) []hookClassification {
 	metadata := shellscanReceiptMetadata(scan)
 	if scan.ProtectedPath != "" {
-		return trustMaterialClassification(tool, scan.ProtectedPath, metadata)
+		return trustMaterialClassification(tool, scan.ProtectedPath, "", metadata)
 	}
 	if target, ok := signerInvocation(scan.Commands); ok {
-		return trustMaterialClassification(tool, target, metadata)
+		return trustMaterialClassification(tool, target, "", metadata)
 	}
 	var destinations, secrets []string
 	for _, fact := range scan.EffectFacts {
@@ -312,17 +310,35 @@ var writeContentKeys = map[string]bool{
 	"command": true, "cmd": true, "patch": true, "diff": true,
 }
 
-// globInputKeys hold glob syntax. A content search's "pattern" is a regular
-// expression instead, which globToolPattern tells apart by the tool.
-var globInputKeys = map[string]bool{"pattern": true, "glob": true, "include": true, "file_glob": true}
+// searchGlobKind says how a tool reads the string under key: "filter", a glob
+// applied to names (glob, include, file_glob); "path", a path pattern as a
+// Glob tool's pattern is; "regex", a pattern that is a regular expression
+// (Grep's, and Hermes search_files' unless its target is "files"); or "".
+func searchGlobKind(payload preToolPayload, key string) string {
+	switch tool := payload.ToolName; {
+	case key == "glob" || key == "include" || key == "file_glob":
+		return "filter"
+	case key != "pattern":
+		return ""
+	case strings.EqualFold(tool, "grep"), strings.EqualFold(tool, "search_files") && !strings.EqualFold(inputString(payload.ToolInput, "target"), "files"):
+		return "regex"
+	}
+	return "path"
+}
 
-// globFilterKeys hold a filter the search applies to file names at any depth
-// below its root, as ripgrep's --glob does. A Glob tool's "pattern" is
-// anchored at the root instead.
-var globFilterKeys = map[string]bool{"glob": true, "include": true, "file_glob": true}
-
-func globToolPattern(tool, key string) bool {
-	return globInputKeys[key] && !(key == "pattern" && strings.EqualFold(tool, "grep"))
+// newSearchCall collects the search globs of a tool input, read from the
+// directory the search starts in.
+func newSearchCall(payload preToolPayload) *shellscan.SearchCall {
+	search := shellscan.NewSearchCall(searchRoot(inputString(payload.ToolInput, "path"), payload.CWD), homeDirOrEmpty())
+	hookToolStrings(payload.ToolInput, "", func(key, text string) {
+		switch searchGlobKind(payload, key) {
+		case "filter":
+			search.AddFilter(text)
+		case "path":
+			search.AddPathPattern(text)
+		}
+	})
+	return search
 }
 
 // searchRoot is the absolute directory a search tool starts in: its "path"
@@ -341,37 +357,28 @@ func searchRoot(base, cwd string) string {
 }
 
 // guardedToolTarget reports the first reference to signing or trust material
-// in a tool input that is not a shell command. A tool the hook knows is
-// checked on its path arguments; any other tool on every string it was given.
-func guardedToolTarget(guard *shellscan.PathGuard, kind hookToolKind, payload preToolPayload) (string, bool) {
-	found := ""
-	base := inputString(payload.ToolInput, "path")
+// in a tool input that is not a shell command: in every string it was given,
+// as a path, a patch or a search glob. reason says why, when the call was
+// not read in full.
+func guardedToolTarget(guard *shellscan.PathGuard, kind hookToolKind, payload preToolPayload, search *shellscan.SearchCall) (target, reason string, found bool) {
 	hookToolStrings(payload.ToolInput, "", func(key, text string) {
-		if found != "" {
-			return
-		}
-		if kind == hookToolWrite && writeContentKeys[key] {
-			for _, target := range applyPatchTargets(text) {
-				if rule, ok := guard.Match(target, payload.CWD); ok {
-					found = rule
-					return
+		switch {
+		case target != "":
+		case kind == hookToolWrite && writeContentKeys[key]:
+			for _, patched := range applyPatchTargets(text) {
+				if rule, ok := guard.Match(patched, payload.CWD); ok && target == "" {
+					target = rule
 				}
 			}
-			return
-		}
-		if globToolPattern(payload.ToolName, key) {
-			// A search pattern is glob syntax, relative to the search root; a
-			// filter selects names at any depth below it.
-			if rule, ok := guard.MatchSearchGlob(text, searchRoot(base, payload.CWD), globFilterKeys[key]); ok {
-				found = rule
-			}
-			return
-		}
-		if rule, ok := guard.Match(text, payload.CWD); ok {
-			found = rule
+		case searchGlobKind(payload, key) == "filter" || searchGlobKind(payload, key) == "path":
+		default:
+			target, _ = guard.Match(text, payload.CWD)
 		}
 	})
-	return found, found != ""
+	if target != "" {
+		return target, "", true
+	}
+	return guard.MatchSearch(search)
 }
 
 // applyPatchTargets lists the files a Codex or Hermes patch names.
@@ -390,27 +397,23 @@ func applyPatchTargets(patch string) []string {
 
 // readToolClassifications decides a read tool the way the same read through a
 // shell is decided: a credential path is a secret read, anything else passes.
-// A search glob that selects credential files at any depth is such a read
-// too, as `grep -r --include=.env` is through a shell.
-func readToolClassifications(tool string, payload preToolPayload) []hookClassification {
-	target := ""
+// A search glob that selects credential files is such a read too, as
+// `grep -r --include=.env` is through a shell.
+func readToolClassifications(tool string, payload preToolPayload, search *shellscan.SearchCall) []hookClassification {
+	target, reason := "", ""
 	hookToolStrings(payload.ToolInput, "", func(key, text string) {
-		if target != "" {
-			return
-		}
-		switch {
-		case globToolPattern(payload.ToolName, key):
-			if shellscan.SecretReadPath(text) || shellscan.SecretGlob(text) {
-				target = text
-			}
-		case globInputKeys[key]:
-			// A content search's regular expression is not a path.
-		case shellscan.SecretReadPath(text):
+		if target == "" && searchGlobKind(payload, key) == "" && shellscan.SecretReadPath(text) {
 			target = text
 		}
 	})
 	if target == "" {
+		target, reason, _ = search.SecretRead()
+	}
+	if target == "" {
 		return nil
+	}
+	if reason != "" {
+		reason = ": " + reason
 	}
 	return []hookClassification{{
 		ShouldDecide: true,
@@ -418,7 +421,7 @@ func readToolClassifications(tool string, payload preToolPayload) []hookClassifi
 		Target:       target,
 		Action:       "secret_read",
 		ToolID:       "secret.read",
-		Reason:       "secret read via " + tool,
+		Reason:       "secret read via " + tool + reason,
 	}}
 }
 
@@ -606,7 +609,7 @@ func imageToolClassifications(tool string, payload preToolPayload) []hookClassif
 	case localFileReference(source) || existsBelow(payload.CWD, source):
 		local := payload
 		local.ToolInput = map[string]any{"path": source}
-		return readToolClassifications(tool, local)
+		return readToolClassifications(tool, local, nil)
 	}
 	var raws []string
 	if source != "" {

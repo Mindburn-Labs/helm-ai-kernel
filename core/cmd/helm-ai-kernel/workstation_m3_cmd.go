@@ -59,6 +59,14 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 	for _, receipt := range receipts {
 		denied = denied || receipt.Verdict == contracts.WorkstationVerdictDeny
 	}
+	// A command runs only on operate-mode ALLOW receipts. One that would not
+	// is refused here, before any receipt is written, so no ALLOW is left on
+	// disk for a command that never ran.
+	for _, receipt := range receipts {
+		if !denied && refusal == "" && len(flags.argv) > 0 && (receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate) {
+			refusal = fmt.Sprintf("no operate-mode ALLOW receipt covers it (verdict=%s mode=%s)", receipt.Verdict, receipt.Request.EffectMode)
+		}
+	}
 	if denied || refusal == "" {
 		// The receipts that are written are signed again, with the outcome of
 		// the whole command in them: a refused command keeps only its
@@ -86,7 +94,7 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 			if receipt == decisive {
 				out = flags.out
 			}
-			path, err := writeDecisionReceipt(out, flags.receiptDir, receipt)
+			path, err := writeNewDecisionReceipt(out, flags.receiptDir, receipt)
 			if err != nil {
 				// Without its receipt the decision cannot be shown, so the
 				// command does not run, and the exit code says so as a
@@ -119,12 +127,6 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 	remaining := flags.argv
 	if len(remaining) == 0 {
 		return 0
-	}
-	for _, receipt := range receipts {
-		if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
-			_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
-			return cliui.ExitDenied
-		}
 	}
 	cmd := exec.CommandContext(context.Background(), remaining[0], remaining[1:]...)
 	cmd.Stdout = stdout
@@ -587,7 +589,14 @@ func decideEnforceEffects(flags enforceFlags, effects []hookClassification, call
 	receipts := make([]*contracts.WorkstationPolicyDecisionReceipt, 0, len(effects))
 	for _, effect := range effects {
 		effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(effect.Class)
+		// Every request is a request of its own, so a later run of the same
+		// command gets receipts, and receipt files, of its own.
+		requestID, err := newHookRandomID("enforce_")
+		if err != nil {
+			return nil, fmt.Errorf("generate request ID: %w", err)
+		}
 		req := contracts.WorkstationDecisionRequest{
+			RequestID:    requestID,
 			RunID:        "workstation-decision",
 			ActorID:      "agent.local",
 			WorkspaceID:  "local-workstation",
@@ -640,6 +649,35 @@ func writeDecisionReceipt(path, receiptDir string, receipt *contracts.Workstatio
 		return "", err
 	}
 	return path, os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+// writeNewDecisionReceipt writes a receipt of enforce as writeDecisionReceipt
+// does, except that a receipt it names itself in receiptDir is created new:
+// a file already there, from an earlier run, is never replaced. A receipt
+// written to the --out path replaces what is there, as the caller asked.
+func writeNewDecisionReceipt(path, receiptDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
+	if path != "" || receiptDir == "" {
+		return writeDecisionReceipt(path, receiptDir, receipt)
+	}
+	if err := os.MkdirAll(receiptDir, 0o755); err != nil {
+		return "", err
+	}
+	data, err := canonicalize.JCS(receipt)
+	if err != nil {
+		return "", err
+	}
+	path = filepath.Join(receiptDir, receipt.DecisionID+".json")
+	//nolint:gosec // G304: the receipt directory is the caller's flag; the file is created new.
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, file.Close()
 }
 
 func printDecisionSummary(stdout io.Writer, receipt *contracts.WorkstationPolicyDecisionReceipt) {

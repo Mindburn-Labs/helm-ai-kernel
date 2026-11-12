@@ -83,6 +83,12 @@ operation (the code is not a command line the hook can read; it needs
 by a relative path that does not exist in the working directory is taken as a
 host; pass an absolute path for a local image. A tool it has no class for is
 decided as an unclassified tool call, which the default profile denies.
+`search_files` `pattern` is a regular expression for a content search and is
+read as a glob only when `target` is `files`; a `file_glob` is always a glob.
+Globs are decided in the grammar that
+[workstation governance](../reference/workstation-governance.md) describes,
+and one outside it is refused when the search starts at, inside or above the
+data directory.
 
 These Hermes tools are not routed, so the hook never sees them:
 `web_search` (it names no URL), and `skill_manage`, `memory`,

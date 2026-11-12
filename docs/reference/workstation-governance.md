@@ -83,22 +83,57 @@ archive, an input redirect, a write or delete, `Read`, `Grep`, `Glob`, `Write`,
 `Edit`, an MCP tool and a tool the hook does not classify are refused alike.
 A path is compared after `~` and `$HOME` expansion, resolution against the
 working directory and any `cd` inside the command, removal of `.`, `..` and
-repeated slashes, and resolution of symbolic links, ignoring case. A glob
-pattern is matched one path segment at a time, and `**` spans any number of
-directories. A search tool's glob filter (`Grep` `glob`, Hermes `file_glob`)
-is matched at any depth below the search root, and a filter or pattern whose
-last part is aimed at a key file name (`*.seed`, `workstation-ed25519.*`) is
-refused wherever the search runs; a filter that selects files in general
-(`*`, `**/*.go`) is not. Brackets and braces are read as the shell and the
-search tools read them: a `]` right after `[` is a class member, a `[` that is
-never closed is itself, a `}` or `,` inside a class does not end or split a
-brace group, a group of one alternative (`{d}`) is that alternative, and a
-POSIX class (`[[:alpha:]]`) makes the rest of its path segment a wildcard. A
-pattern the guard cannot read is taken to reach the material. A search glob
-is expanded under a budget: one longer than 64 KiB, or whose brace expansion
-passes 256 alternatives, 64 KiB or 32 levels of nesting, is not expanded but
-refused, with a receipt reason that says it is too large to expand. The work
-one glob costs is linear in its length and bounded by that budget. A program passed to an interpreter, or to Hermes
+repeated slashes, and resolution of symbolic links, ignoring case.
+
+Globs are decided in a small grammar that the shell, ripgrep, Claude Code,
+Hermes and the DeepSeek harness all read alike: path segments separated by
+`/`, each made of letters, digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*`
+and `?`, a whole-segment `**` (any number of directories), and in a search
+glob brace groups `{a,b}` of two or more alternatives in the grammar, nested
+at most 4 deep. Inside the grammar the hook decides exactly, ignoring case,
+whether a glob can name the material:
+
+- A search (`Grep`, `Glob`, Hermes `search_files`, an MCP tool given `glob`,
+  `include`, `file_glob` or a `pattern`) reaches the material only when it
+  starts at the data directory, inside it, or above it. The start is the
+  `path` argument, else the working directory; `/` is above everything, and a
+  start that cannot be resolved is taken as `/`. From there a glob is matched
+  against what the key directory holds, as the search tool may anchor it:
+  from the start or any directory above it, or at any depth below the start.
+  So `keys/*` and `**/*.seed` from the home directory are refused, while
+  `src/**/*.go` and `docs/*.md` are not.
+- Wherever a search starts, a glob whose last segment is aimed at a key file
+  name (`*.seed`, `workstation-ed25519.*`, and `*.pub`, which names the
+  trusted public key `workstation-ed25519.pub`) is refused: a copy of that file
+  is still that file. A last segment that selects files in general (`*`,
+  `*.go`) is not aimed at it. Search for a specific public key by name
+  (`id_ed25519.pub`) rather than `*.pub`.
+- A path pattern (a `Glob` `pattern`) that is absolute, starts with `~`, or
+  starts with `.` or `..` is read from the directory it names, and each `..`
+  after a wildcard moves its start one directory up.
+- A shell word is expanded as the shell does: a wildcard does not match a
+  leading dot unless `dotglob` or `globdots` is set.
+
+A glob with anything else is not read: a bracket class, a backslash, a leading
+`/` (which ripgrep anchors where it runs, not at `/`), `!`, white space, a
+character outside ASCII, an unbalanced or single-alternative brace group,
+braces nested deeper than 4, `.` or `..` segments, or `**` inside a segment.
+Such a glob is refused, with a reason that names the construct, when the
+search starts at, inside or above the data directory, or when a walk of the
+search root (up to 65,536 entries, at most four roots per call) finds a file
+with a key file name or cannot finish. A shell word with a bracket class is
+refused when the directory it starts in is at, inside or above the data
+directory, so `cat ~/.helm-ai-kernel/k[]e]ys/*` is refused and `cat
+src/[ab]*.go` is not.
+
+The globs of one call share one expansion budget: 256 alternatives and 64 KiB
+of expansion together, with each glob outside the grammar counting as one
+alternative. A call past it is refused with `TRUST_MATERIAL_ACCESS_DENIED`
+under every profile and a reason that says its globs are too large to expand.
+The hook also stops classifying a call after 10 seconds and refuses it the
+same way, well before the 30 second timeout setup installs.
+
+A program passed to an interpreter, or to Hermes
 `execute_code`, is refused when its text names the path, and so is a script
 file whose content names it when the script is run.
 
@@ -148,12 +183,12 @@ When `enforce` is given a command to run (`workstation enforce [flags] -- comman
 - `--class network` takes its destinations from the argv. `--target` then names a destination the caller expects; if the argv does not connect there, or names no destination at all, `enforce` refuses with exit code `126` and signs nothing.
 - `--class shell` and `--class shell-operate` decide on the command line itself. A `--target` that is not that command line is refused.
 - Any other class is decided as declared, in addition to what the argv shows.
-- Every receipt for a wrapped command carries `argv_binding: jcs-sha256` and `argv_sha256`, the digest of the exact argv. `--out` receives the receipt that settled the outcome, the first denial or else the first decision; `--receipt-dir` receives all of them.
+- Every receipt for a wrapped command carries `argv_binding: jcs-sha256` and `argv_sha256`, the digest of the exact argv. `--out` receives the receipt that settled the outcome, the first denial or else the first decision, and replaces the file there; `--receipt-dir` receives the others. Every receipt has a request ID of its own, and each file `enforce` names in `--receipt-dir` is created new, so a later run never replaces an earlier run's receipt.
 - The command inherits the wrapper's environment, and the decision covers the variables in it that change where a client connects or what a shell runs first (see [Network egress decisions](#network-egress-decisions)).
 
 Exit codes: `126` when the command is not run, because an effect is denied, the declaration cannot be matched to the argv, a receipt cannot be written, or a receipt is not an operate-mode `ALLOW`; the command's own exit code when it runs, `128` plus the signal number when a signal ends it, and `127` when it cannot be started; `2` when the flags cannot be parsed or no decision can be made, because the policy profile cannot be loaded or the signing seed is unavailable. The command does not run on `2` either, and nothing is signed.
 
-A command that is refused leaves only its denials in `--out` and `--receipt-dir`, as a refused hook call does, so no `ALLOW` receipt stands for an effect of a command that never ran. Every receipt of one run carries, in its signed bytes, `call_id` (shared by the receipts of that run), `call_receipts` (how many receipts the run wrote) and `call_verdict` (its outcome), beside `argv_binding` and `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts already written for the run are removed as far as removal works; the denials stay.
+A command that is refused leaves only its denials in `--out` and `--receipt-dir`, as a refused hook call does, so no `ALLOW` receipt stands for an effect of a command that never ran. A command whose decisions are all `ALLOW` but not all in operate mode (`--class shell` decides in observe mode) is refused before any receipt is written and leaves none. Every receipt of one run carries, in its signed bytes, `call_id` (shared by the receipts of that run), `call_receipts` (how many receipts the run wrote) and `call_verdict` (its outcome), beside `argv_binding` and `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts already written for the run are removed as far as removal works; the denials stay.
 
 The command is looked up on `PATH` when it runs. The decision names the program as written, not the file that `PATH` resolves it to.
 
@@ -194,7 +229,17 @@ one is a plain read, through a shell and through a read tool alike.
 
 Tools that are not a shell are classified too. `Read`, `Grep` and the other
 read tools are a secret read when given a credential path, or a search glob
-that selects credential files (`.env`, `**/*.pem`), and pass otherwise.
+that selects credential files (`.env`, `**/*.pem`), and pass otherwise. A
+search glob in the grammar above is decided on what it can name; one outside
+it (`.en[v]`, `.en\v`) is a secret read when a walk of the search root finds
+a credential file or cannot finish, and the reason says so. `Grep`'s
+`pattern`, and Hermes `search_files` `pattern` unless `target` is `files`, is
+a regular expression for a content search and is not read as a glob. Through
+a shell, a credential path is read with a backslash taken as quoting the next
+character, so `rg -g '.en\v'` and `grep --include='.en\v'` are secret reads.
+A shell word whose wildcard or bracket would expand to a credential file
+(`cat .en?`, `cat .e*`, `cat .en[v]`) is decided on its text, not on what it
+expands to: under the built-in profile it is not a secret read.
 `WebFetch`, Hermes `browser_navigate` and the other fetch tools are network
 egress to the host of their URL; a search tool, which names no URL, has an
 undetermined destination. Hermes `vision_analyze` is a read when its

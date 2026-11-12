@@ -331,3 +331,89 @@ func TestSetupReadsAClaudeCodeMatcherAsClaudeCodeDoes(t *testing.T) {
 		}
 	}
 }
+
+// setup does not rewrite an entry it shares with other hooks, so status does
+// not offer setup as the fix for one: it says to edit the entry instead.
+func TestSetupStatusOffersNoUpgradeForASharedHookEntry(t *testing.T) {
+	m := newMatcherTestSetup(t, "claude-code")
+	writeSetupMCPTestConfig(t, "claude-code", m.summary.ClientConfigPath, m.summary.BinaryPath, m.opts.DataDir)
+	m.writeClaudeHookEntry(t, olderClaudeMatcher,
+		map[string]any{"type": "command", "command": m.command, "timeout": 30},
+		map[string]any{"type": "command", "command": "other-hook"})
+	_, out, summary := m.status(t, true)
+	if summary["hook_matcher_outdated"] != true {
+		t.Fatalf("a shared entry with an old matcher was not reported outdated:\n%s", out)
+	}
+	if command, present := summary["hook_matcher_upgrade_command"]; present {
+		t.Fatalf("status offers %v for an entry setup will not rewrite", command)
+	}
+	warnings, _ := summary["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), m.hookPath) || !strings.Contains(warnings[0].(string), olderClaudeMatcher) {
+		t.Fatalf("warnings = %v, want one that names the file and the matcher", summary["warnings"])
+	}
+	_, text, _ := m.status(t, false)
+	if strings.Contains(text, "to upgrade it") || !strings.Contains(text, "also holds other hooks") {
+		t.Fatalf("status text offers setup for a shared entry or does not say why it cannot:\n%s", text)
+	}
+}
+
+// A shared entry with an old matcher beside an entry of HELM's own that
+// routes every tool leaves nothing unrouted, so setup has nothing to warn
+// about.
+func TestSetupDoesNotWarnWhenAnotherEntryRoutesEveryTool(t *testing.T) {
+	m := newMatcherTestSetup(t, "claude-code")
+	shared := map[string]any{"matcher": olderClaudeMatcher, "hooks": []any{
+		map[string]any{"type": "command", "command": m.command, "timeout": 30},
+		map[string]any{"type": "command", "command": "other-hook"},
+	}}
+	own := map[string]any{"matcher": setupHookMatcher("claude-code"), "hooks": []any{map[string]any{"type": "command", "command": m.command, "timeout": 30}}}
+	raw, err := json.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": []any{shared, own}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(m.hookPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(m.hookPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr := m.install(t)
+	if strings.Contains(stderr, "warning") {
+		t.Fatalf("setup warned although every tool is routed:\n%s", stderr)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(stdout), &summary); err != nil {
+		t.Fatalf("summary JSON: %v\n%s", err, stdout)
+	}
+	if warnings, present := summary["warnings"]; present {
+		t.Fatalf("summary warnings = %v, want none", warnings)
+	}
+}
+
+// The upgrade hint keeps the install's policy profile, so running it does not
+// fall back to the built-in profile.
+func TestSetupOutdatedMatcherHintKeepsThePolicyProfile(t *testing.T) {
+	m := newMatcherTestSetup(t, "claude-code")
+	writeSetupMCPTestConfig(t, "claude-code", m.summary.ClientConfigPath, m.summary.BinaryPath, m.opts.DataDir)
+	raw, err := os.ReadFile(filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(t.TempDir(), "profile.json")
+	if err := os.WriteFile(profile, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts := m.opts
+	opts.PolicyProfile = profile
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertHookConfig(m.hookPath, olderClaudeMatcher, setupHookCommand(opts, m.summary.BinaryPath), setupPrivateFileRoot(m.opts)); err != nil {
+		t.Fatal(err)
+	}
+	_, out, summary := m.status(t, true)
+	command, _ := summary["hook_matcher_upgrade_command"].(string)
+	if !strings.Contains(command, " --policy-profile "+shellQuote(profile)) {
+		t.Fatalf("upgrade command %q does not keep the policy profile %s:\n%s", command, profile, out)
+	}
+}

@@ -51,7 +51,16 @@ Claude Code does: one made only of letters, digits, `_` and `|` is a list of
 exact tool names, so `Edit|Write` does not route `MultiEdit`; any other
 matcher is a regular expression that may match anywhere in the name. When the
 HELM hook shares a hook entry with another hook, setup leaves that entry's
-matcher alone and prints a warning that names the file and the matcher.
+matcher alone and prints a warning that names the file and the matcher; for
+such an entry `setup status` prints that warning instead of an upgrade
+command, since running setup would not change it.
+
+`Grep` and `Glob` globs are decided in the grammar that
+[workstation governance](../reference/workstation-governance.md) describes. A
+glob outside it (a bracket class, a backslash, a leading `/`, `!`) is refused
+when the search starts at, inside or above `~/.helm-ai-kernel`, and `*.pub` is
+refused wherever the search runs because it names the hook's trusted public
+key; search for a public key by its name instead.
 
 These tools are not routed, so the hook never sees them:
 

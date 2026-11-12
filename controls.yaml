@@ -378,14 +378,15 @@ removal_proofs:
       - "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
   - control: CTL-036
     file: core/cmd/helm-ai-kernel/workstation_m3_cmd.go
-    find: "\t\tif receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {\n"
+    find: "\t\tif !denied && refusal == \"\" && len(flags.argv) > 0 && (receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate) {\n"
     replace: "\t\tif false {\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand"
+      - "core/cmd/helm-ai-kernel.TestWorkstationEnforceLeavesNoAllowForACommandItRefuses"
   - control: CTL-036
     file: core/cmd/helm-ai-kernel/workstation_m3_cmd.go
-    find: "\tif denied {\n\t\treturn cliui.ExitDenied\n\t}\n\tif refusal != \"\" {\n\t\t// Nothing was denied, but nothing decided covers the command either:\n\t\t// an ALLOW for some other effect must not be left on disk for it.\n\t\t_, _ = fmt.Fprintf(stderr, \"Error: refusing to execute command: %s\\n\", refusal)\n\t\treturn cliui.ExitDenied\n\t}\n\tremaining := flags.argv\n\tif len(remaining) == 0 {\n\t\treturn 0\n\t}\n\tfor _, receipt := range receipts {\n\t\tif receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {\n"
-    replace: "\tif false {\n\t\treturn cliui.ExitDenied\n\t}\n\tif refusal != \"\" {\n\t\t_, _ = fmt.Fprintf(stderr, \"Error: refusing to execute command: %s\\n\", refusal)\n\t\treturn cliui.ExitDenied\n\t}\n\tremaining := flags.argv\n\tif len(remaining) == 0 {\n\t\treturn 0\n\t}\n\tfor _, receipt := range receipts {\n\t\tif false && receipt.Verdict != contracts.WorkstationVerdictAllow {\n"
+    find: "\tif denied {\n\t\treturn cliui.ExitDenied\n\t}\n"
+    replace: "\tif false {\n\t\treturn cliui.ExitDenied\n\t}\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
   - control: CTL-036
@@ -424,6 +425,24 @@ removal_proofs:
     replace: "\t\t\t_ = callBinding\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestWorkstationEnforceWritesOnlyTheDenialsOfARefusedCommand"
+  - control: CTL-036
+    file: core/cmd/helm-ai-kernel/workstation_m3_cmd.go
+    find: "\t\trequestID, err := newHookRandomID(\"enforce_\")\n"
+    replace: "\t\trequestID, err := \"\", error(nil)\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestWorkstationEnforceKeepsTheReceiptsOfEveryRun"
+  - control: CTL-036
+    file: core/cmd/helm-ai-kernel/workstation_m3_cmd.go
+    find: "os.O_WRONLY|os.O_CREATE|os.O_EXCL"
+    replace: "os.O_WRONLY|os.O_CREATE|os.O_TRUNC"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestEnforceReceiptWriteNeverReplacesAFile"
+  - control: CTL-036
+    file: core/cmd/helm-ai-kernel/workstation_m3_cmd.go
+    find: "\t\tif path != \"\" && receipts[i].Verdict == contracts.WorkstationVerdictAllow {\n"
+    replace: "\t\tif path != \"\" && receipts[i] == nil {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestWorkstationEnforceRemovesOnlyAllowReceiptsWhenALaterWriteFails"
   - control: CTL-037
     file: core/pkg/workstation/enforcement.go
     find: "\tif receipt.SignerKeyID == retiredObserveOnlySignerKeyID {\n\t\treturn false, nil\n\t}\n\treturn VerifyDecisionReceiptSignature(receipt)\n"
@@ -476,6 +495,12 @@ removal_proofs:
     tests:
       - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty"
       - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
+  - control: CTL-037
+    file: core/pkg/workstation/scope_audit.go
+    find: "\troot, err := openEmptyOutputDir(outDir, \"scope audit evidence pack\")\n"
+    replace: "\t_ = os.MkdirAll(outDir, 0o750)\n\troot, err := os.OpenRoot(outDir)\n"
+    tests:
+      - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
   - control: CTL-037
     file: core/pkg/workstation/evidence.go
     find: "os.O_WRONLY|os.O_CREATE|os.O_EXCL"
@@ -3364,11 +3389,21 @@ controls:
       decision. A payload over 4 MiB is denied without being classified, with
       a receipt that binds the digest of the bytes read and names the tool
       when the payload named it first, and the hook decides on the first JSON
-      value of its input without waiting for the input to end. A search glob
-      is matched as the search tools read its brackets and braces, a pattern
-      the guard cannot read is taken to reach trust material, and a glob past
-      the expansion budget (256 alternatives, 64 KiB, 32 levels of nesting)
-      is refused as trust material without being expanded.
+      value of its input without waiting for the input to end. It decides a
+      glob exactly inside a small grammar (literal names, "*", "?", a
+      whole-segment "**" and brace groups nested at most 4 deep): a search
+      reaches the key files only when it starts at, inside or above the data
+      directory ("/" and an unresolvable start are above everything) and a
+      glob can name what the key directory holds, and a glob aimed at a key
+      file name reaches them wherever the search runs. A glob outside the
+      grammar is refused as trust material when the search starts at, inside
+      or above the data directory, or when a bounded walk of the search root
+      finds a file with a key file name or cannot finish; a shell word with a
+      bracket class is refused when the directory it starts in is at, inside
+      or above the data directory. The globs of one call share one expansion
+      budget (256 alternatives, 64 KiB), past which the call is refused as
+      trust material without being expanded, and a call not classified
+      within 10 seconds is refused the same way.
     status: observed-only
     reason: >-
       The client decides which calls reach the hook, and classifying command
@@ -3395,9 +3430,10 @@ controls:
       - "A script file is not read for what it does: `python3 script.py` is decided on its arguments, and on its text only for a literal reference to the signing material. A path computed at run time, a renamed copy of the kernel binary, a `PATH` override and a recursive read of a directory above the data directory are not detected."
       - "A profile that grants `shell.operate` allows opaque shell forms, which can open connections the allowlist does not see."
       - "A program outside the client table is not classified as egress: package managers, language toolchains, DNS tools and HTTP clients the table does not list connect without a network decision."
-      - "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected. A search glob that selects files in general (`*`, `**/*.go`) below a directory above the data directory is a recursive read of it and is not refused."
-      - "A search glob past the expansion budget (longer than 64 KiB, or expanding past 256 alternatives, 64 KiB or 32 levels of nesting) and a glob longer than 4096 path segments are taken to reach trust material and refused, so the work one glob costs is linear in its length and bounded. The rest of a classification is bounded by the 4 MiB input limit; it is not proven linear for every shape, and the shapes the tests and the review measured (20,000 destinations, 150,000 credential paths, 4 MiB globs and paths) finish in under a second."
-      - "A search tool's glob is read with ripgrep's brace and bracket syntax. A tool whose glob syntax differs (another escape rule, extended globs) is matched by that reading, which may differ from what the tool selects."
+      - "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected. A search with no glob, or with a glob that cannot name what the key directory holds, below a directory above the data directory is a recursive read of it and is not refused. The search root is the `path` argument or the working directory: a tool that takes its root from another argument is decided from the working directory."
+      - "The glob grammar is a subset every supported tool reads alike, and inside it a glob is matched as any of them may anchor it: from the search root or a directory above it, after leading segments that can name `..`, or at any depth below the root. A glob outside it is not read. A symbolic link inside the searched tree is not followed, as ripgrep does not follow one by default; the walk made for a glob outside the grammar covers 65,536 entries of at most four roots per call, and a walk that cannot finish is refused."
+      - "The work of a classification is bounded by the 4 MiB input limit, the per-call glob budget and the 10 second classification deadline; the shapes the tests and the reviews measured (20,000 destinations, 150,000 credential paths, close to 4 MiB of distinct brace globs and 4 MiB paths) finish in under a second."
+      - "A search glob for every public key (`*.pub`) names the trusted public key and is refused wherever it runs. A shell word whose wildcard or bracket would expand to a credential file (`cat .en?`, `cat .en[v]`) is decided on its text, not on what it expands to."
       - "setup status reads a Claude Code matcher as Claude Code's documentation describes (plain names exact, anything else a regular expression matched anywhere in the name) and the other clients' matchers as regular expressions matched anywhere in the name. A client that reads its matcher another way may route fewer tools than setup status reports."
     tests:
       allowed:
@@ -3427,13 +3463,19 @@ controls:
         - "core/cmd/helm-ai-kernel.TestHookAnswersWithoutWaitingForTheEndOfInput"
         - "core/cmd/helm-ai-kernel.TestHookOversizedReceiptBindsTheBytesItRead"
         - "core/cmd/helm-ai-kernel.TestHookCapsTheSecretPathsOfOneCall"
+        - "core/cmd/helm-ai-kernel.TestHookDecidesEveryGlobOfACallUnderOneBudget"
+        - "core/cmd/helm-ai-kernel.TestHookSearchFromTheWorkingDirectory"
+        - "core/cmd/helm-ai-kernel.TestHookDeniesACallItCannotClassifyInTime"
         - "core/pkg/shellscan.TestClassifyReadsClientOptionsWhereverTheClientDoes"
         - "core/pkg/shellscan.TestClassifyRefusesWhatAClientTableDoesNotKnow"
-        - "core/pkg/shellscan.TestPathGuardDecidesALargeBraceGlobInBoundedTimeAndMemory"
-        - "core/pkg/shellscan.TestPathGuardReadsBracketsAndBracesAsTheSearchToolsDo"
-        - "core/pkg/shellscan.TestPathGuardTakesAPatternItCannotReadAsAMatch"
+        - "core/pkg/shellscan.TestPathGuardDecidesGlobsInTheGrammar"
+        - "core/pkg/shellscan.TestPathGuardRefusesAGlobOutsideTheGrammarWhereItCanReach"
+        - "core/pkg/shellscan.TestSearchCallSecretReadDecidesByReach"
+        - "core/pkg/shellscan.TestSearchCallSharesOneBudgetAcrossItsGlobs"
+        - "core/pkg/shellscan.TestSearchCallRefusesWhatItCannotWalk"
+        - "core/pkg/shellscan.TestPathGuardDecidesALargeSearchInBoundedTimeAndMemory"
         - "core/pkg/shellscan.TestPathGuardReadsDoubleStarAsZeroOrMoreDirectories"
-        - "core/pkg/shellscan.TestPathGuardRefusesAPatternWithTooManySegments"
+        - "core/pkg/shellscan.TestPathGuardDecidesALongPatternByItsLastSegments"
         - "core/pkg/shellscan.TestPathGuardListsTheProtectedDirectory"
       removal: []
       bypass:
@@ -3444,6 +3486,10 @@ controls:
         - "core/cmd/helm-ai-kernel.TestSetupOutdatedMatcherHintUpgradesThisInstall"
         - "core/cmd/helm-ai-kernel.TestSetupStatusReadsEveryHelmHookEntry"
         - "core/cmd/helm-ai-kernel.TestSetupReadsAClaudeCodeMatcherAsClaudeCodeDoes"
+        - "core/cmd/helm-ai-kernel.TestSetupStatusOffersNoUpgradeForASharedHookEntry"
+        - "core/cmd/helm-ai-kernel.TestSetupDoesNotWarnWhenAnotherEntryRoutesEveryTool"
+        - "core/cmd/helm-ai-kernel.TestSetupOutdatedMatcherHintKeepsThePolicyProfile"
+        - "core/cmd/helm-ai-kernel.TestHookOversizedReceiptBindsTheBytesItRead"
         - "core/pkg/shellscan.TestClassifyNamesEveryEgressDestination"
         - "core/pkg/shellscan.TestClassifyRefusesToGuessEgressDestinations"
         - "core/pkg/shellscan.TestClassifyReportsProtectedPaths"
@@ -3463,9 +3509,13 @@ controls:
       matched to it, or when a receipt cannot be written; it runs the argv
       only on operate-mode ALLOW receipts that bind the argv, and then exits
       with the argv's own exit code, or 128 plus the signal that ended it.
-      For a command it refuses it writes only the denials, and every receipt
-      it writes carries the call identifier, the number of receipts of the
-      run and the run's verdict.
+      It settles a refusal, including a command whose receipts are not all
+      operate-mode ALLOW, before it writes any receipt, and for a command it
+      refuses it writes only the denials. Every receipt it writes has a
+      request of its own and carries the call identifier, the number of
+      receipts of the run and the run's verdict, and every receipt file it
+      names in --receipt-dir is created new, so a later run never replaces an
+      earlier run's receipt.
     status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.runWorkstationEnforceCmd"
@@ -3479,6 +3529,7 @@ controls:
       - "What a wrapped script or interpreter does when it runs is not seen. The argv is classified from its text, with the limits of CTL-035."
       - "The wrapper's own HOME and XDG_CONFIG_HOME are not decided on: the configuration they locate (`~/.curlrc`, `~/.ssh/config`, git configuration) is not read."
       - "A receipt set from a run whose later receipt could not be written keeps an ALLOW receipt when its removal fails, and receipts written by an earlier release keep the ALLOW receipts of refused commands; call_receipts shows that a set written by this release is incomplete."
+      - "`--out` names a file the caller chose and is replaced by a later run that names it too; only the files enforce names in `--receipt-dir` are created new."
       - "Only the variables shellscan tracks are decided on: the proxy variables, the connection variables (CURL_HOME, WGETRC, GIT_SSH, GIT_SSH_COMMAND, GIT_PROXY_COMMAND, GIT_CONFIG*, GIT_EXEC_PATH, RSYNC_RSH, RSYNC_CONNECT_PROG, LD_PRELOAD, DYLD_INSERT_LIBRARIES) and BASH_ENV and ENV, and those only for network clients the table parses. Other variables reach the command undecided, among them LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, PATH, PYTHONPATH, NODE_OPTIONS and the TLS trust variables; a command with no network effect that starts a shell runs the file BASH_ENV or ENV names under the decision it already needs."
     tests:
       allowed:
@@ -3492,6 +3543,8 @@ controls:
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses"
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceExitsDeniedWhenAReceiptCannotBeWritten"
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceWritesOnlyTheDenialsOfARefusedCommand"
+        - "core/cmd/helm-ai-kernel.TestWorkstationEnforceLeavesNoAllowForACommandItRefuses"
+        - "core/cmd/helm-ai-kernel.TestWorkstationEnforceRemovesOnlyAllowReceiptsWhenALaterWriteFails"
       removal:
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheArgvItRuns"
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceRefusesObserveModeCommand"
@@ -3500,6 +3553,10 @@ controls:
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceReturnsTheCommandsExitCode"
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceReportsTheSignalThatEndedTheCommand"
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceWritesOnlyTheDenialsOfARefusedCommand"
+        - "core/cmd/helm-ai-kernel.TestWorkstationEnforceLeavesNoAllowForACommandItRefuses"
+        - "core/cmd/helm-ai-kernel.TestWorkstationEnforceKeepsTheReceiptsOfEveryRun"
+        - "core/cmd/helm-ai-kernel.TestEnforceReceiptWriteNeverReplacesAFile"
+        - "core/cmd/helm-ai-kernel.TestWorkstationEnforceRemovesOnlyAllowReceiptsWhenALaterWriteFails"
       bypass:
         - "core/cmd/helm-ai-kernel.TestWorkstationEnforceDecidesOnTheEnvironmentItPasses"
 
@@ -3550,6 +3607,7 @@ controls:
         - "core/pkg/workstation.TestOperatorViewChecksEverySignature"
         - "core/pkg/workstation.TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds"
         - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesALinkedSubdirectory"
+        - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
       removal:
         - "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey"
         - "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey"
@@ -3561,6 +3619,7 @@ controls:
         - "core/pkg/workstation.TestScopeAuditCountsReceiptsOfAnotherSignerSeparately"
         - "core/pkg/workstation.TestScopeAuditCountsEveryActionOfAnotherSigner"
         - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty"
+        - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
         - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
         - "core/pkg/workstation.TestPackWriterCreatesEveryFileNew"
       bypass:

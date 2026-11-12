@@ -674,47 +674,6 @@ var secretGlobSamples = []string{
 	".kube/config", ".netrc", ".npmrc", ".pypirc", ".docker/config.json",
 }
 
-// maxSecretGlobSegments bounds how much of a glob SecretGlob compares; the
-// samples are at most three segments deep.
-const maxSecretGlobSegments = 64
-
-// SecretGlob reports whether a file-search glob, applied at any depth below
-// wherever the search runs, selects credential material by the rules
-// SecretReadPath uses. A glob whose last segment selects files in general,
-// such as "*" or "**/*.go", is a search of the tree, not a read of a
-// credential; SecretReadPath of its literal text still applies. A glob too
-// large to expand is taken to select credential material.
-func SecretGlob(pattern string) bool {
-	pattern = strings.ToLower(slashPath(strings.TrimSpace(pattern)))
-	if pattern == "" {
-		return false
-	}
-	alternatives, ok := expandBraces(pattern)
-	if !ok {
-		return true
-	}
-	for _, alternative := range alternatives {
-		segments := strings.Split(strings.Trim(path.Clean(alternative), "/"), "/")
-		if len(segments) > maxSecretGlobSegments {
-			segments = segments[len(segments)-maxSecretGlobSegments:]
-		}
-		if generalSegment(segments[len(segments)-1]) {
-			continue
-		}
-		for _, sample := range secretGlobSamples {
-			target := strings.Split(sample, "/")
-			// The leading segments of the glob name the directories the
-			// search starts in, which can be anything.
-			for start := range segments {
-				if globMatch(segments[start:], target, true, nil) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // publicCounterpart reports a file that sits beside credential material and
 // is named like it but holds none: a public key, or an example env file kept
 // in the repository for its variable names.
@@ -736,12 +695,16 @@ func isLocalSecretPath(value string) bool {
 		return false
 	}
 	normalized := strings.ToLower(strings.ReplaceAll(value, `\\`, "/"))
-	if publicCounterpart(normalized) {
-		return false
-	}
-	for _, needle := range secretReadPathNeedles {
-		if strings.Contains(normalized, needle) {
-			return true
+	// A search tool reads a backslash in a glob as quoting the next byte, so
+	// ".en\v" given to rg -g or grep --include selects ".env".
+	for _, candidate := range []string{normalized, strings.ReplaceAll(normalized, `\`, "")} {
+		if publicCounterpart(candidate) {
+			continue
+		}
+		for _, needle := range secretReadPathNeedles {
+			if strings.Contains(candidate, needle) {
+				return true
+			}
 		}
 	}
 	return false

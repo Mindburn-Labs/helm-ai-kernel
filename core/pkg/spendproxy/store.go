@@ -409,7 +409,9 @@ func pairedUsage(records []*ReceiptRecord) map[string]*ReceiptRecord {
 // which names them too; and a settle_failed line's route quote. A usage or
 // settlement line whose debit exceeds its journal line's hold also closes the
 // window of the journal's time and the window it names, so a line that names
-// none still closes. A receipt written before the windows were recorded
+// none still closes; only journals that carry NoteDispatchJournal count, since
+// a legacy journal's hold excluded the platform fee. A settlement line's
+// closure members are unsigned, so it closes only its own journal's envelope. A receipt written before the windows were recorded
 // books, and closes, the window of its line's time. A debit under an envelope
 // the config no longer declares is not applied to any.
 func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.BalanceLedger, envelopes map[string]*economic.AgentSpendEnvelope) {
@@ -442,7 +444,9 @@ func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.Balan
 				cents = debit
 			}
 		case rec.Kind == RecordSettlement && rec.Settlement != nil:
-			if rec.EnvelopeClosed != "" {
+			// The closure members sit outside the signed payload, so a line
+			// closes only the envelope its own journal reserved (r4 review N4).
+			if journal := journals[rec.SpendIntentID]; rec.EnvelopeClosed != "" && journal != nil && journal.RouteQuote.EnvelopeID == rec.EnvelopeClosed {
 				env, closed = envelopes[rec.EnvelopeClosed], rec.EnvelopeClosedWindows
 			}
 			debit = settlementDebit(rec.Settlement)
@@ -453,7 +457,10 @@ func restoreEnvelopeUse(records []*ReceiptRecord, ledger *inferencegateway.Balan
 			if env == nil {
 				env = envelopes[journal.RouteQuote.EnvelopeID]
 			}
-			if env != nil && debit > journal.RouteQuote.MaxAmountCents {
+			// Only a journal written since holds include the platform fee
+			// carries NoteDispatchJournal; a legacy journal's quote excluded the
+			// fee, so an ordinary bill exceeds it (r4 review N1).
+			if env != nil && journal.Note == NoteDispatchJournal && debit > journal.RouteQuote.MaxAmountCents {
 				closed = append(closed, inferencegateway.PeriodWindow(env.Period, journal.RecordedAt))
 				if window != "" {
 					closed = append(closed, window)

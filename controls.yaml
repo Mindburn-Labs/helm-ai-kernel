@@ -344,6 +344,18 @@ removal_proofs:
       - "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
   - control: CTL-016
     file: core/pkg/spendproxy/store.go
+    find: "journal.Note == NoteDispatchJournal && debit > journal.RouteQuote.MaxAmountCents"
+    replace: "debit > journal.RouteQuote.MaxAmountCents"
+    tests:
+      - "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "journal != nil && journal.RouteQuote.EnvelopeID == rec.EnvelopeClosed {"
+    replace: "(journal == nil || journal != nil) {"
+    tests:
+      - "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
     find: "\t\tledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, cents, legacyWindows(env, rec.RecordedAt, closed))\n"
     replace: "\t\tledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, cents, nil)\n"
     tests:
@@ -3329,8 +3341,10 @@ controls:
       may have reached the provider is debited at its hold and its key is
       spent; only an error before the upstream connection opened releases it.
       A dispatch journalled before its provider call without a committed
-      settlement is held again on start, at the actual cost the log records
-      when that is more than its hold, until `spend-proxy reconcile`, which
+      settlement is held again on start, at its hold, or at the actual cost
+      its usage or settlement line records when that line reached the log
+      without the other and the cost is more (a settle_failed line keeps the
+      hold, as the live proxy does), until `spend-proxy reconcile`, which
       takes the receipts directory's lock and signs with the seed's key
       (without a seed, the one generated in the receipts directory), settles
       or releases it in a signed line; a dispatch another key journalled is

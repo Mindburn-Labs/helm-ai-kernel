@@ -206,8 +206,12 @@ an earlier version run without `--sign` signed each run with a new key, start
 the proxy once under the current seed, which registers its key in
 `trusted_keys.json`, stop it and reconcile with that seed: reconcile signs for
 the dispatch when `trusted_keys.json` registers both keys and the journal line
-verifies against the old one, or, when the registry no longer has the old key,
-with `--journal-key-reason "<why>"`. The line records the old key as
+verifies against the old one, or, when the registry no longer has the old key
+and that key signed only journal lines, with `--journal-key-reason "<why>"`. A
+log in which the old key also signed usage, settlement, release or
+settle_failed lines does not start without it: restore the old public key to
+`trusted_keys.json` (it is in the old start banner and in `/helm/spend/health`)
+first. The line records the old key as
 `reconcile_journal_key_id`, and the reason as `reconcile_journal_key_reason`;
 a start logs a `WARNING` for each pending dispatch another key journalled.
 When the log records that the provider billed the dispatch (a `settle_failed`

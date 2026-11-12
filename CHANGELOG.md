@@ -326,7 +326,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   generate and register `<receipts-dir>/signing-seed`, stop the proxy, then
   reconcile without `--sign`. After a lost or changed seed, start the proxy
   once under the new seed, stop it, and reconcile with the new seed; when
-  `trusted_keys.json` was lost too, reconcile needs `--journal-key-reason`.
+  `trusted_keys.json` was lost too, `--journal-key-reason` covers a key that
+  signed only journal lines, and a log in which the old key also signed
+  usage, settlement, release or settle_failed lines needs that public key
+  restored to `trusted_keys.json` before the proxy starts. A first start on a
+  log written by the released proxy does not close an envelope because a bill
+  exceeded a legacy journal's ceiling, which excluded the platform fee; and a
+  settlement line closes only the envelope its own journal reserved.
   `spend-proxy export --public-key` repeats, one per key that signed the log;
   an earlier version's per-run public keys are only in its
   `trusted_keys.json`, which export does not trust on its own. `--json` adds

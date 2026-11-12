@@ -2,14 +2,18 @@ package packfs
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 // pack builds a pack directory beside a directory that is not part of it.
@@ -183,5 +187,80 @@ func TestFSIsAFileSystem(t *testing.T) {
 	}
 	if err := fstest.TestFS(p, "in.txt", "sub/nested.txt"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// NF3: a name the directory does not list was compared with every name it
+// does list, so a manifest naming n absent files in a directory of n files
+// cost n*n comparisons: 45 s for 80,000. A miss is now one map lookup on the
+// case-folded name, which still finds a spelling in another letter case.
+func TestCheckCase_AMissCostsOneLookup(t *testing.T) {
+	const names = 80_000
+	dir := t.TempDir()
+	logs := filepath.Join(dir, "06_LOGS")
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Creating and removing 80,000 files one by one is slow on some file
+	// systems; spread both over goroutines.
+	forEachName := func(do func(name string) error) {
+		var wg sync.WaitGroup
+		errs := make(chan error, 16)
+		for worker := range 16 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := worker; i < names; i += 16 {
+					if err := do(filepath.Join(logs, fmt.Sprintf("file-%05d.log", i))); err != nil {
+						errs <- err
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatal(err)
+		}
+	}
+	forEachName(func(name string) error { return os.WriteFile(name, nil, 0o600) })
+	t.Cleanup(func() { forEachName(os.Remove) })
+	write(t, filepath.Join(dir, "k.txt"), "")
+	p := open(t, dir)
+
+	done := make(chan error, 1)
+	go func() {
+		for i := range names {
+			if err := p.CheckCase(fmt.Sprintf("06_LOGS/absent-%05d.log", i)); !errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "letter case") {
+				done <- fmt.Errorf("CheckCase of absent name %d = %v, want a plain ErrNotExist", i, err)
+				return
+			}
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("CheckCase of %d absent names in a directory of %d took longer than 10 s", names, names)
+	}
+
+	// The folded lookup finds what strings.EqualFold matches, and names the
+	// spelling the directory lists.
+	for name, listed := range map[string]string{
+		"06_LOGS/FILE-00042.LOG": "06_LOGS/file-00042.log",
+		"06_logs/file-00042.log": "06_LOGS",
+		"K.txt":                  "k.txt", // KELVIN SIGN folds to k
+	} {
+		err := p.CheckCase(name)
+		if !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "another letter case") || !strings.Contains(err.Error(), strconv.Quote(listed)) {
+			t.Errorf("CheckCase(%q) = %v, want ErrNotExist naming %q in another letter case", name, err, listed)
+		}
+	}
+	if err := p.CheckCase("06_LOGS/file-00042.log"); err != nil {
+		t.Errorf("CheckCase of the exact spelling = %v", err)
 	}
 }

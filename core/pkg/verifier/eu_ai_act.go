@@ -14,8 +14,19 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
-// euAIActProfileKey is the member name the scan looks for.
+// euAIActProfileKey is the member name the scan looks for, in any letter
+// case.
 const euAIActProfileKey = "eu_ai_act_profile"
+
+// maxEUAIActProfiles is the most eu_ai_act_profile members the scan validates
+// in one pack. A pack that holds more fails by the name of the file where the
+// count passes it: every member is unmarshalled and validated, so the count
+// needs a bound of its own beside the byte limits.
+const maxEUAIActProfiles = 1024
+
+// maxEUAIActIssues is the most validation issues the reason lists; it counts
+// the rest.
+const maxEUAIActIssues = 10
 
 // maxJSONDepth is the nesting depth encoding/json accepts. The scan never
 // goes deeper; a document that does is one that does not parse.
@@ -38,7 +49,8 @@ var (
 // euAIActScanPackLimit for the pack. A file the scan did not read, because it
 // is over a limit, not a regular file or outside the pack, fails the check by
 // name: it could carry an invalid profile while the check said the pack
-// carries none.
+// carries none. So does the file that brings the pack past
+// maxEUAIActProfiles profiles.
 func checkEUAIActEvidenceProfile(bundlePath string) CheckResult {
 	const name = "eu_ai_act_profile"
 	pack := openPack(bundlePath)
@@ -67,7 +79,7 @@ func checkEUAIActEvidenceProfile(bundlePath string) CheckResult {
 		}
 	}
 	if len(issues) > 0 {
-		return failed(name, strings.Join(issues, "; "))
+		return failed(name, summarizeIssues(issues, maxEUAIActIssues))
 	}
 	if len(scan.profiles) == 0 {
 		switch {
@@ -135,7 +147,12 @@ func collectEUAIActEvidenceProfiles(pack *packFiles) (euAIActScan, error) {
 		scanned += int64(len(data))
 		scan.files++
 
-		found := scanEUAIActFile(data)
+		room := maxEUAIActProfiles - len(scan.profiles)
+		found := scanEUAIActFile(data, room)
+		if len(found.values) > room {
+			return fmt.Errorf("%s brings the pack past %d eu_ai_act_profile members, the most the scan validates in one pack; the members past that are not validated",
+				name, maxEUAIActProfiles)
+		}
 		if found.syntaxErr != nil {
 			if !found.keySeen {
 				scan.unparsed = append(scan.unparsed, name)
@@ -196,8 +213,9 @@ func readEUAIActFile(pack *packFiles, name string, room int64) ([]byte, error) {
 
 // euAIActFileScan is what one file showed.
 type euAIActFileScan struct {
-	// values are the raw values of every complete eu_ai_act_profile member,
-	// at any depth, in every JSON document of the file.
+	// values are the raw values of the complete eu_ai_act_profile members, at
+	// any depth, in every JSON document of the file, up to one more than the
+	// limit scanEUAIActFile was given.
 	values []json.RawMessage
 	// keySeen is set when the file names the member anywhere, whether or not
 	// its value could be read.
@@ -208,49 +226,65 @@ type euAIActFileScan struct {
 
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
-// scanEUAIActFile finds every eu_ai_act_profile member in a file, in every
-// JSON document it holds (a line-delimited file holds several).
+// scanEUAIActFile finds the eu_ai_act_profile members in a file, in every
+// JSON document it holds (a line-delimited file holds several). It stops
+// capturing values at limit+1, so a caller sees that a file holds more than
+// limit without the file costing memory per member.
 //
 // A leading UTF-8 byte order mark is skipped, as JSON readers that accept one
 // do. Each document is checked by encoding/json, which refuses nesting deeper
 // than 10000, and then searched byte by byte with an explicit stack, so a
 // file of any shape costs time and memory in proportion to its size and
-// nothing recurses. The member name is matched after JSON unescaping, the way
-// a reader of the file sees it, and a name that appears twice in one object is
-// seen twice. A value under the member is captured whole and not searched
-// further.
+// nothing recurses. The member name is matched after JSON unescaping and in
+// any letter case, the way encoding/json matches a member to a struct field,
+// and a name that appears twice in one object is seen twice. A value under
+// the member is captured whole and not searched further.
 //
 // When a document does not parse, the rest of the file is still searched for
-// the member, and a file that holds the member name anywhere, even as raw
-// text in damaged bytes, sets keySeen: a profile a reader cannot use must not
-// read as a pack that carries none.
-func scanEUAIActFile(data []byte) euAIActFileScan {
+// the member, and a file that holds the member name anywhere, in any letter
+// case, even as raw text in damaged bytes, sets keySeen: a profile a reader
+// cannot use must not read as a pack that carries none.
+func scanEUAIActFile(data []byte, limit int) euAIActFileScan {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	// Most files hold one document. json.Valid checks it in place, under the
 	// same depth limit, without the copy the decoder buffers.
 	if json.Valid(data) {
-		values, seen := findMemberValues(data, euAIActProfileKey)
+		values, seen := findMemberValues(data, euAIActProfileKey, limit+1)
 		return euAIActFileScan{values: values, keySeen: seen}
 	}
 	var out euAIActFileScan
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	for {
+	for len(out.values) <= limit {
 		start := int(decoder.InputOffset())
 		err := decoder.Decode(&jsonSkip{})
 		if err == io.EOF {
 			return out
 		}
 		if err != nil {
-			values, seen := findMemberValues(data[start:], euAIActProfileKey)
+			values, seen := findMemberValues(data[start:], euAIActProfileKey, limit+1-len(out.values))
 			out.values = append(out.values, values...)
-			out.keySeen = out.keySeen || seen || bytes.Contains(data, []byte(euAIActProfileKey))
+			out.keySeen = out.keySeen || seen || containsFold(data, euAIActProfileKey)
 			out.syntaxErr = err
 			return out
 		}
-		values, seen := findMemberValues(data[start:int(decoder.InputOffset())], euAIActProfileKey)
+		values, seen := findMemberValues(data[start:int(decoder.InputOffset())], euAIActProfileKey, limit+1-len(out.values))
 		out.values = append(out.values, values...)
 		out.keySeen = out.keySeen || seen
 	}
+	return out
+}
+
+// containsFold reports whether data holds key, an ASCII name, in any letter
+// case. No rune outside ASCII folds to a letter of euAIActProfileKey, so
+// comparing bytes finds every spelling strings.EqualFold accepts.
+func containsFold(data []byte, key string) bool {
+	first := key[0] | 0x20
+	for i := 0; i+len(key) <= len(data); i++ {
+		if data[i]|0x20 == first && bytes.EqualFold(data[i:i+len(key)], []byte(key)) {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonSkip lets encoding/json check a document without building it.
@@ -259,11 +293,12 @@ type jsonSkip struct{}
 func (*jsonSkip) UnmarshalJSON([]byte) error { return nil }
 
 // findMemberValues returns the raw value of every member named key in data,
-// and whether a member of that name was seen at all. data is a JSON document,
-// or bytes that stop being one somewhere: the scan stops at the end of data,
-// at a member value that does not end, and at nesting deeper than
-// maxJSONDepth. It keeps its own stack and never recurses.
-func findMemberValues(data []byte, key string) ([]json.RawMessage, bool) {
+// up to limit values, and whether a member of that name was seen at all. data
+// is a JSON document, or bytes that stop being one somewhere: the scan stops
+// at the end of data, at limit values, at a member value that does not end, and
+// at nesting deeper than maxJSONDepth. It keeps its own stack and never
+// recurses.
+func findMemberValues(data []byte, key string, limit int) ([]json.RawMessage, bool) {
 	type frame struct{ object, wantKey bool }
 	var stack []frame
 	var values []json.RawMessage
@@ -297,6 +332,9 @@ func findMemberValues(data []byte, key string) ([]json.RawMessage, bool) {
 				return values, seen
 			}
 			values = append(values, json.RawMessage(data[valueStart:valueEnd]))
+			if len(values) >= limit {
+				return values, seen
+			}
 			i = valueEnd
 		case '{':
 			if len(stack) >= maxJSONDepth {
@@ -328,17 +366,20 @@ func findMemberValues(data []byte, key string) ([]json.RawMessage, bool) {
 }
 
 // memberNameIs reports whether the JSON string raw, quotes included, decodes
-// to key. Letters and the underscore can only be escaped as \uXXXX, so a raw
-// name longer than six bytes per character of key cannot decode to it.
+// to key in any letter case (strings.EqualFold, which is how encoding/json
+// matches a member to a struct field). Letters and the underscore can only be
+// escaped as \uXXXX, and no rune outside ASCII folds to a letter of the key,
+// so a raw name longer than six bytes per character of key cannot decode to
+// it.
 func memberNameIs(raw []byte, key string) bool {
 	if !bytes.ContainsRune(raw, '\\') {
-		return string(raw[1:len(raw)-1]) == key
+		return bytes.EqualFold(raw[1:len(raw)-1], []byte(key))
 	}
 	if len(raw) > 2+6*len(key) {
 		return false
 	}
 	var name string
-	return json.Unmarshal(raw, &name) == nil && name == key
+	return json.Unmarshal(raw, &name) == nil && strings.EqualFold(name, key)
 }
 
 // jsonStringEnd returns the index after the closing quote of the string that

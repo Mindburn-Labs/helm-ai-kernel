@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // MaxFileBytes is the most ReadFile reads from one file: 64 MiB. The
@@ -53,7 +54,14 @@ type FS struct {
 	escape error
 
 	mu       sync.Mutex
-	listings map[string]map[string]bool
+	listings map[string]*listing
+}
+
+// listing is what one directory lists: its names, and each name under its
+// case-folded key (foldKey) mapped to the first listed name with that key.
+type listing struct {
+	names  map[string]bool
+	folded map[string]string
 }
 
 // Open opens the pack directory dir.
@@ -268,15 +276,13 @@ func (p *FS) CheckCase(name string) error {
 	}
 	dir := "."
 	for _, segment := range strings.Split(name, "/") {
-		names, err := p.listing(dir)
+		list, err := p.listing(dir)
 		if err != nil {
 			return err
 		}
-		if !names[segment] {
-			for listed := range names {
-				if strings.EqualFold(listed, segment) {
-					return &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: the pack holds %q, which is spelled in another letter case", fs.ErrNotExist, path.Join(dir, listed))}
-				}
+		if !list.names[segment] {
+			if listed, ok := list.folded[foldKey(segment)]; ok {
+				return &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: the pack holds %q, which is spelled in another letter case", fs.ErrNotExist, path.Join(dir, listed))}
 			}
 			return &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 		}
@@ -285,25 +291,45 @@ func (p *FS) CheckCase(name string) error {
 	return nil
 }
 
-func (p *FS) listing(dir string) (map[string]bool, error) {
+func (p *FS) listing(dir string) (*listing, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if names, ok := p.listings[dir]; ok {
-		return names, nil
+	if list, ok := p.listings[dir]; ok {
+		return list, nil
 	}
 	entries, err := p.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	names := make(map[string]bool, len(entries))
+	list := &listing{names: make(map[string]bool, len(entries)), folded: make(map[string]string, len(entries))}
 	for _, entry := range entries {
-		names[entry.Name()] = true
+		list.names[entry.Name()] = true
+		key := foldKey(entry.Name())
+		if _, ok := list.folded[key]; !ok {
+			list.folded[key] = entry.Name()
+		}
 	}
 	if p.listings == nil {
-		p.listings = map[string]map[string]bool{}
+		p.listings = map[string]*listing{}
 	}
-	p.listings[dir] = names
-	return names, nil
+	p.listings[dir] = list
+	return list, nil
+}
+
+// foldKey maps every rune of s to the smallest rune of its Unicode simple
+// case-folding orbit, so foldKey(a) == foldKey(b) exactly when
+// strings.EqualFold(a, b).
+func foldKey(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		smallest := r
+		for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
+			smallest = min(smallest, next)
+		}
+		b.WriteRune(smallest)
+	}
+	return b.String()
 }
 
 // Walk walks the tree under dir in lexical order, as fs.WalkDir does. A

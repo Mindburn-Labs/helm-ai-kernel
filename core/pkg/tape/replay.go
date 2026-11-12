@@ -23,6 +23,12 @@ type Tape struct {
 	Files []string
 }
 
+// entryByteBudget is the most LoadTape reads from the entry files of one
+// tape: 256 MiB. Every entry is held in memory for the replay, so the tape
+// has a bound of its own beside the per-file limit of the file system it is
+// read from.
+const entryByteBudget int64 = 256 << 20
+
 // recordedEntryTypes are the entry types a Recorder writes.
 var recordedEntryTypes = []EntryType{
 	EntryTypeTime, EntryTypeRNGSeed, EntryTypeNetwork, EntryTypeToolOutput,
@@ -52,12 +58,16 @@ type LstatFS interface {
 // not hold. Entry files are read in the order of
 // the number in their name, so entry_2.json comes before entry_12.json, and
 // a name without a number comes after every numbered one.
+//
+// Every entry file is sized before any is read. When the entry files hold
+// more than 256 MiB in all, LoadTape reads none of them and fails, naming the
+// file that passes the bound.
 func LoadTape(fsys LstatFS, dir string) (*Tape, error) {
-	if err := requireKind(fsys, dir, true); err != nil {
+	if _, err := requireKind(fsys, dir, true); err != nil {
 		return nil, err
 	}
 	manifestName := path.Join(dir, "tape_manifest.json")
-	if err := requireKind(fsys, manifestName, false); err != nil {
+	if _, err := requireKind(fsys, manifestName, false); err != nil {
 		return nil, fmt.Errorf("cannot read tape manifest: %w", err)
 	}
 	data, err := fs.ReadFile(fsys, manifestName)
@@ -73,15 +83,30 @@ func LoadTape(fsys LstatFS, dir string) (*Tape, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot load tape entries: %w", err)
 	}
+	var total int64
+	for _, file := range files {
+		info, err := requireKind(fsys, path.Join(dir, file), false)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load tape entries: %w", err)
+		}
+		if total += info.Size(); total > entryByteBudget {
+			return nil, overBudget(file)
+		}
+	}
 	tape := &Tape{Manifest: manifest, Files: files}
+	var read int64
 	for _, file := range files {
 		name := path.Join(dir, file)
-		if err := requireKind(fsys, name, false); err != nil {
+		if _, err := requireKind(fsys, name, false); err != nil {
 			return nil, fmt.Errorf("cannot load tape entries: %w", err)
 		}
 		data, err := fs.ReadFile(fsys, name)
 		if err != nil {
 			return nil, fmt.Errorf("cannot load tape entries: read %s: %w", file, err)
+		}
+		// A file that grew after it was sized still counts.
+		if read += int64(len(data)); read > entryByteBudget {
+			return nil, overBudget(file)
 		}
 		var entry Entry
 		if err := json.Unmarshal(data, &entry); err != nil {
@@ -127,27 +152,33 @@ func entryFileNumber(name string) (uint64, bool) {
 	return n, err == nil
 }
 
+func overBudget(file string) error {
+	return fmt.Errorf("cannot load tape entries: %s brings the entry files past %d MiB, the most a replay reads from one tape, so no entry file is replayed",
+		file, entryByteBudget>>20)
+}
+
 // requireKind refuses a name that is a symbolic link, or that is not the
 // kind of file the tape layout puts there: a directory when wantDir is set, a
-// regular file otherwise. It looks at the name itself and does not follow it.
-func requireKind(fsys LstatFS, name string, wantDir bool) error {
+// regular file otherwise, and returns what the name is. It looks at the name
+// itself and does not follow it.
+func requireKind(fsys LstatFS, name string, wantDir bool) (fs.FileInfo, error) {
 	base := path.Base(name)
 	info, err := fsys.Lstat(name)
 	if err != nil {
 		if wantDir {
-			return fmt.Errorf("tapes directory not found: %s: %w", name, err)
+			return nil, fmt.Errorf("tapes directory not found: %s: %w", name, err)
 		}
-		return fmt.Errorf("%s: %w", base, err)
+		return nil, fmt.Errorf("%s: %w", base, err)
 	}
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
-		return fmt.Errorf("refusing to read %s: it is a symbolic link, and a tape is replayed only from files the pack holds", base)
+		return nil, fmt.Errorf("refusing to read %s: it is a symbolic link, and a tape is replayed only from files the pack holds", base)
 	case wantDir && !info.IsDir():
-		return fmt.Errorf("refusing to read %s: it is not a directory", base)
+		return nil, fmt.Errorf("refusing to read %s: it is not a directory", base)
 	case !wantDir && !info.Mode().IsRegular():
-		return fmt.Errorf("refusing to read %s: it is not a regular file", base)
+		return nil, fmt.Errorf("refusing to read %s: it is not a regular file", base)
 	}
-	return nil
+	return info, nil
 }
 
 // Replay serves the tape back through a Replayer the way a replayed run

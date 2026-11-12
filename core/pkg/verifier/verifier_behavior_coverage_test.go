@@ -101,11 +101,8 @@ func TestVerifyBundle_ReplayDeterminismPassesWithRequiredEvidence(t *testing.T) 
 	if err := os.MkdirAll(tapesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(tapesDir, "tape_manifest.json"), map[string]any{
-		"schema_version": "helm.tape_manifest.v1",
-		"run_id":         "test-session-001",
-		"entries":        []any{},
-	})
+	// Gate G2 requires a tape with entries to replay.
+	writeTape(t, dir, nil)
 	if err := os.MkdirAll(filepath.Join(dir, "02_PROOFGRAPH"), 0o755); err != nil {
 		t.Fatal(err)
 	}

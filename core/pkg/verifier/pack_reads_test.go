@@ -282,6 +282,25 @@ func TestChecksRefuseFilesLinkedFromOutsideThePack(t *testing.T) {
 	}
 }
 
+// NF4 (N09): a receipts directory linked out of the pack is refused, not
+// taken for a missing one. Read as missing, the checks fell back to
+// 02_PROOFGRAPH/receipts and judged the pack on the receipts there.
+func TestReceiptsDirectoryLinkedOutOfThePackFails(t *testing.T) {
+	pack, outside := outsideFixture(t)
+	receipt := []byte(`{"receipt_id":"rcpt-001","decision_id":"dec-001","decision_hash":"sha256:abc","lamport_clock":1}`)
+	writeRaw(t, pack, "02_PROOFGRAPH/receipts/receipt-001.json", receipt)
+	writeRaw(t, outside, "receipts/receipt-001.json", receipt)
+	if err := os.Symlink(filepath.Join(outside, "receipts"), filepath.Join(pack, "receipts")); err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range []CheckResult{checkPolicyDecisionHashes(pack), checkChainIntegrity(pack), checkLamportMonotonicity(pack)} {
+		result = result.normalized()
+		if result.Status != CheckFailed || !strings.Contains(result.Reason, "receipts is not read") || !strings.Contains(result.Reason, "outside the pack") {
+			t.Errorf("%s = %s (%s%s), want FAILED: receipts is a link out of the pack", result.Name, result.Status, result.Detail, result.Reason)
+		}
+	}
+}
+
 // N3: whether a pack is named by a relative or an absolute path must not
 // change what is read. A symbolic link with an absolute target that points
 // back into the pack was refused for one spelling of the pack path and read

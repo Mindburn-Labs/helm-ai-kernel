@@ -60,6 +60,8 @@ func g2TapeFiles(t *testing.T, editRow func(rows []map[string]any)) map[string][
 // F4: `verify` and `replay` judge one tape alike. A sealed pack that declares
 // G2 and whose manifest says NETWORK where the entry says TOOL_OUTPUT was
 // VERIFIED by `verify` (the manifest was only parsed) and DIVERGED by `replay`.
+// NF10: a G2 pack whose tape holds no entries was VERIFIED by `verify` while
+// `replay` reported NOT_RUN and exited 1.
 func TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("HELM_DATA_DIR", dataDir)
@@ -67,15 +69,26 @@ func TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		editRow    func(rows []map[string]any)
+		emptyTape  bool
 		wantVerify int
 		wantReplay string
 	}{
 		{name: "intact tape", wantVerify: 0, wantReplay: "COMPLETE"},
 		{name: "manifest disagrees with an entry", editRow: func(rows []map[string]any) { rows[1]["type"] = "NETWORK" }, wantVerify: 1, wantReplay: "DIVERGED"},
+		{name: "tape with no entries", emptyTape: true, wantVerify: 1, wantReplay: "NOT_RUN"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			files := g2TapeFiles(t, tc.editRow)
+			if tc.emptyTape {
+				for name := range files {
+					if strings.HasPrefix(name, "08_TAPES/entry_") {
+						delete(files, name)
+					}
+				}
+				files["08_TAPES/tape_manifest.json"] = []byte(`{"run_id":"run-g2","entries":[]}`)
+			}
 			packDir := writeCLIPack(t, dataDir, cliPack{
-				files:       g2TapeFiles(t, tc.editRow),
+				files:       files,
 				indexFields: map[string]any{"gates": []string{"G0", "G2"}},
 			})
 			verifyCode, report, raw := verifyJSONReport(t, "--allow-self-attested", packDir)
@@ -88,6 +101,11 @@ func TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack(t *testing.T) {
 			}
 			if (verifyCode == 0) != (replayCode == 0) {
 				t.Fatalf("verify exit=%d and replay exit=%d disagree on one tape\nverify: %s\nreplay: %s", verifyCode, replayCode, raw, replayRaw)
+			}
+			if tc.wantReplay != "COMPLETE" {
+				if statuses := reportCheckStatuses(t, report); statuses["replay_determinism"] != "FAILED" {
+					t.Fatalf("replay_determinism = %s, want FAILED\n%s", statuses["replay_determinism"], raw)
+				}
 			}
 			if tc.wantReplay == "DIVERGED" {
 				statuses := reportCheckStatuses(t, report)

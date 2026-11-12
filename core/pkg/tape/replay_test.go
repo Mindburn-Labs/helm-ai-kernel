@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -159,4 +160,47 @@ func TestLoadTape_RefusesWhatTheLayoutDoesNotPutThere(t *testing.T) {
 			require.ErrorContains(t, err, "refusing to read "+linked+": it is a symbolic link")
 		}
 	})
+}
+
+// sparseEntryFiles writes a tape manifest and n entry files of size bytes
+// each in a new directory. The files are sparse: they cost no disk, and
+// reading one returns zeros, which do not parse.
+func sparseEntryFiles(t *testing.T, n int, size int64) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, WriteManifest(dir, recordedTape(0).BuildManifest()))
+	for i := 1; i <= n; i++ {
+		file, err := os.Create(filepath.Join(dir, fmt.Sprintf("entry_%04d.json", i)))
+		require.NoError(t, err)
+		require.NoError(t, file.Truncate(size))
+		require.NoError(t, file.Close())
+	}
+	return dir
+}
+
+// NF5: LoadTape read every entry file whole with no bound over the tape, so
+// `verify` on a pack with six 60 MiB entries held 942 MB. The entry files of
+// one tape are sized before any is read, and a tape past 256 MiB fails by the
+// name of the file that passes the bound, with nothing read.
+func TestLoadTape_EntryFilesPastTheTapeBudgetFailByName(t *testing.T) {
+	dir := sparseEntryFiles(t, 5, 60<<20)
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := LoadTape(os.DirFS(dir).(LstatFS), ".")
+	runtime.ReadMemStats(&after)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "entry_0005.json")
+	assert.Contains(t, err.Error(), "256 MiB")
+	assert.NotContains(t, err.Error(), "entry_0001.json")
+	allocated := after.TotalAlloc - before.TotalAlloc
+	assert.Less(t, allocated, uint64(16<<20), "LoadTape allocated %d MiB before refusing the tape", allocated>>20)
+	t.Logf("LoadTape allocated %d KiB: %v", allocated>>10, err)
+
+	// Four of them fit, and are read.
+	require.NoError(t, os.Remove(filepath.Join(dir, "entry_0005.json")))
+	_, err = LoadTape(os.DirFS(dir).(LstatFS), ".")
+	require.ErrorContains(t, err, "parse entry_0001.json")
 }

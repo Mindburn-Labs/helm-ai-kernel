@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // textSafe is the one place pack-controlled strings are made safe to print.
@@ -64,5 +65,51 @@ func TestTextSafe(t *testing.T) {
 	writeText(&out, "%s|%s|%v|%d|%s\n", "a\nb", verdict("c\x1bd"), json.Number("1\n2"), 7, os.ErrNotExist)
 	if got, want := out.String(), "a\\nb|c\\x1bd|1\\n2|7|file does not exist\n"; got != want {
 		t.Errorf("writeText wrote %q, want %q", got, want)
+	}
+}
+
+// NF2: textSafe looked at the whole run of spaces around each space it
+// escaped, so a run of n spaces cost n*n steps: `verify` took 273 s to print
+// an envelope id holding 1,000,000 spaces. Each run is now measured once.
+func TestTextSafe_ALongRunOfSpacesTakesLinearTime(t *testing.T) {
+	const spaces = 1_000_000
+	in := "a" + strings.Repeat(" ", spaces) + "b"
+	done := make(chan string, 1)
+	go func() { done <- textSafe(in) }()
+	select {
+	case got := <-done:
+		if want := "a" + strings.Repeat(`\x20`, spaces) + "b"; got != want {
+			t.Fatalf("textSafe of %d spaces returned %d bytes, want %d", spaces, len(got), len(want))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("textSafe of a run of %d spaces took longer than 5 s", spaces)
+	}
+}
+
+// NF4 (N30): three spaces in a row are already a run that is escaped.
+func TestTextSafe_ThreeSpacesAreARun(t *testing.T) {
+	for in, want := range map[string]string{
+		"a  b":    "a  b",
+		"a   b":   `a\x20\x20\x20b`,
+		"   ":     `\x20\x20\x20`,
+		"a   ":    `a\x20\x20\x20`,
+		"a  b  c": "a  b  c",
+	} {
+		if got := textSafe(in); got != want {
+			t.Errorf("textSafe(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// NF6: a combining mark past the second one on a letter is escaped, and one
+// above U+FFFF needs all its digits: written as \u%04x, U+E0100 printed as
+// `0`, the same as U+E010 followed by the digit 0.
+func TestTextSafe_AnEscapedMarkAboveUFFFFKeepsAllItsDigits(t *testing.T) {
+	mark := textSafe("á́\U000E0100")
+	if want := "á́" + `\U000e0100`; mark != want {
+		t.Fatalf("textSafe(third mark U+E0100) = %q, want %q", mark, want)
+	}
+	if other := textSafe("á́" + "0"); other == mark {
+		t.Fatalf("textSafe prints U+E0100 and U+E010 followed by 0 the same: %q", mark)
 	}
 }

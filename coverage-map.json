@@ -1290,7 +1290,7 @@
       "id": "CTL-009",
       "title": "Evidence bundle verification",
       "owner": "Mindburn Labs core team (conformance)",
-      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a recorded tape is replayed by the code `helm-ai-kernel replay` runs. Every check `verify` and `evidence inspect` run, except roots and evidence_pack_seal, reads the bundle only through an os.Root opened on its directory, and only from regular files: a path or symbolic link that leaves the bundle, an absolute symbolic link, a named pipe, a device or a socket is refused and never read, and the check that wanted the file fails (embedded_signature_trust skips it). A file read whole is read up to 64 MiB, and the EU AI Act scan reads at most 256 MiB per bundle; a file a limit leaves unread fails the check by name.",
+      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a recorded tape is replayed by the code `helm-ai-kernel replay` runs. Every check `verify` and `evidence inspect` run, except roots and evidence_pack_seal, reads the bundle only through an os.Root opened on its directory, and only from regular files: a path or symbolic link that leaves the bundle, an absolute symbolic link, a named pipe, a device or a socket is refused and never read, and the check that wanted the file fails (embedded_signature_trust skips it, and a directory walk passes over a link whose name it does not read). The layout check tests, lists and reads through the same os.Root. A file read whole is read up to 64 MiB; the EU AI Act scan reads at most 256 MiB and validates at most 1024 profiles per bundle, and a tape replay reads at most 256 MiB of entry files; the file a limit stops at fails the check by name.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1310,12 +1310,13 @@
         "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check.",
         "A bundle that omits optional evidence (a receipt chain, manifest file hashes, connector evidence, an EU AI Act profile, host evidence, a replay gate, signed receipts) still verifies: those checks are NOT_RUN, and VERIFIED covers only the checks that ran. A caller that needs one of them must name it with `--require-check`.",
         "The field-presence checks (policy_decision_hashes, connector_evidence, eu_ai_act_profile, replay_determinism) recompute nothing; their details say so.",
-        "Replay material is validated without gate G2: a determinism manifest with diverging hashes fails, and a tape that carries entries is replayed and fails if it does not replay. The files in 05_DIFFS are read as replay differences only under G2, where an empty file whose name starts with a dot is a placeholder. A tape that replays, in a bundle without a determinism manifest, states no replay result and leaves replay_determinism NOT_RUN. Replaying serves recorded inputs back; the run is not re-executed.",
+        "Replay material is validated without gate G2: a determinism manifest with diverging hashes fails, and a tape that carries entries is replayed and fails if it does not replay. Under G2 a tape with no entries fails, as `replay` reports NOT_RUN for it. The entry files of a tape are sized before any is read, and entry files past 256 MiB in all fail by the name of the file that passes the bound, with none read. The files in 05_DIFFS are read as replay differences only under G2, where an empty file whose name starts with a dot is a placeholder. A tape that replays, in a bundle without a determinism manifest, states no replay result and leaves replay_determinism NOT_RUN. Replaying serves recorded inputs back; the run is not re-executed.",
         "roots and evidence_pack_seal read the bundle by path through core/pkg/evidence. It refuses a symbolic link anywhere on the path of 00_INDEX.json, of the seal file and of every indexed file, and a last component that is not a regular file, by looking (os.Lstat) before it opens the file; a file swapped in between those two steps is not caught there.",
-        "The layout check `verify` and `evidence inspect` add for a bundle in the canonical layout (core/pkg/conform) tests whether files and directories exist with os.Stat by path, which follows symbolic links; the only file it reads, 00_INDEX.json, it reads through os.Root.",
+        "The layout check `verify` and `evidence inspect` add for a bundle in the canonical layout (core/pkg/conform) tests whether the mandatory files and directories exist, lists the bundle directory and 99_EXT, and reads 00_INDEX.json through os.Root; a mandatory name or 99_EXT that is a symbolic link out of the bundle is an issue and is never listed. Whether the bundle is in the canonical layout and whether it carries a conformance signature are tested with os.Stat by path, which follows symbolic links and opens nothing.",
         "Each check opens the bundle directory by path when it starts. A bundle directory replaced while it is being verified is outside this control.",
         "A symbolic link that stays inside the bundle is followed. A path 00_INDEX.json or manifest.json names must match the directory listing letter for letter, so a case-insensitive file system fails it as a case-sensitive one does.",
-        "A .json file that does not parse fails eu_ai_act_profile only when it names the profile as plain text or as a member the scan still finds; otherwise it is counted as unparsed in the reason. embedded_signature_trust skips a file it cannot read safely and does not fail on it. The launch id and evidence graph `evidence inspect` prints are left out when their files are refused.",
+        "The EU AI Act scan matches the member name in any letter case, as encoding/json does. A .json file that does not parse fails eu_ai_act_profile only when it names the profile, in any letter case, as plain text or as a member the scan still finds; otherwise it is counted as unparsed in the reason. A failed eu_ai_act_profile reason lists the first 10 issues and counts the rest. The launch id and evidence graph `evidence inspect` prints are left out when their files are refused.",
+        "Reads that skip instead of failing: embedded_signature_trust skips a receipt or attestation file or directory it cannot read, and reads no receipts when the receipts directory is refused (chain_integrity, lamport_monotonicity and policy_decision_hashes fail that bundle); host_evidence skips a host evidence directory, or a directory under one, that it cannot list. The walks of eu_ai_act_profile, host_evidence and embedded_signature_trust do not follow a symbolic link: one whose name ends in a suffix the check reads is opened through os.Root, and any other, including a link to a directory inside or outside the bundle, is passed over without being named.",
         "Under the host evidence directories a file named like a correlation or verification report that parses as one is not verified as a receipt chain; one that holds receipts is, and one that does not parse fails.",
         "`helm-ai-kernel replay` is outside this control: it replays the tape with the code replay_determinism runs and does not check the bundle seal."
       ],
@@ -1339,7 +1340,15 @@
           "core/pkg/conform.TestVerifyReportReadsOnlyFromInsideThePack",
           "core/cmd/helm-ai-kernel.TestVerifyFlagChecksReadOnlyFromInsideThePack",
           "core/cmd/helm-ai-kernel.TestVerifyFlagChecksDoNotBlockOnANamedPipe",
-          "core/cmd/helm-ai-kernel.TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack"
+          "core/cmd/helm-ai-kernel.TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack",
+          "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+          "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries",
+          "core/pkg/verifier.TestReplayDeterminism_ATapeThatCannotBeLoadedFails",
+          "core/pkg/verifier.TestReplayDeterminism_EntryFilesAnEmptyManifestDoesNotListFail",
+          "core/pkg/verifier.TestReplayDeterminism_AnEmptyDiffWithoutALeadingDotIsADifference",
+          "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails",
+          "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack"
         ],
         "removal": [
           "core/pkg/verifier.TestVerifyBundle_HashMismatch",
@@ -1359,7 +1368,14 @@
           "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash",
           "core/pkg/verifier.TestEUAIActProfile_AByteOrderMarkDoesNotHideAProfile",
           "core/pkg/tape.TestReplay_RefusesEntryTypesTheRecorderDoesNotWrite",
-          "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack"
+          "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack",
+          "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+          "core/pkg/tape.TestLoadTape_EntryFilesPastTheTapeBudgetFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries",
+          "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails",
+          "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack",
+          "core/pkg/verifier.TestEUAIActProfile_TheMemberNameMatchesInAnyLetterCase"
         ],
         "bypass": [
           "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault",
@@ -1369,7 +1385,8 @@
           "core/pkg/verifier.TestPackContainmentDoesNotDependOnHowThePackPathIsWritten",
           "core/pkg/verifier.TestFileHashes_NamesMustMatchTheFileExactly",
           "core/pkg/verifier.TestEUAIActProfile_AFileThatNamesTheProfileAndDoesNotParseFails",
-          "core/pkg/verifier.TestReplayDeterminism_PlaceholdersIn05DiffsAreNotDifferences"
+          "core/pkg/verifier.TestReplayDeterminism_PlaceholdersIn05DiffsAreNotDifferences",
+          "core/pkg/verifier.TestEUAIActProfile_ADamagedFileThatNamesTheProfileAsPlainTextFails"
         ]
       },
       "removal_proofs": [
@@ -1474,6 +1491,43 @@
           "file": "core/cmd/helm-ai-kernel/verify_cmd.go",
           "tests": [
             "core/cmd/helm-ai-kernel.TestVerifyFlagChecksReadOnlyFromInsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_TheMemberNameMatchesInAnyLetterCase"
+          ]
+        },
+        {
+          "file": "core/pkg/tape/replay.go",
+          "tests": [
+            "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+            "core/pkg/tape.TestLoadTape_EntryFilesPastTheTapeBudgetFailByName"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packread.go",
+          "tests": [
+            "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails"
+          ]
+        },
+        {
+          "file": "core/pkg/conform/evidencepack.go",
+          "tests": [
+            "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack"
           ]
         }
       ]

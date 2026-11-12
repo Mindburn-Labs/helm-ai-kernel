@@ -149,8 +149,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   from the pack as `\\`, so a Windows path prints as `C:\\path\\file`.
   Characters that print as blank space (space separators other than the ASCII
   space, the Hangul fillers, the blank Braille pattern), runs of three or
-  more spaces and combining marks past the second on one letter are escaped
-  too. `--json` is unchanged.
+  more spaces (each space as `\x20`) and combining marks past the second on
+  one letter (as `\uXXXX`, or `\UXXXXXXXX` above U+FFFF) are escaped too.
+  `--json` is unchanged.
 - `helm-ai-kernel verify` and `evidence inspect` read the pack through an
   `os.Root` opened on its directory in every check except `roots` and
   `evidence_pack_seal`, including the conformance signature check and the
@@ -163,7 +164,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   fails it); one that holds a `.json` file over 64 MiB, or `.json` files past
   256 MiB in all, which the EU AI Act scan names instead of reading; one
   whose `00_INDEX.json` or `manifest.json` names a file in another letter
-  case than the pack directory lists it; and one whose seal file
+  case than the pack directory lists it; one with a host receipt chain file
+  (`.json`, `.jsonl` or `.ndjson` under `host_evidence/` or
+  `11_HOST_EVIDENCE/`) over 64 MiB, which fails `external_host:chain_file`
+  instead of being read whole; and one whose seal file
   `07_ATTESTATIONS/evidence_pack.sig`, index or an indexed file is a symbolic
   link or not a regular file (the seal check refuses them before opening).
   `--require-eidas` also fails, as `eidas:read_anchor`, when
@@ -191,9 +195,38 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   is, so a pack with such a file no longer verifies. A file nested deeper than
   10000 levels, the limit `encoding/json` keeps, is one that does not parse;
   the scan keeps its own bounded stack and never recurses.
+- The EU AI Act scan matches the member name in any letter case, the way
+  `encoding/json` matches it to the `eu_ai_act_profile` field of the Go
+  types that read a pack, so a pack with an invalid profile under
+  `EU_AI_ACT_PROFILE` no longer verifies. It validates at most 1024 profiles
+  per pack: a pack with more fails `eu_ai_act_profile`, naming the file that
+  holds the 1025th. A failed reason lists the first 10 validation issues and
+  ends `; and N more`.
+- `verify` and `replay` read at most 256 MiB of tape entry files per tape,
+  sized before any is read. A larger tape fails `replay_determinism`, and
+  exits `replay` with 2 (`NOT_RUN` under `--json`), naming the entry file
+  that passes the bound.
+- Under gate `G2`, a tape with no entries fails `replay_determinism`: it
+  replays nothing, which `replay` reports as `NOT_RUN` with exit 1. Without
+  `G2` the check names it as not replayed, as before.
+- The layout check that `verify` and `evidence inspect` add tests the
+  mandatory names, lists the pack directory and `99_EXT`, and reads
+  `00_INDEX.json` through the `os.Root` on the pack. A mandatory name or
+  `99_EXT` that is a symbolic link out of the pack fails as
+  `conform:<name> is not read: ...`; `99_EXT` linked out of the pack is no
+  longer listed, so the names of the files outside are not printed.
 
 ### Added
 
+- Package `core/pkg/verifier/packfs` reads one EvidencePack directory through
+  an `os.Root`: it refuses names and symbolic links that leave the pack,
+  absolute symbolic links and files that are not regular, reads whole files
+  up to 64 MiB (`MaxFileBytes`), and checks the letter case of a name a pack
+  states (`CheckCase`).
+- `core/pkg/tape`: `LoadTape` reads a tape from a file system (`LstatFS`)
+  into a `Tape`, and `Tape.Replay` replays it; `verify` and `replay` both use
+  them. `ParseManifest` decodes `tape_manifest.json` and `EntryFileNames`
+  lists entry files in number order.
 - `helm-ai-kernel verify --require-check <names>` fails the pack when a named
   check did not run, for example `--require-check chain_integrity` for a pack
   that must carry a receipt chain. Repeat the flag or separate names with
@@ -201,6 +234,11 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
   `check_counts` and a `status` on every check. `evidence inspect --json`
   carries `outcome` and `check_counts` too.
+
+### Removed
+
+- `tape.ReadManifest(dir)` in `core/pkg/tape`. Read the file and call
+  `tape.ParseManifest`, or load the whole tape with `tape.LoadTape`.
 
 ### Fixed
 

@@ -40,6 +40,14 @@ func textSafe(s string) string {
 	var b strings.Builder
 	marks := 0
 	for i := 0; i < len(s); {
+		if n := spaceRun(s, i); n >= minSpaceRun {
+			// The whole run is written at once and stepped over, so each
+			// space is looked at once.
+			b.WriteString(strings.Repeat(`\x20`, n))
+			i += n
+			marks = 0
+			continue
+		}
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if unicode.In(r, unicode.Mn, unicode.Me) {
 			marks++
@@ -51,10 +59,10 @@ func textSafe(s string) string {
 			fmt.Fprintf(&b, `\x%02x`, s[i])
 		case r == '\\':
 			b.WriteString(`\\`)
-		case r == ' ' && inSpaceRun(s, i):
-			b.WriteString(`\x20`)
-		case marks > maxCombiningMarks:
+		case marks > maxCombiningMarks && r <= 0xffff:
 			fmt.Fprintf(&b, `\u%04x`, r)
+		case marks > maxCombiningMarks:
+			fmt.Fprintf(&b, `\U%08x`, r)
 		case textSafeRune(r):
 			b.WriteRune(r)
 		case r == '\n':
@@ -79,11 +87,23 @@ func textSafe(s string) string {
 // ordinary text, such as Vietnamese letters with two diacritics.
 const maxCombiningMarks = 2
 
+// minSpaceRun is the shortest run of ASCII spaces that textSafe escapes.
+const minSpaceRun = 3
+
 // textSafeClean reports whether textSafe would return s as it is.
 func textSafeClean(s string) bool {
 	marks := 0
-	for i, r := range s {
-		if r == '\\' || r == utf8.RuneError || !textSafeRune(r) || (r == ' ' && inSpaceRun(s, i)) {
+	for i := 0; i < len(s); {
+		if n := spaceRun(s, i); n > 0 {
+			if n >= minSpaceRun {
+				return false
+			}
+			i += n
+			marks = 0
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == '\\' || r == utf8.RuneError || !textSafeRune(r) {
 			return false
 		}
 		if unicode.In(r, unicode.Mn, unicode.Me) {
@@ -93,21 +113,20 @@ func textSafeClean(s string) bool {
 		} else {
 			marks = 0
 		}
+		i += size
 	}
 	return true
 }
 
-// inSpaceRun reports whether the ASCII space at s[i] is part of a run of three
-// or more.
-func inSpaceRun(s string, i int) bool {
-	start, end := i, i+1
-	for start > 0 && s[start-1] == ' ' {
-		start--
+// spaceRun returns how many ASCII spaces in a row start at s[i]. textSafe and
+// textSafeClean call it at the start of a run and step over the whole run, so
+// a string costs time in proportion to its length.
+func spaceRun(s string, i int) int {
+	n := 0
+	for i+n < len(s) && s[i+n] == ' ' {
+		n++
 	}
-	for end < len(s) && s[end] == ' ' {
-		end++
-	}
-	return end-start >= 3
+	return n
 }
 
 // blankRunes print as empty space although Unicode counts them as letters or

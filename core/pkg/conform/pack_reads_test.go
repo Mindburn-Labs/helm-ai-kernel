@@ -99,3 +99,62 @@ func TestDeclaredExtensionsAreReadOnlyFromInsideThePack(t *testing.T) {
 		t.Fatalf("extensions read through a link out of the pack: %v", got)
 	}
 }
+
+// NF7: the layout check listed 99_EXT and tested the mandatory directories by
+// path, following symbolic links. With 99_EXT linked to a directory outside
+// the pack, `verify` printed the names of the files there as undeclared
+// extensions, and a mandatory directory linked out of the pack counted as
+// present. The check now lists and tests through an os.Root on the pack.
+func TestValidateEvidencePackStructureReadsOnlyInsideThePack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic links need privileges on Windows")
+	}
+	root := t.TempDir()
+	pack := filepath.Join(root, "pack")
+	outside := filepath.Join(root, "outside")
+	if err := CreateEvidencePackDirs(pack); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{filepath.Join(outside, "host"), filepath.Join(outside, "reports")} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, data := range map[string]string{
+		filepath.Join(pack, "00_INDEX.json"):  `{"extensions":["ext-a"]}`,
+		filepath.Join(pack, "01_SCORE.json"):  `{}`,
+		filepath.Join(outside, "secret.json"): `{}`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(pack, ExtensionDirPrefix)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(pack, "12_REPORTS")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "reports"), filepath.Join(pack, "12_REPORTS")); err != nil {
+		t.Fatal(err)
+	}
+
+	issues := ValidateEvidencePackStructure(pack)
+	joined := strings.Join(issues, "\n")
+	for _, outsideName := range []string{"secret.json", "host", "reports"} {
+		if strings.Contains(joined, outsideName) {
+			t.Errorf("the layout check names %q, an entry of a directory outside the pack:\n%s", outsideName, joined)
+		}
+	}
+	for _, name := range []string{ExtensionDirPrefix, "12_REPORTS"} {
+		found := false
+		for _, issue := range issues {
+			if strings.HasPrefix(issue, name+" is not read: ") && strings.Contains(issue, "outside the pack") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no issue says %s is a link out of the pack:\n%s", name, joined)
+		}
+	}
+}

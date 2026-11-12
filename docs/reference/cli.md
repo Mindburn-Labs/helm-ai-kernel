@@ -151,9 +151,10 @@ keeps the raw values. Every check except `roots` and `evidence_pack_seal`,
 including `--require-eidas` and `--require-tee`, reads the pack through an
 `os.Root` on its directory: a path or symbolic link that leaves the pack, an
 absolute symbolic link and a file that is not a regular file fail the check
-that wanted them. The seal code those two use reads by path under its own
-rules, and the layout check tests whether files exist by path; both are
-described in [Receipts](../VERIFICATION.md#what-the-result-covers).
+that wanted them. The layout check reads and lists through the same
+`os.Root`. The seal code those two use reads by path under its own rules,
+described in [Receipts](../VERIFICATION.md#what-the-result-covers) with the
+reads that skip what they cannot read.
 
 `replay` serves an EvidencePack's recorded tape (`08_TAPES`) back through the
 tape replayer and reports `COMPLETE`, `DIVERGED` or `NOT_RUN`. Exit 0 only
@@ -164,9 +165,11 @@ every entry has a type the recorder writes, every manifest row carries `seq`,
 carries for an entry equals that entry. It replays recorded inputs; it does
 not re-execute the run, and it does not check the pack seal, so run `verify`
 on the pack as well; `verify` replays the tape with the same code. A symbolic
-link in place of the tape directory or a tape file, or a tape file that does
-not parse, exits 2; with `--json` the result is still printed, with
-`replay_status` `NOT_RUN` and the reason in `error`.
+link in place of the tape directory or a tape file, a tape file that does
+not parse, or entry files past 256 MiB in all (sized before any is read),
+exits 2; with `--json` the result is still printed, with `replay_status`
+`NOT_RUN` and the reason in `error`. A tape with no entries is `NOT_RUN` and
+exits 1; `verify` fails it in a pack that declares gate `G2`.
 
 ## Doctor
 

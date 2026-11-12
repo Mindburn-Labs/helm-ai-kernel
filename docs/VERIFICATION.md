@@ -128,12 +128,12 @@ checks: 5 passed, 0 failed, 8 not run; this result covers only the checks that r
 | `roots` | The manifest root hash and Merkle root were derived from the entries `00_INDEX.json` lists. The seal check compares them. | The pack has no `00_INDEX.json`, or it lists no entries. |
 | `evidence_pack_seal` | The seal signature verifies under your trust root (with `--allow-self-attested`, under the key the seal carries), the seal matches the pack inventory with no unindexed file, and the anchor and storage rules of the trust profile hold. | Never; a missing seal fails. |
 | `file_hashes` (reported as `hash:<file>`) | Every file named in `manifest.json` `file_hashes` is inside the pack and matches its SHA-256. | The pack has no `manifest.json`, or it declares no `file_hashes`. |
-| `eu_ai_act_profile` | Each embedded `eu_ai_act_profile` carries the fields its role and risk category require. The referenced records are not resolved. | No `.json` file in the pack carries one. Every `.json` file is read up to 64 MiB, and up to 256 MiB for the whole pack; a file over either limit fails the check by name. The reason counts the files that do not parse as JSON. |
+| `eu_ai_act_profile` | Each embedded `eu_ai_act_profile` carries the fields its role and risk category require. The referenced records are not resolved. | No `.json` file in the pack carries one. Every `.json` file is read up to 64 MiB, and up to 256 MiB for the whole pack; a file over either limit fails the check by name. At most 1024 profiles are validated per pack, and the file that holds the 1025th fails the check by name. A failed reason lists the first 10 issues and counts the rest. The reason counts the files that do not parse as JSON. |
 | `connector_evidence` | Each connector evidence record declares the required `sha256:` hashes and references. The hashes are not recomputed. | The pack has no `connector_evidence.json`. |
 | `chain_integrity` | Receipts link from genesis to head through `prev_hash` with no fork, gap or cycle. | No receipt carries a `prev_hash`: the pack asserts no chain. |
 | `lamport_monotonicity` | Along each chain the Lamport clock starts at 1 and increases by one. | No receipt carries a `prev_hash`. |
 | `policy_decision_hashes` | Every MCP policy receipt carries `output_hash`, `args_hash` and `signature`, or, in a pack without such receipts, at least one receipt carries a `decision_hash`; the detail gives the count. Presence only; the hashes are not recomputed. | Never; a pack in which no receipt carries a binding fails. |
-| `replay_determinism` | The replay evidence the pack declares or carries is consistent with itself: `02_PROOFGRAPH/determinism_manifest.json` states equal `live_hash` and `replay_hash`, and `08_TAPES/tape_manifest.json` parses; a tape that carries entries is replayed by the code `helm-ai-kernel replay` runs and holds; under gate `G2` both manifests must be present and `05_DIFFS` must hold nothing but empty placeholder files whose names start with `.`. The run is not re-executed, and the two hashes are the pack's own statements. The detail names which files were read. | `00_INDEX.json` `gates` does not declare `G2` and the pack carries no `determinism_manifest.json`. A tape states no replay result: it is replayed and named in the reason, and fails if it does not parse or does not replay. |
+| `replay_determinism` | The replay evidence the pack declares or carries is consistent with itself: `02_PROOFGRAPH/determinism_manifest.json` states equal `live_hash` and `replay_hash`, and `08_TAPES/tape_manifest.json` parses; a tape that carries entries is replayed by the code `helm-ai-kernel replay` runs and holds; under gate `G2` both manifests must be present, the tape must hold entries, and `05_DIFFS` must hold nothing but empty placeholder files whose names start with `.`. The run is not re-executed, and the two hashes are the pack's own statements. The detail names which files were read. | `00_INDEX.json` `gates` does not declare `G2` and the pack carries no `determinism_manifest.json`. A tape states no replay result: it is replayed and named in the reason, and fails if it does not parse or does not replay. |
 | `host_evidence` (reported per chain file as `<file>:external_host:<check>`) | Host receipt chains parse, hash, link and verify under `--external-host-public-key`. | The pack has no chain file under `host_evidence/` or `11_HOST_EVIDENCE/`. The reason names report files it did not read as chains. |
 | `embedded_signature_trust` | Signatures declared on receipts and attestations verify against configured trust roots, or, under `dev-local`, against keys the sealed pack carries, which the result names as self-attested. Witness signatures are checked only against witness keys the caller configures. | No receipt or attestation declares a signature. |
 
@@ -158,7 +158,11 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     or not, and every replay issue fails the check: a row without an entry, a
     missing field, a value that does not match its hash, an unknown entry
     type, entries out of order. Entry files without a `tape_manifest.json`
-    fail. A tape that replays, in a pack with no determinism manifest, states
+    fail. The entry files of one tape are read up to 256 MiB in all: they are
+    sized before any is read, and a tape past that fails by the name of the
+    entry file that passes it, with no entry read. Under `G2` a tape with no
+    entries fails: it replays nothing, which `replay` reports as `NOT_RUN`.
+    A tape that replays, in a pack with no determinism manifest, states
     no replay result, so the check stays `NOT_RUN` and its reason says the
     tape replayed. Without `G2` the files in `05_DIFFS` are not read:
     producers keep placeholders and other artifacts there, and only `G2`
@@ -167,15 +171,18 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     anything else is a difference. A `gates` value that is not a list of
     gate names is malformed and fails.
   - An `eu_ai_act_profile` is found in every `.json` file, in every document
-    of a line-delimited file, in each repeat of the key and under an escaped
-    spelling of it, after a UTF-8 byte order mark. Nesting deeper than 10000
+    of a line-delimited file, in each repeat of the key, in any letter case
+    and under an escaped spelling of it, after a UTF-8 byte order mark. The
+    name is matched the way `encoding/json` matches a member to a struct
+    field (`strings.EqualFold`), so `EU_AI_ACT_PROFILE` is a profile, as it
+    is to the Go readers of a pack. Nesting deeper than 10000
     levels, the limit `encoding/json` keeps, makes a file one that does not
     parse; it never stops the verifier. A file that does not parse fails when
-    it names the profile, as plain text anywhere in it or as a member the
-    scan finds before or after the damage; otherwise it is counted in the
-    reason. A file over 64 MiB, a file past the first 256 MiB the scan reads
-    in one pack, and a file that is refused (see below) fail the check by
-    name.
+    it names the profile, as plain text anywhere in it (in any letter case)
+    or as a member the scan finds before or after the damage; otherwise it is
+    counted in the reason. A file over 64 MiB, a file past the first 256 MiB
+    the scan reads in one pack, a file that is refused (see below) and the
+    file that holds the 1025th profile in the pack fail the check by name.
   - Under `host_evidence/` and `11_HOST_EVIDENCE/`, a `.json` file named like
     a correlation or verification report is left out of chain verification
     only when it parses as one JSON object or array. If it holds receipts it
@@ -196,9 +203,18 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     lists it, letter case included, so a pack fails the same way on a file
     system that ignores case. A file read whole is read up to 64 MiB; one
     that is larger fails the check that needed it. A host evidence directory
-    that is refused fails `external_host:evidence_dir`. Only
-    `embedded_signature_trust` skips a file it cannot read instead of
-    failing on it.
+    that is refused fails `external_host:evidence_dir`. These reads skip
+    what they cannot read instead of failing on it:
+    `embedded_signature_trust` skips a receipt or attestation file or
+    directory it cannot read, and reads no receipts when the receipts
+    directory is refused (the receipt checks fail that pack), and
+    `host_evidence` skips `host_evidence/`, `11_HOST_EVIDENCE/` or a
+    directory under them that it cannot list. The directory walks of
+    `eu_ai_act_profile`, `host_evidence` and `embedded_signature_trust` do
+    not follow a symbolic link: a link whose name ends in a suffix the check
+    reads (`.json`, and `.jsonl` or `.ndjson` for host chains) is opened
+    through the `os.Root` like a file, and any other link, including one to a
+    directory inside or outside the pack, is passed over without being named.
   - `roots` and `evidence_pack_seal` read the pack by path through the seal
     code, under its own rules: a symbolic link on the path of `00_INDEX.json`,
     of the seal file or of an indexed file is refused, so is a file there that
@@ -206,9 +222,14 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     not list fails the seal. The seal code looks at a file and then opens it
     by name, so a file swapped in between those two steps is not caught
     there. The layout check `verify` and `evidence inspect` add for a pack in
-    the canonical layout tests whether files and directories exist by path,
-    following symbolic links; the one file it reads, `00_INDEX.json`, it reads
-    through the `os.Root`.
+    the canonical layout tests whether the mandatory files and directories
+    exist, lists the pack directory and `99_EXT`, and reads `00_INDEX.json`,
+    all through the `os.Root`: a mandatory name or `99_EXT` that is a
+    symbolic link out of the pack is reported as not read and is never
+    listed. Whether the pack is in the canonical layout (it holds
+    `00_INDEX.json` or `02_PROOFGRAPH`) and whether it carries a conformance
+    signature are tested with `os.Stat` by path, which follows symbolic links;
+    nothing is opened or listed there.
   - Each check opens the pack directory by path when it starts, so a pack
     directory replaced while it is being verified is not covered.
 - The trust profile: `customer` and `high-assurance` require anchor and
@@ -324,15 +345,20 @@ sequence. It reports `COMPLETE` (exit 0) only when all of this holds:
 
 Anything else is `DIVERGED` (exit 1) with the issues listed. A tape with no
 entries is `NOT_RUN` (exit 1): nothing was replayed. A tape that cannot be
-read (a symbolic link, a missing manifest, a file that does not parse) exits
-`2`; with `--json` the command still prints a result, with `replay_status`
-`NOT_RUN`, `entries_replayed` `0` and the reason in `error`. `--verify` also
-requires `data_class` on every entry.
+read (a symbolic link, a missing manifest, a file that does not parse, entry
+files past 256 MiB in all) exits `2`; with `--json` the command still prints
+a result, with `replay_status` `NOT_RUN`, `entries_replayed` `0` and the
+reason in `error`. The entry files are sized before any is read, so a tape
+past 256 MiB is refused by the name of the entry file that passes it without
+any entry being read. `--verify` also requires `data_class` on every entry.
 
 `verify` replays the same tape with the same code in its `replay_determinism`
 check, so the two commands do not disagree on a tape: a tape `replay` reports
 `DIVERGED` fails `verify` too, and so does a tape `replay` cannot read
-because a file in it is a symbolic link or does not parse. The
+because a file in it is a symbolic link or does not parse, or because its
+entry files hold more than 256 MiB. A tape with no entries, which `replay`
+reports as `NOT_RUN`, fails `verify` in a pack that declares gate `G2`; in
+one that does not, `verify` names it as not replayed. The
 `data_class` requirement `--verify` adds is the one rule `verify` does not
 apply.
 

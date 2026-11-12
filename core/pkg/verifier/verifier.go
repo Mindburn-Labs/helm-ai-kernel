@@ -1666,9 +1666,11 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 //
 //   - A pack that declares gate G2 in 00_INDEX.json claims replay evidence, so
 //     all of it is required: 08_TAPES/tape_manifest.json and
-//     02_PROOFGRAPH/determinism_manifest.json must be present and valid, and
-//     05_DIFFS must hold nothing but empty placeholder files (a name that
-//     starts with "."). Anything missing is FAILED.
+//     02_PROOFGRAPH/determinism_manifest.json must be present and valid, the
+//     tape must hold entries to replay, and 05_DIFFS must hold nothing but
+//     empty placeholder files (a name that starts with "."). Anything missing
+//     is FAILED; a tape with no entries replays nothing, which `replay`
+//     reports as NOT_RUN.
 //   - A tape that carries entries (rows in tape_manifest.json or entry_*.json
 //     files) is replayed with tape.Tape.Replay, the code `helm-ai-kernel
 //     replay` runs, whether or not G2 is declared, and every issue it finds
@@ -1736,6 +1738,9 @@ func checkReplayDeterminism(bundlePath string) CheckResult {
 			return failed(name, fmt.Sprintf("invalid tape manifest JSON: %v", err))
 		}
 		if len(manifest.Entries) == 0 && len(entryFiles) == 0 {
+			if declared {
+				return failed(name, "gate G2 requires a tape to replay, and 08_TAPES/tape_manifest.json lists 0 entries with no entry files beside it, so nothing is replayed")
+			}
 			established = append(established, "tape_manifest.json parses and lists 0 entries (not replayed)")
 			break
 		}

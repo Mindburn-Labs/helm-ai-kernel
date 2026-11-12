@@ -187,12 +187,13 @@ func TestVerifyBundle_UnparseableManifestFailsFileHashes(t *testing.T) {
 	assertCheck(t, report, "file_hashes", false)
 }
 
-// The replay gate compares two hashes the pack states about itself and parses
+// The replay check compares two hashes the pack states about itself and parses
 // the tape manifest. Its passing detail must say that and must not claim a
-// replay happened.
+// replay happened. The pack does not declare G2: under G2 a tape with no
+// entries fails (TestReplayDeterminism_G2RequiresATapeWithEntries).
 func TestVerifyBundle_ReplayDeterminismDetailSaysWhatWasCompared(t *testing.T) {
 	dir := createValidBundleFixture(t)
-	setBundleGates(t, dir, "G0", "G1", "G2")
+	setBundleGates(t, dir, "G0", "G1")
 	for _, sub := range []string{"08_TAPES", "02_PROOFGRAPH"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)

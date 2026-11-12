@@ -166,14 +166,23 @@ func TestCheckResult_JSONRoundtrip(t *testing.T) {
 }
 
 func TestFileExists_False(t *testing.T) {
-	if fileExists("/tmp/does-not-exist-xyz-99999") {
-		t.Fatal("should return false for nonexistent file")
+	pack := openPack(t.TempDir())
+	defer pack.close()
+	if has, err := pack.hasFile("does-not-exist-xyz-99999"); has || err != nil {
+		t.Fatalf("hasFile = %v, %v; should return false and no error for a nonexistent file", has, err)
+	}
+	missing := openPack("/tmp/does-not-exist-xyz-99999")
+	defer missing.close()
+	if has, err := missing.hasFile("00_INDEX.json"); has || err != nil {
+		t.Fatalf("hasFile in a missing pack = %v, %v; should return false and no error", has, err)
 	}
 }
 
 func TestDirExists_False(t *testing.T) {
-	if dirExists("/tmp/does-not-exist-dir-xyz-99999") {
-		t.Fatal("should return false for nonexistent dir")
+	pack := openPack(t.TempDir())
+	defer pack.close()
+	if has, err := pack.hasDir("does-not-exist-dir-xyz-99999"); has || err != nil {
+		t.Fatalf("hasDir = %v, %v; should return false and no error for a nonexistent dir", has, err)
 	}
 }
 

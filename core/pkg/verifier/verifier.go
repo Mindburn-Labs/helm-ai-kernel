@@ -33,7 +33,9 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // VerifyReport is the structured output of offline verification.
@@ -380,8 +382,10 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 }
 
 func enrichReportMetadata(bundlePath string, report *VerifyReport, opts VerifyOptions) {
+	pack := openPack(bundlePath)
+	defer pack.close()
 	for _, name := range []string{"00_INDEX.json", "manifest.json"} {
-		data, err := os.ReadFile(filepath.Join(bundlePath, name))
+		data, err := pack.readFile(name)
 		if err != nil {
 			continue
 		}
@@ -492,15 +496,20 @@ func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, in
 	valid := 0
 	selfAttested := 0
 	total := 0
-	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
-		if !dirExists(dir) {
+	pack := openPack(bundlePath)
+	defer pack.close()
+	receipts, _ := receiptDir(pack)
+	for _, dir := range []string{receipts, "07_ATTESTATIONS"} {
+		if has, _ := pack.hasDir(dir); !has {
 			continue
 		}
-		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		// A file that cannot be read safely is skipped here; the chain checks
+		// and the seal fail a pack that holds one.
+		_ = pack.walk(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
 				return nil
 			}
-			data, readErr := os.ReadFile(path)
+			data, readErr := pack.readFile(path)
 			if readErr != nil {
 				return nil
 			}
@@ -869,8 +878,16 @@ func checkStructure(bundlePath string) CheckResult {
 	}
 
 	// Check for manifest.json or 00_INDEX.json
-	hasManifest := fileExists(filepath.Join(bundlePath, "manifest.json"))
-	hasIndex := fileExists(filepath.Join(bundlePath, "00_INDEX.json"))
+	pack := openPack(bundlePath)
+	defer pack.close()
+	hasManifest, err := pack.hasFile("manifest.json")
+	if err != nil {
+		return failed("structure", fmt.Sprintf("manifest.json is not read: %v", err))
+	}
+	hasIndex, err := pack.hasFile("00_INDEX.json")
+	if err != nil {
+		return failed("structure", fmt.Sprintf("00_INDEX.json is not read: %v", err))
+	}
 
 	if !hasManifest && !hasIndex {
 		return CheckResult{Name: "structure", Pass: false, Reason: "missing manifest.json or 00_INDEX.json"}
@@ -890,15 +907,20 @@ func checkStructure(bundlePath string) CheckResult {
 
 func checkIndex(bundlePath string) CheckResult {
 	const name = "index_integrity"
-	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
-	if !fileExists(indexPath) {
+	pack := openPack(bundlePath)
+	defer pack.close()
+	hasIndex, err := pack.hasFile("00_INDEX.json")
+	if err != nil {
+		return failed(name, fmt.Sprintf("cannot read index: %v", err))
+	}
+	if !hasIndex {
 		// A manifest.json pack lists its hashes in the manifest; file_hashes
 		// reads those. Parsing the manifest here used to count as index
 		// integrity although no index was compared.
 		return notRun(name, "pack has no 00_INDEX.json, so there are no indexed hashes to compare")
 	}
 
-	data, err := os.ReadFile(indexPath)
+	data, err := pack.readFile("00_INDEX.json")
 	if err != nil {
 		return failed(name, fmt.Sprintf("cannot read index: %v", err))
 	}
@@ -913,14 +935,16 @@ func checkIndex(bundlePath string) CheckResult {
 		if entry.Path == "" {
 			return failed(name, "index entry path is required")
 		}
-		data, err := readPackFile(bundlePath, entry.Path)
-		if errors.Is(err, errOutsidePack) {
+		actual, err := pack.hashNamed(entry.Path)
+		switch {
+		case errors.Is(err, packfs.ErrOutside):
 			return failed(name, fmt.Sprintf("index entry escapes bundle: %v", err))
-		}
-		if err != nil {
+		case absent(err):
 			return failed(name, fmt.Sprintf("indexed file missing %s: %v", entry.Path, err))
+		case err != nil:
+			return failed(name, fmt.Sprintf("indexed file %s cannot be read: %v", entry.Path, err))
 		}
-		if actual := sha256Hex(data); actual != entry.SHA256 {
+		if actual != entry.SHA256 {
 			return failed(name, fmt.Sprintf("indexed hash mismatch for %s: expected %s, got %s", entry.Path, entry.SHA256, actual))
 		}
 	}
@@ -933,7 +957,13 @@ func checkIndex(bundlePath string) CheckResult {
 // index_integrity.
 func checkRoots(bundlePath string, report *VerifyReport) CheckResult {
 	const name = "roots"
-	if !fileExists(filepath.Join(bundlePath, "00_INDEX.json")) {
+	pack := openPack(bundlePath)
+	hasIndex, err := pack.hasFile("00_INDEX.json")
+	pack.close()
+	if err != nil {
+		return failed(name, fmt.Sprintf("00_INDEX.json is not read: %v", err))
+	}
+	if !hasIndex {
 		return notRun(name, "pack has no 00_INDEX.json to derive roots from")
 	}
 	roots, err := computeIndexRoots(bundlePath)
@@ -963,9 +993,6 @@ type indexFile struct {
 }
 
 func computeIndexRoots(bundlePath string) (VerifyRoots, error) {
-	if !fileExists(filepath.Join(bundlePath, "00_INDEX.json")) {
-		return VerifyRoots{}, nil
-	}
 	roots, err := evidencepkg.ComputeEvidencePackIndexRoots(bundlePath)
 	if err != nil {
 		return VerifyRoots{}, err
@@ -977,61 +1004,18 @@ func computeIndexRoots(bundlePath string) (VerifyRoots, error) {
 	}, nil
 }
 
-// errOutsidePack marks a path a pack file names that does not stay inside the
-// pack directory.
-var errOutsidePack = errors.New("path is outside the pack")
-
-// packFilePath resolves a path that a pack file names (an 00_INDEX.json entry
-// or a manifest.json file_hashes key) to the file to read. It is the one
-// containment rule for both: the path must be relative, must not contain a
-// ".." segment, and must still be inside the pack directory once symbolic
-// links are resolved. A path that breaks the rule returns an error wrapping
-// errOutsidePack; any other error means the file could not be found.
-//
-// Without it a manifest naming "../../outside.txt" had that file hashed and
-// reported as a verified pack file.
-func packFilePath(bundlePath, name string) (string, error) {
-	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" || strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) {
-		return "", fmt.Errorf("%w: %q is absolute, and a pack names its files relative to its own directory", errOutsidePack, name)
-	}
-	for _, segment := range strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if segment == ".." {
-			return "", fmt.Errorf("%w: %q contains a \"..\" segment", errOutsidePack, name)
-		}
-	}
-	root, err := filepath.EvalSymlinks(bundlePath)
-	if err != nil {
-		return "", fmt.Errorf("cannot resolve the pack directory: %v", err)
-	}
-	resolved, err := filepath.EvalSymlinks(filepath.Join(bundlePath, filepath.FromSlash(name)))
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(root, resolved)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("%w: %q resolves through a symbolic link to a file that is not in the pack directory", errOutsidePack, name)
-	}
-	return resolved, nil
-}
-
-// readPackFile reads a file the pack names, after packFilePath has held the
-// name inside the pack directory. index_integrity and file_hashes both read
-// through it, so neither can be pointed at a file the pack does not hold.
-func readPackFile(bundlePath, name string) ([]byte, error) {
-	resolved, err := packFilePath(bundlePath, name)
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(resolved) // #nosec G304 -- packFilePath resolved the path and refused any that leaves the pack directory
-}
-
 func checkFileHashes(bundlePath string) []CheckResult {
 	var results []CheckResult
 
 	// Try manifest.json with file_hashes
-	manifestPath := filepath.Join(bundlePath, "manifest.json")
-	if fileExists(manifestPath) {
-		data, err := os.ReadFile(manifestPath)
+	pack := openPack(bundlePath)
+	defer pack.close()
+	hasManifest, err := pack.hasFile("manifest.json")
+	if err != nil {
+		return []CheckResult{failed("file_hashes", fmt.Sprintf("cannot read manifest: %v", err))}
+	}
+	if hasManifest {
+		data, err := pack.readFile("manifest.json")
 		if err != nil {
 			return []CheckResult{{Name: "file_hashes", Pass: false, Reason: fmt.Sprintf("cannot read manifest: %v", err)}}
 		}
@@ -1057,19 +1041,22 @@ func checkFileHashes(bundlePath string) []CheckResult {
 
 		for _, name := range keys {
 			expectedHash := manifest.FileHashes[name]
-			content, err := readPackFile(bundlePath, name)
-			if errors.Is(err, errOutsidePack) {
+			actualHash, err := pack.hashNamed(name)
+			if errors.Is(err, packfs.ErrOutside) {
 				results = append(results, failed(fmt.Sprintf("hash:%s", name), fmt.Sprintf("manifest path is outside the pack, so it was not read: %v", err)))
 				continue
 			}
-			if err != nil {
+			if absent(err) {
 				results = append(results, CheckResult{
 					Name: fmt.Sprintf("hash:%s", name), Pass: false,
 					Reason: fmt.Sprintf("file missing: %v", err),
 				})
 				continue
 			}
-			actualHash := sha256Hex(content)
+			if err != nil {
+				results = append(results, failed(fmt.Sprintf("hash:%s", name), fmt.Sprintf("file cannot be read: %v", err)))
+				continue
+			}
 			if actualHash != expectedHash {
 				results = append(results, CheckResult{
 					Name: fmt.Sprintf("hash:%s", name), Pass: false,
@@ -1093,13 +1080,19 @@ func checkFileHashes(bundlePath string) []CheckResult {
 }
 
 func checkConnectorEvidence(bundlePath string) CheckResult {
+	pack := openPack(bundlePath)
+	defer pack.close()
 	path := ""
 	for _, candidate := range []string{
-		filepath.Join(bundlePath, "connector_evidence.json"),
-		filepath.Join(bundlePath, "09_SCHEMAS", "connector_evidence.json"),
-		filepath.Join(bundlePath, "07_ATTESTATIONS", "connector_evidence.json"),
+		"connector_evidence.json",
+		"09_SCHEMAS/connector_evidence.json",
+		"07_ATTESTATIONS/connector_evidence.json",
 	} {
-		if fileExists(candidate) {
+		present, err := pack.hasFile(candidate)
+		if err != nil {
+			return failed("connector_evidence", fmt.Sprintf("%s is not read: %v", candidate, err))
+		}
+		if present {
 			path = candidate
 			break
 		}
@@ -1108,7 +1101,7 @@ func checkConnectorEvidence(bundlePath string) CheckResult {
 		return notRun("connector_evidence", "pack has no connector_evidence.json")
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := pack.readFile(path)
 	if err != nil {
 		return CheckResult{Name: "connector_evidence", Pass: false, Reason: fmt.Sprintf("cannot read connector evidence: %v", err)}
 	}
@@ -1169,10 +1162,18 @@ func parseConnectorEvidenceRecords(data []byte) ([]evidencepkg.ConnectorEvidence
 
 func checkChainIntegrity(bundlePath string) CheckResult {
 	// Look for proofgraph.json or 02_PROOFGRAPH/
-	pgPath := filepath.Join(bundlePath, "proofgraph.json")
-	pgDir := filepath.Join(bundlePath, "02_PROOFGRAPH")
+	pack := openPack(bundlePath)
+	defer pack.close()
+	hasGraph, err := pack.hasFile("proofgraph.json")
+	if err != nil {
+		return failed("chain_integrity", fmt.Sprintf("proofgraph.json is not read: %v", err))
+	}
+	hasGraphDir, err := pack.hasDir("02_PROOFGRAPH")
+	if err != nil {
+		return failed("chain_integrity", fmt.Sprintf("02_PROOFGRAPH is not read: %v", err))
+	}
 
-	if !fileExists(pgPath) && !dirExists(pgDir) {
+	if !hasGraph && !hasGraphDir {
 		return CheckResult{
 			Name:   "chain_integrity",
 			Pass:   false,
@@ -1180,8 +1181,8 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 		}
 	}
 
-	if fileExists(pgPath) {
-		data, err := os.ReadFile(pgPath)
+	if hasGraph {
+		data, err := pack.readFile("proofgraph.json")
 		if err != nil {
 			return CheckResult{Name: "chain_integrity", Pass: false, Reason: fmt.Sprintf("cannot read proofgraph: %v", err)}
 		}
@@ -1195,8 +1196,12 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 	// check — it never read prev_hash and never walked a parent, so a chain with
 	// its middle removed, its order changed, or a fork grafted on reported
 	// "chain integrity: PASS" (F-03). Actually link the receipts.
-	if !packClaimsAChain(receiptPath(bundlePath)) {
-		return unchainedPackResult("chain_integrity", receiptPath(bundlePath))
+	receipts, err := receiptDir(pack)
+	if err != nil {
+		return failed("chain_integrity", err.Error())
+	}
+	if !packClaimsAChain(pack, receipts) {
+		return unchainedPackResult(pack, "chain_integrity", receipts)
 	}
 	chains, res := loadReceiptChains(bundlePath, "chain_integrity")
 	if res != nil {
@@ -1235,8 +1240,14 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 // This previously returned Pass with "%d receipt files present" straight from
 // os.ReadDir — no clock was ever parsed, so any ordering claim passed (F-03).
 func checkLamportMonotonicity(bundlePath string) CheckResult {
-	if !packClaimsAChain(receiptPath(bundlePath)) {
-		return unchainedPackResult("lamport_monotonicity", receiptPath(bundlePath))
+	pack := openPack(bundlePath)
+	defer pack.close()
+	receipts, err := receiptDir(pack)
+	if err != nil {
+		return failed("lamport_monotonicity", err.Error())
+	}
+	if !packClaimsAChain(pack, receipts) {
+		return unchainedPackResult(pack, "lamport_monotonicity", receipts)
 	}
 	chains, res := loadReceiptChains(bundlePath, "lamport_monotonicity")
 	if res != nil {
@@ -1336,11 +1347,19 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 		return nil, &CheckResult{Name: checkName, Pass: false, Reason: fmt.Sprintf(format, args...)}
 	}
 
-	receiptsDir := receiptPath(bundlePath)
-	if !dirExists(receiptsDir) {
+	pack := openPack(bundlePath)
+	defer pack.close()
+	receiptsDir, err := receiptDir(pack)
+	if err != nil {
+		return fail("%v", err)
+	}
+	if has, err := pack.hasDir(receiptsDir); err != nil || !has {
+		if err != nil {
+			return fail("cannot read receipts: %v", err)
+		}
 		return fail("missing receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — chain of custody cannot be verified")
 	}
-	entries, err := os.ReadDir(receiptsDir)
+	entries, err := pack.readDir(receiptsDir)
 	if err != nil {
 		return fail("cannot read receipts: %v", err)
 	}
@@ -1351,8 +1370,7 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		filePath := filepath.Join(receiptsDir, entry.Name())
-		data, err := os.ReadFile(filePath)
+		data, err := pack.readFile(receiptsDir + "/" + entry.Name())
 		if err != nil {
 			return fail("cannot read receipt %s: %v", entry.Name(), err)
 		}
@@ -1521,11 +1539,11 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 // what the pack claims, and the report says so in plain text instead of
 // reporting a verified chain. A missing or empty receipts directory is not "no
 // chain claimed" — it is a pack with no evidence, so it falls through and fails.
-func packClaimsAChain(receiptsDir string) bool {
-	if !dirExists(receiptsDir) {
+func packClaimsAChain(pack *packFiles, receiptsDir string) bool {
+	if has, err := pack.hasDir(receiptsDir); err != nil || !has {
 		return true
 	}
-	entries, err := os.ReadDir(receiptsDir)
+	entries, err := pack.readDir(receiptsDir)
 	if err != nil {
 		return true
 	}
@@ -1535,7 +1553,7 @@ func packClaimsAChain(receiptsDir string) bool {
 			continue
 		}
 		receipts++
-		data, err := os.ReadFile(filepath.Join(receiptsDir, entry.Name()))
+		data, err := pack.readFile(receiptsDir + "/" + entry.Name())
 		if err != nil {
 			// An unreadable receipt must not be read as "no chain claimed" —
 			// that would let a corrupt or deliberately unreadable file skip the
@@ -1556,8 +1574,8 @@ func packClaimsAChain(receiptsDir string) bool {
 
 // unchainedPackResult describes a pack that makes no chaining claim. There is
 // no chain to walk, so the check did not run; it used to be counted as passed.
-func unchainedPackResult(checkName, receiptsDir string) CheckResult {
-	entries, _ := os.ReadDir(receiptsDir)
+func unchainedPackResult(pack *packFiles, checkName, receiptsDir string) CheckResult {
+	entries, _ := pack.readDir(receiptsDir)
 	n := 0
 	for _, e := range entries {
 		if !e.IsDir() && filepath.Ext(e.Name()) == ".json" {
@@ -1573,13 +1591,21 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 	// receipts use decision_hash. Current MCP proof receipts use the signed
 	// EffectID, OutputHash (complete authorization evaluation), and ArgsHash
 	// (raw authorization inputs), avoiding an unsigned compatibility field.
-	receiptsDir := receiptPath(bundlePath)
-	if !dirExists(receiptsDir) {
+	pack := openPack(bundlePath)
+	defer pack.close()
+	receiptsDir, err := receiptDir(pack)
+	if err != nil {
+		return failed("policy_decision_hashes", err.Error())
+	}
+	if has, err := pack.hasDir(receiptsDir); err != nil || !has {
+		if err != nil {
+			return failed("policy_decision_hashes", fmt.Sprintf("cannot read receipts: %v", err))
+		}
 		// Already caught by lamport check, but note here too
 		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — no policy decision binding to look for"}
 	}
 
-	entries, err := os.ReadDir(receiptsDir)
+	entries, err := pack.readDir(receiptsDir)
 	if err != nil || len(entries) == 0 {
 		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipt files to look for a policy decision binding in"}
 	}
@@ -1594,10 +1620,11 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 		if entry.IsDir() {
 			continue
 		}
-		filePath := filepath.Join(receiptsDir, entry.Name())
-		data, err := os.ReadFile(filePath)
+		data, err := pack.readFile(receiptsDir + "/" + entry.Name())
 		if err != nil {
-			continue
+			// A receipt the pack holds but that cannot be read safely (a link
+			// out of the pack, a named pipe) is not one with no binding.
+			return failed("policy_decision_hashes", fmt.Sprintf("cannot read receipt %s: %v", entry.Name(), err))
 		}
 		var receipt map[string]any
 		if err := json.Unmarshal(data, &receipt); err != nil {
@@ -1640,7 +1667,12 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 //   - A pack that declares gate G2 in 00_INDEX.json claims replay evidence, so
 //     all of it is required: 08_TAPES/tape_manifest.json and
 //     02_PROOFGRAPH/determinism_manifest.json must be present and valid, and
-//     05_DIFFS must hold no files. Anything missing is FAILED.
+//     05_DIFFS must hold nothing but empty placeholder files (a name that
+//     starts with "."). Anything missing is FAILED.
+//   - A tape that carries entries (rows in tape_manifest.json or entry_*.json
+//     files) is replayed with tape.Tape.Replay, the code `helm-ai-kernel
+//     replay` runs, whether or not G2 is declared, and every issue it finds
+//     fails the check. Entry files without a tape manifest fail too.
 //   - A pack that does not declare G2 is still checked on the replay material
 //     it carries. A determinism manifest is the replay result: when present it
 //     must parse and state equal live_hash and replay_hash, so diverging
@@ -1648,47 +1680,81 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 //     05_DIFFS is not read here: producers keep placeholders and other
 //     artifacts in it, and only G2 makes its files replay differences.
 //   - NOT_RUN only when G2 is not declared and the pack carries no
-//     determinism manifest. A tape manifest alone states no replay result, so
-//     it does not make the check run; it is still parsed, fails if it does not
-//     parse, and is named in the reason.
+//     determinism manifest. A tape states no replay result, so it does not
+//     make the check run; it is still replayed, fails if it does not replay,
+//     and is named in the reason.
 //   - A gates value that is not a list of gate names is malformed input and
 //     FAILED: it cannot be read as "G2 is not declared".
 //
-// It replays nothing: live_hash and replay_hash are the pack's own
-// statements, and the tape is not served back.
+// live_hash and replay_hash are the pack's own statements. Replaying the tape
+// serves its recorded inputs back and compares them with their hashes and the
+// manifest; it does not re-execute the run.
 func checkReplayDeterminism(bundlePath string) CheckResult {
 	const name = "replay_determinism"
-	declared, undeclared, err := replayGateDeclared(bundlePath)
+	const (
+		tapesDir     = "08_TAPES"
+		tapeManifest = "08_TAPES/tape_manifest.json"
+		detManifest  = "02_PROOFGRAPH/determinism_manifest.json"
+	)
+	pack := openPack(bundlePath)
+	defer pack.close()
+	declared, undeclared, err := replayGateDeclared(pack)
 	if err != nil {
 		return failed(name, err.Error())
 	}
 
-	tapesDir := filepath.Join(bundlePath, "08_TAPES")
-	manifestPath := filepath.Join(tapesDir, "tape_manifest.json")
-	detManifestPath := filepath.Join(bundlePath, "02_PROOFGRAPH", "determinism_manifest.json")
-	hasTapeManifest := fileExists(manifestPath)
-	hasDetManifest := fileExists(detManifestPath)
+	hasTapesDir, err := pack.hasDir(tapesDir)
+	if err != nil {
+		return failed(name, fmt.Sprintf("%s is not read: %v", tapesDir, err))
+	}
+	hasTapeManifest, err := pack.hasFile(tapeManifest)
+	if err != nil {
+		return failed(name, fmt.Sprintf("%s is not read: %v", tapeManifest, err))
+	}
+	hasDetManifest, err := pack.hasFile(detManifest)
+	if err != nil {
+		return failed(name, fmt.Sprintf("%s is not read: %v", detManifest, err))
+	}
+	var entryFiles []string
+	if hasTapesDir {
+		if entryFiles, err = tape.EntryFileNames(pack.fs, tapesDir); err != nil {
+			return failed(name, fmt.Sprintf("cannot list %s: %v", tapesDir, err))
+		}
+	}
 
 	// established lists what was read and held.
 	var established []string
 
 	switch {
 	case hasTapeManifest:
-		manifestData, err := os.ReadFile(manifestPath)
+		manifestData, err := pack.readFile(tapeManifest)
 		if err != nil {
 			return failed(name, fmt.Sprintf("cannot read tape manifest: %v", err))
 		}
-		var tapeManifest map[string]any
-		if err := json.Unmarshal(manifestData, &tapeManifest); err != nil {
+		manifest, err := tape.ParseManifest(manifestData)
+		if err != nil {
 			return failed(name, fmt.Sprintf("invalid tape manifest JSON: %v", err))
 		}
-		entryCount := 0
-		if entries, ok := tapeManifest["entries"].([]any); ok {
-			entryCount = len(entries)
+		if len(manifest.Entries) == 0 && len(entryFiles) == 0 {
+			established = append(established, "tape_manifest.json parses and lists 0 entries (not replayed)")
+			break
 		}
-		established = append(established, fmt.Sprintf("tape_manifest.json parses and lists %d entries (not replayed)", entryCount))
+		recorded, err := tape.LoadTape(pack.fs, tapesDir)
+		if err != nil {
+			return failed(name, fmt.Sprintf("the tape cannot be replayed: %v", err))
+		}
+		replayed, issues := recorded.Replay()
+		if len(issues) > 0 {
+			return failed(name, fmt.Sprintf("the tape does not replay: %d of %d tape entries replayed, %d issues: %s",
+				replayed, len(recorded.Entries), len(issues), summarizeIssues(issues, 10)))
+		}
+		established = append(established, fmt.Sprintf("tape_manifest.json lists %d entries and the tape replays: %d of %d tape entries replayed through the tape replayer, "+
+			"each matching its value_hash and tape_manifest.json (recorded inputs served back, the run is not re-executed)",
+			len(manifest.Entries), replayed, len(recorded.Entries)))
+	case len(entryFiles) > 0:
+		return failed(name, fmt.Sprintf("08_TAPES holds %d entry files but no tape_manifest.json, so the tape cannot be replayed", len(entryFiles)))
 	case !declared:
-	case !dirExists(tapesDir):
+	case !hasTapesDir:
 		return failed(name, "missing 08_TAPES directory — replay evidence required")
 	default:
 		return failed(name, "missing 08_TAPES/tape_manifest.json — replay evidence required")
@@ -1696,7 +1762,7 @@ func checkReplayDeterminism(bundlePath string) CheckResult {
 
 	switch {
 	case hasDetManifest:
-		detManifestData, err := os.ReadFile(detManifestPath)
+		detManifestData, err := pack.readFile(detManifest)
 		if err != nil {
 			return failed(name, fmt.Sprintf("cannot read determinism manifest: %v", err))
 		}
@@ -1734,12 +1800,46 @@ func checkReplayDeterminism(bundlePath string) CheckResult {
 			strings.Join(established, "; "), notRead))
 	}
 
-	diffsDir := filepath.Join(bundlePath, "05_DIFFS")
-	if entries, err := os.ReadDir(diffsDir); err == nil && len(entries) > 0 {
-		return failed(name, "05_DIFFS contains replay differences")
+	differences, err := replayDifferences(pack)
+	if err != nil {
+		return failed(name, fmt.Sprintf("cannot read 05_DIFFS: %v", err))
 	}
-	established = append(established, "05_DIFFS holds no files")
+	if len(differences) > 0 {
+		return failed(name, "05_DIFFS contains replay differences: "+summarizeNames(differences, 5))
+	}
+	established = append(established, "05_DIFFS holds no files other than empty placeholders")
 	return verified(name, "gate G2 evidence is present: "+strings.Join(established, "; "))
+}
+
+// replayDifferences lists what 05_DIFFS holds besides placeholders. A
+// placeholder is an empty regular file whose name starts with ".", such as
+// the .keep the launchpad writer creates. A missing 05_DIFFS holds nothing.
+func replayDifferences(pack *packFiles) ([]string, error) {
+	entries, err := pack.readDir("05_DIFFS")
+	if absent(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var differences []string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") && entry.Type().IsRegular() {
+			if info, err := entry.Info(); err == nil && info.Size() == 0 {
+				continue
+			}
+		}
+		differences = append(differences, "05_DIFFS/"+entry.Name())
+	}
+	return differences, nil
+}
+
+// summarizeIssues joins up to limit issues and says how many it left out.
+func summarizeIssues(issues []string, limit int) string {
+	if len(issues) <= limit {
+		return strings.Join(issues, "; ")
+	}
+	return fmt.Sprintf("%s; and %d more", strings.Join(issues[:limit], "; "), len(issues)-limit)
 }
 
 // replayGateDeclared reports whether 00_INDEX.json declares gate G2, which is
@@ -1747,13 +1847,16 @@ func checkReplayDeterminism(bundlePath string) CheckResult {
 // returned text says what the index declares instead. An index that cannot be
 // read or parsed declares nothing either way, and neither does a gates value
 // that is not a list of gate names: both are errors, not "G2 is not declared".
-func replayGateDeclared(bundlePath string) (bool, string, error) {
-	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
-	if !fileExists(indexPath) {
+func replayGateDeclared(pack *packFiles) (bool, string, error) {
+	hasIndex, err := pack.hasFile("00_INDEX.json")
+	if err != nil {
+		return false, "", fmt.Errorf("cannot read the gates 00_INDEX.json declares: %v", err)
+	}
+	if !hasIndex {
 		return false, "pack has no 00_INDEX.json, so it declares no gates", nil
 	}
 
-	data, err := os.ReadFile(indexPath)
+	data, err := pack.readFile("00_INDEX.json")
 	if err != nil {
 		return false, "", fmt.Errorf("cannot read the gates 00_INDEX.json declares: %v", err)
 	}
@@ -1810,22 +1913,18 @@ func checkHostEvidence(bundlePath string, opts VerifyOptions) []CheckResult {
 
 // --- Helpers ---
 
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
-func receiptPath(bundlePath string) string {
-	legacy := filepath.Join(bundlePath, "receipts")
-	if dirExists(legacy) {
-		return legacy
+// receiptDir is where the pack keeps its receipts: receipts/ when that
+// directory exists, else 02_PROOFGRAPH/receipts/. A receipts name that leaves
+// the pack is an error, not a missing directory.
+func receiptDir(pack *packFiles) (string, error) {
+	legacy, err := pack.hasDir("receipts")
+	if err != nil {
+		return "", fmt.Errorf("receipts is not read: %v", err)
 	}
-	return filepath.Join(bundlePath, "02_PROOFGRAPH", "receipts")
+	if legacy {
+		return "receipts", nil
+	}
+	return "02_PROOFGRAPH/receipts", nil
 }
 
 func sha256Hex(data []byte) string {

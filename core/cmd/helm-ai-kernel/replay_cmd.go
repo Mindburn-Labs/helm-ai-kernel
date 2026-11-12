@@ -1,17 +1,13 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"sort"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // Replay statuses.
@@ -22,10 +18,12 @@ const (
 	// who wrote the tape: see replaySealNotice.
 	replayStatusComplete = "COMPLETE"
 	// replayStatusDiverged: the replayer missed an entry, a served value does
-	// not match what was recorded, the entry files are out of order, or the
-	// manifest and the tape disagree.
+	// not match what was recorded, the entry files are out of order, an entry
+	// has a type the recorder never writes, or the manifest and the tape
+	// disagree.
 	replayStatusDiverged = "DIVERGED"
-	// replayStatusNotRun: the tape holds no entries, so nothing was replayed.
+	// replayStatusNotRun: the tape holds no entries, or could not be read, so
+	// nothing was replayed.
 	replayStatusNotRun = "NOT_RUN"
 )
 
@@ -38,16 +36,20 @@ const replaySealNotice = "The pack seal is not checked: a tape and tape_manifest
 // runReplayCmd implements `helm-ai-kernel replay` per §2.1.
 //
 // It serves the recorded tape of a run back through tape.Replayer and reports
-// what the replayer returned. COMPLETE means all of this held:
+// what the replayer returned. The tape is read through one os.Root on the
+// pack (package packfs) and judged by tape.Tape.Replay, the same code the
+// verifier's replay_determinism check runs. COMPLETE means all of this held:
 //
 //   - 08_TAPES, tape_manifest.json and every entry_*.json are real files and
 //     directories, not symbolic links;
-//   - the entry files, in name order, carry strictly increasing sequence
-//     numbers;
-//   - every entry was served in sequence from 1 with no tape miss, and each
-//     served value matches the value_hash recorded on its entry;
-//   - tape_manifest.json lists every entry exactly once, and every field it
-//     carries for an entry equals that entry.
+//   - the entry files, in the order of the number in their name, carry
+//     strictly increasing sequence numbers;
+//   - every entry was served in sequence from 1 with no tape miss, each
+//     served value matches the value_hash recorded on its entry, and each
+//     entry has a type the recorder writes;
+//   - tape_manifest.json lists every entry exactly once, every row carries
+//     seq, type, key, sha256 and size_bytes, and every field it carries for an
+//     entry equals that entry.
 //
 // It replays recorded inputs only. It does not re-execute the run or compare
 // decisions: this command has the tape, not the code and policy that consumed
@@ -59,7 +61,8 @@ const replaySealNotice = "The pack seal is not checked: a tape and tape_manifest
 //	0 = every tape entry was replayed and matched
 //	1 = the replay diverged, or the tape holds nothing to replay
 //	2 = runtime or usage error, or a symbolic link where the tape should be;
-//	    nothing was replayed
+//	    nothing was replayed. Under --json the result is still printed, with
+//	    replay_status NOT_RUN and the error.
 func runReplayCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("replay", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -83,34 +86,38 @@ func runReplayCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// Everything under the tape directory is named by the pack. A symbolic
-	// link there points at bytes the pack does not hold, so it is refused
-	// instead of followed.
-	tapesDir := filepath.Join(evidenceDir, "08_TAPES")
-	if err := requireNoSymlink(tapesDir, true); err != nil {
+	// fail reports a tape that could not be read. Nothing was replayed.
+	fail := func(err error) int {
 		writeText(stderr, "Error: %s\n", err)
-		return 2
-	}
-	if err := requireNoSymlink(filepath.Join(tapesDir, "tape_manifest.json"), false); err != nil {
-		writeText(stderr, "Error: cannot read tape manifest: %s\n", err)
+		if jsonOutput {
+			data, _ := json.MarshalIndent(map[string]any{
+				"evidence_dir":     evidenceDir,
+				"entries_replayed": 0,
+				"replay_status":    replayStatusNotRun,
+				"seal_checked":     false,
+				"error":            err.Error(),
+			}, "", "  ")
+			_, _ = fmt.Fprintln(stdout, string(data))
+		}
 		return 2
 	}
 
-	// Load manifest using tape package API
-	manifest, err := tape.ReadManifest(tapesDir)
+	pack, err := packfs.Open(evidenceDir)
 	if err != nil {
-		writeText(stderr, "Error: cannot read tape manifest: %s\n", err)
-		return 2
+		return fail(fmt.Errorf("cannot open the evidence pack: %w", err))
 	}
+	defer func() { _ = pack.Close() }()
 
-	// Load tape entries from individual files
-	entries, files, err := loadTapeEntries(tapesDir)
+	// Everything under the tape directory is named by the pack. A symbolic
+	// link there points at bytes the pack does not hold, so LoadTape refuses
+	// it instead of following it.
+	recorded, err := tape.LoadTape(pack, "08_TAPES")
 	if err != nil {
-		writeText(stderr, "Error: cannot load tape entries: %s\n", err)
-		return 2
+		return fail(err)
 	}
+	manifest, entries := recorded.Manifest, recorded.Entries
 
-	replayed, issues := replayTape(entries, files, manifest)
+	replayed, issues := recorded.Replay()
 	if verify {
 		for i, e := range entries {
 			if e.DataClass == "" {
@@ -156,7 +163,8 @@ func runReplayCmd(args []string, stdout, stderr io.Writer) int {
 		default:
 			writeText(stdout, "Replayed %d of %d tape entries through the tape replayer.\n", replayed, len(entries))
 			writeText(stdout, "COMPLETE means: the entry files are in sequence order; every entry was served in sequence from 1 with no tape miss; "+
-				"each served value matches the value_hash recorded on its entry; tape_manifest.json lists every entry exactly once; "+
+				"each served value matches the value_hash recorded on its entry; every entry has a type the recorder writes; "+
+				"tape_manifest.json lists every entry exactly once with seq, type, key, sha256 and size_bytes; "+
 				"and every field tape_manifest.json carries for an entry equals that entry.\n")
 			writeText(stdout, "%s\n", replaySealNotice)
 			writeText(stdout, "This replays recorded inputs only; it does not re-execute the run or compare decisions.\n")
@@ -169,139 +177,6 @@ func runReplayCmd(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// replayTape serves the tape back through tape.Replayer the way a replayed run
-// consumes it, front to back, and returns how many entries were served with
-// their recorded value intact, plus everything that did not hold. files names
-// the entry file each entry was read from, in the order they were read.
-func replayTape(entries []tape.Entry, files []string, manifest *tape.Manifest) (int, []string) {
-	var issues []string
-
-	// The replayer keys entries by seq, so the order of the files does not
-	// change what it serves. A tape whose files are out of sequence order was
-	// still not written by a recorder, which numbers entries as it appends.
-	for i := 1; i < len(entries); i++ {
-		if entries[i].Seq <= entries[i-1].Seq {
-			issues = append(issues, fmt.Sprintf("entry files are not in sequence order: %s holds seq=%d after seq=%d in %s",
-				files[i], entries[i].Seq, entries[i-1].Seq, files[i-1]))
-		}
-	}
-
-	replayer := tape.NewReplayer(entries)
-	if replayer.Count() != len(entries) {
-		// The replayer keys entries by seq, so a repeated seq leaves one entry
-		// that can never be served.
-		issues = append(issues, fmt.Sprintf("%d entry files hold %d distinct sequence numbers: entries share a sequence number", len(entries), replayer.Count()))
-	}
-
-	replayed := 0
-	served := make(map[uint64]bool, replayer.Count())
-	for range replayer.Count() {
-		entry, err := replayer.Next()
-		if err != nil {
-			issues = append(issues, err.Error())
-			continue
-		}
-		served[entry.Seq] = true
-		sum := sha256.Sum256(entry.Value)
-		if computed := hex.EncodeToString(sum[:]); computed != entry.ValueHash {
-			issues = append(issues, fmt.Sprintf("seq=%d served value does not match its recorded value_hash: recorded %s, got %s", entry.Seq, entry.ValueHash, computed))
-			continue
-		}
-		replayed++
-	}
-
-	// A hole stops the walk short of the entries behind it.
-	listed := make(map[uint64]bool, len(manifest.Entries))
-	for _, item := range manifest.Entries {
-		listed[item.Seq] = true
-	}
-	var unreached, unlisted []uint64
-	seen := make(map[uint64]bool, len(entries))
-	for _, entry := range entries {
-		if seen[entry.Seq] {
-			continue
-		}
-		seen[entry.Seq] = true
-		if !served[entry.Seq] {
-			unreached = append(unreached, entry.Seq)
-		}
-		if !listed[entry.Seq] {
-			unlisted = append(unlisted, entry.Seq)
-		}
-	}
-	sort.Slice(unreached, func(i, j int) bool { return unreached[i] < unreached[j] })
-	sort.Slice(unlisted, func(i, j int) bool { return unlisted[i] < unlisted[j] })
-	for _, seq := range unreached {
-		issues = append(issues, fmt.Sprintf("seq=%d is on the tape but was never served: the sequence is not contiguous from 1", seq))
-	}
-	for _, seq := range unlisted {
-		issues = append(issues, fmt.Sprintf("seq=%d is on the tape but not listed in tape_manifest.json", seq))
-	}
-
-	// The manifest is what the run says it recorded; the tape must hold each
-	// of those entries, and every field a manifest row carries must equal the
-	// entry it names.
-	issues = append(issues, tape.VerifyManifestIntegrity(entries, manifest)...)
-	return replayed, issues
-}
-
-// loadTapeEntries loads tape entries from the entry_*.json files in the tapes
-// directory, in file-name order, and returns the base name of the file each
-// entry came from.
-func loadTapeEntries(tapesDir string) ([]tape.Entry, []string, error) {
-	paths, err := filepath.Glob(filepath.Join(tapesDir, "entry_*.json"))
-	if err != nil {
-		return nil, nil, err
-	}
-	// Glob returns names sorted; sort again so the sequence-order check does
-	// not depend on that.
-	sort.Strings(paths)
-
-	var entries []tape.Entry
-	var files []string
-	for _, f := range paths {
-		name := filepath.Base(f)
-		if err := requireNoSymlink(f, false); err != nil {
-			return nil, nil, err
-		}
-		data, err := os.ReadFile(f)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read %s: %w", name, err)
-		}
-		var entry tape.Entry
-		if err := json.Unmarshal(data, &entry); err != nil {
-			return nil, nil, fmt.Errorf("parse %s: %w", name, err)
-		}
-		entries = append(entries, entry)
-		files = append(files, name)
-	}
-
-	return entries, files, nil
-}
-
-// requireNoSymlink refuses a path that is a symbolic link, or that is not the
-// kind of file the tape layout puts there: a directory when wantDir is set, a
-// regular file otherwise. It looks at the path itself and does not follow it.
-func requireNoSymlink(path string, wantDir bool) error {
-	name := filepath.Base(path)
-	info, err := os.Lstat(path)
-	if err != nil {
-		if wantDir {
-			return fmt.Errorf("tapes directory not found: %s", path)
-		}
-		return fmt.Errorf("%s: %w", name, err)
-	}
-	switch {
-	case info.Mode()&os.ModeSymlink != 0:
-		return fmt.Errorf("refusing to read %s: it is a symbolic link, and a tape is replayed only from files the pack holds", name)
-	case wantDir && !info.IsDir():
-		return fmt.Errorf("refusing to read %s: it is not a directory", name)
-	case !wantDir && !info.Mode().IsRegular():
-		return fmt.Errorf("refusing to read %s: it is not a regular file", name)
-	}
-	return nil
 }
 
 func init() {

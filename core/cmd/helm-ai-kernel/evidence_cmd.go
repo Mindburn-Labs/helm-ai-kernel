@@ -17,6 +17,7 @@ import (
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
@@ -578,9 +579,21 @@ func withEvidenceBundleDir(bundle string, fn func(string) error) error {
 	return fn(tempDir)
 }
 
+// readPackFile reads one file of the pack directory dir through an os.Root on
+// it (package packfs): a symbolic link that leaves the pack or has an absolute
+// target, a named pipe and a device are refused, never read.
+func readPackFile(dir, name string) ([]byte, error) {
+	pack, err := packfs.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = pack.Close() }()
+	return pack.ReadFile(name)
+}
+
 func readLaunchpadManifest(dir string) (lpreceipts.EvidencePackManifest, error) {
 	var manifest lpreceipts.EvidencePackManifest
-	data, err := os.ReadFile(filepath.Join(dir, "04_EXPORTS", "launchpad_manifest.json"))
+	data, err := readPackFile(dir, "04_EXPORTS/launchpad_manifest.json")
 	if err != nil {
 		return manifest, err
 	}
@@ -589,7 +602,7 @@ func readLaunchpadManifest(dir string) (lpreceipts.EvidencePackManifest, error) 
 
 func readEvidenceGraph(dir string) (lpreceipts.EvidenceGraph, error) {
 	var graph lpreceipts.EvidenceGraph
-	data, err := os.ReadFile(filepath.Join(dir, "04_EXPORTS", "launchpad_evidence_graph.json"))
+	data, err := readPackFile(dir, "04_EXPORTS/launchpad_evidence_graph.json")
 	if err != nil {
 		return graph, err
 	}
@@ -597,7 +610,7 @@ func readEvidenceGraph(dir string) (lpreceipts.EvidenceGraph, error) {
 }
 
 func readEvidenceIndex(dir string) (map[string]string, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "00_INDEX.json"))
+	data, err := readPackFile(dir, "00_INDEX.json")
 	if err != nil {
 		return nil, err
 	}

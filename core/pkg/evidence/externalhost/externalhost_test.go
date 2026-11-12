@@ -863,3 +863,25 @@ func TestVerifyChain_UnsignedReceiptWithoutARequiredKeyIsNotRun(t *testing.T) {
 	}
 	assertFailedCheck(t, required, "external_host:signature")
 }
+
+// N10: an object whose receipts list is empty is a chain with no receipts,
+// and the chain fails on that. It was read as one JSONL receipt line.
+func TestParse_ChainWithAnEmptyReceiptsListHoldsNoReceipts(t *testing.T) {
+	chain, err := Parse([]byte(`{"receipts":[],"results":[]}`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(chain.Receipts) != 0 {
+		t.Fatalf("receipts = %d, want 0", len(chain.Receipts))
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified || len(report.Checks) != 1 || report.Checks[0].Reason != "chain contains no receipts" {
+		t.Fatalf("report = %+v, want one failed check: chain contains no receipts", report)
+	}
+	if _, err := Parse([]byte(`{"receipts":"not a list"}`)); err == nil || !strings.Contains(err.Error(), "parse host receipt chain") {
+		t.Fatalf("Parse of a receipts member that is not a list = %v, want a parse error", err)
+	}
+}

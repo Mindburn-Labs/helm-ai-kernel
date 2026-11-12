@@ -494,3 +494,93 @@ func TestReplayCmdNamesEntriesThatWereNeverServed(t *testing.T) {
 		t.Fatalf("entries_replayed = %v, want 1", result["entries_replayed"])
 	}
 }
+
+// F3: a manifest whose rows carry only seq replayed as COMPLETE: only the
+// fields a row carries were compared, so nothing was. Every row must carry the
+// fields the recorder writes.
+func TestReplayCmdRequiresEveryManifestRowField(t *testing.T) {
+	evidenceDir := writeReplayTape(t, nil)
+	editTapeManifest(t, evidenceDir, func(items []map[string]any) []map[string]any {
+		for i := range items {
+			items[i] = map[string]any{"seq": items[i]["seq"]}
+		}
+		return items
+	})
+	code, result, raw := runReplayJSON(t, evidenceDir)
+	if code != 1 || result["replay_status"] != "DIVERGED" {
+		t.Fatalf("exit=%d status=%v, want 1/DIVERGED for rows that carry only seq\n%s", code, result["replay_status"], raw)
+	}
+	if issues := fmt.Sprint(result["issues"]); !strings.Contains(issues, `seq=1 manifest row lacks "key", "sha256", "size_bytes", "type"`) {
+		t.Fatalf("issues %s do not name the fields the rows leave out", issues)
+	}
+}
+
+// N1: entry files are ordered by the number in their name, so entry_2.json
+// comes before entry_12.json. Name order put entry_12.json first and reported
+// the tape out of sequence.
+func TestReplayCmdOrdersEntryFilesByTheirNumber(t *testing.T) {
+	recorder := tape.NewRecorder("run-unpadded")
+	for i := 0; i < 12; i++ {
+		recorder.RecordToolOutput("executor", fmt.Sprintf("tool-%d", i), []byte(fmt.Sprintf(`{"n":%d}`, i)))
+	}
+	evidenceDir := t.TempDir()
+	tapesDir := filepath.Join(evidenceDir, "08_TAPES")
+	if err := os.MkdirAll(tapesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := tape.WriteManifest(tapesDir, recorder.BuildManifest()); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range recorder.Entries() {
+		data, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tapesDir, fmt.Sprintf("entry_%d.json", entry.Seq)), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, result, raw := runReplayJSON(t, evidenceDir)
+	if code != 0 || result["replay_status"] != "COMPLETE" {
+		t.Fatalf("exit=%d status=%v, want 0/COMPLETE for entry_1.json ... entry_12.json\n%s", code, result["replay_status"], raw)
+	}
+}
+
+// N7: an entry type the recorder never writes, or none, replayed as COMPLETE.
+func TestReplayCmdRefusesEntryTypesTheRecorderDoesNotWrite(t *testing.T) {
+	for _, entryType := range []tape.EntryType{"BOGUS_TYPE", ""} {
+		t.Run(string(entryType), func(t *testing.T) {
+			evidenceDir := writeReplayTape(t, func(entries []tape.Entry, manifest *tape.Manifest) []tape.Entry {
+				entries[1].Type = entryType
+				manifest.Entries[1].Type = entryType
+				return entries
+			})
+			code, result, raw := runReplayJSON(t, evidenceDir)
+			if code != 1 || result["replay_status"] != "DIVERGED" {
+				t.Fatalf("exit=%d status=%v, want 1/DIVERGED for entry type %q\n%s", code, result["replay_status"], entryType, raw)
+			}
+			if issues := fmt.Sprint(result["issues"]); !strings.Contains(issues, "seq=2") || !strings.Contains(issues, "entry type") {
+				t.Fatalf("issues %s do not name the entry type of seq=2", issues)
+			}
+		})
+	}
+}
+
+// N7: under --json every outcome prints a JSON result, an unreadable tape
+// included. An entry file that did not parse printed nothing on stdout.
+func TestReplayCmdPrintsJSONWhenTheTapeCannotBeRead(t *testing.T) {
+	evidenceDir := writeReplayTape(t, nil)
+	if err := os.WriteFile(filepath.Join(evidenceDir, "08_TAPES", "entry_0001.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, result, raw := runReplayJSON(t, evidenceDir)
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2: nothing was replayed\n%s", code, raw)
+	}
+	if result["replay_status"] != "NOT_RUN" || result["entries_replayed"] != float64(0) || result["seal_checked"] != false {
+		t.Fatalf("result = %v, want NOT_RUN with nothing replayed", result)
+	}
+	if errText, _ := result["error"].(string); !strings.Contains(errText, "entry_0001.json") {
+		t.Fatalf("error %q does not name the entry file", errText)
+	}
+}

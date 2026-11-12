@@ -84,6 +84,21 @@ func Parse(data []byte) (*contracts.ExternalReceiptChain, error) {
 		normalizeChain(&chain)
 		return &chain, nil
 	}
+	// One object with a receipts member is a chain even when the list is
+	// empty, and VerifyChain says it holds no receipts. It used to fall
+	// through to the line-delimited reader, which read the whole object as one
+	// receipt line.
+	var object map[string]json.RawMessage
+	if json.Unmarshal(trimmed, &object) == nil {
+		if _, isChain := object["receipts"]; isChain {
+			chain = contracts.ExternalReceiptChain{}
+			if err := json.Unmarshal(trimmed, &chain); err != nil {
+				return nil, fmt.Errorf("parse host receipt chain: %w", err)
+			}
+			normalizeChain(&chain)
+			return &chain, nil
+		}
+	}
 
 	var receipts []contracts.ExternalHostReceipt
 	if err := json.Unmarshal(trimmed, &receipts); err == nil && len(receipts) > 0 {

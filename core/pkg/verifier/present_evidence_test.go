@@ -126,19 +126,34 @@ func TestReplayDeterminism_PresentMaterialIsValidatedWithoutG2(t *testing.T) {
 			wantInText: "gate G2 is not declared",
 		},
 		{
-			name:       "consistent determinism manifest beside a tape manifest",
-			files:      map[string]string{detManifest: string(equalHashes), tapeManifest: `{"run_id":"r","entries":[{"seq":1},{"seq":2}]}`},
+			name:       "consistent determinism manifest beside an empty tape manifest",
+			files:      map[string]string{detManifest: string(equalHashes), tapeManifest: `{"run_id":"r","entries":[]}`},
 			want:       CheckVerified,
-			wantInText: "tape_manifest.json parses and lists 2 entries (not replayed); determinism_manifest.json states equal",
+			wantInText: "tape_manifest.json parses and lists 0 entries (not replayed); determinism_manifest.json states equal",
+		},
+		{
+			// Manifest rows are entries the tape claims to hold. The tape is
+			// replayed, as `replay` replays it, and rows without an entry fail
+			// it. They used to be counted and reported as "not replayed".
+			name:       "tape manifest whose rows name entries the tape does not hold",
+			files:      map[string]string{detManifest: string(equalHashes), tapeManifest: `{"run_id":"r","entries":[{"seq":1},{"seq":2}]}`},
+			want:       CheckFailed,
+			wantInText: "seq=1 referenced in manifest but not in entries",
 		},
 		{
 			// A tape manifest states no replay result. It is parsed, and the
 			// reason says it is there, but it does not make the check run:
 			// VERIFIED on it would satisfy --require-check with nothing compared.
 			name:       "tape manifest only",
-			files:      map[string]string{tapeManifest: `{"run_id":"r","entries":[{"seq":1}]}`},
+			files:      map[string]string{tapeManifest: `{"run_id":"r","entries":[]}`},
 			want:       CheckNotRun,
-			wantInText: "no 02_PROOFGRAPH/determinism_manifest.json, so it states no replay result to compare; 08_TAPES/tape_manifest.json parses and lists 1 entries (not replayed)",
+			wantInText: "no 02_PROOFGRAPH/determinism_manifest.json, so it states no replay result to compare; 08_TAPES/tape_manifest.json parses and lists 0 entries (not replayed)",
+		},
+		{
+			name:       "tape manifest only, with rows the tape does not hold",
+			files:      map[string]string{tapeManifest: `{"run_id":"r","entries":[{"seq":1}]}`},
+			want:       CheckFailed,
+			wantInText: "seq=1 referenced in manifest but not in entries",
 		},
 	} {
 		for gatesName, gates := range map[string]string{"gates without G2": `["G0","G1"]`, "gates misspell G2": `["g2"]`, "no gates": ""} {
@@ -236,7 +251,7 @@ func TestEUAIActProfile_LargeFilesAreRead(t *testing.T) {
 // line-delimited file.
 func TestEUAIActProfile_FindsEveryProfileAJSONReaderWouldSee(t *testing.T) {
 	for name, content := range map[string]string{
-		"escaped key":                     `{"eu_ai_act_profile":{}}`,
+		"escaped key":                     `{"eu_ai_act_pro\u0066ile":{}}`,
 		"repeated key, invalid one first": `{"eu_ai_act_profile":{},"eu_ai_act_profile":` + validEUAIActProfile + `}`,
 		"second document of a JSONL file": "{\"a\":1}\n{\"eu_ai_act_profile\":{}}\n",
 		"profile followed by garbage":     `{"eu_ai_act_profile":` + validEUAIActProfile + `} trailing garbage`,

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 func TestVerifyBundleNoFiles(t *testing.T) {
@@ -40,11 +41,11 @@ func TestVerifyBundleSuccessAndVerifierError(t *testing.T) {
 	defer restore()
 
 	sentinel := errors.New("signature failed")
-	receiptVerifyFile = func(path string, opts externalhost.VerifyOptions) (*externalhost.VerificationReport, error) {
+	receiptVerifyChain = func(name string, _ []byte, opts externalhost.VerifyOptions) (*externalhost.VerificationReport, error) {
 		if !opts.RequireKey {
 			t.Fatal("expected RequireKey")
 		}
-		if strings.Contains(path, "bad") {
+		if strings.Contains(name, "bad") {
 			return nil, sentinel
 		}
 		return &externalhost.VerificationReport{
@@ -131,36 +132,22 @@ func TestFindChainFilesSkipsStatAndWalkErrors(t *testing.T) {
 	restore := replaceHooks()
 	defer restore()
 
-	receiptWalkDir = func(root string, fn iofs.WalkDirFunc) error {
-		return fn(filepath.Join(root, "bad.jsonl"), nil, errors.New("walk failed"))
+	receiptWalkDir = func(_ *packfs.FS, dir string, fn iofs.WalkDirFunc) error {
+		return fn(dir+"/bad.jsonl", nil, errors.New("walk failed"))
 	}
 	if got := FindChainFiles(root); len(got) != 0 {
 		t.Fatalf("expected walk error entry to be skipped, got %v", got)
 	}
 }
 
-func TestRelFallback(t *testing.T) {
-	restore := replaceHooks()
-	defer restore()
-
-	receiptRel = func(string, string) (string, error) {
-		return "", errors.New("rel failed")
-	}
-	if got := rel("root", "root/file.jsonl"); got != "root/file.jsonl" {
-		t.Fatalf("expected fallback path, got %q", got)
-	}
-}
-
 func replaceHooks() func() {
 	originalStat := receiptStat
 	originalWalkDir := receiptWalkDir
-	originalRel := receiptRel
-	originalVerifyFile := receiptVerifyFile
+	originalVerifyChain := receiptVerifyChain
 	return func() {
 		receiptStat = originalStat
 		receiptWalkDir = originalWalkDir
-		receiptRel = originalRel
-		receiptVerifyFile = originalVerifyFile
+		receiptVerifyChain = originalVerifyChain
 	}
 }
 

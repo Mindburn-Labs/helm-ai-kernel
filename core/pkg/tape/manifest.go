@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // WriteManifest writes tape_manifest.json to the given directory per §5.3.
@@ -22,24 +24,16 @@ func WriteManifest(dir string, manifest *Manifest) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// ReadManifest reads tape_manifest.json from the given directory.
-func ReadManifest(dir string) (*Manifest, error) {
-	path := filepath.Join(dir, "tape_manifest.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read tape manifest: %w", err)
-	}
-	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("parse tape manifest: %w", err)
-	}
-	return &manifest, nil
-}
+// requiredRowFields are the fields WriteManifest writes on every row. A row
+// read from tape_manifest.json must carry each of them: a row without sha256
+// leaves the entry's value compared with nothing.
+var requiredRowFields = []string{"seq", "type", "key", "sha256", "size_bytes"}
 
 // VerifyManifestIntegrity compares the manifest with the tape entries and
-// returns every difference: a manifest row with no entry, a sequence number
-// listed more than once, and any field a manifest row carries that does not
-// equal the entry it names.
+// returns every difference: a row that lacks a field the recorder writes on
+// every row (seq, type, key, sha256, size_bytes), a manifest row with no
+// entry, a sequence number listed more than once, and any field a manifest
+// row carries that does not equal the entry it names.
 //
 // sha256 and size_bytes are compared with the entry's value; every other field
 // is compared with the entry field of the same name. A field the entry has no
@@ -58,6 +52,10 @@ func VerifyManifestIntegrity(entries []Entry, manifest *Manifest) []string {
 	}
 	reported := make(map[uint64]bool, len(listed))
 	for _, item := range manifest.Entries {
+		if missing := item.missingFields(); len(missing) > 0 {
+			issues = append(issues, fmt.Sprintf("seq=%d manifest row lacks %s: the recorder writes seq, type, key, sha256 and size_bytes on every row",
+				item.Seq, strings.Join(missing, ", ")))
+		}
 		if listed[item.Seq] > 1 && !reported[item.Seq] {
 			reported[item.Seq] = true
 			issues = append(issues, fmt.Sprintf("seq=%d is listed %d times in tape_manifest.json", item.Seq, listed[item.Seq]))
@@ -133,6 +131,23 @@ func (item *ManifestItem) UnmarshalJSON(data []byte) error {
 	*item = ManifestItem(decoded)
 	item.fields = fields
 	return nil
+}
+
+// missingFields names, quoted and sorted, the required fields a row read
+// from tape_manifest.json does not carry. A row built in memory carries all
+// of them.
+func (item ManifestItem) missingFields() []string {
+	if item.fields == nil {
+		return nil
+	}
+	var missing []string
+	for _, name := range requiredRowFields {
+		if _, ok := item.fields[name]; !ok {
+			missing = append(missing, strconv.Quote(name))
+		}
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 // carriedFields is the row as JSON fields: the ones it was read with, or, for

@@ -145,16 +145,28 @@ requires it.
 
 `evidence inspect <pack>` reaches the same verdict through the same code and
 exits the same way, in text and `--json` mode. Text output of these commands
-shows control characters and line breaks from the pack as visible escapes;
-`--json` keeps the raw values.
+shows control characters, line breaks and characters that print as blank
+space from the pack as visible escapes, and a backslash as `\\`; `--json`
+keeps the raw values. Every check except `roots` and `evidence_pack_seal`,
+including `--require-eidas` and `--require-tee`, reads the pack through an
+`os.Root` on its directory: a path or symbolic link that leaves the pack, an
+absolute symbolic link and a file that is not a regular file fail the check
+that wanted them. The seal code those two use reads by path under its own
+rules, and the layout check tests whether files exist by path; both are
+described in [Receipts](../VERIFICATION.md#what-the-result-covers).
 
 `replay` serves an EvidencePack's recorded tape (`08_TAPES`) back through the
 tape replayer and reports `COMPLETE`, `DIVERGED` or `NOT_RUN`. Exit 0 only
-for `COMPLETE`: the entry files are in sequence order, every entry was served
-and matches its recorded hash, and every field the tape manifest carries for
-an entry equals that entry. It replays recorded inputs; it does not re-execute
-the run, and it does not check the pack seal, so run `verify` on the pack as
-well. A symbolic link in place of the tape directory or a tape file exits 2.
+for `COMPLETE`: the entry files are in the order of the number in their name
+and in sequence order, every entry was served and matches its recorded hash,
+every entry has a type the recorder writes, every manifest row carries `seq`,
+`type`, `key`, `sha256` and `size_bytes`, and every field the tape manifest
+carries for an entry equals that entry. It replays recorded inputs; it does
+not re-execute the run, and it does not check the pack seal, so run `verify`
+on the pack as well; `verify` replays the tape with the same code. A symbolic
+link in place of the tape directory or a tape file, or a tape file that does
+not parse, exits 2; with `--json` the result is still printed, with
+`replay_status` `NOT_RUN` and the reason in `error`.
 
 ## Doctor
 

@@ -130,6 +130,67 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `protocols/json-schemas/cli/helm_cli_schema.json` requires `outcome`,
   `check_counts` and `checks[].status`. A report from a verifier older than
   `0.3.0` does not validate against it.
+- Text output changed in three places that scripts may match. Read `--json`
+  instead, which keeps the structure:
+  - `verify` prints a `checks: N passed, N failed, N not run` line after the
+    headline in every outcome (with `N unverifiable, ` before the not-run
+    count when a check is unverifiable, and `; this result covers only the
+    checks that ran` after it on a `VERIFIED` result with checks not run),
+    followed by up to 20 `  not run: <check>: <reason>` lines and
+    `  ... and N more not run (use --json for all of them)`.
+  - `evidence inspect` prints `  Outcome:` as the second line, so
+    `  Verified:` and `  Summary:` move down one line, and it ends with the
+    failed and unverifiable checks (`  - <check>: <reason>`) and the same
+    counts block.
+  - `replay` prints `Replay DIVERGED: X of Y tape entries replayed, N issues:`
+    where it printed `Replay DIVERGED (N issues):`, and every result ends with
+    `Run ID:` and `Status:` lines.
+- Text output of `verify`, `evidence inspect` and `replay` writes a backslash
+  from the pack as `\\`, so a Windows path prints as `C:\\path\\file`.
+  Characters that print as blank space (space separators other than the ASCII
+  space, the Hangul fillers, the blank Braille pattern), runs of three or
+  more spaces and combining marks past the second on one letter are escaped
+  too. `--json` is unchanged.
+- `helm-ai-kernel verify` and `evidence inspect` read the pack through an
+  `os.Root` opened on its directory in every check except `roots` and
+  `evidence_pack_seal`, including the conformance signature check and the
+  `--require-eidas` and `--require-tee` checks, and read only regular files.
+  These packs no longer verify: one where a file a check reads is a symbolic
+  link whose target is outside the pack, or an absolute symbolic link (also
+  one that points back into the pack); one where it is a named pipe, a device
+  or a socket; one whose `11_HOST_EVIDENCE` or `host_evidence` directory is a
+  symbolic link out of the pack (the new `external_host:evidence_dir` check
+  fails it); one that holds a `.json` file over 64 MiB, or `.json` files past
+  256 MiB in all, which the EU AI Act scan names instead of reading; one
+  whose `00_INDEX.json` or `manifest.json` names a file in another letter
+  case than the pack directory lists it; and one whose seal file
+  `07_ATTESTATIONS/evidence_pack.sig`, index or an indexed file is a symbolic
+  link or not a regular file (the seal check refuses them before opening).
+  `--require-eidas` also fails, as `eidas:read_anchor`, when
+  `02_PROOFGRAPH/anchors` or `00_INDEX.json` is refused, and `--require-tee`,
+  as `tee:read_receipt`, when `receipts` is. `verify` used to
+  hang on a named pipe in the pack. `evidence inspect` leaves out the launch
+  id and evidence graph it prints when their files are refused.
+- `helm-ai-kernel verify` replays a tape that carries entries with the code
+  `helm-ai-kernel replay` runs, under gate `G2` or not, so a pack whose tape
+  `replay` reports `DIVERGED` (without `--verify`, whose `data_class`
+  requirement `verify` does not apply) no longer verifies; that includes
+  `tape_manifest.json` rows that name entries the tape does not hold. Entry
+  files without a `tape_manifest.json` fail. Under `G2`, an empty file whose
+  name starts with `.` in `05_DIFFS`, such as the launchpad writer's `.keep`,
+  no longer fails the pack.
+- `helm-ai-kernel replay` reports `DIVERGED` for a manifest row that lacks
+  `seq`, `type`, `key`, `sha256` or `size_bytes`, and for an entry whose type
+  is empty or not one the recorder writes. Entry files are read in the order
+  of the number in their name (`entry_2.json` before `entry_12.json`). With
+  `--json`, a tape that cannot be read still prints a result
+  with `replay_status` `NOT_RUN`, `entries_replayed` `0` and the new `error`
+  member, and exits 2 as before.
+- The EU AI Act scan reads past a UTF-8 byte order mark and fails a `.json`
+  file that names `eu_ai_act_profile` and does not parse, wherever the damage
+  is, so a pack with such a file no longer verifies. A file nested deeper than
+  10000 levels, the limit `encoding/json` keeps, is one that does not parse;
+  the scan keeps its own bounded stack and never recurses.
 
 ### Added
 
@@ -175,11 +236,27 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `VERIFIED`: replay material in a pack whose `gates` omit or misspell `G2`,
   an EU AI Act profile in a file over 2 MiB, and a damaged report file under
   the host evidence directories. Each is now validated or failed, and a
-  `NOT_RUN` reason says what was looked for. A tape manifest alone states no
-  replay result, so `replay_determinism` stays `NOT_RUN` on it and says so.
+  `NOT_RUN` reason says what was looked for. A tape states no replay result,
+  so `replay_determinism` stays `NOT_RUN` on one that replays without a
+  determinism manifest, and says so.
 - `verify` hashed files outside the pack: a `manifest.json` `file_hashes` key
   such as `../../outside.txt` was `VERIFIED`. Manifest and index paths are
   now held to one containment rule and are not read outside the pack.
+- `verify` read files outside the pack through symbolic links in every check
+  that reads a fixed name or walks a directory: a
+  `02_PROOFGRAPH/determinism_manifest.json` linked to an outside file with
+  equal hashes was read as the pack's own, and a link to
+  `/dev/stdin` under `12_REPORTS/` or `11_HOST_EVIDENCE/` hung the command.
+  Every check except `roots` and `evidence_pack_seal` now reads through an
+  `os.Root` on the pack and refuses links that leave it, absolute links and
+  files that are not regular files; the result no longer depends on whether
+  the pack path is relative or absolute. `roots` and `evidence_pack_seal`
+  refuse named pipes and devices before opening them, as they already
+  refused symbolic links.
+- `verify` and `replay` disagreed on a tape: under gate `G2` the verifier only
+  parsed `tape_manifest.json`, so a sealed pack whose manifest said `NETWORK`
+  where the entry said `TOOL_OUTPUT` was `VERIFIED`. The replay now lives in
+  `core/pkg/tape` and both run it.
 - `verify` and `evidence inspect` disagreed on one pack: a sealed pack with a
   valid `manifest.json` was `FAILED` by `verify` (`unexpected top-level
   entry: manifest.json`) and `VERIFIED` by `evidence inspect`, so

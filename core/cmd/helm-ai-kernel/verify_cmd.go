@@ -12,9 +12,11 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +29,7 @@ import (
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // runVerifyCmd implements `helm-ai-kernel verify` per §2.1.
@@ -695,9 +698,27 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 
 	results := make([]verifier.CheckResult, 0, 4)
 
-	// Inventory candidate anchors from disk.
+	// Inventory candidate anchors from the pack, read through an os.Root on
+	// its directory: a link out of the pack or a named pipe is refused.
+	pack, packErr := packfs.Open(bundleRoot)
+	if packErr != nil {
+		return append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot open the pack: %v", packErr),
+		})
+	}
+	defer func() { _ = pack.Close() }()
+	const anchorsName = "02_PROOFGRAPH/anchors"
 	anchorsDir := filepath.Join(bundleRoot, "02_PROOFGRAPH", "anchors")
-	entries, _ := os.ReadDir(anchorsDir)
+	entries, err := pack.ReadDir(anchorsName)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read %s: %v", anchorsName, err),
+		})
+	}
 
 	type anchorMeta struct {
 		Path           string
@@ -712,7 +733,7 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 			continue
 		}
 		path := filepath.Join(anchorsDir, ent.Name())
-		data, err := os.ReadFile(path)
+		data, err := pack.ReadFile(anchorsName + "/" + ent.Name())
 		if err != nil {
 			results = append(results, verifier.CheckResult{
 				Name:   "eidas:read_anchor",
@@ -737,7 +758,13 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 	}
 
 	// Also check 00_INDEX.json's embedded anchor field, when present.
-	if data, err := os.ReadFile(filepath.Join(bundleRoot, "00_INDEX.json")); err == nil {
+	if data, err := pack.ReadFile("00_INDEX.json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read 00_INDEX.json: %v", err),
+		})
+	} else if err == nil {
 		var doc map[string]any
 		if json.Unmarshal(data, &doc) == nil {
 			if a, ok := doc["anchor"].(map[string]any); ok {
@@ -829,10 +856,28 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 		}}
 	}
 
+	// Receipts are read through an os.Root on the pack directory: a link out
+	// of the pack or a named pipe is refused.
+	pack, err := packfs.Open(bundleRoot)
+	if err != nil {
+		return []verifier.CheckResult{{
+			Name:   "tee:read_receipt",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot open the pack: %v", err),
+		}}
+	}
+	defer func() { _ = pack.Close() }()
 	receiptsDir := filepath.Join(bundleRoot, "receipts")
-	entries, _ := os.ReadDir(receiptsDir)
+	entries, err := pack.ReadDir("receipts")
 
 	var results []verifier.CheckResult
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "tee:read_receipt",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read receipts: %v", err),
+		})
+	}
 	receiptsSeen := 0
 	receiptsWithTEE := 0
 	receiptsWrongPlatform := 0
@@ -842,7 +887,7 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 			continue
 		}
 		path := filepath.Join(receiptsDir, ent.Name())
-		data, err := os.ReadFile(path)
+		data, err := pack.ReadFile("receipts/" + ent.Name())
 		if err != nil {
 			results = append(results, verifier.CheckResult{
 				Name:   "tee:read_receipt",

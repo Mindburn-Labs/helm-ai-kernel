@@ -1,6 +1,7 @@
 package tape
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,7 +86,9 @@ func TestManifest_WriteRead(t *testing.T) {
 	manifest := r.BuildManifest()
 	require.NoError(t, WriteManifest(dir, manifest))
 
-	loaded, err := ReadManifest(dir)
+	data, err := os.ReadFile(filepath.Join(dir, "tape_manifest.json"))
+	require.NoError(t, err)
+	loaded, err := ParseManifest(data)
 	require.NoError(t, err)
 	require.Equal(t, "run-1", loaded.RunID)
 	require.Len(t, loaded.Entries, 2)
@@ -168,9 +171,9 @@ func TestManifest_FieldsOutsideTheStructAreCompared(t *testing.T) {
 		dir := t.TempDir()
 		doc := `{"run_id":"run-1","entries":[` + row + `]}`
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "tape_manifest.json"), []byte(doc), 0o600))
-		manifest, err := ReadManifest(dir)
+		tape, err := LoadTape(os.DirFS(dir).(LstatFS), ".")
 		require.NoError(t, err)
-		return manifest
+		return tape.Manifest
 	}
 	base := `"seq":1,"type":"TOOL_OUTPUT","key":"tool","sha256":"` + sum + `","size_bytes":3`
 
@@ -183,8 +186,38 @@ func TestManifest_FieldsOutsideTheStructAreCompared(t *testing.T) {
 	issues = VerifyManifestIntegrity(entries, read(t, `{`+base+`,"approved_by":"nobody"}`))
 	require.Equal(t, []string{`seq=1 manifest field "approved_by" has no counterpart on the tape entry, so it cannot be compared`}, issues)
 
-	// A row that leaves a field out makes no statement about it.
-	require.Empty(t, VerifyManifestIntegrity(entries, read(t, `{"seq":1,"sha256":"`+sum+`"}`)))
+	// A row that leaves out a field the recorder always writes is not a row
+	// the recorder wrote, and the field it leaves out is compared with
+	// nothing. It used to make no statement about it and pass.
+	require.Equal(t, []string{
+		`seq=1 manifest row lacks "key", "size_bytes", "type": the recorder writes seq, type, key, sha256 and size_bytes on every row`,
+	}, VerifyManifestIntegrity(entries, read(t, `{"seq":1,"sha256":"`+sum+`"}`)))
+}
+
+// F3: rows that carried only seq replayed as COMPLETE, because only the fields
+// a row carries were compared. Every row must carry the fields the recorder
+// writes, and a missing one is an issue.
+func TestManifest_RowsMustCarryEveryFieldTheRecorderWrites(t *testing.T) {
+	r := NewRecorder("run-1")
+	r.Record(EntryTypeToolOutput, "executor", "tool", []byte("out"))
+	r.Record(EntryTypeTime, "kernel", "time", []byte("now"))
+	entries := r.Entries()
+
+	var manifest Manifest
+	require.NoError(t, json.Unmarshal([]byte(`{"run_id":"run-1","entries":[{"seq":1},{"seq":2,"type":null,"key":"time","sha256":"`+entries[1].ValueHash+`","size_bytes":3}]}`), &manifest))
+	issues := VerifyManifestIntegrity(entries, &manifest)
+	require.Contains(t, issues, `seq=1 manifest row lacks "key", "sha256", "size_bytes", "type": the recorder writes seq, type, key, sha256 and size_bytes on every row`)
+	// A field written as null is carried, and compared.
+	require.Contains(t, issues, `seq=2 manifest field "type" is null, tape entry has "TIME"`)
+
+	// A row without seq cannot be matched to an entry at all.
+	manifest = Manifest{}
+	require.NoError(t, json.Unmarshal([]byte(`{"run_id":"run-1","entries":[{"type":"TOOL_OUTPUT","key":"tool","sha256":"`+entries[0].ValueHash+`","size_bytes":3}]}`), &manifest))
+	issues = VerifyManifestIntegrity(entries, &manifest)
+	require.Contains(t, issues, `seq=0 manifest row lacks "seq": the recorder writes seq, type, key, sha256 and size_bytes on every row`)
+
+	// The rows the recorder builds carry every field.
+	require.Empty(t, VerifyManifestIntegrity(entries, r.BuildManifest()))
 }
 
 func TestManifest_RowListedTwiceAndRowWithoutEntry(t *testing.T) {

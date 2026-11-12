@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // ReportSignature represents a signed conformance report per §10.
@@ -87,7 +89,7 @@ func SignReport(evidenceDir string, policyHash string, schemaBundleHash string, 
 // VerifyReport validates a signed conformance report.
 func VerifyReport(evidenceDir string, verifier func(data []byte, sig string) error) error {
 	// Read signature
-	sigData, err := os.ReadFile(filepath.Join(evidenceDir, "07_ATTESTATIONS", "conformance_report.sig"))
+	sigData, err := readPackFile(evidenceDir, "07_ATTESTATIONS/conformance_report.sig")
 	if err != nil {
 		return fmt.Errorf("read signature: %w", err)
 	}
@@ -98,7 +100,7 @@ func VerifyReport(evidenceDir string, verifier func(data []byte, sig string) err
 	}
 
 	// Verify index hash
-	indexData, err := os.ReadFile(filepath.Join(evidenceDir, "00_INDEX.json"))
+	indexData, err := readPackFile(evidenceDir, "00_INDEX.json")
 	if err != nil {
 		return fmt.Errorf("read 00_INDEX.json: %w", err)
 	}
@@ -107,7 +109,7 @@ func VerifyReport(evidenceDir string, verifier func(data []byte, sig string) err
 	}
 
 	// Verify score hash
-	scoreData, err := os.ReadFile(filepath.Join(evidenceDir, "01_SCORE.json"))
+	scoreData, err := readPackFile(evidenceDir, "01_SCORE.json")
 	if err != nil {
 		return fmt.Errorf("read 01_SCORE.json: %w", err)
 	}
@@ -137,4 +139,18 @@ func VerifyReport(evidenceDir string, verifier func(data []byte, sig string) err
 func sha256Hash(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+// readPackFile reads the pack file name (slash-separated, relative to
+// packDir) through an os.Root on the pack directory (package packfs): a
+// symbolic link that leaves the pack or has an absolute target, a named pipe
+// and a device are refused, never read, and so is a file over
+// packfs.MaxFileBytes.
+func readPackFile(packDir, name string) ([]byte, error) {
+	pack, err := packfs.Open(packDir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = pack.Close() }()
+	return pack.ReadFile(name)
 }

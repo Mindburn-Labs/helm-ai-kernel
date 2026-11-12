@@ -140,7 +140,7 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 }
 
 func declaredEvidencePackExtensions(root string) []string {
-	data, err := os.ReadFile(filepath.Join(root, "00_INDEX.json"))
+	data, err := readPackFile(root, "00_INDEX.json")
 	if err != nil {
 		return nil
 	}

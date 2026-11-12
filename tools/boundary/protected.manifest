@@ -964,7 +964,7 @@ de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/spec
 8f012b8b85b82c7533561abb94160108587648859ceecffa802f3df86f249b77  protocols/specs/rfc/artifact-versioning-v1.md
 db2f9017459be01a40d9d21b1411f0e1461afb9bc550e3d10ee233d3eaf3da9b  protocols/specs/rfc/canonical-json-v1.md
 41e41ae7387cbfeff899b7569d4b3cb3859ce2049e0cacc80c8c521500cb02d3  protocols/specs/rfc/identifier-urn-v1.md
-b389dcd2639fec16b3f1d4d271a509c0d45d42db4aa91d04a54d439349aaaa96  protocols/specs/rfc/policy-bundle-v1.md
+261219dce42b1b0be90aba8b7527934bd97cb34f5d198f3a56ea4dac37d8ddbf  protocols/specs/rfc/policy-bundle-v1.md
 6fb90efceb2a7708079eaa3e9127e578a5d02573d79b28d7742ba8769ff38784  protocols/specs/rfc/reason-codes-v1.md
 981f7a33c869a671fb155dc33cb1b386dcf123d1a5806662a3ac31f8a345cb75  protocols/specs/rfc/receipt-format-v1.md
 e98a649ea99d4f4dfac7989f326447ac49c42840f54237f20b621687a20d06e7  protocols/specs/rfc/receipt-pq-hybrid-profile-v1.md

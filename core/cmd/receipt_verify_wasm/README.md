@@ -48,11 +48,19 @@ duplicate members or invalid number spellings.
 
 Member names are matched exactly, the way `JSON.parse` matches them. A
 document in which a receipt, bundle, permit or binding member is spelled in
-another letter case (`"Verdict"` for `verdict`), or in which two members of
-one object differ only in letter case, is `FAILED` with an error that names
-the letter case. Without that rule a document could carry `"verdict":"ALLOW"`
-for the host and `"Verdict":"DENY"`, the signed value, for the verifier. Read
-a receipt's members from the same text the verifier accepted.
+another letter case (`"Verdict"` for `verdict`) is `FAILED` with an error that
+names the letter case. Without that rule a document could carry
+`"verdict":"ALLOW"` for the host and `"Verdict":"DENY"`, the signed value, for
+the verifier. Keys of `metadata`, `public_key_set`, `subject` and other
+free-form values are compared exactly, as `JSON.parse` compares them.
+
+In the bundle form, an object with a `receipts` array, the verifier checks the
+receipts inside that array and nothing else. A document that carries a receipt
+member beside it, such as `{"verdict":"ALLOW","receipts":[...]}`, is `FAILED`:
+`JSON.parse(text).verdict` would read a value no check covered. Read a
+receipt's members from the entries of `receipts` (or from the receipt object,
+or the array, when that is what you passed), in the same text the verifier
+accepted.
 
 Supply `trustRootJSON` independently of the artifact, as
 `{"keys":{"key-id":"32-byte-Ed25519-public-key-as-hex"}}`. No production key
@@ -79,6 +87,11 @@ bridge does not check such a receipt and has no option to: the result is
 `UNVERIFIABLE` with no checks. The native `receipt_verify --allow-legacy-v4`
 checks one and says what its signature does not cover.
 
+`key_id` in `verification` is the first receipt's own `key_id` member. No
+signature covers it and it is not the key a signature verified under;
+`key_id_note` says so in the result. `preimage_versions` lists the preimage
+each receipt was checked under with a receipt count.
+
 The `integrity` check is `not_applicable` for every input. It recomputes each
 receipt's chain hash and compares it with nothing, and its detail names the
 receipt whose unsigned members nothing pins. The `closure` check is the one
@@ -95,8 +108,9 @@ The shared corpus reuses frozen public receipt/permit fixtures, including a
 frozen gateway receipt chain with its bindings, without private keys. It tests native/WASM result parity, artifact-only trust refusal, wrong
 roots, signed-field and permit tampering, strict wire parsing and argument/size
 refusals. It holds the frozen gateway denial edited to read `ALLOW` by exact
-member name, and its signature replayed as a legacy receipt; the JavaScript
-harness reads the first with `JSON.parse` before the verifier refuses it. It also covers initialization races and parsing-work refusals followed
+member name, the same denial inside a bundle whose top level says `ALLOW`,
+and its signature replayed as a legacy receipt; the JavaScript harness reads
+the first two with `JSON.parse` before the verifier refuses them. It also covers initialization races and parsing-work refusals followed
 by successful reuse. The JavaScript harness runs the actual WASM module in Node
 with WASM linear memory capped at 128 MiB and records its exact binary hash and named
 results in `conformance.json`.

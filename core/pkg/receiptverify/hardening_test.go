@@ -153,43 +153,6 @@ func TestCaseVariantMembersCannotShadowSignedFields(t *testing.T) {
 	}
 }
 
-// TestCaseFoldedDuplicateMembersAreRejectedAtEveryDepth pins the rule the
-// duplicate scan applies to every object it walks, typed or not: two members
-// of one object whose names are equal under the case folding encoding/json
-// uses are one name written twice. The folding is Unicode simple folding, so
-// the Kelvin sign and the long s collide with k and s.
-func TestCaseFoldedDuplicateMembersAreRejectedAtEveryDepth(t *testing.T) {
-	for name, doc := range map[string]string{
-		"top level":           `{"a":1,"A":2}`,
-		"nested object":       `{"outer":{"verdict":"ALLOW","VERDICT":"DENY"}}`,
-		"inside an array":     `[{"status":"x"},{"status":"x","Status":"y"}]`,
-		"kelvin sign":         `{"key_id":"a","` + "K" + `ey_id":"b"}`,
-		"long s":              `{"status":"a","` + "ſ" + `tatus":"b"}`,
-		"escaped member name": `{"status":"a","\u0053tatus":"b"}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			err := ValidateJSONStructure([]byte(doc))
-			if err == nil || !strings.Contains(err.Error(), "duplicate object member") || !strings.Contains(err.Error(), "letter case") {
-				t.Fatalf("ValidateJSONStructure(%s) = %v, want a duplicate-member refusal naming letter case", doc, err)
-			}
-		})
-	}
-	// Names that are not equal under case folding stay distinct, and the same
-	// name in two different objects is not a duplicate.
-	for name, doc := range map[string]string{
-		"distinct names":            `{"a":1,"b":2}`,
-		"underscore is not folded":  `{"key_id":1,"keyid":2}`,
-		"same name in two objects":  `{"x":{"a":1},"y":{"A":1}}`,
-		"same name in two elements": `[{"a":1},{"A":1}]`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := ValidateJSONStructure([]byte(doc)); err != nil {
-				t.Fatalf("ValidateJSONStructure(%s) = %v, want nil", doc, err)
-			}
-		})
-	}
-}
-
 // TestCaseVariantSpellingsOfKnownMembersAreRejected covers the member that is
 // written once, in the wrong letter case. encoding/json would still bind it to
 // the struct field, so the verifier would act on a value that no exact-name
@@ -608,41 +571,122 @@ func TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo(t *testing.T) {
 	}
 }
 
-// TestLegacyReceiptInAVersionedChainIsCounted: preimage_version reports the
-// first receipt only, so a legacy receipt further down a chain is refused by
-// its own index, and under the opt-in the count is what shows it.
-func TestLegacyReceiptInAVersionedChainIsCounted(t *testing.T) {
+// resultJSON is a result as a consumer of receipt_verify --json reads it.
+func resultJSON(t *testing.T, res Result) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestLegacyReceiptInAVersionedChainIsNamed: a chain may hold receipts signed
+// under different preimages. preimage_version named the first receipt's only,
+// so a chain of a receipt.v5 receipt and a legacy one read "receipt.v5" with
+// valid true. The result now names every preimage and how many receipts were
+// checked under each, and preimage_version is "mixed" when there are two.
+func TestLegacyReceiptInAVersionedChainIsNamed(t *testing.T) {
 	raw, trust, _ := signedDenial(t)
 	first, err := ParseBundle(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, legacyTrust := legacyV4Receipt(t)
-	for id, key := range legacyTrust.Keys {
-		trust.Keys[id] = key
+	prev, err := contracts.ReceiptChainHash(first.Receipts[0])
+	if err != nil {
+		t.Fatal(err)
 	}
+	// A legacy receipt that really chains to the receipt.v5 one, so the
+	// result is valid and nothing but the version members can show the mix.
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x53}, ed25519.SeedSize))
+	legacy := &contracts.Receipt{
+		ReceiptID: "rcpt-legacy-2", DecisionID: "dec-legacy-2", EffectID: "eff-legacy-2", Status: "EXECUTED",
+		PrevHash: prev, LamportClock: 2, Verdict: "ALLOW", KeyID: "legacy-key",
+	}
+	legacy.Signature = hex.EncodeToString(ed25519.Sign(key, canonicalizeV4(legacy)))
+	trust.Keys["legacy-key"] = hex.EncodeToString(key.Public().(ed25519.PublicKey))
 	chain := []*contracts.Receipt{first.Receipts[0], legacy}
 
 	res := Verify(chain, trust)
 	requireLegacyRefusal(t, res)
-	if !strings.Contains(res.Errors[0], `receipt[1] "rcpt-legacy-1"`) || !strings.Contains(res.Errors[0], "1 of 2") {
+	if !strings.Contains(res.Errors[0], `receipt[1] "rcpt-legacy-2"`) || !strings.Contains(res.Errors[0], "1 of 2") {
 		t.Fatalf("the refusal must name the legacy receipt and how many there are: %s", res.Errors[0])
 	}
 
 	res = VerifyBundleWith(Bundle{Receipts: chain}, trust, Options{AllowLegacyV4: true})
-	if res.PreimageVersion != contracts.ReceiptSignatureV5 || res.LegacyReceipts != 1 {
-		t.Fatalf("a legacy receipt behind a receipt.v5 one must be counted: %+v", res)
+	if !res.Valid || res.LegacyReceipts != 1 {
+		t.Fatalf("the chain is expected to verify under the opt-in with one legacy receipt counted: %+v", res)
+	}
+	out := resultJSON(t, res)
+	if out["preimage_version"] != "mixed" {
+		t.Fatalf("preimage_version = %v for a chain of a receipt.v5 and a legacy receipt, want \"mixed\"", out["preimage_version"])
+	}
+	want := []any{
+		map[string]any{"version": contracts.ReceiptSignatureV5, "receipts": float64(1)},
+		map[string]any{"version": "v4-fields", "receipts": float64(1)},
+	}
+	if !reflect.DeepEqual(out["preimage_versions"], want) {
+		t.Fatalf("preimage_versions = %v, want every preimage with its receipt count: %v", out["preimage_versions"], want)
 	}
 	if identity := checkNamed(t, res, CheckIdentity); identity.Status != StatusPass || !strings.Contains(identity.Detail, "of these, 1 legacy v4 receipt(s)") {
 		t.Fatalf("the identity check must say how many of the receipts it passed are legacy: %+v", identity)
 	}
+
+	// A chain under one preimage keeps naming it, with the count beside it.
+	fx := loadFrozen(t)
+	out = resultJSON(t, Verify(fx.Receipts, fx.trust()))
+	if out["preimage_version"] != contracts.ReceiptSignatureV5 ||
+		!reflect.DeepEqual(out["preimage_versions"], []any{map[string]any{"version": contracts.ReceiptSignatureV5, "receipts": float64(3)}}) {
+		t.Fatalf("a receipt.v5 chain reports preimage_version %v, preimage_versions %v", out["preimage_version"], out["preimage_versions"])
+	}
 }
 
-// TestOptedInReplayIsValidAndSaysWhatItDoesNotCover states what the opt-in
-// accepts: the replay of a receipt.v5 signature as a legacy receipt verifies
-// under it, which is why it is not the default and why the result must say
-// that the verdict it carries is not covered.
-func TestOptedInReplayIsValidAndSaysWhatItDoesNotCover(t *testing.T) {
+// TestKeyIDInTheResultIsMarkedAsAClaim: key_id in a result is the first
+// receipt's key_id member. No signature covers it and no key is chosen by it,
+// so a result that carries it must say so beside it: a reader takes a key_id
+// next to "valid": true for the key that verified.
+func TestKeyIDInTheResultIsMarkedAsAClaim(t *testing.T) {
+	raw, trust, _ := signedDenial(t)
+	renamed := replaceOnce(t, raw, `"key_id":"hardening-test-key"`, `"key_id":"any-name-at-all"`)
+	bundle, err := ParseBundle(renamed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := VerifyBundle(bundle, trust)
+	if !res.Valid {
+		t.Fatalf("key_id is outside the signed envelope, so rewriting it is expected to leave the receipt valid: %+v", res)
+	}
+	out := resultJSON(t, res)
+	if out["key_id"] != "any-name-at-all" {
+		t.Fatalf("key_id = %v, want the receipt's member echoed", out["key_id"])
+	}
+	note, _ := out["key_id_note"].(string)
+	for _, want := range []string{"unsigned", "claim", "not the key"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("a result that carries key_id must say what it is (key_id_note missing %q): %q", want, note)
+		}
+	}
+	// No key_id, no note.
+	without, err := ParseBundle(replaceOnce(t, raw, `"key_id":"hardening-test-key",`, ``))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := resultJSON(t, VerifyBundle(without, trust)); out["key_id"] != nil || out["key_id_note"] != nil {
+		t.Fatalf("a result with no key_id carries a note about one: %v", out)
+	}
+}
+
+// TestOptedInReplayIsRefusedByItsReceiptID: the opt-in checks receipts issued
+// before receipt.v5, and must still not accept a receipt.v5 signature read
+// back as a legacy receipt. The replay cannot choose its receipt_id: the
+// legacy preimage begins with it, and the signed bytes it replays are the JSON
+// text of the receipt.v5 envelope, which begins with "{". A genuine legacy
+// receipt_id never does, so that one character tells the two apart.
+func TestOptedInReplayIsRefusedByItsReceiptID(t *testing.T) {
 	raw, trust, _ := signedDenial(t)
 	genuine, err := ParseBundle(raw)
 	if err != nil {
@@ -656,12 +700,33 @@ func TestOptedInReplayIsValidAndSaysWhatItDoesNotCover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := VerifyBundleWith(bundle, trust, Options{AllowLegacyV4: true})
-	if !res.Valid || res.LegacyReceipts != 1 {
-		t.Fatalf("the legacy preimage has no domain separation, so the replay is expected to verify under the opt-in: %+v", res)
+	r := bundle.Receipts[0]
+	if !bytes.Equal(canonicalizeV4(r), signed) || !strings.HasPrefix(r.ReceiptID, `{"args_hash"`) {
+		t.Fatalf("the planted document is not a legacy reading of the signed receipt.v5 bytes; the case proves nothing: %+v", r)
 	}
-	if detail := checkNamed(t, res, CheckIdentity).Detail; !strings.Contains(detail, "does not cover verdict") {
-		t.Fatalf("an opted-in pass on a replayed receipt must say the verdict is not covered: %s", detail)
+	// The signature itself is good for these bytes: only the rule refuses it.
+	for _, key := range trust.Keys {
+		if ok, err := verifyEd25519(key, r.Signature, canonicalizeV4(r)); err != nil || !ok {
+			t.Fatalf("the replayed signature does not verify over the legacy preimage; the case proves nothing: %v", err)
+		}
+	}
+
+	res := VerifyBundleWith(bundle, trust, Options{AllowLegacyV4: true})
+	identity := checkNamed(t, res, CheckIdentity)
+	if res.Valid || identity.Status != StatusFail {
+		t.Fatalf("the signature of a receipt.v5 DENY receipt was replayed as a legacy receipt and VERIFIED under the opt-in with verdict %q: %+v",
+			r.Verdict, res)
+	}
+	for _, want := range []string{"receipt_id", `"{"`, "replay"} {
+		if !strings.Contains(identity.Detail, want) {
+			t.Fatalf("the refusal must say why the receipt is not a legacy receipt (missing %s): %s", want, identity.Detail)
+		}
+	}
+
+	// A genuine legacy receipt is not caught by the rule.
+	legacy, legacyTrust := legacyV4Receipt(t)
+	if res := VerifyBundleWith(Bundle{Receipts: []*contracts.Receipt{legacy}}, legacyTrust, Options{AllowLegacyV4: true}); !res.Valid {
+		t.Fatalf("a genuine legacy receipt no longer verifies under the opt-in: %+v", res)
 	}
 }
 
@@ -868,6 +933,31 @@ func TestCorpusHardeningDocumentsAreWhatTheirNamesSay(t *testing.T) {
 		t.Fatalf("gateway_case_variant_member is not refused for the letter case of timestamp: %v", err)
 	}
 
+	// The decoy bundle reads ALLOW at its top level, holds the frozen DENY
+	// receipt unchanged, and is refused for the members beside "receipts":
+	// without them the same bundle verifies.
+	decoy := []byte(corpus.Documents["gateway_bundle_decoy"])
+	var top struct {
+		Verdict  string            `json:"verdict"`
+		Receipts []json.RawMessage `json:"receipts"`
+	}
+	if err := json.Unmarshal(decoy, &top); err != nil {
+		t.Fatal(err)
+	}
+	if top.Verdict != "ALLOW" || len(top.Receipts) != 1 {
+		t.Fatalf("gateway_bundle_decoy does not read ALLOW at its top level over one receipt: %s", decoy)
+	}
+	inner, err := ParseBundle([]byte(`{"receipts":[` + string(top.Receipts[0]) + `]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := VerifyBundle(inner, trust); !res.Valid || inner.Receipts[0].Verdict != "DENY" || inner.Receipts[0].Signature != denial.Signature {
+		t.Fatalf("the receipt inside gateway_bundle_decoy is not the frozen DENY, verified: %+v", res)
+	}
+	if _, err := ParseBundle(decoy); err == nil || !strings.Contains(err.Error(), "receipt member") {
+		t.Fatalf("gateway_bundle_decoy is not refused for the receipt members at its top level: %v", err)
+	}
+
 	replay, err := ParseBundle([]byte(corpus.Documents["gateway_legacy_replay"]))
 	if err != nil {
 		t.Fatal(err)
@@ -881,8 +971,11 @@ func TestCorpusHardeningDocumentsAreWhatTheirNamesSay(t *testing.T) {
 		t.Fatalf("gateway_legacy_replay is not a legacy reading of the frozen DENY receipt's signed bytes: %+v", r)
 	}
 	requireLegacyRefusal(t, VerifyBundle(replay, trust))
-	if res := VerifyBundleWith(replay, trust, Options{AllowLegacyV4: true}); !res.Valid || res.LegacyReceipts != 1 {
-		t.Fatalf("gateway_legacy_replay does not verify under the opt-in, so it is not a replay: %+v", res)
+	// The signature is the frozen one over these very bytes, so only the
+	// receipt_id rule keeps the opt-in from accepting it.
+	if res := VerifyBundleWith(replay, trust, Options{AllowLegacyV4: true}); res.Valid ||
+		!strings.Contains(checkNamed(t, res, CheckIdentity).Detail, "replay") {
+		t.Fatalf("gateway_legacy_replay verifies under the opt-in, or is refused for another reason: %+v", res)
 	}
 }
 
@@ -971,7 +1064,8 @@ func TestMembersOfFollowsEncodingJSONFieldRules(t *testing.T) {
 		`{"Through_Pointer":"b"}`:       true,
 		`{"named_embed":{"Inner":"c"}}`: true,
 		`{"untagged":"d"}`:              true,
-		`{"Skipped":"x","skipped":"y"}`: true, // one name twice, typed or not
+		`{"Skipped":"x","skipped":"y"}`: false, // neither is a member: two names no field binds
+		`{"Tagged":"x","tagged":"y"}`:   true,
 		`{"Skipped":"x","hidden":"y"}`:  false,
 		`{"namedEmbed":{"Inner":"c"}}`:  false,
 	} {

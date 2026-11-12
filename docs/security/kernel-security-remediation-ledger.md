@@ -425,26 +425,42 @@ check of `POST /api/v1/evidence/verify`. No key was needed.
 
 Every receipt verifier now refuses a receipt with no `signature_version` unless
 its caller opts in: `receiptverify.Options.AllowLegacyV4` (`receipt_verify
---allow-legacy-v4`) and `crypto.AllowLegacyReceiptPreimages`. No shipped caller
-opts in except the `receipt_verify` flag. An opted-in result counts the legacy
-receipts and says that their signature does not cover `verdict`, `tool_name`
-or `timestamp`.
+--allow-legacy-v4`), `crypto.AllowLegacyReceiptPreimages`, and
+`verifier.VerifyOptions.AllowLegacyV4Receipts` (`helm-ai-kernel verify
+--allow-legacy-v4-receipts`) for the dev-local MCP branch of the EvidencePack
+verifier. No shipped caller opts in except those two flags.
+`KeyRing.VerifyReceipt` returns the same refusal, so the evidence route
+reports the receipt as not checked under a rotated runtime key as well. An
+opted-in result counts the legacy receipts and says that their signature does
+not cover `verdict`, `tool_name` or `timestamp`. The replay is refused under
+every opt-in too: the legacy preimage begins with `receipt_id`, and the
+replayed bytes are JSON text, so the replay's `receipt_id` begins with `{`.
 
 In the same change, `receiptverify` matches member names exactly. Go's JSON
 decoder binds `"Verdict"` to the `verdict` field and the duplicate-member scan
 compared names exactly, so a signed DENY receipt could carry `"verdict":"ALLOW"`
-for `jq` and JavaScript and `"Verdict":"DENY"` for the verifier. The
-`integrity` check, which compares nothing, reports `not_applicable` and no
-longer says the signed bytes are the bytes on disk.
+for `jq` and JavaScript and `"Verdict":"DENY"` for the verifier. The rule
+applies where a Go struct is decoded; keys of maps and free-form values are
+compared exactly. A bundle that carries a receipt member beside `receipts` is
+refused, because `{"verdict":"ALLOW","receipts":[<a DENY receipt>]}` verified
+while its reader read ALLOW. `POST /api/v1/evidence/verify`,
+`helm-ai-kernel verify receipt` and `POST /api/demo/verify` read a receipt
+with the same parser (`receiptverify.ParseReceipt`). The `integrity` check,
+which compares nothing, reports `not_applicable` and no longer says the signed
+bytes are the bytes on disk.
 
 Regressions: `TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt`,
 `TestCaseVariantMembersCannotShadowSignedFields` and
 `TestIntegrityCheckSaysOnlyWhatItChecked` in `core/pkg/receiptverify`,
 `TestReceiptV5SignatureDoesNotReplayAsLegacy` in `core/pkg/crypto`, and
 `TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt` in
-`core/cmd/helm-ai-kernel`. The dev-local MCP proof path of the EvidencePack
-verifier (`core/pkg/verifier`) still reads an unversioned receipt against the
-key its pack carries; that result is self-attested and is not changed here.
+`core/cmd/helm-ai-kernel`. Also `TestBundleTopLevelHoldsNoReceiptMember`,
+`TestOptedInReplayIsRefusedByItsReceiptID` and
+`TestLetterCaseRuleFollowsTheDecodedType` in `core/pkg/receiptverify`,
+`TestKeyRingReportsALegacyReceiptAsNotChecked` in `core/pkg/crypto`,
+`TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault` in `core/pkg/verifier`,
+and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes` in
+`core/cmd/helm-ai-kernel`.
 
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 

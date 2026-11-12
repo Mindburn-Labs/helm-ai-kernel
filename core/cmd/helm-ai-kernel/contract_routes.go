@@ -1850,6 +1850,16 @@ func verifyEvidenceRequest(r *http.Request, svc *Services) evidenceVerification 
 
 // readEvidenceVerificationInput reads the uploaded bundle and its receipts,
 // sorted by session and Lamport clock.
+//
+// Each receipt file is read by receiptverify.ParseReceipt, the parser
+// receipt_verify uses, so one rule decides what a receipt document is. The
+// signature profile is left to verifyTrustedEvidenceReceipt, which checks the
+// hybrid and ML-DSA profiles that parser's own verifier does not know. A file
+// that writes a member twice, or spells a receipt member in another letter
+// case, says one thing to encoding/json and another to a reader that matches
+// names exactly; the bundle seal cannot vouch for it, because whoever holds
+// the bundle seals it. Such a file makes the bundle unreadable (bundle_format
+// FAILED) before any receipt check runs.
 func readEvidenceVerificationInput(r *http.Request) ([]byte, *evidenceBundle, []*contracts.Receipt, error) {
 	raw, err := readEvidenceBundleRequest(r)
 	if err != nil {
@@ -1864,11 +1874,11 @@ func readEvidenceVerificationInput(r *http.Request) ([]byte, *evidenceBundle, []
 		if !strings.HasPrefix(name, "receipts/") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		var receipt contracts.Receipt
-		if err := json.Unmarshal(data, &receipt); err != nil {
+		receipt, err := receiptverify.ParseReceipt(data, receiptverify.AnySignatureProfile)
+		if err != nil {
 			return nil, nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
-		receipts = append(receipts, &receipt)
+		receipts = append(receipts, receipt)
 	}
 	if len(receipts) == 0 {
 		return nil, nil, nil, errors.New("no receipts in evidence bundle")
@@ -2268,7 +2278,9 @@ var errNoTrustedReceiptVerifier = errors.New("trusted receipt signer unavailable
 // receipt-provided public keys. A self-signed uploaded bundle is consistency
 // evidence only and must not become its own authority. A receipt with no
 // signature_version is refused with helmcrypto.ErrLegacyReceiptRefused by
-// every branch below: none passes AllowLegacyReceiptPreimages.
+// every branch below, the KeyRing included: none passes
+// AllowLegacyReceiptPreimages. A signer of another type that exposes
+// VerifyReceipt answers for itself.
 func verifyTrustedEvidenceReceipt(svc *Services, receipt *contracts.Receipt) error {
 	if svc == nil || svc.ReceiptSigner == nil {
 		return errNoTrustedReceiptVerifier

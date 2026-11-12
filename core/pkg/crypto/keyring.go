@@ -229,7 +229,16 @@ func (k *KeyRing) SignReceipt(r *contracts.Receipt) error {
 // VerifyReceipt verifies a receipt against the trusted keyring members.
 // Profile-aware signers validate the receipt's declared profile and signature
 // envelope together, so a hybrid receipt cannot be downgraded to classical.
+//
+// A receipt with no signature_version is refused with ErrLegacyReceiptRefused
+// before any member is tried, and the method has no opt-in. Every member
+// refuses such a receipt the same way, and folding their refusals into "no key
+// verified the receipt" told the caller that a signature did not match when no
+// signature had been checked.
 func (k *KeyRing) VerifyReceipt(r *contracts.Receipt) (bool, error) {
+	if r != nil && r.SignatureVersion == "" {
+		return false, ErrLegacyReceiptRefused
+	}
 	k.mu.RLock()
 	defer k.mu.RUnlock()
 	for _, s := range k.signers {

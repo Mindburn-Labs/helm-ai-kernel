@@ -49,6 +49,14 @@ helm-ai-kernel verify receipt \
 Exit 0 only when integrity and signer trust both hold against the
 caller-supplied key. Hop fixtures are labeled DENY / no permit.
 
+Integrity here is the `receipt.v5` signature over its 13 signed members, not
+the whole file. The report lists those as `signed_members` and the file's
+other members (`tool_name`, `timestamp`, `key_id` among them) as
+`unsigned_members`: no signature covers them, and rewriting them changes
+neither `integrity_valid` nor the exit status. The file is read by the parser
+`receipt_verify` uses, so the rules under
+[Verify A Receipt Chain Offline](#verify-a-receipt-chain-offline) apply.
+
 For a single workstation receipt:
 
 ```bash
@@ -197,14 +205,25 @@ receipt, receipt array or bundle, or a legacy receipt without
 `--allow-legacy-v4`. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
 result does and does not establish.
 
-Two rules decide whether a file is checked at all:
+These rules decide whether a file is checked at all:
 
 - **Member names are matched exactly.** A file in which a receipt, bundle,
   permit or binding member is spelled in another letter case (`"Verdict"` for
-  `verdict`), or in which two members of one object differ only in letter
-  case, does not parse (exit `2`). Go's JSON decoder would bind `"Verdict"` to
-  the verdict; `jq` and JavaScript would not, so the same file would say one
-  thing to the verifier and another to its reader.
+  `verdict`) does not parse (exit `2`). Go's JSON decoder would bind
+  `"Verdict"` to the verdict; `jq` and JavaScript would not, so the same file
+  would say one thing to the verifier and another to its reader. Keys of
+  `metadata`, `public_key_set`, `subject` and other free-form values are
+  compared exactly: `a` and `A` there are two keys to every reader. A member
+  written twice is refused wherever it is.
+- **A bundle holds receipts only inside `receipts`.** In the bundle form (an
+  object with a `receipts` array) the verifier checks the receipts in that
+  array. A receipt member beside it, such as `verdict`, `status` or
+  `tool_name`, is checked by nothing and is what `jq .verdict` returns, so a
+  file that carries one does not parse (exit `2`). The bundle's own members
+  (`key_id`, `public_key_hex`, `permits`, `gateway_bindings`) and names that
+  are not receipt members, such as a `comment`, are accepted.
+- **Nesting is limited to 64 levels.** A file nested deeper is refused before
+  it is read further (exit `2`).
 - **A legacy receipt needs `--allow-legacy-v4`.** A receipt with no
   `signature_version` was signed before `receipt.v5`, over eight fields joined
   with `:` and no escaping. That signature does not cover `verdict`,
@@ -219,7 +238,11 @@ Two rules decide whether a file is checked at all:
   The output then counts the legacy receipts (`legacy_receipts` in `--json`)
   and says that their signature does not cover `verdict`, `tool_name` or
   `timestamp`. Pass the flag only for receipts you know were issued before
-  `receipt.v5`.
+  `receipt.v5`. The replay itself still fails under the flag (exit `1`): the
+  legacy preimage begins with `receipt_id`, and the replayed bytes begin with
+  `{`, which no receipt id does. For a chain that mixes the two kinds,
+  `preimage_version` is `mixed` and `preimage_versions` lists each preimage
+  with its receipt count.
 
 A `receipt.v5` signature covers 13 members, not the whole receipt. The
 `integrity` check is always `not_applicable`: it recomputes each receipt's
@@ -227,4 +250,6 @@ chain hash and compares it with nothing, and it names the receipt whose other
 members (`timestamp`, `tool_name`, `executor_id`, `metadata`, `key_id` among
 them) nothing covers. That is a single receipt, or the last receipt of a
 chain. The `closure` check compares each earlier receipt with its successor's
-signed `prev_hash`.
+signed `prev_hash`. `key_id` in the `--json` verdict is such a member: it is
+the first receipt's own claim, not the key a signature verified under, and
+`key_id_note` says so.

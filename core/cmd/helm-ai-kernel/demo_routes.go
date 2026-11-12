@@ -1,8 +1,12 @@
+// quantum_posture: the public demo signs and verifies receipts with the
+// runtime's configured receipt signer and adds no signature scheme; its
+// receipt checks claim no post-quantum protection of their own.
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +17,7 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
 const demoPolicyID = "agent_tool_call_boundary"
@@ -42,15 +47,30 @@ type demoRunRequest struct {
 	Args     map[string]any `json:"args,omitempty"`
 }
 
+// demoVerifyRequest and demoTamperRequest keep the receipt as the bytes the
+// caller sent, for readDemoReceipt: decoding it here would let encoding/json
+// fold member names before the receipt parser sees them.
 type demoVerifyRequest struct {
-	Receipt             contracts.Receipt `json:"receipt"`
-	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
+	Receipt             json.RawMessage `json:"receipt"`
+	ExpectedReceiptHash string          `json:"expected_receipt_hash"`
 }
 
 type demoTamperRequest struct {
-	Receipt             contracts.Receipt `json:"receipt"`
-	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
-	Mutation            string            `json:"mutation"`
+	Receipt             json.RawMessage `json:"receipt"`
+	ExpectedReceiptHash string          `json:"expected_receipt_hash"`
+	Mutation            string          `json:"mutation"`
+}
+
+// readDemoReceipt reads the receipt of a demo request with the parser
+// receipt_verify uses. A receipt that writes a member twice, or spells one in
+// another letter case, reads differently to the page that displays it than to
+// this verifier, and is refused instead of verified. The signature profile is
+// the runtime signer's to check: it may be hybrid.
+func readDemoReceipt(raw json.RawMessage) (*contracts.Receipt, error) {
+	if len(raw) == 0 {
+		return nil, errors.New("receipt is required")
+	}
+	return receiptverify.ParseReceipt(raw, receiptverify.AnySignatureProfile)
 }
 
 var demoActions = map[string]demoAction{
@@ -181,7 +201,12 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteBadRequest(w, "expected_receipt_hash is required")
 			return
 		}
-		result := verifyDemoReceipt(svc, &req.Receipt, req.ExpectedReceiptHash)
+		receipt, err := readDemoReceipt(req.Receipt)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid receipt: "+err.Error())
+			return
+		}
+		result := verifyDemoReceipt(svc, receipt, req.ExpectedReceiptHash)
 		writeJSON(w, result)
 	})
 
@@ -199,8 +224,13 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteBadRequest(w, "expected_receipt_hash is required")
 			return
 		}
-		originalHash, _ := contracts.ReceiptChainHash(&req.Receipt)
-		tampered := req.Receipt
+		receipt, err := readDemoReceipt(req.Receipt)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid receipt: "+err.Error())
+			return
+		}
+		originalHash, _ := contracts.ReceiptChainHash(receipt)
+		tampered := *receipt
 		switch strings.TrimSpace(req.Mutation) {
 		case "", "flip_verdict", "flip_status":
 			if tampered.Status == string(contracts.VerdictDeny) {
@@ -351,6 +381,15 @@ func publicReasonCode(decision *contracts.DecisionRecord) string {
 	return "UNSPECIFIED"
 }
 
+// verifyDemoReceipt checks a demo receipt against the runtime signer and the
+// hash the demo run returned.
+//
+// verified_fields names the members the signature was verified over: the
+// receipt.v5 signed members when the signature is valid, and nothing
+// otherwise. hash_matches covers the whole receipt, but only against a hash
+// the caller supplied. A receipt with no signature_version is not checked
+// (helmcrypto.ErrLegacyReceiptRefused), and the reason says that instead of
+// reporting a signature that failed.
 func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceiptHash string) map[string]any {
 	expectedReceiptHash = strings.TrimSpace(expectedReceiptHash)
 	receiptHash, hashErr := contracts.ReceiptChainHash(receipt)
@@ -361,6 +400,7 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 			"signature_valid":       false,
 			"hash_matches":          hashMatches,
 			"reason":                "receipt signer unavailable",
+			"verified_fields":       []string{},
 			"receipt_hash":          receiptHash,
 			"expected_receipt_hash": expectedReceiptHash,
 		}
@@ -374,6 +414,7 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 			"signature_valid":       false,
 			"hash_matches":          hashMatches,
 			"reason":                "receipt signer cannot verify receipts",
+			"verified_fields":       []string{},
 			"receipt_hash":          receiptHash,
 			"expected_receipt_hash": expectedReceiptHash,
 		}
@@ -382,6 +423,8 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 	reason := "signature and receipt hash verified"
 	if hashErr != nil {
 		reason = "receipt hash failed: " + hashErr.Error()
+	} else if errors.Is(verifyErr, helmcrypto.ErrLegacyReceiptRefused) {
+		reason = "receipt not checked: " + verifyErr.Error()
 	} else if verifyErr != nil {
 		reason = "signature verification failed: " + verifyErr.Error()
 	} else if !signatureValid {
@@ -390,12 +433,16 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 		reason = "receipt hash mismatch"
 	}
 	valid := signatureValid && hashMatches && hashErr == nil && verifyErr == nil
+	verifiedFields := []string{}
+	if signatureValid && verifyErr == nil && receipt.SignatureVersion == contracts.ReceiptSignatureV5 {
+		verifiedFields = receiptverify.ReceiptV5SignedMembers()
+	}
 	return map[string]any{
 		"valid":                 valid,
 		"signature_valid":       signatureValid,
 		"hash_matches":          hashMatches,
 		"reason":                reason,
-		"verified_fields":       []string{"receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash", "lamport_clock", "args_hash", "signature"},
+		"verified_fields":       verifiedFields,
 		"receipt_hash":          receiptHash,
 		"expected_receipt_hash": expectedReceiptHash,
 	}

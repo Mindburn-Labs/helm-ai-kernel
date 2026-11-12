@@ -79,6 +79,14 @@ assert.equal(JSON.parse(shadowed).verdict, "ALLOW", "the shadowed denial must re
 const shadowRefusal = verifier.verifyJSON(shadowed, corpus.trust_roots.gateway);
 assert.equal(shadowRefusal.verdict, "FAILED");
 assert(shadowRefusal.verification.errors.some((x) => x.includes("letter case")), "the refusal must name the letter case");
+// A bundle whose top level says ALLOW over a genuine DENY receipt: the host
+// reads ALLOW from the text, and the verifier refuses the text.
+const decoy = corpus.documents.gateway_bundle_decoy;
+assert.equal(JSON.parse(decoy).verdict, "ALLOW", "the decoy bundle must read ALLOW at its top level");
+assert.equal(JSON.parse(decoy).receipts[0].verdict, "DENY", "the receipt inside the decoy bundle must be the DENY");
+const decoyRefusal = verifier.verifyJSON(decoy, corpus.trust_roots.gateway);
+assert.equal(decoyRefusal.verdict, "FAILED");
+assert(decoyRefusal.verification.errors.some((x) => x.includes("receipt member")), "the refusal must name the receipt member beside receipts");
 const legacy = corpus.documents.gateway_legacy_replay;
 assert.equal(JSON.parse(legacy).signature_version, undefined);
 assert.equal(JSON.parse(legacy).verdict, "ALLOW");
@@ -88,8 +96,9 @@ assert.equal(legacyRefusal.verification.checks, null, "a legacy receipt must be 
 assert(legacyRefusal.verification.errors.length === 1 && legacyRefusal.verification.errors[0].includes("signature_version") &&
   legacyRefusal.verification.errors[0].includes("legacy"), "the refusal must say the receipt is legacy");
 results.push({ case: "exact-name-reader-sees-what-the-verifier-refused", verdict: "FAILED", result: "PASS" },
+  { case: "bundle-reader-sees-what-the-verifier-refused", verdict: "FAILED", result: "PASS" },
   { case: "legacy-receipt-not-checked", verdict: "UNVERIFIABLE", result: "PASS" });
-passed += 2;
+passed += 3;
 for (const [index, args] of [[], [{}], ["{}", {}], ["{}", "{}", "unexpected"]].entries()) {
   assert.equal(verifier.verifyJSON(...args).verdict, "FAILED", "invalid JS argument shape");
   results.push({ case: `invalid-js-arguments-${index + 1}`, verdict: "FAILED", result: "PASS" });

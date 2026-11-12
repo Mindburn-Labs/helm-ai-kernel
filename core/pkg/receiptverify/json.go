@@ -45,7 +45,8 @@ type DocumentResult struct {
 // It has no legacy opt-in either: a document holding a receipt with no
 // signature_version is UNVERIFIABLE, because it was not checked (see
 // LegacyV4Refusal). A document whose member names differ from the receipt,
-// bundle or permit members only in letter case is FAILED at parsing.
+// bundle or permit members only in letter case, or whose bundle form carries a
+// receipt member beside "receipts", is FAILED at parsing.
 //
 // Parsing and all cryptographic/chain/permit checks use the same producer as
 // receipt_verify. No clock, configuration discovery, file or network is read.

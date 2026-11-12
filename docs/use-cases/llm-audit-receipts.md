@@ -65,8 +65,10 @@ Two limits apply today:
   `ErrLegacyReceiptRefused` unless the caller passes
   `crypto.AllowLegacyReceiptPreimages`. Under the opt-in,
   `crypto.VerifyReceiptSignature` first tries the historical whole-receipt JCS
-  candidate and then V4. The 13-key envelope applies only to receipts that
-  declare `receipt.v5`.
+  candidate and then V4, and every verifier refuses a legacy receipt whose
+  `receipt_id` begins with `{`: that is the replay, because the legacy
+  preimage begins with `receipt_id` and the replayed bytes are JSON text. The
+  13-key envelope applies only to receipts that declare `receipt.v5`.
 
 ## Verifying a receipt chain
 
@@ -105,9 +107,13 @@ prints the verdict as JSON. Verify the download itself with `make verify-cosign`
 as described in [Verification](../VERIFICATION.md).
 
 Member names are matched exactly. A file in which a receipt member is spelled
-in another letter case, or in which two members of one object differ only in
-letter case, does not parse: `jq` and JavaScript match names exactly, and a
-decoder that did not would verify one value while they read another.
+in another letter case does not parse: `jq` and JavaScript match names
+exactly, and a decoder that did not would verify one value while they read
+another. Keys of `metadata` and other free-form values are compared exactly.
+In the bundle form (an object with a `receipts` array), a receipt member
+beside `receipts`, such as a top-level `verdict`, does not parse either:
+nothing checks it, and it is what a reader of the file would take for the
+verdict.
 
 For each receipt, the verifier reconstructs the preimage declared by
 `signature_version` and accepts the signature if it verifies under any
@@ -117,7 +123,9 @@ it is then checked against the legacy V4 preimage, and the output says how many
 receipts are legacy and that their signature does not cover `verdict`,
 `tool_name` or `timestamp`. The `integrity` check compares nothing and is
 always `not_applicable`; it names the receipt whose members outside the
-signature nothing covers. The receipt's `key_id` is only a key-order
+signature nothing covers. A chain that mixes legacy and `receipt.v5` receipts
+reports `preimage_version` `mixed` and lists each in `preimage_versions`. The
+receipt's `key_id` is only a key-order
 hint; every supplied key is trusted, and the verifier does not bind any key to
 an organization. An auditor, insurer, or counterparty must obtain the signer's
 public key over an independent channel. Running with `--allow-self-attested`

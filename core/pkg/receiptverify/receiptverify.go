@@ -29,10 +29,12 @@
 // organisation is the caller's problem and deliberately stays outside this
 // package — see TrustRoot.
 //
-// Two kinds of input are refused before any check runs. A document whose
-// member names differ from the receipt's only in letter case does not parse
-// (ParseBundle), and a receipt with no signature_version, a legacy receipt, is
-// not checked unless the caller opts in (Options.AllowLegacyV4).
+// Some input is refused before any check runs. A document does not parse
+// (ParseBundle) when a member that decodes into a receipt, bundle or permit
+// field is spelled in another letter case, when a bundle carries a receipt
+// member beside its "receipts", or when it is nested deeper than MaxJSONDepth.
+// A receipt with no signature_version, a legacy receipt, is not checked unless
+// the caller opts in (Options.AllowLegacyV4).
 package receiptverify
 
 import (
@@ -45,6 +47,7 @@ import (
 	"io"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -123,15 +126,24 @@ type Check struct {
 type Result struct {
 	Valid  bool    `json:"valid"`
 	Checks []Check `json:"checks"`
-	// PreimageVersion names the canonicalization the signature was verified
-	// under. Retained versions are what make an old receipt verifiable by a new
-	// binary.
+	// PreimageVersion names the canonicalization the signatures were checked
+	// under when every receipt shares one, and is PreimageVersionMixed when
+	// they do not; PreimageVersions then says which. Retained versions are
+	// what make an old receipt verifiable by a new binary.
 	PreimageVersion string `json:"preimage_version,omitempty"`
-	// KeyID echoes the receipt's declared key id purely so a caller can see
-	// which key the receipt *claims*. It is never used to select a key.
-	KeyID    string `json:"key_id,omitempty"`
-	Receipts int    `json:"receipts"`
-	Permits  int    `json:"permits,omitempty"`
+	// PreimageVersions lists every canonicalization a signature was checked
+	// under, in the order the receipts first use them, with the number of
+	// receipts under each. A chain may mix them, and a single name for the
+	// chain would then be true of some receipts only.
+	PreimageVersions []PreimageVersionCount `json:"preimage_versions,omitempty"`
+	// KeyID echoes the first receipt's key_id member so a caller can see which
+	// key the receipt *claims*. No signature covers key_id, it is never used
+	// to select or trust a key, and it is not the key a signature verified
+	// under; KeyIDNote says so wherever KeyID is set.
+	KeyID     string `json:"key_id,omitempty"`
+	KeyIDNote string `json:"key_id_note,omitempty"`
+	Receipts  int    `json:"receipts"`
+	Permits   int    `json:"permits,omitempty"`
 	// LegacyReceipts counts the receipts with no signature_version, checked
 	// only under Options.AllowLegacyV4. Their signature covers the eight
 	// members of the legacy v4 preimage and nothing else: not verdict, not
@@ -147,6 +159,22 @@ type Result struct {
 	BindingsChecked int      `json:"bindings_checked,omitempty"`
 	Errors          []string `json:"errors,omitempty"`
 }
+
+// PreimageVersionMixed is Result.PreimageVersion for receipts checked under
+// more than one preimage.
+const PreimageVersionMixed = "mixed"
+
+// PreimageVersionCount is one entry of Result.PreimageVersions.
+type PreimageVersionCount struct {
+	Version  string `json:"version"`
+	Receipts int    `json:"receipts"`
+}
+
+// keyIDNote travels with Result.KeyID in every output. A key_id printed beside
+// "valid": true reads as the key that verified; it is whatever the receipt's
+// writer put there.
+const keyIDNote = "key_id is the first receipt's own key_id member: an unsigned claim of the receipt, " +
+	"not the key a signature verified under. Signatures are checked against the keys the caller supplies, whatever key_id says"
 
 // Bundle is the shape a receipt reaches a counterparty in: one or more
 // receipts in causal order, optionally the permits that authorized them, and
@@ -219,7 +247,22 @@ func ClassicalEd25519MetadataCompatible(profile, algorithm string) bool {
 // The decoded document is returned with semantic errors when possible so an
 // EvidencePack inventory can count a signed-but-invalid receipt as invalid
 // instead of silently dropping it.
+//
+// The document is read as a map, by exact member name, and is not decoded into
+// contracts.Receipt here: a caller that goes on to decode it into a Go struct
+// uses ParseReceipt or ParseBundle, which also refuse a receipt member spelled
+// in another letter case.
 func ParseReceiptDocument(raw []byte) (map[string]any, error) {
+	return parseReceiptDocument(raw, false)
+}
+
+// parseReceiptDocument is ParseReceiptDocument. anyProfile leaves the
+// signature_profile and signature_algorithm pair to the caller's verifier
+// (see AnySignatureProfile).
+func parseReceiptDocument(raw []byte, anyProfile bool) (map[string]any, error) {
+	if err := checkJSONDepth(raw); err != nil {
+		return nil, err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var document map[string]any
@@ -272,7 +315,7 @@ func ParseReceiptDocument(raw []byte) (map[string]any, error) {
 
 	// Managed-agent receipt_version contracts have their own signature metadata
 	// schemas. The pair below governs canonical HELM receipts only.
-	if !isManagedAgentReceipt(document) {
+	if !anyProfile && !isManagedAgentReceipt(document) {
 		profile, err := optionalStringMember(document, "signature_profile")
 		if err != nil {
 			return document, err
@@ -308,12 +351,14 @@ func isManagedAgentReceipt(document map[string]any) bool {
 		version == "managed_agent_execution_receipt.v1"
 }
 
-// ValidateJSONStructure rejects duplicate object members and trailing JSON
-// values before encoding/json can collapse them during typed decoding.
+// ValidateJSONStructure rejects duplicate object members, trailing JSON values
+// and nesting deeper than MaxJSONDepth before encoding/json can collapse or
+// recurse into them during typed decoding.
 //
-// Two members of one object are duplicates when their names are equal under
-// the case folding encoding/json matches struct fields with (foldName), at
-// every depth: "verdict" and "Verdict" are one name written twice.
+// It knows no type the document is decoded into, so it compares member names
+// exactly, as encoding/json does for a map. A document that is decoded into a
+// Go struct is checked by ParseBundle or ParseReceipt, which also refuse a
+// struct member spelled in another letter case.
 func ValidateJSONStructure(raw []byte) error {
 	return validateJSON(raw, nil)
 }
@@ -322,16 +367,23 @@ func ValidateJSONStructure(raw []byte) error {
 // target. Wherever a Go struct is decoded, a member whose name is a struct
 // member's name in another letter case is refused: encoding/json would bind
 // it to that field, so the verifier would act on a value that a reader
-// matching names exactly does not see. Member names inside maps, interface
-// values and self-decoding types are data and are left alone. A nil target
+// matching names exactly does not see. This also refuses every pair of
+// members that differ only in letter case and reach one field.
+//
+// Member names inside maps, interface values and self-decoding types are
+// data: encoding/json matches them exactly, so "a" and "A" there are two keys
+// to every reader, and only one name written twice is refused. A nil target
 // checks structure only.
 func validateJSON(raw []byte, target reflect.Type) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := scanJSONValue(decoder, "$", target); err != nil {
+	if err := checkJSONDepth(raw); err != nil {
 		return err
 	}
-	if token, err := decoder.Token(); err == nil {
+	scan := jsonScan{decoder: json.NewDecoder(bytes.NewReader(raw))}
+	scan.decoder.UseNumber()
+	if err := scan.value(target); err != nil {
+		return err
+	}
+	if token, err := scan.decoder.Token(); err == nil {
 		return fmt.Errorf("receipt has a trailing JSON value beginning with %v", token)
 	} else if !errors.Is(err, io.EOF) {
 		return fmt.Errorf("receipt has invalid trailing JSON: %w", err)
@@ -339,10 +391,86 @@ func validateJSON(raw []byte, target reflect.Type) error {
 	return nil
 }
 
-func scanJSONValue(decoder *json.Decoder, path string, target reflect.Type) error {
-	token, err := decoder.Token()
+// errJSONTooDeep is the nesting-limit refusal of the native path and of the
+// WASM work limits (validateJSONWork).
+var errJSONTooDeep = errors.New("JSON exceeds the 64-level nesting limit")
+
+// checkJSONDepth refuses a document nested deeper than MaxJSONDepth. Every
+// entry point runs it before anything recursive touches the document: the
+// member-name scan and encoding/json both recurse once per level, and 200 KB
+// of brackets is 100,000 levels.
+//
+// It is one pass over the bytes that allocates nothing and tracks only whether
+// it is inside a string, where brackets are data. It does not judge whether
+// the document is well formed; the parsers that follow do.
+func checkJSONDepth(raw []byte) error {
+	depth := 0
+	inString, escaped := false, false
+	for _, c := range raw {
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '{', '[':
+			if depth++; depth > MaxJSONDepth {
+				return errJSONTooDeep
+			}
+		case '}', ']':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return nil
+}
+
+// jsonScan walks one document token by token for validateJSON.
+type jsonScan struct {
+	decoder *json.Decoder
+	// path is where the scan stands. It is kept as steps and rendered only
+	// when a refusal names it: a string built at every level costs memory
+	// quadratic in the nesting depth.
+	path []jsonPathStep
+}
+
+// jsonPathStep is one object member or array index on the way to a value.
+type jsonPathStep struct {
+	member  string
+	index   int
+	isIndex bool
+}
+
+// at renders the current path the way a refusal names it: $.receipts[0].verdict.
+func (s *jsonScan) at() string {
+	var b strings.Builder
+	b.WriteByte('$')
+	for _, step := range s.path {
+		if step.isIndex {
+			b.WriteByte('[')
+			b.WriteString(strconv.Itoa(step.index))
+			b.WriteByte(']')
+			continue
+		}
+		b.WriteByte('.')
+		b.WriteString(step.member)
+	}
+	return b.String()
+}
+
+func (s *jsonScan) value(target reflect.Type) error {
+	token, err := s.decoder.Token()
 	if err != nil {
-		return fmt.Errorf("invalid receipt JSON at %s: %w", path, err)
+		return fmt.Errorf("invalid receipt JSON at %s: %w", s.at(), err)
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {
@@ -361,56 +489,56 @@ func scanJSONValue(decoder *json.Decoder, path string, target reflect.Type) erro
 				value = target.Elem()
 			}
 		}
-		seen := map[string]string{}
-		for decoder.More() {
-			keyToken, err := decoder.Token()
+		seen := map[string]struct{}{}
+		for s.decoder.More() {
+			keyToken, err := s.decoder.Token()
 			if err != nil {
-				return fmt.Errorf("invalid receipt object at %s: %w", path, err)
+				return fmt.Errorf("invalid receipt object at %s: %w", s.at(), err)
 			}
 			key, ok := keyToken.(string)
 			if !ok {
-				return fmt.Errorf("invalid receipt object member at %s", path)
+				return fmt.Errorf("invalid receipt object member at %s", s.at())
 			}
-			folded := foldName(key)
-			if first, duplicate := seen[folded]; duplicate {
-				if first == key {
-					return fmt.Errorf("duplicate object member %q at %s", key, path)
-				}
-				return fmt.Errorf("duplicate object member %q at %s: it differs from %q only in letter case", key, path, first)
+			if _, duplicate := seen[key]; duplicate {
+				return fmt.Errorf("duplicate object member %q at %s", key, s.at())
 			}
-			seen[folded] = key
+			seen[key] = struct{}{}
 			if members != nil {
 				var exact bool
 				if value, exact = members.exact[key]; !exact {
-					if known, variant := members.folded[folded]; variant {
-						return fmt.Errorf("member %q at %s is the member %q in another letter case; member names are matched exactly", key, path, known)
+					if known, variant := members.folded[foldName(key)]; variant {
+						return fmt.Errorf("member %q at %s is the member %q in another letter case; member names are matched exactly", key, s.at(), known)
 					}
 				}
 			}
-			if err := scanJSONValue(decoder, path+"."+key, value); err != nil {
+			s.path = append(s.path, jsonPathStep{member: key})
+			if err := s.value(value); err != nil {
 				return err
 			}
+			s.path = s.path[:len(s.path)-1]
 		}
-		end, err := decoder.Token()
+		end, err := s.decoder.Token()
 		if err != nil || end != json.Delim('}') {
-			return fmt.Errorf("invalid receipt object at %s", path)
+			return fmt.Errorf("invalid receipt object at %s", s.at())
 		}
 	case '[':
 		var element reflect.Type
 		if target != nil && (target.Kind() == reflect.Slice || target.Kind() == reflect.Array) {
 			element = target.Elem()
 		}
-		for index := 0; decoder.More(); index++ {
-			if err := scanJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index), element); err != nil {
+		for index := 0; s.decoder.More(); index++ {
+			s.path = append(s.path, jsonPathStep{index: index, isIndex: true})
+			if err := s.value(element); err != nil {
 				return err
 			}
+			s.path = s.path[:len(s.path)-1]
 		}
-		end, err := decoder.Token()
+		end, err := s.decoder.Token()
 		if err != nil || end != json.Delim(']') {
-			return fmt.Errorf("invalid receipt array at %s", path)
+			return fmt.Errorf("invalid receipt array at %s", s.at())
 		}
 	default:
-		return fmt.Errorf("unexpected closing delimiter %q at %s", delim, path)
+		return fmt.Errorf("unexpected closing delimiter %q at %s", delim, s.at())
 	}
 	return nil
 }
@@ -437,6 +565,20 @@ type receiptV5SigningEnvelope struct {
 	ReasonCode       string `json:"reason_code"`
 	PolicyHash       string `json:"policy_hash"`
 	SessionID        string `json:"session_id"`
+}
+
+// ReceiptV5SignedMembers returns the names of the receipt members a
+// receipt.v5 signature covers, in envelope order. Every other member of a
+// receipt is covered by no signature of its own: a caller that reports on a
+// receipt uses this to say which of the members it shows were checked.
+func ReceiptV5SignedMembers() []string {
+	envelope := reflect.TypeFor[receiptV5SigningEnvelope]()
+	names := make([]string, 0, envelope.NumField())
+	for i := 0; i < envelope.NumField(); i++ {
+		name, _, _ := strings.Cut(envelope.Field(i).Tag.Get("json"), ",")
+		names = append(names, name)
+	}
+	return names
 }
 
 // canonicalizeV5 reproduces crypto.CanonicalizeReceiptV5.
@@ -474,7 +616,8 @@ const legacyV4Members = "receipt_id, decision_id, effect_id, status, output_hash
 // signature of a genuine receipt verifies for a legacy receipt its signer
 // never issued, with any verdict. A verifier therefore checks a legacy receipt
 // only when its caller has opted in (Options.AllowLegacyV4), and
-// VerifyBundleWith answers with this refusal otherwise. A caller that must
+// VerifyBundleWith answers with this refusal otherwise. Under the opt-in that
+// replay is still refused, by its receipt_id (errLegacyReplay). A caller that must
 // report "not checked" apart from "failed" calls it first, as receipt_verify
 // does for its exit code.
 func LegacyV4Refusal(receipts []*contracts.Receipt) error {
@@ -507,6 +650,19 @@ func canonicalizeV4(r *contracts.Receipt) []byte {
 		r.PrevHash, sigSeparator, r.LamportClock, sigSeparator, r.ArgsHash))
 }
 
+// errLegacyReplay refuses a legacy receipt whose receipt_id begins with "{".
+//
+// The legacy preimage begins with receipt_id, unescaped. Every versioned
+// payload this key signs (the receipt.v5 envelope, a decision, a permit) is
+// the JCS text of a JSON object, which begins with "{". A legacy receipt
+// built from those bytes and their signature therefore cannot have any other
+// receipt_id, and no receipt id the kernel ever issued begins with "{": the
+// one character separates a replayed signature from a receipt issued before
+// receipt.v5, which the missing domain separation alone cannot.
+var errLegacyReplay = errors.New(`its receipt_id begins with "{": the legacy preimage would begin with a JSON object, ` +
+	"which is what a versioned payload (receipt.v5) signs, so this is the replay of another signature " +
+	"as a legacy receipt and not a receipt issued before receipt.v5")
+
 // verifyPayload reconstructs the signed payload for the receipt's declared
 // version. An unknown version is rejected rather than guessed: silently
 // retrying other preimages is how a verifier is talked into accepting a
@@ -514,6 +670,9 @@ func canonicalizeV4(r *contracts.Receipt) []byte {
 func verifyPayload(r *contracts.Receipt) ([]byte, string, error) {
 	switch r.SignatureVersion {
 	case "":
+		if strings.HasPrefix(r.ReceiptID, "{") {
+			return nil, "", errLegacyReplay
+		}
 		return canonicalizeV4(r), "v4-fields", nil
 	case contracts.ReceiptSignatureV5:
 		p, err := canonicalizeV5(r)
@@ -600,7 +759,9 @@ type Options struct {
 	// AllowLegacyV4 checks receipts with no signature_version against the
 	// legacy v4 preimage instead of refusing them (see LegacyV4Refusal). The
 	// result counts them as LegacyReceipts and the identity check says what
-	// their signature does not cover.
+	// their signature does not cover. A legacy receipt whose receipt_id
+	// begins with "{" fails the identity check all the same: it is a
+	// versioned signature replayed as a legacy receipt.
 	AllowLegacyV4 bool
 }
 
@@ -665,7 +826,9 @@ func verifyBundle(b Bundle, trust TrustRoot, opts Options) (Result, refusal) {
 		return res, refusedNoTrustedKey
 	}
 
-	res.KeyID = receipts[0].KeyID
+	if res.KeyID = receipts[0].KeyID; res.KeyID != "" {
+		res.KeyIDNote = keyIDNote
+	}
 	for _, r := range receipts {
 		if r.SignatureVersion == "" {
 			res.LegacyReceipts++
@@ -705,11 +868,9 @@ func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[
 		}
 		payload, version, err := verifyPayload(r)
 		if err != nil {
-			return Check{CheckIdentity, StatusFail, fmt.Sprintf("receipt[%d]: %v", i, err)}
+			return Check{CheckIdentity, StatusFail, fmt.Sprintf("receipt[%d] %q: %v", i, r.ReceiptID, err)}
 		}
-		if res.PreimageVersion == "" {
-			res.PreimageVersion = version
-		}
+		res.countPreimage(version)
 		keys, err := candidateKeys(r, trust, embedded)
 		if err != nil {
 			return Check{CheckIdentity, StatusFail, fmt.Sprintf(
@@ -743,6 +904,22 @@ func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[
 			"so this pass says nothing about those members of a legacy receipt", res.LegacyReceipts, legacyV4Members)
 	}
 	return Check{CheckIdentity, StatusPass, detail}
+}
+
+// countPreimage records that one more receipt was checked under version, and
+// keeps PreimageVersion true of all of them.
+func (res *Result) countPreimage(version string) {
+	for i := range res.PreimageVersions {
+		if res.PreimageVersions[i].Version == version {
+			res.PreimageVersions[i].Receipts++
+			return
+		}
+	}
+	res.PreimageVersions = append(res.PreimageVersions, PreimageVersionCount{Version: version, Receipts: 1})
+	res.PreimageVersion = version
+	if len(res.PreimageVersions) > 1 {
+		res.PreimageVersion = PreimageVersionMixed
+	}
 }
 
 // unsignedMemberExamples names members of a receipt that the receipt.v5

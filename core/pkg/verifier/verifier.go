@@ -106,6 +106,13 @@ type VerifyOptions struct {
 	// from inside the pack. Only set this when verifying a pack this process
 	// just produced; never when verifying one that arrived from elsewhere.
 	AllowSelfAttested bool
+	// AllowLegacyV4Receipts checks a dev-local MCP proof receipt that has no
+	// signature_version against the legacy V4 preimage instead of leaving it
+	// unverified. The preimage is eight colon-joined fields with no escaping,
+	// so the signature of a receipt.v5 receipt can be read back as one
+	// (helm-tracker#305); set this only for a pack known to predate
+	// receipt.v5. See legacyV4ReceiptRefused.
+	AllowLegacyV4Receipts bool
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
@@ -504,6 +511,9 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 				return false, false
 			}
 		}
+		if legacyV4ReceiptRefused(document, opts) {
+			return false, false
+		}
 		switch class {
 		case mcpPolicyDecisionClass:
 			ok := verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
@@ -515,6 +525,25 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 			return verifyEvaluateReceiptV5AgainstCallerKey(document, sig), false
 		}
 	}
+}
+
+// legacyV4ReceiptRefused reports whether document is a receipt with no
+// signature_version that this verification must not check.
+//
+// The dev-local MCP branches verify such a receipt against the legacy V4
+// preimage under a key the pack itself carries. That preimage is eight fields
+// joined with ":" with no escaping, so the signed bytes of a receipt.v5
+// receipt can be read back as those eight fields: its signature, with the
+// real key beside it, verified here for an unversioned receipt that says
+// something else. The legacy preimage is therefore used only under
+// VerifyOptions.AllowLegacyV4Receipts, and never for a receipt_id that begins
+// with "{": the preimage begins with receipt_id, and a replayed versioned
+// payload is JSON text, which a receipt id the kernel issued never is.
+func legacyV4ReceiptRefused(document map[string]any, opts VerifyOptions) bool {
+	if firstString(document, "signature_version") != "" {
+		return false
+	}
+	return !opts.AllowLegacyV4Receipts || strings.HasPrefix(firstString(document, "receipt_id"), "{")
 }
 
 // verifyEvaluateReceiptV5AgainstCallerKey checks a Kernel evaluate receipt.v5

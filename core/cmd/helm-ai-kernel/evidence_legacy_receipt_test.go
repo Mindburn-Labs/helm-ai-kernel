@@ -6,15 +6,22 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 // replayReceiptV5AsLegacy re-splits the bytes a receipt.v5 signature covers
@@ -132,6 +139,187 @@ func TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt(t *testing.T) {
 			if !resultErrorsContain(result, tc.receipt.ReceiptID+" not checked") || !resultErrorsContain(result, "legacy") ||
 				!resultErrorsContain(result, "signature_version") {
 				t.Fatalf("the response must say the receipt was not checked and why: %+v", result)
+			}
+		})
+	}
+}
+
+// TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked: a runtime
+// whose trust anchor is a KeyRing (rotated keys) answered an unversioned
+// receipt with "no key verified the receipt", which this route reports as
+// FAILED: "signature verification failed". No signature had been checked. The
+// keyring now returns the legacy refusal, and the route reports the receipt
+// as not checked, as it does under a single key.
+func TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked(t *testing.T) {
+	trusted, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x61}, ed25519.SeedSize), "runtime-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring := helmcrypto.NewKeyRing()
+	ring.AddKey(trusted)
+	svc := &Services{ReceiptSigner: ring}
+
+	legacy := newEvidenceVerifyTestReceipt("legacy-1", "legacy-session", 1, "")
+	if legacy.Signature, err = trusted.Sign(helmcrypto.ReceiptPreimageV4(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	if _, valid, err := helmcrypto.VerifyReceiptProfile(trusted.PublicKey(), "", legacy, helmcrypto.AllowLegacyReceiptPreimages); err != nil || !valid {
+		t.Fatalf("the planted legacy receipt is not validly signed; the case proves nothing (valid=%v err=%v)", valid, err)
+	}
+	if err := verifyTrustedEvidenceReceipt(svc, legacy); !errors.Is(err, helmcrypto.ErrLegacyReceiptRefused) {
+		t.Fatalf("verifyTrustedEvidenceReceipt under a KeyRing = %v, want the legacy refusal", err)
+	}
+	result := evidenceVerification{}
+	checkEvidenceReceiptSignatures(&result, []*contracts.Receipt{legacy}, svc)
+	if len(result.ChecksRun) != 1 || result.ChecksRun[0].Status != "UNVERIFIABLE" {
+		t.Fatalf("receipt_signatures under a KeyRing = %+v for an unversioned receipt, want UNVERIFIABLE (not checked)", result.ChecksRun)
+	}
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "legacy-1 not checked") || strings.Contains(result.Errors[0], "verification failed") {
+		t.Fatalf("the route must say the receipt was not checked, not that its signature failed: %v", result.Errors)
+	}
+
+	// A receipt.v5 receipt is still checked through the keyring, both ways.
+	current := newEvidenceVerifyTestReceipt("v5-1", "session", 1, "")
+	if err := trusted.SignReceipt(current); err != nil {
+		t.Fatal(err)
+	}
+	result = evidenceVerification{}
+	checkEvidenceReceiptSignatures(&result, []*contracts.Receipt{current}, svc)
+	if len(result.ChecksRun) != 1 || result.ChecksRun[0].Status != "VERIFIED" {
+		t.Fatalf("a receipt.v5 receipt under a KeyRing = %+v, want VERIFIED", result.ChecksRun)
+	}
+	current.Status = "TAMPERED"
+	result = evidenceVerification{}
+	checkEvidenceReceiptSignatures(&result, []*contracts.Receipt{current}, svc)
+	if len(result.ChecksRun) != 1 || result.ChecksRun[0].Status != "FAILED" {
+		t.Fatalf("a tampered receipt.v5 receipt under a KeyRing = %+v, want FAILED", result.ChecksRun)
+	}
+}
+
+// sealedEvidenceBundleOfFiles builds a runtime-sealed evidence bundle whose
+// receipt files hold exactly the bytes given, with a manifest that hashes
+// them, so a test can plant a receipt file json.Marshal would never write.
+func sealedEvidenceBundleOfFiles(t *testing.T, svc *Services, sessionID string, receiptFiles map[string][]byte, signedAt []*contracts.Receipt) []byte {
+	t.Helper()
+	files := map[string][]byte{}
+	hashes := map[string]string{}
+	for name, data := range receiptFiles {
+		files[name] = data
+		sum := sha256.Sum256(data)
+		hashes[name] = hex.EncodeToString(sum[:])
+	}
+	manifest, err := json.Marshal(evidenceManifest{Version: "1.0", ExportedAt: "1970-01-01T00:00:00Z", SessionID: sessionID, FileHashes: hashes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files["manifest.json"] = manifest
+	sealSigner, trustConfig, err := trustedEvidenceBundleSealSigner(svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packDir := t.TempDir()
+	if err := writeEvidenceBundlePackFiles(packDir, files); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeEvidenceBundleIndex(packDir, files); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
+		PackID:      evidenceBundlePackID(sessionID, files),
+		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
+		Signer:      sealSigner,
+		TrustConfig: trustConfig,
+		SignedAt:    evidenceBundleSignedAt(signedAt),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, controlPath := range []string{evidenceBundleIndexPath, evidencepkg.EvidencePackSealPath} {
+		data, err := os.ReadFile(filepath.Join(packDir, filepath.FromSlash(controlPath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[controlPath] = data
+	}
+	bundle, err := tarEvidenceBundleFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bundle
+}
+
+// TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes: the route decoded each
+// receipt file with encoding/json alone. A file that says verdict ALLOW by
+// exact name and restores the signed DENY in "Verdict", or that writes
+// "verdict" twice, then had its signature VERIFIED while every reader of the
+// bundle that matches names exactly read ALLOW from it. The bundle seal does
+// not help: whoever holds the bundle seals it. Every receipt file now goes
+// through the parser receipt_verify uses.
+func TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes(t *testing.T) {
+	trusted, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x61}, ed25519.SeedSize), "runtime-signer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Services{ReceiptSigner: trusted}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	denial := newEvidenceVerifyTestReceipt("deny-1", "sess-a", 1, "")
+	denial.Status, denial.Verdict, denial.ReasonCode = "DENIED", "DENY", "MANDATE_LIMIT_EXCEEDED"
+	if err := trusted.SignReceipt(denial); err != nil {
+		t.Fatal(err)
+	}
+	genuine, err := json.Marshal(denial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Count(genuine, []byte(`"verdict":"DENY"`)) != 1 {
+		t.Fatalf("the genuine receipt does not carry its verdict once: %s", genuine)
+	}
+	shadow := append([]byte(`{"verdict":"ALLOW",`), bytes.Replace(genuine, []byte(`"verdict":"DENY"`), []byte(`"Verdict":"DENY"`), 1)[1:]...)
+	duplicate := append([]byte(`{"verdict":"ALLOW",`), genuine[1:]...)
+	variantVersion := bytes.Replace(genuine, []byte(`"signature_version":`), []byte(`"Signature_Version":`), 1)
+	for name, data := range map[string][]byte{"shadow": shadow} {
+		var exact map[string]any
+		if err := json.Unmarshal(data, &exact); err != nil {
+			t.Fatal(err)
+		}
+		var folded contracts.Receipt
+		if err := json.Unmarshal(data, &folded); err != nil {
+			t.Fatal(err)
+		}
+		if exact["verdict"] != "ALLOW" || folded.Verdict != "DENY" {
+			t.Fatalf("%s: the planted file does not read ALLOW by exact name over the signed DENY; the case proves nothing", name)
+		}
+	}
+
+	verify := func(data []byte) map[string]any {
+		bundle := sealedEvidenceBundleOfFiles(t, svc, "sess-a", map[string][]byte{"receipts/deny-1.json": data}, []*contracts.Receipt{denial})
+		return postEvidenceVerification(t, mux, "/api/v1/evidence/verify", bundle)
+	}
+	// The harness builds a bundle the route verifies when nothing is planted.
+	if result := verify(genuine); result["outcome"] != "VERIFIED" || evidenceCheckStatuses(t, result)["receipt_signatures"] != "VERIFIED" {
+		t.Fatalf("the genuine receipt in a runtime-sealed bundle is not VERIFIED; the cases prove nothing: %+v", result)
+	}
+
+	for name, tc := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"letter-case shadow":                       {shadow, "letter case"},
+		"verdict written twice":                    {duplicate, `duplicate object member "verdict"`},
+		"signature_version in another letter case": {variantVersion, "letter case"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := verify(tc.data)
+			statuses := evidenceCheckStatuses(t, result)
+			if statuses["receipt_signatures"] == "VERIFIED" || result["outcome"] == "VERIFIED" {
+				t.Fatalf("a receipt file its reader reads differently was VERIFIED: %+v", result)
+			}
+			if result["outcome"] != "FAILED" || statuses["bundle_format"] != "FAILED" {
+				t.Fatalf("outcome = %v, bundle_format = %s; want the bundle refused as unreadable: %+v", result["outcome"], statuses["bundle_format"], result)
+			}
+			if !resultErrorsContain(result, "receipts/deny-1.json") || !resultErrorsContain(result, tc.want) {
+				t.Fatalf("the refusal must name the file and the reason (%s): %+v", tc.want, result["errors"])
 			}
 		})
 	}

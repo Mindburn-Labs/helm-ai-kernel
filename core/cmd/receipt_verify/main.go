@@ -55,7 +55,17 @@
 // timestamp, and the signature of a receipt.v5 receipt can be replayed as one.
 // Such a file is not checked (exit 2) unless --allow-legacy-v4 is given; the
 // output then says how many receipts are legacy and what their signature does
-// not cover.
+// not cover, and names every preimage of a chain that mixes them. A legacy
+// receipt whose receipt_id begins with "{" fails under the flag too: it is a
+// versioned signature replayed as a legacy receipt.
+//
+// In the bundle form the receipts are the members of "receipts". A receipt
+// member beside them ("verdict", "tool_name") is refused: nothing checks it,
+// and a reader of the file would take it for a checked receipt's. A file
+// nested deeper than 64 levels is refused before it is read further.
+//
+// key_id in the JSON verdict is the first receipt's own member, an unsigned
+// claim; key_id_note says so.
 //
 // Exit codes: 0 verified, 1 verification failed, 2 no verdict reported (bad or
 // missing flags, no key, an unreadable receipt or key file, a receipt file that
@@ -275,6 +285,16 @@ func writeHuman(w *os.File, res receiptverify.Result) {
 	}
 	if res.PreimageVersion != "" {
 		fmt.Fprintf(w, ", preimage %s", res.PreimageVersion)
+		// A chain checked under more than one preimage names each, with how
+		// many receipts it covers: "receipt.v5" alone would be true of some
+		// receipts only.
+		if len(res.PreimageVersions) > 1 {
+			parts := make([]string, 0, len(res.PreimageVersions))
+			for _, v := range res.PreimageVersions {
+				parts = append(parts, fmt.Sprintf("%s: %d receipt(s)", v.Version, v.Receipts))
+			}
+			fmt.Fprintf(w, " (%s)", strings.Join(parts, ", "))
+		}
 	}
 	if res.LegacyReceipts > 0 {
 		fmt.Fprintf(w, ", %d LEGACY receipt(s)", res.LegacyReceipts)

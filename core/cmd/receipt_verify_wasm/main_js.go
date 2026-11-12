@@ -8,7 +8,8 @@
 // The bridge takes no options, so it has neither the self-attestation nor the
 // legacy opt-in of the native command: a receipt with no signature_version is
 // UNVERIFIABLE (not checked), and a document whose member names differ from
-// the receipt's only in letter case is FAILED.
+// the receipt's only in letter case, or whose bundle form carries a receipt
+// member beside "receipts", is FAILED.
 package main
 
 import (

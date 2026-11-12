@@ -92,6 +92,8 @@ const (
 // version is refused with ErrLegacyReceiptRefused unless the caller passes
 // AllowLegacyReceiptPreimages; it is then tried against the pre-HELM-303 JCS
 // helper and the V4 preimage, and the returned version says which verified.
+// Under the option a receipt_id beginning with "{" is refused with
+// ErrLegacyReceiptReplay before either is tried.
 func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt, opts ...ReceiptVerifyOption) (bool, ReceiptPreimageVersion, error) {
 	if r == nil {
 		return false, "", fmt.Errorf("receipt is nil")
@@ -117,6 +119,9 @@ func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt, opts ...Rece
 	case "":
 		if !allowsLegacyReceiptPreimages(opts) {
 			return false, "", ErrLegacyReceiptRefused
+		}
+		if legacyReceiptIsReplay(r) {
+			return false, "", ErrLegacyReceiptReplay
 		}
 		payload, err := ReceiptPreimageV5(r)
 		if err != nil {

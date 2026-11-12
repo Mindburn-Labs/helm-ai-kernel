@@ -300,3 +300,162 @@ func TestHumanVerdictDoesNotClaimTheWholeReceiptWasSigned(t *testing.T) {
 		}
 	}
 }
+
+// TestBundleWithAReceiptMemberBesideItsReceiptsIsNotVerified: the frozen DENY
+// receipt wrapped in a bundle whose top level says verdict ALLOW. `jq .verdict`
+// reads ALLOW from the file, and the receipt inside is genuine, so the
+// verifier answered VERIFIED for a file its reader takes for an ALLOW.
+func TestBundleWithAReceiptMemberBesideItsReceiptsIsNotVerified(t *testing.T) {
+	raw, key := frozenGatewayDenial(t)
+	decoy := []byte(`{"verdict":"ALLOW","receipt_id":"rcpt-0001","tool_name":"wire_transfer","receipts":[` + string(raw) + `]}`)
+	var exact map[string]any
+	if err := json.Unmarshal(decoy, &exact); err != nil {
+		t.Fatal(err)
+	}
+	if exact["verdict"] != "ALLOW" {
+		t.Fatalf("the planted file does not read ALLOW by exact name; the case proves nothing: %v", exact)
+	}
+	if code, stdout, stderr := execute(t, "--receipt", writeFile(t, "clean.json", []byte(`{"receipts":[`+string(raw)+`]}`)), "--key", key); code != 0 {
+		t.Fatalf("the same bundle without the decoy members does not verify; the case proves nothing: exit %d\n%s%s", code, stdout, stderr)
+	}
+	for _, args := range [][]string{nil, {"--json"}, {"--allow-legacy-v4"}} {
+		code, stdout, stderr := execute(t, append([]string{"--receipt", writeFile(t, "decoy.json", decoy), "--key", key}, args...)...)
+		if code != 2 || stdout != "" || !strings.Contains(stderr, "receipt member") || !strings.Contains(stderr, `"receipts"`) {
+			t.Fatalf("a bundle that reads ALLOW at its top level %v: exit %d, want 2 with a refusal naming the receipt member and no verdict\nstdout: %s\nstderr: %s",
+				args, code, stdout, stderr)
+		}
+	}
+}
+
+// TestReplayIsNotVerifiedUnderTheLegacyOptIn: --allow-legacy-v4 is for
+// receipts issued before receipt.v5. The replay of a receipt.v5 signature as a
+// legacy receipt is not one, and its receipt_id shows it: the legacy preimage
+// begins with receipt_id, and the signed bytes it replays begin with "{".
+func TestReplayIsNotVerifiedUnderTheLegacyOptIn(t *testing.T) {
+	raw, key := frozenGatewayDenial(t)
+	var genuine contracts.Receipt
+	if err := json.Unmarshal(raw, &genuine); err != nil {
+		t.Fatal(err)
+	}
+	signed, err := crypto.CanonicalizeReceiptV5(&genuine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, "replayed.json", replayAsLegacy(t, signed, genuine.Signature))
+
+	code, stdout, stderr := execute(t, "--receipt", path, "--key", key, "--allow-legacy-v4")
+	if code != 1 || !strings.Contains(stdout, "NOT VERIFIED") || !strings.Contains(stdout, "replay") || !strings.Contains(stdout, "receipt_id") {
+		t.Fatalf("a receipt.v5 signature replayed as a legacy ALLOW receipt under --allow-legacy-v4: exit %d, want 1 and a refusal naming the replay\nstdout: %s\nstderr: %s",
+			code, stdout, stderr)
+	}
+	code, stdout, _ = execute(t, "--receipt", path, "--key", key, "--allow-legacy-v4", "--json")
+	var report struct {
+		Valid bool `json:"valid"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil || code != 1 || report.Valid {
+		t.Fatalf("the JSON verdict of the replay under the opt-in: exit %d, valid %v (%v)\n%s", code, report.Valid, err, stdout)
+	}
+}
+
+// TestMixedChainNamesEveryPreimage: a chain of a receipt.v5 receipt and a
+// legacy one that chains to it. Both output forms named the first receipt's
+// preimage alone, "receipt.v5", for a chain half of which is legacy.
+func TestMixedChainNamesEveryPreimage(t *testing.T) {
+	signer, err := crypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x54}, ed25519.SeedSize), "mixed-chain-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := &contracts.Receipt{
+		ReceiptID: "rcpt-mixed-1", DecisionID: "dec-mixed-1", EffectID: "eff-mixed-1", Status: "DENIED",
+		OutputHash: "sha256:out-1", ArgsHash: "sha256:args-1", LamportClock: 1,
+		Verdict: "DENY", ReasonCode: "POLICY_DENY", PolicyHash: "sha256:policy", SessionID: "mixed-session",
+	}
+	if err := signer.SignReceipt(first); err != nil {
+		t.Fatal(err)
+	}
+	prev, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := &contracts.Receipt{
+		ReceiptID: "rcpt-mixed-2", DecisionID: "dec-mixed-2", EffectID: "eff-mixed-2", Status: "EXECUTED",
+		PrevHash: prev, LamportClock: 2, Verdict: "ALLOW", SessionID: "mixed-session",
+	}
+	if legacy.Signature, err = signer.Sign(crypto.ReceiptPreimageV4(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	chain, err := json.Marshal([]*contracts.Receipt{first, legacy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, key := writeFile(t, "mixed.json", chain), signer.PublicKey()
+
+	code, stdout, stderr := execute(t, "--receipt", path, "--key", key, "--allow-legacy-v4")
+	if code != 0 {
+		t.Fatalf("the mixed chain is expected to verify under the opt-in: exit %d\n%s%s", code, stdout, stderr)
+	}
+	headline, _, _ := strings.Cut(stdout, "\n")
+	if !strings.Contains(headline, "preimage mixed (receipt.v5: 1 receipt(s), v4-fields: 1 receipt(s))") || !strings.Contains(headline, "1 LEGACY receipt(s)") {
+		t.Fatalf("the headline must name every preimage of a mixed chain, got: %s", headline)
+	}
+
+	code, stdout, _ = execute(t, "--receipt", path, "--key", key, "--allow-legacy-v4", "--json")
+	var report struct {
+		Valid            bool   `json:"valid"`
+		PreimageVersion  string `json:"preimage_version"`
+		PreimageVersions []struct {
+			Version  string `json:"version"`
+			Receipts int    `json:"receipts"`
+		} `json:"preimage_versions"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil || code != 0 {
+		t.Fatalf("--json: exit %d (%v)\n%s", code, err, stdout)
+	}
+	if !report.Valid || report.PreimageVersion != "mixed" || len(report.PreimageVersions) != 2 ||
+		report.PreimageVersions[0].Version != "receipt.v5" || report.PreimageVersions[0].Receipts != 1 ||
+		report.PreimageVersions[1].Version != "v4-fields" || report.PreimageVersions[1].Receipts != 1 {
+		t.Fatalf("the JSON verdict must name every preimage with its receipt count: %s", stdout)
+	}
+
+	// A chain under one preimage keeps its headline.
+	fx := loadFixture(t, chainFixture)
+	if _, stdout, _ := execute(t, "--receipt", chainFixture, "--key", fx.PublicKeyHex); !strings.Contains(stdout, ", preimage receipt.v5\n") {
+		t.Fatalf("a receipt.v5 chain must still read \"preimage receipt.v5\":\n%s", stdout)
+	}
+}
+
+// TestJSONVerdictSaysKeyIDIsAClaim: key_id in the JSON verdict is a member of
+// the receipt that no signature covers. Rewritten to any name the file still
+// verifies, so the verdict that echoes it says what it is.
+func TestJSONVerdictSaysKeyIDIsAClaim(t *testing.T) {
+	raw, key := frozenGatewayDenial(t)
+	var members map[string]any
+	if err := json.Unmarshal(raw, &members); err != nil {
+		t.Fatal(err)
+	}
+	members["key_id"] = "any-name-at-all"
+	renamed, err := json.Marshal(members)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := execute(t, "--receipt", writeFile(t, "renamed.json", renamed), "--key", key, "--json")
+	var report map[string]any
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil || code != 0 || report["valid"] != true {
+		t.Fatalf("key_id is outside the signed envelope, so the file is expected to verify: exit %d (%v)\n%s%s", code, err, stdout, stderr)
+	}
+	note, _ := report["key_id_note"].(string)
+	if report["key_id"] != "any-name-at-all" || !strings.Contains(note, "unsigned claim") || !strings.Contains(note, "not the key") {
+		t.Fatalf("a verdict that echoes key_id must say it is the receipt's unsigned claim: key_id %v, key_id_note %q", report["key_id"], note)
+	}
+}
+
+// TestDeeplyNestedFileIsRefusedWithoutBeingWalked: 200 KB of brackets in an
+// unsigned member took 28 GB before the native command refused the file.
+func TestDeeplyNestedFileIsRefusedWithoutBeingWalked(t *testing.T) {
+	raw, key := frozenGatewayDenial(t)
+	deep := []byte(string(raw[:len(raw)-1]) + `,"metadata":{"deep":` + strings.Repeat("[", 100_000) + strings.Repeat("]", 100_000) + `}}`)
+	code, stdout, stderr := execute(t, "--receipt", writeFile(t, "deep.json", deep), "--key", key)
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "nesting limit") {
+		t.Fatalf("a file nested 100,000 levels: exit %d, want 2 with the nesting limit refusal\nstdout: %s\nstderr: %.200s", code, stdout, stderr)
+	}
+}

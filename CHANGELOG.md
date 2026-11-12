@@ -92,25 +92,58 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 - A receipt with no `signature_version` (a legacy receipt, signed before
   `receipt.v5`) is no longer checked by default. `receipt_verify` exits 2 for a
-  file that holds one; pass `--allow-legacy-v4` to check it as before. Go
-  callers of `core/pkg/receiptverify` set `Options.AllowLegacyV4`. The
-  JavaScript and WebAssembly verifier has no opt-in and returns
-  `UNVERIFIABLE`.
+  file that holds one; pass `--allow-legacy-v4` to check it. Go callers of
+  `core/pkg/receiptverify` set `Options.AllowLegacyV4`. The JavaScript and
+  WebAssembly verifier has no opt-in and returns `UNVERIFIABLE`.
+- Under the opt-in, a legacy receipt whose `receipt_id` begins with `{` fails:
+  it is the signature of a versioned payload read back as a legacy receipt.
+  `core/pkg/crypto` returns `ErrLegacyReceiptReplay` for it.
 - `POST /api/v1/evidence/verify` reports a receipt with no `signature_version`
   as not checked: its `receipt_signatures` check is `UNVERIFIABLE`, where it
-  used to be `VERIFIED` when the legacy signature matched.
+  used to be `VERIFIED` when the legacy signature matched. This holds when the
+  runtime trust anchor is a `KeyRing` too.
+- `POST /api/v1/evidence/verify` reads every receipt file with the parser
+  `receipt_verify` uses. A bundle that holds a receipt file with a member
+  written twice, or with a receipt member spelled in another letter case, is
+  refused: `bundle_format` is `FAILED` and no receipt check runs.
 - In `core/pkg/crypto`, `ReceiptVerifyPayload`, `VerifyReceiptProfile`,
   `VerifyReceiptRequiredProfile`, `VerifyReceiptSignature` and every
-  `VerifyReceipt` method return `ErrLegacyReceiptRefused` for a receipt with no
-  `signature_version`. The first four take `AllowLegacyReceiptPreimages` to
-  check one.
-- `receipt_verify` and the JavaScript verifier refuse a file in which a
-  receipt, bundle, permit or binding member is spelled in another letter case,
-  or in which two members of one object differ only in letter case. Write
-  member names exactly as the schema spells them.
+  `VerifyReceipt` method, `KeyRing.VerifyReceipt` included, return
+  `ErrLegacyReceiptRefused` for a receipt with no `signature_version`. The
+  first four take `AllowLegacyReceiptPreimages` to check one.
+- `receipt_verify`, the JavaScript verifier and `helm-ai-kernel verify receipt`
+  refuse a file in which a receipt, bundle, permit or binding member is
+  spelled in another letter case. Write member names exactly as the schema
+  spells them. Keys of `metadata`, `public_key_set`, `subject` and other
+  free-form values are compared exactly, so `a` and `A` there are two keys.
+- `receipt_verify` and the JavaScript verifier refuse a bundle (an object with
+  a `receipts` array) that carries a receipt member such as `verdict`,
+  `status` or `tool_name` at its top level. `key_id`, `public_key_hex`,
+  `permits` and `gateway_bindings` are the bundle's own members and stay; so
+  does any name that is not a receipt member. The `--format json` report of
+  `helm-ai-kernel receipts list` is refused for its top-level `status`: pass
+  its `receipts` array instead.
+- `receipt_verify` refuses a file nested deeper than 64 levels, as the
+  JavaScript verifier already did.
 - The `integrity` check of `receipt_verify` is now `not_applicable` where it
   was `pass`. It never compared anything; `closure` is the check that compares
   the hashes of a chain. Exit codes and the `valid` member are unchanged.
+- `receipt_verify --json`: `preimage_version` is `mixed` for a chain checked
+  under more than one preimage, and the new `preimage_versions` lists each
+  with its receipt count. The new `key_id_note` says that `key_id` is the
+  receipt's unsigned claim. No member was renamed or removed.
+- `helm-ai-kernel verify receipt --json` adds `signed_members`,
+  `unsigned_members` and `integrity_scope`. `integrity_valid` and
+  `signer_trusted` keep their names and meaning: both are about the 13 signed
+  members only.
+- `helm-ai-kernel verify` no longer checks a dev-local MCP proof receipt that
+  has no `signature_version`; `embedded_signature_trust` fails for a pack that
+  holds one. Pass `--allow-legacy-v4-receipts` for a pack known to predate
+  `receipt.v5` (`verifier.VerifyOptions.AllowLegacyV4Receipts`).
+- `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a receipt
+  with a member written twice or spelled in another letter case.
+  `verified_fields` now lists the 13 members a `receipt.v5` signature covers,
+  and is empty when the signature was not verified.
 
 ### Fixed
 
@@ -122,11 +155,26 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   exactly.
 - The signature of a `receipt.v5` receipt could be replayed as a legacy
   receipt with a different verdict, and `receipt_verify`, the JavaScript
-  verifier and `POST /api/v1/evidence/verify` accepted it. The legacy preimage
-  is eight fields joined with `:` with no escaping, so the signed bytes of a
-  `receipt.v5` receipt can be read as those eight fields. Legacy receipts are
-  now refused unless the caller opts in, and an opted-in result says that a
-  legacy signature does not cover `verdict`, `tool_name` or `timestamp`.
+  verifier, `POST /api/v1/evidence/verify` and the dev-local MCP branch of
+  `helm-ai-kernel verify` accepted it. The legacy preimage is eight fields
+  joined with `:` with no escaping, so the signed bytes of a `receipt.v5`
+  receipt can be read as those eight fields. Legacy receipts are now refused
+  unless the caller opts in, an opted-in result says that a legacy signature
+  does not cover `verdict`, `tool_name` or `timestamp`, and the replay is
+  refused under the opt-in as well, by its `receipt_id`.
+- A genuine DENY receipt wrapped as
+  `{"verdict":"ALLOW","receipts":[...]}` was `VERIFIED` while `jq .verdict`
+  and `JSON.parse` read `ALLOW` from the file. A bundle with a receipt member
+  beside `receipts` is now refused.
+- `POST /api/v1/evidence/verify` verified a receipt file that says `ALLOW` by
+  exact member name and restores the signed `DENY` in `"Verdict"`, or that
+  writes `verdict` twice.
+- `helm-ai-kernel verify receipt` accepted a file whose only version member
+  was `"Signature_Version"`, skipping the `receipt.v5` member checks.
+- `receipt_verify` took gigabytes of memory on a small file nested 100,000
+  levels deep before refusing it.
+- `preimage_version` named only the first receipt's preimage, so a chain of a
+  `receipt.v5` and a legacy receipt read `receipt.v5`.
 - The `integrity` check of `receipt_verify` no longer says "the signed bytes
   are the bytes on disk". It says what it does, and names the receipt whose
   members outside the signature nothing covers: a single receipt, or the last

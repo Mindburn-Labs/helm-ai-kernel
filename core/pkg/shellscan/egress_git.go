@@ -16,6 +16,7 @@ import (
 
 var gitGlobalValueOptions = map[string]bool{
 	"-C": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--super-prefix": true,
+	"--attr-source": true,
 }
 
 var gitGlobalFlags = map[string]bool{
@@ -24,8 +25,15 @@ var gitGlobalFlags = map[string]bool{
 	"--no-pager": true, "--no-replace-objects": true, "--no-lazy-fetch": true,
 	"--no-optional-locks": true, "--no-advice": true, "--bare": true, "--exec-path": true,
 	"--literal-pathspecs": true, "--glob-pathspecs": true, "--noglob-pathspecs": true,
-	"--icase-pathspecs": true,
+	"--icase-pathspecs": true, "--no-literal-pathspecs": true, "--list-cmds": true,
 }
+
+// gitNetworkSubcommands are the subcommands subcommand() can resolve to a
+// connection. A command line that cannot be parsed up to its subcommand is
+// undetermined when one of these words appears in it.
+var gitNetworkSubcommands = names(`
+	clone fetch pull push ls-remote fetch-pack send-pack http-fetch http-push
+	remote submodule archive config`)
 
 func gitSpec(valueLetters, flagLetters, valueNames, flagNames string, roles map[string]optRole) cliSpec {
 	short, value, flag := letters(valueLetters, flagLetters)
@@ -98,7 +106,14 @@ func gitConfigMovesConnection(key string) bool {
 		}
 	}
 	switch key {
-	case "core.sshcommand", "core.gitproxy", "http.curloptresolve":
+	case "core.sshcommand", "core.gitproxy", "http.curloptresolve",
+		// A bundle URI is a second address git downloads from.
+		"fetch.bundleuri", "transfer.bundleuri", "clone.bundleuri",
+		// These name a program git runs while it connects.
+		"core.askpass", "core.hookspath", "core.fsmonitor", "credential.helper":
+		return true
+	}
+	if strings.HasPrefix(key, "credential.") && strings.HasSuffix(key, ".helper") {
 		return true
 	}
 	return (strings.HasPrefix(key, "http.") || strings.HasPrefix(key, "https.")) && strings.HasSuffix(key, "proxy")
@@ -110,6 +125,10 @@ type gitInvocation struct {
 	// a redirect on its first request unless told not to.
 	http        bool
 	noRedirects bool
+	// redirectsByURL is set when a per-URL http.<url>.followRedirects key
+	// turns redirects on: it overrides the general key for the URLs it
+	// matches, and which URLs those are is not worked out here.
+	redirectsByURL bool
 	// storesOnly marks a subcommand that records an address without
 	// connecting to it (remote add, config).
 	storesOnly bool
@@ -121,10 +140,18 @@ type gitInvocation struct {
 func (g *gitInvocation) config(entry string) {
 	key, value, _ := strings.Cut(entry, "=")
 	key = strings.ToLower(strings.TrimSpace(key))
-	if key == "http.followredirects" {
+	if strings.HasPrefix(key, "http.") && strings.HasSuffix(key, ".followredirects") {
+		// git keeps the last value given for a key, so each entry replaces
+		// the one before it, and a key without a value means true.
+		off := false
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case "false", "no", "off", "0":
-			g.noRedirects = true
+			off = true
+		}
+		if key == "http.followredirects" {
+			g.noRedirects = off
+		} else if !off {
+			g.redirectsByURL = true
 		}
 		return
 	}
@@ -307,13 +334,17 @@ func (g *gitInvocation) configWrite(args []string) bool {
 			operands = operands[1:]
 		}
 	}
+	// The key is not always the first operand: --file, --type, --default and
+	// --comment take a value that lands among the operands here. Rather than
+	// keep the arity of every option, take the first operand that is a key
+	// which moves a connection and has a value after it.
+	for len(operands) >= 2 && !gitConfigMovesConnection(strings.ToLower(operands[0])) {
+		operands = operands[1:]
+	}
 	if len(operands) < 2 {
 		return false
 	}
 	key := strings.ToLower(operands[0])
-	if !gitConfigMovesConnection(key) {
-		return false
-	}
 	g.storesOnly = true
 	// A url.<base>.insteadOf rewrite carries its address in the key, and a
 	// proxy or ssh command is not an address at all.
@@ -351,12 +382,18 @@ globals:
 			if !attached {
 				i++
 			}
+		case name == "--exec-path" && attached:
+			scan.refuse("--exec-path replaces the programs git runs")
 		case gitGlobalFlags[name]:
 		default:
 			// The subcommand cannot be located behind an option whose arity is
-			// unknown; say so only if the rest names an address.
+			// unknown. If the rest names an address or a subcommand that can
+			// connect, the command is undetermined: it must not fall through
+			// to a plain command with no network decision.
 			for _, rest := range tokens[i+1:] {
-				if _, _, scpLike := remoteSpec(rest); netdest.HasScheme(rest) || scpLike && strings.Contains(rest, "@") {
+				_, _, scpLike := remoteSpec(rest)
+				_, networkWord := gitNetworkSubcommands[rest]
+				if networkWord || netdest.HasScheme(rest) || scpLike && strings.Contains(rest, "@") {
 					return egressScan{undetermined: "git option " + token + " is not recognized"}, true, false
 				}
 			}
@@ -369,7 +406,7 @@ globals:
 	for _, config := range configs {
 		g.config(config)
 	}
-	if g.http && !g.noRedirects && !g.storesOnly {
+	if g.http && (!g.noRedirects || g.redirectsByURL) && !g.storesOnly {
 		scan.refuse("git follows a redirect on its first HTTP request; pass -c http.followRedirects=false")
 	}
 	return scan, true, g.configured && len(scan.destinations) == 0 && scan.undetermined == ""

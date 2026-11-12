@@ -822,6 +822,21 @@ func (c *collector) markLiteralWord(w *syntax.Word) {
 // read. Scope is not modelled: a prefix assignment, an export and a plain
 // assignment all count for every network command in the text.
 func (c *collector) recordAssignment(assign *syntax.Assign) {
+	if assign.Name == nil && assign.Naked && assign.Value != nil {
+		// export "NAME=value" and declare -x 'NAME=value' reach the parser as
+		// one quoted word, not as a name and a value; the shell still assigns.
+		word := resolveWord(assign.Value)
+		name, value, isAssignment := strings.Cut(word.text, "=")
+		switch {
+		case strings.HasPrefix(word.text, "-"):
+			// an option of the builtin
+		case word.dynamic && (!isAssignment || !assignmentWord(word.text)):
+			c.env = append(c.env, envOverride{dynamic: true})
+		case isAssignment && tracksVariable(name):
+			c.env = append(c.env, envOverride{name: name, value: value, dynamic: word.dynamic})
+		}
+		return
+	}
 	if assign.Name == nil || !tracksVariable(assign.Name.Value) {
 		return
 	}

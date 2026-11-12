@@ -272,3 +272,25 @@ func TestClassifyArgvAt(t *testing.T) {
 		})
 	}
 }
+
+// The shell writes a negated class as "[!...]". A pattern that uses one is
+// matched as the shell expands it, not with "!" taken as a member.
+func TestPathGuardReadsShellBracketNegation(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	cases := []struct {
+		pattern string
+		want    bool
+	}{
+		{"~/.signer/[!r]*/*", true},
+		{"~/.signer/[!r]*", true},
+		// A class that excludes the first letter of the protected directory
+		// cannot expand to it.
+		{"~/.signer/[!k]*/*", false},
+	}
+	for _, tc := range cases {
+		if rule, got := f.guard.MatchPattern(tc.pattern, work); got != tc.want {
+			t.Errorf("MatchPattern(%q) = %q, %v; want %v", tc.pattern, rule, got, tc.want)
+		}
+	}
+}

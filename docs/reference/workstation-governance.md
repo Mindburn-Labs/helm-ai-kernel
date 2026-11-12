@@ -151,7 +151,7 @@ A network decision is made per destination. The hook and `enforce` read the dest
 
 The hook is not on the network path. It does not see a redirect, a DNS answer, a hostname alias in `~/.ssh/config`, a default in `~/.curlrc`, or what a script does when it runs. Writes to `.curlrc`, `.wgetrc`, `.netrc`, `.ssh/` and `.git/` are sensitive writes for that reason.
 
-An allowlist bounds the commands whose destinations can be read. A profile that also grants `shell.operate` allows shell forms the scanner cannot read (a computed command word, `eval` of a variable, a program passed to an interpreter), and those can connect anywhere. A profile meant to bound egress should not grant it. Package managers and language toolchains that download are not classified as egress.
+An allowlist bounds the commands whose destinations can be read. A profile that also grants `shell.operate` allows shell forms the scanner cannot read (a computed command word, `eval` of a variable, a program passed to an interpreter), and those can connect anywhere. A profile meant to bound egress should not grant it. A program outside the client table (curl, wget, the ssh family, rsync, git, netcat, telnet, openssl) is not classified as egress: package managers, language toolchains, DNS tools and other HTTP clients connect without a network decision. For a client in the table, an option the table does not know makes the destination undetermined, which an allowlist profile denies.
 
 The shell guard parses shell syntax before classifying selected destructive
 forms, including chained and wrapped commands. It routes recognized force-push,

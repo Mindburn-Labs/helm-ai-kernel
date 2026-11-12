@@ -44,9 +44,11 @@ type cliSpec struct {
 	words    map[string]string // whole tokens that are options (wget -nv)
 	// equals accepts --name=value; negatable accepts --no-name for a flag.
 	equals, negatable bool
-	// operandsEnd stops option parsing at the first operand (ssh, where the
-	// rest is the remote command).
-	operandsEnd bool
+	// operandsEnd, when positive, is the operand at which option parsing
+	// stops: 1 for a client that reads no option after its first operand, 2
+	// for ssh, which keeps reading options after the host and stops at the
+	// first word of the remote command. Zero reads options everywhere.
+	operandsEnd int
 }
 
 type cliVisitor struct {
@@ -59,11 +61,13 @@ type cliVisitor struct {
 
 func walkCLI(spec cliSpec, tokens []string, visit cliVisitor) {
 	operandsOnly := false
+	operands := 0
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]
 		if operandsOnly || token == "" || token == "-" || !strings.HasPrefix(token, "-") {
 			visit.operand(token)
-			operandsOnly = operandsOnly || spec.operandsEnd
+			operands++
+			operandsOnly = operandsOnly || spec.operandsEnd > 0 && operands >= spec.operandsEnd
 			continue
 		}
 		if token == "--" {
@@ -536,7 +540,7 @@ func wgetEgress(tokens []string) egressScan {
 	return scan
 }
 
-func sshFamilySpec(valueLetters, flagLetters string, roles map[string]optRole, operandsEnd bool) cliSpec {
+func sshFamilySpec(valueLetters, flagLetters string, roles map[string]optRole, operandsEnd int) cliSpec {
 	short, value, flag := letters(valueLetters, flagLetters)
 	for name, role := range roles {
 		if _, ok := value[name]; ok {
@@ -549,13 +553,17 @@ func sshFamilySpec(valueLetters, flagLetters string, roles map[string]optRole, o
 var (
 	sshSpec = sshFamilySpec("BbcDEeFIiJLlmOoPpQRSWw", "46AaCfGgKkMNnqsTtVvXxYy", map[string]optRole{
 		"p": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "O": roleOpaque,
-	}, true)
+		// ssh takes its host, then goes back to reading options, and treats
+		// the next operand as the start of the remote command (ssh.c parses
+		// the remaining arguments again after the host). An option written
+		// after the host is therefore an option, not part of the command.
+	}, 2)
 	scpSpec = sshFamilySpec("cDFiJloPSX", "346ABCOpqRrsTv", map[string]optRole{
 		"P": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque,
-	}, false)
+	}, 0)
 	sftpSpec = sshFamilySpec("BbcDFiJloPRSsX", "46AaCfNpqrv", map[string]optRole{
 		"P": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "D": roleOpaque,
-	}, true)
+	}, 0)
 )
 
 // sshConnection collects the options the OpenSSH clients share.
@@ -565,6 +573,20 @@ type sshConnection struct {
 	port     string
 	hostName string // -o HostName, which replaces the host that was typed
 	offline  bool   // the invocation prints something and exits
+	// operands counts the operands seen so far, for the clients where an
+	// option after an operand is read by some builds and not by others.
+	operands int
+}
+
+// optionAfterOperand refuses an scp or sftp option written after an operand.
+// Whether the client reads it as an option depends on the getopt it was built
+// with, so the destination it yields is not known from the text.
+func (c *sshConnection) optionAfterOperand(name string, role optRole) bool {
+	if c.operands == 0 || role == rolePlain {
+		return false
+	}
+	c.scan.refuse(optionLabel(name) + " after an operand is read differently by different builds of " + c.tool)
+	return true
 }
 
 func (c *sshConnection) option(name string, role optRole, value string) {
@@ -591,13 +613,39 @@ var sshOpaqueOptions = map[string]bool{
 	"canonicaldomains": true, "canonicalizepermittedcnames": true, "proxyusefdpass": true,
 }
 
+// sshPlainOptions are -o keys that leave the host ssh connects to, and the
+// program it connects with, as the command line shows them. A key in neither
+// table makes the destination undetermined: a key that is not known here is
+// not assumed to be harmless.
+var sshPlainOptions = names(`
+	addkeystoagent addressfamily batchmode bindaddress bindinterface
+	casignaturealgorithms certificatefile checkhostip ciphers clearallforwardings
+	compression connectionattempts connecttimeout controlpersist dynamicforward
+	escapechar exitonforwardfailure fingerprinthash forkafterauthentication
+	forwardagent forwardx11 forwardx11timeout forwardx11trusted gatewayports
+	globalknownhostsfile gssapiauthentication gssapidelegatecredentials
+	hashknownhosts hostbasedauthentication hostkeyalgorithms hostkeyalias
+	identitiesonly identityagent identityfile ipqos kbdinteractiveauthentication
+	kexalgorithms localforward loglevel logverbose macs
+	nohostauthenticationforlocalhost numberofpasswordprompts
+	passwordauthentication preferredauthentications pubkeyacceptedalgorithms
+	pubkeyauthentication rekeylimit remoteforward requesttty requiredrsasize
+	sendenv serveralivecountmax serveraliveinterval sessiontype setenv stdinnull
+	stricthostkeychecking tcpkeepalive updatehostkeys user userknownhostsfile
+	verifyhostkeydns visualhostkey`)
+
 func (c *sshConnection) configOption(option string) {
-	key, value, found := strings.Cut(option, "=")
-	if !found {
-		key, value, _ = strings.Cut(strings.TrimSpace(option), " ")
+	// ssh reads a configuration line here: it skips leading blanks and one
+	// "=", ends the key at "=", a space or a tab, and skips the separator
+	// before the value. So "-o=Key=Value" and "-o 'Key<TAB>Value'" set Key.
+	option = strings.TrimLeft(option, " \t")
+	option = strings.TrimLeft(strings.TrimPrefix(option, "="), " \t")
+	original, value := option, ""
+	if end := strings.IndexAny(option, "= \t"); end >= 0 {
+		original, value = option[:end], strings.TrimLeft(option[end:], "= \t")
 	}
-	original := strings.TrimSpace(key)
-	key, value = strings.ToLower(original), strings.TrimSpace(value)
+	key := strings.ToLower(original)
+	value = strings.TrimSpace(value)
 	switch {
 	case key == "hostname":
 		// %h and the other tokens are expanded by ssh, not here.
@@ -610,8 +658,14 @@ func (c *sshConnection) configOption(option string) {
 		c.port = value
 	case key == "proxyjump":
 		c.jump(value)
-	case sshOpaqueOptions[key] && !strings.EqualFold(value, "none") && !strings.EqualFold(value, "no"):
-		c.scan.refuse("-o " + original + " moves the connection")
+	case sshOpaqueOptions[key]:
+		if !strings.EqualFold(value, "none") && !strings.EqualFold(value, "no") {
+			c.scan.refuse("-o " + original + " moves the connection")
+		}
+	default:
+		if _, plain := sshPlainOptions[key]; !plain {
+			c.scan.refuse("-o " + original + " is not an option whose effect on the connection is known")
+		}
 	}
 }
 
@@ -677,8 +731,13 @@ func sftpEgress(tokens []string) egressScan {
 	seen := false
 	walkCLI(sftpSpec, tokens, cliVisitor{
 		invalid: scan.refuse,
-		option:  connection.option,
+		option: func(name string, role optRole, value string) {
+			if !connection.optionAfterOperand(name, role) {
+				connection.option(name, role, value)
+			}
+		},
 		operand: func(token string) {
+			connection.operands++
 			if !seen {
 				destination, seen = token, true
 			}
@@ -706,8 +765,15 @@ func scpEgress(tokens []string) egressScan {
 	var operands []string
 	walkCLI(scpSpec, tokens, cliVisitor{
 		invalid: scan.refuse,
-		option:  connection.option,
-		operand: func(token string) { operands = append(operands, token) },
+		option: func(name string, role optRole, value string) {
+			if !connection.optionAfterOperand(name, role) {
+				connection.option(name, role, value)
+			}
+		},
+		operand: func(token string) {
+			connection.operands++
+			operands = append(operands, token)
+		},
 	})
 	for _, operand := range operands {
 		if netdest.HasScheme(operand) {
@@ -872,32 +938,133 @@ func telnetEgress(tokens []string) egressScan {
 	return scan
 }
 
+// opensslClientFlags and opensslClientValues are the s_client and s_time
+// options that leave the peer as -connect, -host and -port name it. An option
+// in neither table makes the destination undetermined: several of the others
+// fetch from an address (-crl_download, a store URI) or load code (-engine,
+// -provider), and a table that skipped what it did not know would pass them.
+var opensslClientFlags = names(`
+	4 6 quiet brief showcerts crlf ign_eof no_ign_eof state debug msg prexit
+	tls1 tls1_1 tls1_2 tls1_3 dtls dtls1 dtls1_2 no_ssl3 no_tls1 no_tls1_1
+	no_tls1_2 no_tls1_3 reconnect status tlsextdebug nocommands
+	verify_return_error verify_quiet no_ticket comp no_comp bugs nbio
+	noservername trace security_debug security_debug_verbose partial_chain
+	no_check_time x509_strict enable_pha legacy_renegotiation no_renegotiation
+	legacy_server_connect no_legacy_server_connect fallback_scsv serverpref
+	new reuse`)
+
+var opensslClientValues = names(`
+	servername verify verify_depth verify_hostname verify_ip verify_email
+	verify_name cert key cert_chain certform keyform pass cafile capath
+	chaincafile cipher ciphersuites sigalgs client_sigalgs curves groups alpn
+	nextprotoneg starttls xmpphost name sess_in sess_out psk psk_identity
+	keylogfile msgfile bind maxfraglen max_send_frag split_send_frag mtu
+	min_protocol max_protocol proxy_user proxy_pass attime purpose time www
+	keymatexport keymatexportlen`)
+
 // opensslEgress covers s_client and s_time, the openssl subcommands that open
-// a client connection; commandEgress keeps the others out. The destination is
-// the value of -connect, and of -proxy when one is set; no other option can
-// name one, so unknown options are skipped.
+// a client connection. The peer is the value of -connect, of -host with
+// -port, or an operand written as host:port; -proxy is a second destination.
+// openssl accepts -name, --name and name=value spellings of every option.
 func opensslEgress(tokens []string) egressScan {
 	var scan egressScan
+	host, port := "", ""
 	connected := false
 	for i := 1; i < len(tokens); i++ {
-		switch tokens[i] {
-		case "-connect", "-proxy":
+		token := tokens[i]
+		if !strings.HasPrefix(token, "-") || token == "-" {
+			// OpenSSL 3 takes the peer as an operand.
+			scan.addTarget(token, "tcp", "the host")
+			connected = true
+			continue
+		}
+		name, value, attached := strings.Cut(strings.TrimLeft(token, "-"), "=")
+		name = strings.ToLower(name)
+		next := func() (string, bool) {
+			if attached {
+				return value, true
+			}
 			if i+1 >= len(tokens) {
-				scan.refuse(tokens[i] + " has no value")
-				continue
+				scan.refuse(token + " has no value")
+				return "", false
 			}
 			i++
-			scan.addTarget(tokens[i], "tcp", tokens[i-1])
-			connected = true
-		case "-unix":
+			return tokens[i], true
+		}
+		switch {
+		case name == "help":
+			return egressScan{}
+		case name == "connect" || name == "proxy":
+			if target, ok := next(); ok {
+				scan.addTarget(target, "tcp", "-"+name)
+				connected = connected || name == "connect"
+			}
+		case name == "host":
+			host, _ = next()
+		case name == "port":
+			port, _ = next()
+		case name == "unix":
 			scan.refuse("-unix connects through a local socket")
+		default:
+			if _, flag := opensslClientFlags[name]; flag && !attached {
+				continue
+			}
+			if _, takesValue := opensslClientValues[name]; !takesValue {
+				scan.refuse("openssl option " + token + " is not one whose effect on the connection is known")
+				continue
+			}
+			// A file option also accepts a store URI, which openssl fetches.
+			if argument, ok := next(); ok && netdest.HasScheme(argument) {
+				scan.refuse(token + " names an address openssl loads from")
+			}
 		}
 	}
-	if !connected {
-		// Without -connect the client dials its built-in default address.
+	switch {
+	case connected:
+		// -connect wins over -host and -port when both are given.
+	case host != "" || port != "":
+		if host == "" {
+			host = "localhost"
+		}
+		if port == "" {
+			port = "4433"
+		}
+		scan.addHost("tcp", host, port, "-host")
+	default:
+		// Without a peer the client dials its built-in default address.
 		scan.addHost("tcp", "localhost", "4433", "the default address")
 	}
 	return scan
+}
+
+// opensslFetchEgress covers the other openssl subcommands. They read keys and
+// certificates from files, but ocsp and cmp talk to a responder, and any of
+// them loads an argument written as a URL from that address.
+func opensslFetchEgress(tokens []string) (egressScan, bool) {
+	var scan egressScan
+	if len(tokens) == 0 {
+		return scan, false
+	}
+	sub := tokens[0]
+	for i := 1; i < len(tokens); i++ {
+		name, value, attached := strings.Cut(strings.ToLower(strings.TrimLeft(tokens[i], "-")), "=")
+		isOption := strings.HasPrefix(tokens[i], "-")
+		switch {
+		case isOption && (sub == "ocsp" && name == "host" || sub == "cmp" && (name == "server" || name == "proxy")):
+			if !attached && i+1 < len(tokens) {
+				i++
+				value = tokens[i]
+			}
+			scan.addTarget(value, "http", "-"+name)
+		case isOption && sub == "cmp" && name == "config":
+			scan.refuse("cmp reads its server from a configuration file")
+		case netdest.HasScheme(tokens[i]) && !strings.HasPrefix(strings.ToLower(tokens[i]), "file:"):
+			scan.addTarget(tokens[i], "", "a URL")
+		case attached && netdest.HasScheme(value) && !strings.HasPrefix(value, "file:"):
+			scan.addTarget(tokens[i][strings.Index(tokens[i], "=")+1:], "", "a URL")
+		}
+	}
+	return scan, len(scan.destinations) > 0 || scan.undetermined != ""
 }
 
 // egressResolvers are the tools whose destinations are read from their
@@ -969,7 +1136,12 @@ func commandEgress(command Command, overrides []envOverride) (scan egressScan, n
 		// line also sets a variable that moves the connection.
 		return scan, network && !(configured && len(overrides) == 0)
 	case command.Name == "openssl" && (len(tokens) == 0 || tokens[0] != "s_client" && tokens[0] != "s_time"):
-		return egressScan{}, false // digests, encodings, key handling: no connection
+		// Digests, encodings and key handling open no connection, unless an
+		// argument is an address to load from or a responder to ask.
+		scan, network = opensslFetchEgress(tokens)
+		if !network {
+			return egressScan{}, false
+		}
 	case egressResolvers[command.Name] != nil:
 		scan = egressResolvers[command.Name](tokens)
 		network = len(scan.destinations) > 0 || scan.undetermined != "" || command.Dynamic && hasOperand(tokens)
@@ -1028,6 +1200,10 @@ func applyEnvOverrides(scan *egressScan, overrides []envOverride) {
 	for _, override := range overrides {
 		name := strings.ToLower(override.name)
 		switch {
+		case override.name == "":
+			// The name itself is computed, so it may be any of the variables
+			// a client reads.
+			scan.refuse("a variable is set under a name computed at run time")
 		case connectionVariables[name]:
 			scan.refuse(override.name + " changes how the client connects")
 		case !proxyVariables[name]:

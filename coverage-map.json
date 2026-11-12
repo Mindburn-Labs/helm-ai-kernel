@@ -2487,7 +2487,7 @@
       "id": "CTL-035",
       "title": "Local coding-agent hook shell guard",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt. It decides network egress on every destination a command names and denies a destination it cannot name under an allowlist profile. It denies, under every profile, a call that reaches its own signing key, trusted public key or policy profile, or that runs the kernel command which signs with that key or installs the hook. A read or fetch tool is decided like the same effect through a shell, and a tool it has no class for is decided, not passed.",
+      "claim": "The pre-tool hook denies destructive shell commands and fails closed when it cannot write its receipt. For the network clients it parses (curl, wget, the ssh family, rsync, git, netcat, telnet, openssl) and for fetch tools, it decides network egress on every destination the call names, and under an allowlist profile it denies a call whose destinations it cannot all name, which includes an option the client's table does not know. It denies, under every profile, a call that reaches its own signing key, trusted public key or policy profile, or that runs the kernel command which signs with that key or installs the hook. A read or fetch tool is decided like the same effect through a shell, and a tool it has no class for is decided, not passed.",
       "status": "observed-only",
       "plane": "runtime",
       "reason": "The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. No removal proof deletes these checks yet.",
@@ -2511,12 +2511,14 @@
         "A remote named in git configuration is treated as operator configuration and is not decided.",
         "A script file is not read for what it does: `python3 script.py` is decided on its arguments, and on its text only for a literal reference to the signing material. A path computed at run time, a renamed copy of the kernel binary, a `PATH` override and a recursive read of a directory above the data directory are not detected.",
         "A profile that grants `shell.operate` allows opaque shell forms, which can open connections the allowlist does not see.",
-        "Package managers and language toolchains that download are not classified as egress."
+        "A program outside the client table is not classified as egress: package managers, language toolchains, DNS tools and HTTP clients the table does not list connect without a network decision.",
+        "Trust material is matched on the path a command writes. A glob whose head is a variable, a `cd` into the key directory through a glob and an archive tool pointed at a parent directory with `-C` are not detected."
       ],
       "tests": {
         "allowed": [
           "core/cmd/helm-ai-kernel.TestHookPreToolAllowsSafeBashWithoutApprovalOutput",
-          "core/cmd/helm-ai-kernel.TestHookGrantedProfileAllowsClassifiedTools"
+          "core/cmd/helm-ai-kernel.TestHookGrantedProfileAllowsClassifiedTools",
+          "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestHookPreToolDeniesDestructiveBashAndWritesReceipt",
@@ -2524,7 +2526,10 @@
           "core/cmd/helm-ai-kernel.TestHookPreToolReturnsBlockingExitWhenDenyCannotBeWritten",
           "core/cmd/helm-ai-kernel.TestHookDefaultProfileClassifiesEveryTool",
           "core/cmd/helm-ai-kernel.TestHookReceiptsNameEveryEgressDestination",
-          "core/cmd/helm-ai-kernel.TestHookProtectsAnExplicitSigningSeedFile"
+          "core/cmd/helm-ai-kernel.TestHookProtectsAnExplicitSigningSeedFile",
+          "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/pkg/shellscan.TestClassifyReadsClientOptionsWhereverTheClientDoes",
+          "core/pkg/shellscan.TestClassifyRefusesWhatAClientTableDoesNotKnow"
         ],
         "removal": [],
         "bypass": [

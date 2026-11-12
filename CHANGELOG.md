@@ -108,6 +108,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   without `--max-redirect=0` and `git` over HTTP without
   `-c http.followRedirects=false`, because the client follows redirects to
   hosts the hook cannot see.
+- Under an allowlist profile, an option the hook's table for a client does
+  not know is denied with `EGRESS_DESTINATION_UNDETERMINED` instead of being
+  skipped: an `ssh -o` key outside the common ones, an `openssl s_client`
+  option that loads code or fetches from an address, a `git` global option
+  the table does not list. `scp` and `sftp` options written after an operand
+  are denied the same way.
 - `git clone`, `fetch`, `pull`, `push` and `ls-remote` with an address on the
   command line, `git remote add` and `set-url`, and `git submodule update` are
   now network egress. `git` with a remote named in git configuration is
@@ -143,7 +149,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   A second URL, a host hidden behind `user@`, and an option or variable that
   moves the connection (`--connect-to`, `--resolve`, a proxy, `ssh -J`) now
   each count as a destination, in the hook and in `workstation` policy
-  evaluation, which share one parser.
+  evaluation, which share one parser. The parser reads each client's command
+  line the way the client does: `ssh` options written after the host,
+  `-o=Key=Value`, an `openssl s_client` peer given as an operand or with
+  `-host` and `-port`, the last value of a repeated `git -c
+  http.followRedirects`, an address stored with `git config --file`, and a
+  proxy variable exported as one quoted word.
+- A fetch tool that takes a list (`urls`) is decided on every URL in it. It
+  was denied as undetermined under an allowlist profile even when every URL
+  was allowed.
+- A path pattern with a negated class (`[!x]*`) is matched against the hook's
+  key directory as the shell expands it.
 - The hook did not protect its own signing material. A call that reaches the
   key directory, a seed passed by flag, the policy profile, or the kernel
   command that signs or installs the hook is now denied with

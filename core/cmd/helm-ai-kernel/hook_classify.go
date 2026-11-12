@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -313,29 +314,83 @@ func readToolClassifications(tool string, payload preToolPayload) []hookClassifi
 	}}
 }
 
-// fetchToolClassifications decides a fetch or search tool as network egress.
-// The destination is the host of the URL the tool was given; a tool given no
-// URL, such as a search, sends its query somewhere the hook cannot name.
+// fetchToolClassifications decides a fetch or search tool as network egress:
+// one decision per destination, the host of each URL the tool was given. The
+// URL is read from `url` or `uri`, and from a `urls` list for the tools that
+// take several. A tool given no URL, such as a search, sends its query
+// somewhere the hook cannot name, and one URL that cannot be parsed makes the
+// call undetermined as a whole.
 func fetchToolClassifications(tool string, payload preToolPayload) []hookClassification {
-	target := netdest.Undetermined
-	reason := "network egress via " + tool + ": destination could not be determined (the call names no URL)"
+	var raws []string
 	if raw := inputString(payload.ToolInput, "url", "uri"); raw != "" {
-		reason = "network egress via " + tool + ": destination could not be determined (the URL could not be parsed)"
-		if destination, err := netdest.Parse(raw); err == nil {
-			target, reason = destination.String(), "network egress via "+tool
+		raws = append(raws, raw)
+	}
+	listed, listOK := inputStringList(payload.ToolInput, "urls")
+	raws = append(raws, listed...)
+
+	undetermined := ""
+	var targets []string
+	switch {
+	case !listOK:
+		undetermined = "the urls field is not a list of URLs"
+	case len(raws) == 0:
+		undetermined = "the call names no URL"
+	}
+	for _, raw := range raws {
+		destination, err := netdest.Parse(raw)
+		if err != nil {
+			undetermined = "a URL could not be parsed"
+			break
+		}
+		if target := destination.String(); !slices.Contains(targets, target) {
+			targets = append(targets, target)
 		}
 	}
-	metadata := map[string]string{}
-	bindEgressDestinations(metadata, []string{target})
-	return []hookClassification{{
-		ShouldDecide: true,
-		Class:        "network",
-		Target:       target,
-		Action:       "network_egress",
-		ToolID:       "network.egress",
-		Reason:       reason,
-		Metadata:     metadata,
-	}}
+	reason := "network egress via " + tool
+	if undetermined != "" {
+		targets = []string{netdest.Undetermined}
+		reason += ": destination could not be determined (" + undetermined + ")"
+	}
+	classifications := make([]hookClassification, 0, len(targets))
+	for _, target := range targets {
+		metadata := map[string]string{}
+		bindEgressDestinations(metadata, targets)
+		classifications = append(classifications, hookClassification{
+			ShouldDecide: true,
+			Class:        "network",
+			Target:       target,
+			Action:       "network_egress",
+			ToolID:       "network.egress",
+			Reason:       reason,
+			Metadata:     metadata,
+		})
+	}
+	return classifications
+}
+
+// inputStringList reads a list of strings from the first of keys that is
+// present. ok is false when the field is there but is not a list of strings,
+// so a caller can refuse it instead of reading it as empty.
+func inputStringList(input map[string]any, keys ...string) (values []string, ok bool) {
+	for _, key := range keys {
+		raw, present := input[key]
+		if !present || raw == nil {
+			continue
+		}
+		list, isList := raw.([]any)
+		if !isList {
+			return nil, false
+		}
+		for _, item := range list {
+			text, isString := item.(string)
+			if !isString || strings.TrimSpace(text) == "" {
+				return nil, false
+			}
+			values = append(values, strings.TrimSpace(text))
+		}
+		return values, true
+	}
+	return nil, true
 }
 
 // unknownToolClassifications routes a tool the hook has no class for to the

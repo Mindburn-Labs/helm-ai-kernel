@@ -293,11 +293,35 @@ func segmentsMatch(pattern, target []string, dotGlob bool) bool {
 		if !dotGlob && strings.HasPrefix(target[i], ".") && !strings.HasPrefix(pattern[i], ".") && !strings.HasPrefix(pattern[i], `\.`) {
 			return false
 		}
-		if ok, err := path.Match(pattern[i], target[i]); err != nil || !ok {
+		if ok, err := path.Match(shellBracket(pattern[i]), target[i]); err != nil || !ok {
 			return false
 		}
 	}
 	return true
+}
+
+// shellBracket rewrites the shell's "[!...]" to the "[^...]" that path.Match
+// reads as a negated class. Left alone, path.Match takes "!" as a member of
+// the class, so "[!x]*" would not match a name the shell expands it to.
+func shellBracket(segment string) string {
+	if !strings.Contains(segment, "[!") {
+		return segment
+	}
+	var out strings.Builder
+	for i := 0; i < len(segment); i++ {
+		switch {
+		case segment[i] == '\\' && i+1 < len(segment):
+			out.WriteByte(segment[i])
+			i++
+			out.WriteByte(segment[i])
+		case segment[i] == '[' && i+1 < len(segment) && segment[i+1] == '!':
+			out.WriteString("[^")
+			i++
+		default:
+			out.WriteByte(segment[i])
+		}
+	}
+	return out.String()
 }
 
 // reachesInto reports whether a known prefix, followed by text computed at

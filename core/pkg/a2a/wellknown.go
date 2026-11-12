@@ -115,8 +115,8 @@ func NewKernelCardProvider(cfg KernelCardConfig) *KernelCardProvider {
 		{
 			ID:          "helm.evaluate",
 			Name:        "Evaluate A2A envelope",
-			Description: "Negotiate A2A protocol features and verify envelope signatures for cross-agent communication.",
-			Examples:    []string{"Evaluate this A2A envelope for trust negotiation", "Verify agent signature on this delegation request"},
+			Description: "Negotiate A2A protocol features for cross-agent communication: expiry, schema version, policy rules and required features. Envelope signatures are not verified.",
+			Examples:    []string{"Evaluate this A2A envelope for feature negotiation", "Check which features this envelope and the kernel agree on"},
 			InputModes:  []string{"structured"},
 			OutputModes: []string{"structured"},
 		},

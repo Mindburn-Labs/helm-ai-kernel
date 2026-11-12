@@ -61,14 +61,16 @@ Local `mcp approve` does not mint MCP authority. Escape hatches: `HELM_NO_TUI=1`
 | --- | --- | --- |
 | Run a destructive shell command¹ | `DENY` | signed receipt |
 | Use an unknown MCP tool | `ESCALATE` | quarantine record |
-| Read protected secrets | `DENY` | fail-closed receipt |
+| Read protected secrets from a shell command¹ | `DENY` | fail-closed receipt |
 | Run approved work | `ALLOW` | receipt + evidence |
 | Export a review bundle | verify offline | EvidencePack |
 
 ¹ The local agent hook is an observed-only integration, not an enforced
 boundary. Its shell guard matches an intentionally narrow set of destructive
 command patterns and denies syntax it cannot evaluate statically — it is not a
-general shell analyzer. See
+general shell analyzer. The hook evaluates shell commands, MCP tool calls and
+writes to sensitive files; it does not evaluate a client's own file-read or
+web-fetch tools. See
 [the guard's scope](docs/reference/workstation-governance.md#coverage-label-observed-only).
 
 HELM only governs effects that reach its boundary. For example, evals showed
@@ -131,7 +133,7 @@ logo use is covered by [TRADEMARK.md](TRADEMARK.md).
 
 ## Source Build
 
-The source build uses Go 1.26.10 (the version pinned by `go.work` and
+The source build uses Go 1.26.11 (the version pinned by `go.work` and
 `mise.toml`). The supported reproducible recipe explicitly trusts the
 checked-out mise configuration and installs the pinned toolchain. If mise is
 unavailable, use a compatible native Go toolchain instead.

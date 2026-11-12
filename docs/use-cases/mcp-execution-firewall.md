@@ -9,7 +9,7 @@ MCP made it trivial for agents to discover new tools; it also made it trivial fo
 
 Discovered servers enter a quarantine lifecycle: discovered, quarantined, then approved, revoked, or expired. While quarantined, their tools cannot dispatch; calls return a deterministic verdict instead of reaching the tool. Leaving quarantine needs a credential-verified approval authority; without one, the approval routes fail closed and the server stays quarantined. A tool whose schema is not valid JSON Schema is denied.
 
-Every decision along that path produces a signed receipt, which means you can show an auditor exactly which MCP tools were reachable, when each was approved, and by whom. This is the fail-closed security layer the MCP ecosystem is missing.
+Every decision along that path is recorded: `mcp authorize-call` writes a hash-sealed boundary record, and `mcp proof` packs signed receipts into an EvidencePack. You can show an auditor which MCP servers were discovered, which calls were stopped, and why. This is the fail-closed security layer the MCP ecosystem is missing.
 
 ## MCP Firewall Path
 

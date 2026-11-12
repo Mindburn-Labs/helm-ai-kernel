@@ -49,5 +49,5 @@ or release artifacts.
 python3 scripts/check_documentation_truth.py
 cd core
 go test ./cmd/helm-ai-kernel -run 'TestConformLevelsAreRetired|TestConformRejectsRetiredProfilesAndGates' -count=1
-go test ./pkg/conformance -run 'TestCoreSuiteRegistrationAndRun|TestOWASP_LLM_Top10' -count=1
+go test ./pkg/conformance -run 'TestSuiteRunResultBranches|TestDefaultNegativeBoundaryVectors' -count=1
 ```

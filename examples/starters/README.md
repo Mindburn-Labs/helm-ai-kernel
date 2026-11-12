@@ -26,4 +26,5 @@ bash examples/starters/openai/ci-smoke.sh
 ```
 
 The smoke scripts check that `helm-ai-kernel init <profile>` creates `helm.yaml` and
-`.env` in a temporary project and that `helm-ai-kernel doctor` can inspect it.
+`.env.helm.example` in a temporary project, then run `helm-ai-kernel doctor`
+there without failing on its result.

@@ -26,6 +26,11 @@ var (
 // relevant candidate inputs. Callers must not export a partial report.
 var ErrScanCoverageIncomplete = errors.New("shadow: scan coverage incomplete")
 
+// ErrNothingExamined means a scan read no file because its root, or everything
+// it tried to read below the root, was missing or unreadable. Such a scan has
+// no report and no grade: nothing read is not nothing found.
+var ErrNothingExamined = errors.New("shadow: nothing could be examined")
+
 // Scanner walks a directory tree and produces a Report of shadow-AI findings.
 // Zero-allocation-per-match is not a goal; deterministic output is.
 type Scanner struct {
@@ -78,7 +83,14 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 			if s.RequireComplete && !s.shouldSkipDir(absRoot, path) {
 				return incompleteScanError("unable to traverse declared scan scope")
 			}
-			// Legacy shadow scans skip unreadable paths rather than aborting.
+			if path == absRoot {
+				return fmt.Errorf("%w: scan root: %v", ErrNothingExamined, walkErr)
+			}
+			// Legacy shadow scans skip unreadable paths below the root rather
+			// than aborting, and count the ones that were in scope.
+			if !s.shouldSkipDir(absRoot, path) {
+				r.PathsUnreadable++
+			}
 			return nil
 		}
 		if d == nil {
@@ -102,7 +114,7 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 			if s.RequireComplete {
 				return incompleteScanError("unable to inspect candidate input")
 			}
-			r.FilesSkipped++
+			r.PathsUnreadable++
 			return nil
 		}
 		if info.Size() > s.MaxFileBytes {
@@ -112,10 +124,14 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 			r.FilesSkipped++
 			return nil
 		}
-		r.FilesScanned++
-		if err := s.scanFile(path, absRoot, r); err != nil && s.RequireComplete {
-			return incompleteScanError("unable to read candidate input")
+		if err := s.scanFile(path, absRoot, r); err != nil {
+			if s.RequireComplete {
+				return incompleteScanError("unable to read candidate input")
+			}
+			r.PathsUnreadable++
+			return nil
 		}
+		r.FilesScanned++
 		return nil
 	})
 	if err != nil {
@@ -123,6 +139,9 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 			return nil, incompleteScanError("unable to traverse declared scan scope")
 		}
 		return nil, err
+	}
+	if r.FilesScanned == 0 && r.PathsUnreadable > 0 {
+		return nil, fmt.Errorf("%w: %d path(s) below the scan root could not be read", ErrNothingExamined, r.PathsUnreadable)
 	}
 
 	// Post-process: tag HELM absence findings once per agent-SDK file if no

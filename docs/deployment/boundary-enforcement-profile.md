@@ -29,7 +29,7 @@ Doctrine invariant, stated once and relied on everywhere:
 ```
                  ┌─────────────────────────── appliance ───────────────────────────┐
                  │                                                                  │
-   policy input  │  systemd drop-ins        helm-gateway.service (unprivileged)     │
+   policy input  │  systemd drop-ins        helm-gateway.service (no capabilities)  │
    (hash-bound)  │  ┌─────────────────┐     ┌───────────────────────────────┐       │
  ──compile──────►│  │ orchestrator.d/ │     │ HELM gateway: verdicts,       │──┐    │
    + signed      │  │ 50-helm-…conf   ├────►│ receipts, L7 egress checker   │  │    │
@@ -126,13 +126,15 @@ refuses to start the gateway. The OS does the refusing.
 **Privilege model:** reading the live nftables ruleset requires
 `CAP_NET_ADMIN`. That capability lives only in the short-lived attest oneshot
 (`CapabilityBoundingSet=CAP_NET_ADMIN`), never in the long-running gateway,
-which stays fully unprivileged (`CapabilityBoundingSet=` empty). Running the
+which holds no capabilities (`CapabilityBoundingSet=` empty; the appliance unit
+sets no `User=`, so the gateway still runs as root). Running the
 probe inside the gateway would either over-privilege it or turn fail-closed
 into fail-bricked.
 
 **Unit lineage:** `deploy/systemd/helm-gateway.service` is the standalone
 hardened single-host reference (no profile gating). The `deploy/appliance/`
-pair is the profile-gated topology: same hardening posture, plus the
+pair is the profile-gated topology: the same filesystem and capability
+hardening without the standalone unit's `DynamicUser=yes`, plus the
 attest-oneshot dependency and the compiled per-profile drop-in.
 
 ## 3. First boot, governance side

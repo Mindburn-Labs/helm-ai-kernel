@@ -8,13 +8,12 @@ last_reviewed: 2026-09-24
 Keep an OpenAI-shaped client interface while HELM makes the boundary decision
 and emits receipts.
 
-## 1. Start HELM
+<!-- quantum_posture: this page describes optional classical Ed25519 proxy receipt signatures and adds no post-quantum cryptographic control. -->
 
-```bash
-helm-ai-kernel serve --policy ./release.high_risk.v3.toml
-```
+## 1. Start The Proxy
 
-## 2. Start The Proxy
+The proxy builds its own Guardian and receipt log. It does not call
+`helm-ai-kernel serve`, so no server needs to run beside it.
 
 ```bash
 python3 scripts/launch/mock-openai-upstream.py --port 19090
@@ -32,21 +31,21 @@ The proxy binds `127.0.0.1`. It reads `HELM_PROXY_BIND_ADDR`, not the
 `mcp serve --transport http` follows the same rule with `HELM_MCP_BIND_ADDR`
 and refuses `--auth none` off loopback.
 
-## 3. Point The Client At HELM
+## 2. Point The Client At HELM
 
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:9090/v1
 export OPENAI_API_KEY=local-dev-key
 ```
 
-## 4. Verify Denial
+## 3. Verify Denial
 
 ```bash
 ./scripts/launch/demo-openai-proxy.sh
 ```
 
-Expected denial responses include `X-Helm-Status: DENIED` and
-`X-Helm-Receipt-ID`.
+The script starts its own mock upstream and proxy on separate ports. Expected
+denial responses include `X-Helm-Status: DENIED` and `X-Helm-Receipt-ID`.
 
 ## What The Proxy Governs
 
@@ -62,6 +61,17 @@ Expected denial responses include `X-Helm-Status: DENIED` and
   `X-Helm-Session-ID` UUID header or, without one, the request's correlation ID.
 - `--daily-limit` and `--monthly-limit` are refused: the proxy sees token
   counts, not prices.
+
+## Receipts And Signatures
+
+- Each governed response appends one receipt to a hash-chained JSONL file under
+  `--receipts-dir`; the proxy serves the file at `/helm/receipts`.
+- Receipts are unsigned unless the proxy starts with `--sign <seed>`. The
+  commands on this page do not pass it. The seed is a 32-byte Ed25519 seed in
+  hex or base64; any other string is hashed into one, with a warning.
+- With `--sign`, each receipt carries an Ed25519 signature over
+  `<receipt_id>:<output_hash>:<status>:<lamport_clock>`, also returned as
+  `X-Helm-Signature`. No shipped command verifies that signature.
 
 ## Source Truth
 

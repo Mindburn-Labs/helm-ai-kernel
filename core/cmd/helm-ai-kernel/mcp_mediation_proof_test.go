@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -261,6 +262,80 @@ func TestMCPMediationProofInstallArtifactsUseGovernedStdioServer(t *testing.T) {
 		if !strings.Contains(stdout.String(), "mcp") || !strings.Contains(stdout.String(), "serve") || !strings.Contains(stdout.String(), "stdio") {
 			t.Fatalf("print-config %s does not use governed stdio server: %s", client, stdout.String())
 		}
+	}
+}
+
+// mcpBundleManifestView is the part of a bundle manifest that the root
+// mcp-bundle.json repeats by hand.
+type mcpBundleManifestView struct {
+	Server struct {
+		Command string `json:"command"`
+	} `json:"server"`
+	Governance struct {
+		Features []string `json:"features"`
+	} `json:"governance"`
+	PlatformOverrides map[string]struct {
+		Server struct {
+			Command string `json:"command"`
+		} `json:"server"`
+	} `json:"platform_overrides"`
+}
+
+// TestMCPBundleManifestMatchesRootManifest pins the governance features the
+// packed manifest advertises and keeps the root mcp-bundle.json equal to it.
+// Adding a feature here needs the code that performs it: a detector, scorer or
+// protocol method that no shipped command reaches is not a feature.
+func TestMCPBundleManifestMatchesRootManifest(t *testing.T) {
+	wantFeatures := []string{
+		"guardian-6-gate-pipeline",
+		"profile-aware-signed-receipts",
+		"schema-pep-validation",
+		"proofgraph-audit-trail",
+		"typosquat-detection",
+	}
+
+	bundle := filepath.Join(t.TempDir(), "helm-ai-kernel.mcpb")
+	var stdout, stderr bytes.Buffer
+	if code := generateMCPBundle(bundle, &stdout, &stderr); code != 0 {
+		t.Fatalf("generateMCPBundle code=%d stderr=%s", code, stderr.String())
+	}
+	reader, err := zip.OpenReader(bundle)
+	if err != nil {
+		t.Fatalf("open bundle: %v", err)
+	}
+	defer reader.Close()
+	manifestFile, err := reader.Open("manifest.json")
+	if err != nil {
+		t.Fatalf("open packed manifest: %v", err)
+	}
+	defer manifestFile.Close()
+	var packed mcpBundleManifestView
+	if err := json.NewDecoder(manifestFile).Decode(&packed); err != nil {
+		t.Fatalf("decode packed manifest: %v", err)
+	}
+
+	rootData, err := os.ReadFile(filepath.Join(kernelRepoRoot(t), "mcp-bundle.json"))
+	if err != nil {
+		t.Fatalf("read root mcp-bundle.json: %v", err)
+	}
+	var root mcpBundleManifestView
+	if err := json.Unmarshal(rootData, &root); err != nil {
+		t.Fatalf("decode root mcp-bundle.json: %v", err)
+	}
+
+	assertArgs(t, packed.Governance.Features, wantFeatures...)
+	assertArgs(t, root.Governance.Features, wantFeatures...)
+	if got := packed.PlatformOverrides["win32"].Server.Command; got != "./helm-ai-kernel.exe" {
+		t.Fatalf("packed win32 command = %q", got)
+	}
+	if got := root.PlatformOverrides["win32"].Server.Command; got != "./helm-ai-kernel.exe" {
+		t.Fatalf("root win32 command = %q", got)
+	}
+	if root.Server.Command != "./helm-ai-kernel" {
+		t.Fatalf("root server command = %q, want the binary name the bundle packs", root.Server.Command)
+	}
+	if runtime.GOOS != "windows" && packed.Server.Command != root.Server.Command {
+		t.Fatalf("packed server command = %q, root = %q", packed.Server.Command, root.Server.Command)
 	}
 }
 

@@ -1,7 +1,15 @@
 # Durable connector effect reservation
 
-Status: source-owned implementation and real-PostgreSQL proof; internal,
-pre-production, and not yet enabled by a deployed Data Plane configuration.
+Status: retired (helm-tracker#266). The admitter's write path
+(`EffectReservationAdmitter.Admit`, `MarkStarted`, `MarkNotStarted`,
+`MarkUncertain`, `Recover` and `ListActive`) and its PostgreSQL tests were
+deleted: no shipped binary called them (`controls.yaml` CTL-015, retired). The
+tree keeps the `approval_effect_reservation_events` table and its triggers, the
+`EffectReservationEvent` type, the read path behind the effect-disposition and
+reconciliation-candidate routes, and the `EffectReservationBoundary` interface
+in `core/pkg/runtimeadapters/mcp`, which only test fakes implement. No shipped
+binary appends a reservation event, so this page describes the design, not
+running code.
 
 This boundary joins one immutable Kernel-signed
 `approval-dispatch-admission.v1` to the current signed connector release head
@@ -176,11 +184,10 @@ deployed Data Plane proof.
 
 ## Verification
 
-Run unit and real database proofs:
+Run the remaining unit and vector checks:
 
 ```bash
 (cd core && GOWORK=off go test ./pkg/boundary/approvalceremony ./pkg/runtimeadapters/mcp ./pkg/connectors/github -count=1)
-HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
 make verify-approval-ceremony-vectors
 make verify-effect-close-vectors
 make verify-effect-disposition-vectors
@@ -188,7 +195,10 @@ make docs-coverage
 make docs-truth
 ```
 
-The PostgreSQL proof covers exact replay, `ADMITTED -> STARTED -> UNCERTAIN`,
+These commands drive the MCP bridge and the GitHub connector against an
+in-memory reservation boundary and check the signed contract vectors. The
+PostgreSQL proof of the lifecycle, and its `make` target, were deleted with the
+admitter. That proof covered exact replay, `ADMITTED -> STARTED -> UNCERTAIN`,
 `ADMITTED -> NOT_STARTED`, terminal transitions, active-work listing,
 cross-tenant RLS, append-only rejection, and concurrent admission/revocation,
 start/FENCE, and start/revocation races. For each start race, the only accepted
@@ -214,11 +224,12 @@ without disposition after FENCE, with a pre-rotation disposition, or under
   rotation instead of test/admin construction;
 - implement the production approval `BindingProvider` that derives the signed
   connector snapshot only from the verified current release;
-- wire `EffectReservationAdmitter` and signed dispatch admission retrieval into
-  the deployed Kernel/Data Plane configuration; the code path is opt-in today;
+- restore a reservation write path, which the tree no longer has, and wire it
+  and signed dispatch admission retrieval into the deployed Kernel/Data Plane
+  configuration;
 - wire the source-owned connector acknowledgement and signed close contracts
   into real connectors, sealed EvidencePack production, and the deployed Data
-  Plane; the internal close boundary exists but no deployed adapter invokes it;
+  Plane; the close path was deleted with the admitter (CTL-040);
 - wire the internal signed active-work disposition contract into a durable
   Control Plane ledger/outbox, authenticated Data Plane adapter, connector
   acknowledgement reconciliation, and operator Console; its Kernel receipt

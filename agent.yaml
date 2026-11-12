@@ -2,7 +2,7 @@ repo_type: svc
 owners:
   team: helm-platform
 commands:
-  setup: make setup
+  check: make check
   test: make test
   lint: make lint
   build: make build
@@ -12,4 +12,4 @@ risk:
   protected_paths:
     - docs/**
 agent_entrypoints:
-  default_task: make agent-context
+  default_task: make check

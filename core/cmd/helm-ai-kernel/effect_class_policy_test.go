@@ -180,8 +180,8 @@ func TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow(t *testing.
 			{"a label is not replaced by the resource's class", "db.drop_database", contracts.EffectTypeCreateTask, "ticket.write", extauthz.VerdictDeny, "ticket.write", nil},
 			{"a declared class at the resource's class stays the caller's", "db.drop_database", contracts.EffectTypeCreateTask, "E1", extauthz.VerdictAllow, "E1", nil},
 			{"a declared class above the resource's is not lowered", "db.drop_database", contracts.EffectTypeCreateTask, "E2", extauthz.VerdictDeny, "E2", nil},
-			{"a declared class below the resource's is raised and kept", "db.drop_database", contracts.EffectTypeExecutePayment, "E0", extauthz.VerdictDeny, "E4", "E0"},
-			{"a generic tool call is raised the same way", contracts.EffectTypeCallTool, contracts.EffectTypeExecutePayment, "E0", extauthz.VerdictDeny, "E4", "E0"},
+			{"a declared class below the resource's is not raised", "db.drop_database", contracts.EffectTypeExecutePayment, "E0", extauthz.VerdictAllow, "E0", nil},
+			{"a generic tool call is not raised either", contracts.EffectTypeCallTool, contracts.EffectTypeExecutePayment, "E0", extauthz.VerdictAllow, "E0", nil},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest)
@@ -209,6 +209,51 @@ func TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow(t *testing.
 		if response.Verdict != extauthz.VerdictDeny {
 			t.Fatalf("ext-authz verdict=%s, want DENY from the caller_declared rule", response.Verdict)
 		}
+	})
+}
+
+// The resource of an action other than EXECUTE_TOOL proves nothing about the
+// action, so it does not change the class at all. A raise from it restricted
+// only an honest caller: the same request with a label in place of the class
+// skipped it.
+func TestTheResourceDoesNotChangeTheClassOfAnotherAction(t *testing.T) {
+	const (
+		declaredByCaller = guardian.EffectClassSourceCallerDeclared
+		fromCatalog      = guardian.EffectClassSourceEffectCatalog
+	)
+	t.Run("ext-authz", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, action, toolURN, declared string
+			verdict, class, source          string
+			kept                            any
+		}{
+			{"a catalogued action declared at its class", contracts.EffectTypeSendChatMessage, contracts.EffectTypeInfraDestroy, "E1", extauthz.VerdictAllow, "E1", fromCatalog, nil},
+			{"the same action with a label in place of its class", contracts.EffectTypeSendChatMessage, contracts.EffectTypeInfraDestroy, "e1", extauthz.VerdictAllow, "E1", fromCatalog, "e1"},
+			{"the same action declared below its class", contracts.EffectTypeSendChatMessage, contracts.EffectTypeInfraDestroy, "E0", extauthz.VerdictAllow, "E1", fromCatalog, "E0"},
+			{"an action the catalog does not know", "local.echo", contracts.EffectTypeInfraDestroy, "E0", extauthz.VerdictAllow, "E0", declaredByCaller, nil},
+			// The resource of EXECUTE_TOOL is the tool, so its class counts.
+			{"EXECUTE_TOOL with the same resource", "EXECUTE_TOOL", contracts.EffectTypeInfraDestroy, "E1", extauthz.VerdictDeny, "E4", fromCatalog, "E1"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				svc, policy := effectClassPolicyServices(t, allowE1ForEffectClassTest)
+				response := extAuthzWithEffectClassPolicy(t, svc, policy, tc.action, tc.toolURN, tc.declared)
+				policy.requireEffectClass(t, tc.class, tc.source, tc.kept)
+				if response.Verdict != tc.verdict {
+					t.Fatalf("verdict=%s reason=%s, want %s", response.Verdict, response.ReasonCode, tc.verdict)
+				}
+			})
+		}
+	})
+	// The activation ceiling is checked against the same class: an E0 record
+	// admits an uncatalogued action declared E0 whatever resource it names.
+	t.Run("organization runtime", func(t *testing.T) {
+		capturing := &evaluateRouteCapturingPDP{}
+		svc, _ := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+		response := organizationRuntimeEvaluateForTest(t, svc, "local.echo", contracts.EffectTypeInfraDestroy, "E0")
+		if capturing.request == nil {
+			t.Fatalf("verdict=%s reason=%s: the activation gate refused an E0 declaration for an action the catalog does not know", response.Verdict, response.ReasonCode)
+		}
+		requireEffectClassBinding(t, capturing.request.Context, "E0", declaredByCaller, nil)
 	})
 }
 
@@ -280,6 +325,105 @@ func TestEvaluateRoutePolicyNeverSeesACallersToolName(t *testing.T) {
 			`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"s-1","context":{"tool_name":"db.drop_database"}}`)
 		if policy.seen["tool_name"] != "local.echo" || response.Verdict != string(contracts.VerdictAllow) {
 			t.Fatalf("tool_name=%v verdict=%s, want the request resource and ALLOW", policy.seen["tool_name"], response.Verdict)
+		}
+	})
+}
+
+// Bypass: a pattern is matched against the whole canonical request, so it
+// also matches a member the caller nested in args or context under one of the
+// names the kernel binds at the top level. Only the effect_class, action and
+// resource selectors read the bound values.
+func TestManagedPolicyPatternsAlsoMatchMembersTheCallerNested(t *testing.T) {
+	t.Run("a pattern on tool_name matches args.tool_name", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-echo", Layer: pdp.ManagedPolicyLayerP1, Pattern: `"tool_name":"local\.echo"`, Verdict: contracts.VerdictAllow, Reason: "echo is allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"EXECUTE_TOOL","effect_level":"db.drop_database","session_id":"s-1","args":{"tool_name":"local.echo"}}`)
+		if policy.seen["tool_name"] != "db.drop_database" || response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("tool_name=%v verdict=%s, want the bound db.drop_database decided ALLOW by the caller's args.tool_name", policy.seen["tool_name"], response.Verdict)
+		}
+	})
+	t.Run("a resource selector reads the bound tool", func(t *testing.T) {
+		svc, _ := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-echo", Layer: pdp.ManagedPolicyLayerP1, Action: "EXECUTE_TOOL", Resource: "local.echo", Verdict: contracts.VerdictAllow, Reason: "echo is allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"EXECUTE_TOOL","effect_level":"db.drop_database","session_id":"s-1","args":{"tool_name":"local.echo"}}`)
+		if response.Verdict != string(contracts.VerdictDeny) {
+			t.Fatalf("verdict=%s, want DENY: the selector names local.echo and the tool is db.drop_database", response.Verdict)
+		}
+	})
+	t.Run("a pattern on effect_class and effect_class_source matches members nested in args", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-attested-e2", Layer: pdp.ManagedPolicyLayerP1, Pattern: `"effect_class":"E2","effect_class_source":"effect_catalog"`, Verdict: contracts.VerdictAllow, Reason: "catalogued E2 is allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"local.echo","effect_level":"E2","session_id":"s-1","args":{"effect_class":"E2","effect_class_source":"effect_catalog"}}`)
+		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceCallerDeclared, nil)
+		if response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("verdict=%s, want ALLOW from the caller's nested members", response.Verdict)
+		}
+	})
+	t.Run("an effect_class selector reads the bound class", func(t *testing.T) {
+		svc, _ := effectClassPolicyServices(t, allowE1ForEffectClassTest)
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"E1","session_id":"s-1","args":{"effect_class":"E1"}}`)
+		if response.Verdict != string(contracts.VerdictDeny) {
+			t.Fatalf("verdict=%s, want DENY: SEND_EMAIL is bound E2 and the E1 rule allows", response.Verdict)
+		}
+	})
+	t.Run("an allow pattern on effect_class_declared matches the declaration", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-read-label", Layer: pdp.ManagedPolicyLayerP1, Pattern: `"effect_class_declared":"ticket\.read"`, Verdict: contracts.VerdictAllow, Reason: "ticket reads are allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"ticket.read","session_id":"s-1"}`)
+		policy.requireEffectClass(t, "E2", guardian.EffectClassSourceEffectCatalog, "ticket.read")
+		if response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("verdict=%s, want ALLOW: the pattern names the member that holds the declaration", response.Verdict)
+		}
+	})
+}
+
+// Bypass: a pattern that relies on two members being adjacent in the
+// canonical text, or on the case of a member name, can be defeated by a
+// member the caller sends. Context members of any name the transport does not
+// reserve reach policy, and reserved names and tool_name are matched exactly,
+// so Effect_Class and Tool_Name are not removed.
+func TestManagedPolicyPatternsDependOnTheCallersOtherMembers(t *testing.T) {
+	denyAdjacent := pdp.ManagedPolicyRule{
+		ID: "p0-adjacent", Layer: pdp.ManagedPolicyLayerP0, Pattern: `"effect_class":"E1","principal_id":"principal-trusted"`,
+		Verdict: contracts.VerdictDeny, Reason: "this principal may not run E1",
+	}
+	for _, tc := range []struct {
+		name, context string
+		verdict       contracts.Verdict
+	}{
+		{"nothing between the members", `{}`, contracts.VerdictDeny},
+		{"a member that sorts between them", `{"foo":"x"}`, contracts.VerdictAllow},
+		{"a member named after effect_class", `{"effect_class0":"x"}`, contracts.VerdictAllow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _ := effectClassPolicyServices(t, allowE1ForEffectClassTest, denyAdjacent)
+			response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"local.echo","effect_level":"E1","session_id":"s-1","context":`+tc.context+`}`)
+			if response.Verdict != string(tc.verdict) {
+				t.Fatalf("verdict=%s reason=%s, want %s", response.Verdict, response.ReasonCode, tc.verdict)
+			}
+		})
+	}
+	t.Run("a case variant of a reserved name", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-read-label", Layer: pdp.ManagedPolicyLayerP1, Pattern: `(?i)"effect_class":"ticket\.read"`, Verdict: contracts.VerdictAllow, Reason: "ticket reads are allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"E2","session_id":"s-1","context":{"Effect_Class":"ticket.read"}}`)
+		if policy.seen["Effect_Class"] != "ticket.read" || response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("Effect_Class=%v verdict=%s, want the caller's member kept and ALLOW from the case-insensitive pattern", policy.seen["Effect_Class"], response.Verdict)
+		}
+	})
+	t.Run("a case variant of tool_name", func(t *testing.T) {
+		svc, policy := effectClassPolicyServices(t, pdp.ManagedPolicyRule{
+			ID: "p1-echo", Layer: pdp.ManagedPolicyLayerP1, Pattern: `(?i)"tool_name":"local\.echo"`, Verdict: contracts.VerdictAllow, Reason: "echo is allowed",
+		})
+		response := evaluateWithEffectClassPolicy(t, svc, `{"tool":"SEND_EMAIL","effect_level":"E2","session_id":"s-1","context":{"Tool_Name":"local.echo"}}`)
+		if _, present := policy.seen["tool_name"]; present || policy.seen["Tool_Name"] != "local.echo" || response.Verdict != string(contracts.VerdictAllow) {
+			t.Fatalf("tool_name=%v Tool_Name=%v verdict=%s, want only the caller's Tool_Name and ALLOW from the case-insensitive pattern",
+				policy.seen["tool_name"], policy.seen["Tool_Name"], response.Verdict)
 		}
 	})
 }

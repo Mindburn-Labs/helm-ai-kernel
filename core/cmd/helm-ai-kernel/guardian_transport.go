@@ -84,12 +84,12 @@ func bindAuthenticatedGuardianContext(ctx context.Context, values map[string]any
 // The evaluated action is the request's action. For EXECUTE_TOOL it is also
 // the resource, because Guardian evaluates that resource as the tool. The
 // resource of any other action is the caller's description of what the action
-// touches and proves nothing about the action. A catalogued effect named
-// there raises a class the caller declared and does nothing else: it never
-// lowers the class, never turns a label into a class and never makes the
-// class catalogued. If it did, a caller would choose the class of any action
-// by naming an effect beside it, and the signed effect would call that choice
-// the kernel's.
+// touches and proves nothing about the action, so it does not change the
+// class. If it set the class, a caller would choose the class of any action by
+// naming an effect beside it, and the signed effect would call that choice the
+// kernel's. If it only raised a declared class, it would restrict nothing: a
+// caller who sent a label in place of the class, or named another resource,
+// would skip the raise, and only an honest declaration would pay it.
 //
 // The replaced declaration is returned so a rule that restricts on it still
 // sees it.
@@ -99,14 +99,10 @@ func resolveEffectClass(action, resource, declared string) (class, source, repla
 	// E0..E4 order as strings. An id the catalog does not know leaves floor
 	// empty.
 	floor, _ := contracts.CataloguedEffectClass(strings.TrimSpace(action))
-	if named, ok := contracts.CataloguedEffectClass(strings.TrimSpace(resource)); ok {
-		// The exact comparison Guardian binds the tool by.
-		if action == "EXECUTE_TOOL" {
-			if named > floor {
-				floor = named
-			}
-		} else if contracts.ValidEffectClass(class) && named > class {
-			class = named
+	// The exact comparison Guardian binds the tool by.
+	if action == "EXECUTE_TOOL" {
+		if named, ok := contracts.CataloguedEffectClass(strings.TrimSpace(resource)); ok && named > floor {
+			floor = named
 		}
 	}
 	switch {

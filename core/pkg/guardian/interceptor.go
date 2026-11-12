@@ -57,10 +57,9 @@ const (
 	// EffectClassSourceKernelRoute: the route evaluates one fixed kind of
 	// effect and assigns its class itself.
 	EffectClassSourceKernelRoute = "kernel_route"
-	// EffectClassSourceCallerDeclared: the class follows from what the
-	// authenticated caller sent, its declared class or a higher one of a
-	// catalogued effect it named as the resource. The kernel's catalog has no
-	// record of the evaluated action, or assigns it a lower class.
+	// EffectClassSourceCallerDeclared: the class is the one the authenticated
+	// caller declared. The kernel's catalog has no record of the evaluated
+	// action, or assigns it a lower class.
 	EffectClassSourceCallerDeclared = "caller_declared"
 )
 

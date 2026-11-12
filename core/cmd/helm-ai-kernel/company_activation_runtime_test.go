@@ -17,6 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
@@ -586,5 +587,57 @@ func TestActivationGateRefusesARequestWithNoBoundEffectClass(t *testing.T) {
 	reasonCode, _, _ := organizationRuntimeActivationDenial(svc, req, true, "tenant-1", "workspace-1", now)
 	if reasonCode != contracts.ReasonActivationBindingMismatch {
 		t.Fatalf("reason = %q, want %q for a request with no bound effect class", reasonCode, contracts.ReasonActivationBindingMismatch)
+	}
+}
+
+// A label in place of the class of a catalogued action is checked against the
+// catalog's class: the record's binding check passes on the class and the
+// ceiling refuses it, so the attestation names the verified record. The
+// attestation still carries the submitted label.
+func TestOrganizationRuntimeChecksALabelOnACataloguedActionAgainstTheCatalogClass(t *testing.T) {
+	capturing := &evaluateRouteCapturingPDP{}
+	svc, _ := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+	response := organizationRuntimeEvaluateForTest(t, svc, contracts.EffectTypeSendChatMessage, "connector://chat/channel-1", "ops.label")
+	if capturing.request != nil || response.ReasonCode != string(contracts.ReasonActivationCeilingExceeded) {
+		t.Fatalf("verdict=%s reason=%s reached policy=%t, want %s for the catalog's E1 over an E0 record",
+			response.Verdict, response.ReasonCode, capturing.request != nil, contracts.ReasonActivationCeilingExceeded)
+	}
+	attestation := response.OrganizationRuntimeDecisionAttestation
+	if attestation == nil {
+		t.Fatal("the response carries no organization-runtime attestation")
+	}
+	if attestation.EffectClass != "ops.label" || attestation.ActivationIdentityKind != contracts.OrganizationRuntimeActivationIdentityVerified ||
+		attestation.ActivationRecordRef == "" || attestation.ActivationRecordHash == "" {
+		t.Fatalf("attestation effect_class=%q identity=%q record=%q/%q, want the submitted label and the verified record",
+			attestation.EffectClass, attestation.ActivationIdentityKind, attestation.ActivationRecordRef, attestation.ActivationRecordHash)
+	}
+}
+
+// Bypass: the decision signed for a refusal of the activation gate carries no
+// effect digest, so its signature does not cover the input context, where the
+// class the ceiling was checked against, its source and the declaration are.
+func TestActivationRefusalSignatureDoesNotCoverTheBoundEffectClass(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("activation-refusal-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &api.EvaluateRequest{Tool: "EXECUTE_TOOL", Resource: contracts.EffectTypeExecutePayment, EffectLevel: "E0", Context: map[string]any{
+		guardian.ContextEffectClass:         "E4",
+		guardian.ContextEffectClassSource:   guardian.EffectClassSourceEffectCatalog,
+		guardian.ContextEffectClassDeclared: "E0",
+	}}
+	decision, err := signedActivationDenyDecision(&Services{ReceiptSigner: signer}, req, "principal-1",
+		contracts.ReasonActivationCeilingExceeded, "Company activation ceiling was exceeded", time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.EffectDigest != "" {
+		t.Fatalf("the refusal carries effect digest %q; the bypass line is stale", decision.EffectDigest)
+	}
+	decision.InputContext[guardian.ContextEffectClass] = "E0"
+	delete(decision.InputContext, guardian.ContextEffectClassSource)
+	delete(decision.InputContext, guardian.ContextEffectClassDeclared)
+	if ok, err := signer.VerifyDecision(decision); err != nil || !ok {
+		t.Fatalf("VerifyDecision = %v, %v after the input context changed; the bypass line is stale", ok, err)
 	}
 }

@@ -1329,6 +1329,151 @@ removal_proofs:
     replace: "\tif false && (rpc == \"\") != (wallets == nil) {\n"
     tests:
       - "core/pkg/gateway/runtime.TestTONActonIsOptionalAndAllOrNothing"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/stage.go
+    find: "\t\t\t\tif declared && d.Internal {\n"
+    replace: "\t\t\t\tif true || declared && d.Internal {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestStageCeilingDraftGrantsNoWriteButAnInternalOne"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/stage.go
+    find: "\t\t\tif declared && !d.Writes() {\n"
+    replace: "\t\t\tif !declared || !d.Writes() {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestStageCeilingDraftGrantsNoWriteButAnInternalOne"
+      - "core/pkg/gateway/adapters/provision.TestStageCeilingApprovalRequiredPutsEveryWriteBehindApproval"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/stage.go
+    find: "\t\t\t\tif !slices.Contains(m.Terms.ApprovalRequired, effectType) {\n"
+    replace: "\t\t\t\tif false && !slices.Contains(m.Terms.ApprovalRequired, effectType) {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestStageCeilingApprovalRequiredPutsEveryWriteBehindApproval"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/stage.go
+    find: "\t\t\t\tif m.Terms.ApprovalThreshold != nil {\n"
+    replace: "\t\t\t\tif false && m.Terms.ApprovalThreshold != nil {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestStageCeilingApprovalRequiredPutsEveryWriteBehindApproval"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/stage.go
+    find: "\tif effectargs.StageRank(plan.Stage) > effectargs.StageRank(applied.Stage) {\n"
+    replace: "\tif false && effectargs.StageRank(plan.Stage) > effectargs.StageRank(applied.Stage) {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestPrecheckNarrowNeverRaisesTheStage"
+  - control: CTL-067
+    file: core/pkg/gateway/adapters/provision/precheck.go
+    find: "\t\tif r := checkStageRaise(plan, applied); r != nil {\n"
+    replace: "\t\tif r := checkStageRaise(plan, applied); false && r != nil {\n"
+    tests:
+      - "core/pkg/gateway/adapters/provision.TestPrecheckNarrowNeverRaisesTheStage"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif !bytes.Equal(auth[:32], rpIDHash[:]) {\n"
+    replace: "\tif false && !bytes.Equal(auth[:32], rpIDHash[:]) {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif auth[32]&flagUserPresent == 0 || auth[32]&flagUserVerified == 0 {\n"
+    replace: "\tif auth[32]&flagUserPresent == 0 {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif err != nil || !bytes.Equal(got, challenge) {\n"
+    replace: "\tif err != nil || len(got) < 0 {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\t\tif !ecdsa.VerifyASN1(pub, hash[:], a.Signature) {\n"
+    replace: "\t\tif false && !ecdsa.VerifyASN1(pub, hash[:], a.Signature) {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif (counter != 0 || signCount != 0) && counter <= signCount {\n"
+    replace: "\tif false && (counter != 0 || signCount != 0) && counter <= signCount {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif typ, ok := text(\"type\"); !ok || typ != \"webauthn.get\" {\n"
+    replace: "\tif typ, ok := text(\"type\"); false && (!ok || typ != \"webauthn.get\") {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tif !bytes.Equal(a.CredentialID, cred.ID) {\n"
+    replace: "\tif false && !bytes.Equal(a.CredentialID, cred.ID) {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/owner_assertion.go
+    find: "\tfield(&m, []byte(approverID))\n"
+    replace: "\t_ = approverID\n"
+    tests:
+      - "core/pkg/gateway/admission.TestOwnerChallengesAreBoundToEveryInput"
+  - control: CTL-068
+    file: core/pkg/gateway/admission/decisions.go
+    find: "\treturn required && effectargs.WidensAuthority(effectType)\n"
+    replace: "\treturn false && required && effectargs.WidensAuthority(effectType)\n"
+    tests:
+      - "core/pkg/gateway/admission.TestOwnerAssertionOnlyCoversAuthorityWideningsWhenRequired"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\tif err != nil {\n\t\treturn nil, refuseAdmin(connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired, \"the genesis assertion does not verify: %v\", err)\n"
+    replace: "\tif false && err != nil {\n\t\treturn nil, refuseAdmin(connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired, \"the genesis assertion does not verify: %v\", err)\n"
+    tests:
+      - "core/pkg/gateway/server.TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\t\tif required {\n"
+    replace: "\t\tif false && required {\n"
+    tests:
+      - "core/pkg/gateway/server.TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\tcase len(humans) != 1 || len(keyed) != 1:\n"
+    replace: "\tcase false && (len(humans) != 1 || len(keyed) != 1):\n"
+    tests:
+      - "core/pkg/gateway/server.TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\tcase !h.registered:\n"
+    replace: "\tcase false && !h.registered:\n"
+    tests:
+      - "core/pkg/gateway/server.TestHumanAfterGenesisAddsNoHumanAndNoPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\tcase h.passkeys && !h.enrolled:\n"
+    replace: "\tcase false && h.passkeys && !h.enrolled:\n"
+    tests:
+      - "core/pkg/gateway/server.TestHumanAfterGenesisAddsNoHumanAndNoPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/server/genesis.go
+    find: "\tcase required && !(h.passkeys && h.enrolled && h.genesis):\n"
+    replace: "\tcase false && required && !(h.passkeys && h.enrolled && h.genesis):\n"
+    tests:
+      - "core/pkg/gateway/server.TestHumanAfterGenesisAddsNoHumanAndNoPasskey"
+  - control: CTL-068
+    file: core/pkg/gateway/effectargs/credential.go
+    find: "\t\tif !ok || k.Curve != elliptic.P256() {\n"
+    replace: "\t\tif !ok || (false && k.Curve != elliptic.P256()) {\n"
+    tests:
+      - "core/pkg/gateway/effectargs.TestCheckCredentialAcceptsOnlyKeysTheGatewayVerifies"
+  - control: CTL-068
+    file: core/pkg/gateway/effectargs/plan.go
+    find: "\t\t\tif p.Schema == AuthorityNarrow {\n\t\t\t\treturn invalid(\"%s.credentials: a narrowing plan enrolls no passkey\", path)\n"
+    replace: "\t\t\tif false && p.Schema == AuthorityNarrow {\n\t\t\t\treturn invalid(\"%s.credentials: a narrowing plan enrolls no passkey\", path)\n"
+    tests:
+      - "core/pkg/gateway/effectargs.TestPlanCredentialsAreAHumansPasskeys"
+  - control: CTL-068
+    file: core/pkg/gateway/runtime/runtime.go
+    find: "\tc.OwnerAssertionRequired = required\n"
+    replace: "\tc.OwnerAssertionRequired = false && required\n"
+    tests:
+      - "core/pkg/gateway/runtime.TestOwnerAssertionRequiredIsOffUnlessSetAndRefusesAGuess"
 
 controls:
 
@@ -3884,7 +4029,8 @@ controls:
       jti is recorded in Postgres in the decision's transaction. The
       approval digest must equal the attempt's, the escalation must not have
       expired, and an approval of a high, irreversible or authority-widening
-      effect, judged on the risk re-admission computes, needs a step-up proof:
+      effect, judged on the risk re-admission computes, needs the approver's
+      verified owner assertion (CTL-068) or a step-up proof:
       a compact helm.gateway.stepup token of the decide token's approver and
       tenant, verified like any gateway token, fresh (an iat, and an exp at
       most 300 seconds after it) and bound by authorization_details
@@ -3916,7 +4062,7 @@ controls:
     protected_operations:
       - "Approve, Reject and Cancel of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "A step-up proof is the issuer's attestation that it verified the approver's WebAuthn assertion over the approval digest, not the gateway's own check: the gateway holds no credential registry, so a compromised Control Plane issuer can mint a proof as it can mint a decide token (the trust limits of CTL-052 apply)."
+      - "A step-up proof is the issuer's attestation that it verified the approver's WebAuthn assertion over the approval digest, not the gateway's own check, so a compromised Control Plane issuer can mint a proof as it can mint a decide token (the trust limits of CTL-052 apply). The gateway's own check of the approver's passkey assertion, which satisfies step-up instead and, with HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, is the only proof of a helm.authority.* widening, is CTL-068."
       - "A medium effect a mandate escalates (approval_required) is approved without step-up, and a proof presented for it is ignored: it cannot refuse the approval, and it is not used up or recorded."
       - "An escalation past its expiry is refused; the River job of CTL-056 moves it to EXPIRED."
       - "A decide token binds the attempt and action; the approver sees and hashes the arguments through GetAttemptContent, which this slice serves but cannot force a client to use."
@@ -4832,3 +4978,146 @@ controls:
         - "core/pkg/connectors/sandbox.TestValidIDRefusesWhatCouldEscapeAPathOrACommandLine"
         - "core/pkg/connectors/sandbox/e2b.TestGatewayFindFiltersOnTheClientAndNeverTruncates"
         - "core/pkg/connectors/sandbox/claudemanaged.TestRemoteRunnerDoesNotFollowRedirects"
+
+  - id: CTL-067
+    title: "An authority plan's stage is a ceiling on what it grants"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway holds a helm.authority.provision.v1 or narrow.v1 plan to its
+      stage (helm-tracker#334, modes L1), judged from the effect-type
+      declarations of the adapters it composes (adapters.Declaration), never
+      from the plan or a catalog copy. A write is a declaration whose
+      Reversible is not "not applicable"; an effect type no adapter declares
+      counts as a write. At stage draft no mandate grants a write, except one
+      whose declaration sets Internal (it changes only the composing Control
+      Plane's own rows). At approval-required every write a mandate grants is
+      in its approval_required and that mandate sets no approval_threshold.
+      constrained-live and certified-live grant by mandate terms only, and
+      certified-live grants nothing constrained-live does not. A plan that
+      exceeds its stage is refused STAGE_CEILING_EXCEEDED. A narrowing plan,
+      which needs no approval, never ranks above the applied plan's stage
+      (STAGE_RAISE_REQUIRES_PROVISION), so a rung is raised only by a
+      provision plan, which a distinct human approves with step-up (CTL-053,
+      CTL-068). Propose refuses such a plan before any approver is asked, and
+      the authority adapter refuses it again on the locked applied row before
+      it writes anything (NOT_SENT).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/adapters/provision.CheckStage"
+      - "core/pkg/gateway/adapters/provision.Precheck"
+      - "core/pkg/gateway/adapters/provision.Adapter.Dispatch"
+      - "core/pkg/gateway/adapters/provision.Adapter.BindCatalog"
+      - "core/pkg/gateway/admission.Service.Propose"
+    config:
+      - "None: the declarations are the composed adapters' own (admission.New binds them to the authority adapter through adapters.CatalogBinder), and no flag relaxes the ceiling."
+    protected_operations:
+      - "Propose of helm.authority.provision.v1 and helm.authority.narrow.v1 on helm-gateway serve, and their application by the authority adapter at Dispatch."
+    bypass_assumptions:
+      - "The ceiling is as good as the declarations: a composition that declares a provider write ReversibleNotApplicable, or marks a provider write Internal, lets a draft plan grant it. The Control Plane composition owns its helm.work.* declarations."
+      - "An authority adapter that was never bound to a catalog (a library caller that uses it without admission.New) judges every effect type undeclared, so it refuses every write at draft and approval-required rather than allowing one."
+      - "Plans applied before this control keep their mandates until the next plan; the next plan, narrowing or not, is held to its stage."
+      - "The stage bounds the plan's grants, not the risk class of an effect at admission: a medium write behind approval_required escalates as CTL-053 says."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestPostgresDraftPlanMayGrantAnInternalWrite"
+        - "core/pkg/gateway/admission.TestPostgresNarrowPlanLowersTheStage"
+        - "core/pkg/gateway/adapters/provision.TestStageCeilingLiveStagesGrantByMandateTerms"
+      forbidden:
+        - "core/pkg/gateway/admission.TestPostgresDraftPlanGrantingAWriteIsRefused"
+        - "core/pkg/gateway/admission.TestPostgresApprovalRequiredPlanPutsEveryWriteBehindApproval"
+        - "core/pkg/gateway/admission.TestPostgresNarrowPlanCannotRaiseTheStage"
+        - "core/pkg/gateway/admission.TestPostgresDraftPlanGrantingAnUndeclaredEffectIsRefused"
+        - "core/pkg/gateway/adapters/provision.TestStageCeilingDraftGrantsNoWriteButAnInternalOne"
+        - "core/pkg/gateway/adapters/provision.TestStageCeilingApprovalRequiredPutsEveryWriteBehindApproval"
+        - "core/pkg/gateway/adapters/provision.TestPrecheckNarrowNeverRaisesTheStage"
+      removal:
+        - "core/pkg/gateway/adapters/provision.TestStageCeilingDraftGrantsNoWriteButAnInternalOne"
+        - "core/pkg/gateway/adapters/provision.TestStageCeilingApprovalRequiredPutsEveryWriteBehindApproval"
+        - "core/pkg/gateway/adapters/provision.TestPrecheckNarrowNeverRaisesTheStage"
+      bypass:
+        - "core/pkg/gateway/admission.TestPostgresDraftPlanGrantingAWriteIsRefused"
+        - "core/pkg/gateway/admission.TestPostgresNarrowPlanCannotRaiseTheStage"
+        - "core/pkg/gateway/admission.TestPostgresDraftPlanGrantingAnUndeclaredEffectIsRefused"
+  - id: CTL-068
+    title: "Authority comes from the owner's passkey"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway verifies the owner's own WebAuthn assertion itself
+      (helm-tracker#334). EnsurePrincipals on a tenant it creates enrols the
+      owner's passkey (ES256 or EdDSA, as SubjectPublicKeyInfo) only with a
+      genesis assertion by that passkey over GenesisChallengeV1 of the
+      tenant, the owner and the credential id, which must verify; such a
+      genesis names exactly one human with exactly one passkey. On a tenant
+      that exists it registers no new human and enrols no passkey, whatever
+      the configuration: later humans and passkeys come only through a
+      provision plan a distinct human approved, which enrols the credentials
+      its human principals carry; what exists, presented as it is, is
+      answered unchanged. Approve verifies an owner assertion that is present,
+      whatever the effect, in the approval's transaction and as a pure
+      function of the standard library: clientDataJSON type webauthn.get
+      read by exact key with no duplicate, challenge OwnerChallengeV1 of the
+      tenant, the approver, the attempt and the approval digest, rpIdHash of
+      the credential's rp_id, the user-present and user-verified flags, the
+      signature over authenticatorData || SHA-256(clientDataJSON) by the
+      approver's own enrolled key, a counter that never goes backwards, and
+      the signed payload accepted once (authority_token_replay). One that
+      does not verify refuses the approval (OWNER_ASSERTION_REQUIRED) and the
+      attempt stays ESCALATED with nothing used up; a verified one satisfies
+      step-up, its counter is stored, and the approval record keeps it with
+      its challenge. With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, a step-up
+      proof does not satisfy the step-up of a helm.authority.* widening (a
+      provision plan, a lift, a reassignment grant): only the approver's
+      verified assertion does; a new tenant's genesis needs its passkey owner;
+      and EnsurePrincipals presents no human on a tenant that exists but the
+      owner's repeated genesis request. The schema lets only a credential's
+      counter change, forward.
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/admission.VerifyAssertion"
+      - "core/pkg/gateway/admission.Service.Approve"
+      - "core/pkg/gateway/server.Server.Approve"
+      - "core/pkg/gateway/server.AdminServer.EnsurePrincipals"
+      - "core/pkg/gateway/adapters/provision.Adapter.Dispatch"
+    config:
+      - "HELM_GATEWAY_OWNER_ASSERTION_REQUIRED (chart value gateway.ownerAssertionRequired), off by default until the Control Plane sends owner assertions: true or 1 turns it on, false, 0 or unset leaves it off, anything else stops the gateway at start."
+    protected_operations:
+      - "EnsurePrincipals of helm.gateway.v1.AuthorityAdminService and Approve of helm.gateway.v1.EffectGatewayService on helm-gateway serve, and the passkeys a provision plan enrols when the authority adapter applies it."
+    bypass_assumptions:
+      - "With the flag off, the Control Plane issuer's step-up proof still satisfies step-up, so until the flag is on the issuer remains a root of authority for tenants whose approvers do not send assertions (CTL-053). The floors that hold regardless are the verification of every assertion presented, and no human and no passkey joining a tenant that exists through EnsurePrincipals."
+      - "Genesis is trust on first use: the registrar chooses the passkey it enrols for the owner. The genesis assertion proves possession of that passkey, not who holds it; the gateway does not see the Control Plane's sign-in or registration ceremony."
+      - "The gateway checks the WebAuthn relying party through rpIdHash and the credential's rp_id, not the clientDataJSON origin, which it has no configured list of; an assertion made in a cross-origin frame is refused."
+      - "A tenant registered before this control has no genesis passkey. Its humans' passkeys are enrolled through a provision plan approved with a step-up proof while the flag is off; with the flag on and no passkey enrolled, no widening of that tenant can be approved."
+      - "Any enrolled human approves, not only the genesis owner: the owner delegates approval by approving the plan that enrols another human's passkey."
+      - "The receipt binding is unchanged (binding v1 names the approver principal and any step-up proof's issuer and jti); the approval row keeps the assertion for a later binding version, so an offline verifier cannot yet check it from receipts alone."
+      - "A Postgres role with UPDATE on authority_approvals can rewrite a recorded assertion; the receipt chain, not this table, is the tamper-evident record."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestVerifyAssertionAcceptsTheApproversOwnPasskey"
+        - "core/pkg/gateway/admission.TestPostgresOwnerAssertionApprovesAWideningAndIsKept"
+        - "core/pkg/gateway/admission.TestPostgresProvisionPlanEnrolsAHumansPasskey"
+        - "core/pkg/gateway/server.TestPostgresGenesisEnrolsTheOwnersPasskeyOnTheWire"
+        - "core/pkg/gateway/server.TestPostgresIssuerAloneWidensNothingOnTheWire"
+      forbidden:
+        - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+        - "core/pkg/gateway/admission.TestPostgresOwnerAssertionRefusalsSpendNothing"
+        - "core/pkg/gateway/admission.TestPostgresOwnerAssertionIsAcceptedOnce"
+        - "core/pkg/gateway/admission.TestPostgresOwnerAssertionRequiredRefusesTheIssuersProofForWidenings"
+        - "core/pkg/gateway/server.TestPostgresOwnerAssertionRefusalsOnTheWire"
+        - "core/pkg/gateway/server.TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey"
+        - "core/pkg/gateway/server.TestHumanAfterGenesisAddsNoHumanAndNoPasskey"
+        - "core/pkg/gateway/effectargs.TestCheckCredentialAcceptsOnlyKeysTheGatewayVerifies"
+        - "core/pkg/gateway/effectargs.TestPlanCredentialsAreAHumansPasskeys"
+      removal:
+        - "core/pkg/gateway/admission.TestVerifyAssertionRefusesForgedReplayedAndMisboundAssertions"
+        - "core/pkg/gateway/admission.TestOwnerChallengesAreBoundToEveryInput"
+        - "core/pkg/gateway/admission.TestOwnerAssertionOnlyCoversAuthorityWideningsWhenRequired"
+        - "core/pkg/gateway/server.TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey"
+        - "core/pkg/gateway/server.TestHumanAfterGenesisAddsNoHumanAndNoPasskey"
+        - "core/pkg/gateway/effectargs.TestCheckCredentialAcceptsOnlyKeysTheGatewayVerifies"
+        - "core/pkg/gateway/effectargs.TestPlanCredentialsAreAHumansPasskeys"
+        - "core/pkg/gateway/runtime.TestOwnerAssertionRequiredIsOffUnlessSetAndRefusesAGuess"
+      bypass:
+        - "core/pkg/gateway/server.TestPostgresIssuerAloneWidensNothingOnTheWire"
+        - "core/pkg/gateway/admission.TestSignedPayloadDigestIgnoresTheSignature"
+        - "core/pkg/gateway/admission.TestPostgresOwnerAssertionIsAcceptedOnce"
+        - "core/pkg/gateway/server.TestPostgresOwnerAssertionRefusalsOnTheWire"

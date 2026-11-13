@@ -378,12 +378,7 @@ func (g *Guardian) signDecisionWithPolicy(ctx context.Context, decision *contrac
 		artifacts = append(artifacts, env)
 	}
 
-	var actionID string
-	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
-		actionID = toolName
-	} else {
-		actionID = effect.EffectType
-	}
+	actionID := boundActionID(effect)
 
 	// Temporal intervention has priority over PRG validation.
 	if intervention != nil && intervention.Type != contracts.InterventionNone {
@@ -543,7 +538,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		return nil, fmt.Errorf("effect digest mismatch: decision=%s requested=%s", decision.EffectDigest, effectDigest)
 	}
 
-	allowedTool := executionIntentAllowedTool(effect)
+	allowedTool := boundActionID(effect)
 	effectBinding, err := contracts.NewEffectDigestBinding(effect)
 	if err != nil {
 		return nil, fmt.Errorf("bind execution intent effect: %w", err)
@@ -598,20 +593,54 @@ const (
 	sandboxIntentMinimumDispatchTime = time.Second
 )
 
-// executionIntentExpiresAt keeps the default short dispatch authority for
-// ordinary effects. A sandbox intent must also cover its signed runtime so the
-// default 5-30 minute profiles can execute; it receives at most five minutes
-// of dispatch slack and can never outlive the exact signed lease.
-func executionIntentAllowedTool(effect *contracts.Effect) string {
-	if effect.EffectType == contracts.EffectTypeRunSandboxedCode {
-		return effect.EffectType
-	}
-	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
-		return toolName
+// boundActionID names the action an effect is evaluated and dispatched as. It
+// selects the policy rule and becomes the execution intent's allowed tool, so
+// one definition serves both and an intent cannot name a tool the policy
+// decision was not evaluated for. tool_name is read only for the effect types
+// whose contract carries the tool in params; every other effect is named by
+// its type. On the evaluated-request path Params is the caller's context, and
+// bindRequestTool has already replaced tool_name there (EXECUTE_TOOL) or
+// removed it (every other action), so only an effect built in process can
+// name the tool of a CALL_TOOL.
+func boundActionID(effect *contracts.Effect) string {
+	if namesToolInParams(effect.EffectType) {
+		if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
+			return toolName
+		}
 	}
 	return effect.EffectType
 }
 
+// namesToolInParams reports the effect types that are a tool call, where
+// params.tool_name is the tool and not free-form content.
+func namesToolInParams(effectType string) bool {
+	return effectType == "EXECUTE_TOOL" || effectType == contracts.EffectTypeCallTool
+}
+
+// bindRequestTool leaves a request context holding only a tool_name Guardian
+// put there, and returns it. The context came from the caller. Only
+// EXECUTE_TOOL names its tool in a typed request field, the resource, which
+// the decision record signs: it replaces whatever the caller sent. No other
+// action has a tool Guardian can bind, so a tool_name in its context is the
+// caller's word and is removed. Left there, a policy that matches on
+// tool_name would decide by it, and the effect would sign it. Every
+// interceptor and the policy decision point read the context after this.
+func bindRequestTool(action, resource string, params map[string]interface{}) map[string]interface{} {
+	if action != "EXECUTE_TOOL" {
+		delete(params, "tool_name")
+		return params
+	}
+	if params == nil {
+		params = make(map[string]interface{})
+	}
+	params["tool_name"] = resource
+	return params
+}
+
+// executionIntentExpiresAt keeps the default short dispatch authority for
+// ordinary effects. A sandbox intent must also cover its signed runtime so the
+// default 5-30 minute profiles can execute; it receives at most five minutes
+// of dispatch slack and can never outlive the exact signed lease.
 func executionIntentExpiresAt(effect *contracts.Effect, now time.Time) (time.Time, error) {
 	if effect == nil {
 		return time.Time{}, fmt.Errorf("execution intent requires an effect")
@@ -774,6 +803,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 	if req.Context != nil {
 		delete(req.Context, contextKeyCapabilityToken)
 	}
+	// Bind the tool before any gate or the policy decision point reads the
+	// context, so none of them sees a caller's tool_name as the tool.
+	req.Context = bindRequestTool(req.Action, req.Resource, req.Context)
 
 	span.SetAttributes(
 		attribute.String("action", req.Action),
@@ -913,12 +945,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 			EffectType: req.Action,
 			Params:     req.Context,
 			Taint:      contracts.TaintLabelsFromContext(req.Context),
-		}
-		if req.Action == "EXECUTE_TOOL" {
-			if effect.Params == nil {
-				effect.Params = make(map[string]interface{})
-			}
-			effect.Params["tool_name"] = req.Resource
 		}
 
 		// 2. Prepare Decision Record

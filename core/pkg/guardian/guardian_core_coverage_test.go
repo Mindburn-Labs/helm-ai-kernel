@@ -1037,7 +1037,7 @@ func TestSignDecisionBindsEffectDigestForIntentIssuance(t *testing.T) {
 	g := NewGuardian(&testSigner{}, ruleGraph, nil)
 	effect := &contracts.Effect{
 		EffectID:   "eff-bind",
-		EffectType: "CUSTOM_TOOL",
+		EffectType: "EXECUTE_TOOL",
 		Params:     map[string]interface{}{"tool_name": "bind-tool"},
 	}
 	decision := &contracts.DecisionRecord{ID: "dec-bind", ProposalID: "prop-bind", StepID: "step-bind", Timestamp: time.Now()}

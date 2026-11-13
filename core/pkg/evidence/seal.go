@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -401,6 +402,12 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 	result.TrustLevel = profile
 
 	sealPath := filepath.Join(packDir, EvidencePackSealPath)
+	// A seal that is a symbolic link or not a regular file is refused before
+	// it is opened: a named pipe there blocked verification.
+	if err := rejectEvidencePackSymlinks(packDir, filepath.FromSlash(EvidencePackSealPath)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		result.Errors = append(result.Errors, fmt.Sprintf("read %s: %v", EvidencePackSealPath, err))
+		return result
+	}
 	data, err := os.ReadFile(sealPath)
 	if err != nil {
 		result.State = "missing"
@@ -662,9 +669,15 @@ func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
 	return nil
 }
 
+// rejectEvidencePackSymlinks refuses a pack path with a symbolic link on it,
+// or whose last component is not a regular file. Hashing or reading a named
+// pipe or a device blocks or touches it, so they are refused before they are
+// opened. The path is looked at, then opened by name, so this does not close
+// a race with a writer that swaps the file in between.
 func rejectEvidencePackSymlinks(packDir, rel string) error {
 	path := packDir
-	for _, component := range strings.Split(filepath.Clean(rel), string(filepath.Separator)) {
+	components := strings.Split(filepath.Clean(rel), string(filepath.Separator))
+	for i, component := range components {
 		path = filepath.Join(path, component)
 		info, err := os.Lstat(path)
 		if err != nil {
@@ -672,6 +685,9 @@ func rejectEvidencePackSymlinks(packDir, rel string) error {
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("evidence pack path is a symlink: %s", filepath.ToSlash(rel))
+		}
+		if i == len(components)-1 && !info.Mode().IsRegular() {
+			return fmt.Errorf("evidence pack path is not a regular file: %s", filepath.ToSlash(rel))
 		}
 	}
 	return nil

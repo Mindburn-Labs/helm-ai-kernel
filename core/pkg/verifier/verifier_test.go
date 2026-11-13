@@ -1016,9 +1016,17 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if !report.Verified {
+			t.Fatalf("unconfigured witness signatures must not fail the pack: %s", report.Summary)
+		}
 		for _, check := range report.Checks {
-			if check.Name == "embedded_signature_trust" && !check.Pass {
-				t.Fatalf("unconfigured witness signatures must not fail the pack: %+v", check)
+			if check.Name != "embedded_signature_trust" {
+				continue
+			}
+			// Skipped is not verified: with no configured key nothing was
+			// checked, so the check did not run and is not counted as passed.
+			if check.Pass || check.Status != CheckNotRun {
+				t.Fatalf("a skipped witness signature must be NOT_RUN, neither failed nor passed: %+v", check)
 			}
 		}
 	})

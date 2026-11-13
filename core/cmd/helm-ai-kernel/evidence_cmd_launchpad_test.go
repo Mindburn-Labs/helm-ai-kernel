@@ -29,10 +29,11 @@ func TestEvidenceInspectReportsLaunchpadGraph(t *testing.T) {
 	t.Setenv("HELM_DATA_DIR", t.TempDir())
 
 	// Audit 02-08: the pack carries its own dev-local key, so without the
-	// explicit opt-in inspect must not report it verified.
+	// explicit opt-in inspect must not report it verified. The exit code
+	// follows the outcome: UNVERIFIABLE is 1, in JSON mode too.
 	var stdout, stderr bytes.Buffer
-	if code := runEvidenceInspect([]string{"--json", packDir}, &stdout, &stderr); code != 0 {
-		t.Fatalf("runEvidenceInspect code=%d stderr=%s", code, stderr.String())
+	if code := runEvidenceInspect([]string{"--json", packDir}, &stdout, &stderr); code != 1 {
+		t.Fatalf("runEvidenceInspect code=%d, want 1 for an UNVERIFIABLE pack; stderr=%s", code, stderr.String())
 	}
 	var report map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {

@@ -90,100 +90,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Security
 
+- Pack directory listings and directory `Open` calls acquire a directory-only
+  handle and verify its identity. Replacing a checked child directory with a
+  named pipe can no longer block either call; replacing it with a different
+  directory is refused. The regular-file and pack-root rules are unchanged.
+- Pack filesystem names use slash separators. Windows rejects backslash
+  names before native lookup; Unix retains literal backslashes in names.
+
 - The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
   build images and the workflows. Go 1.26.10 carries GO-2026-6859 (an HTTP/1
   server crash in `net/http`), which `govulncheck` reports as reachable. Every
   module now declares `go 1.26.11`, so consumers need Go 1.26.11 or newer.
-
-### Added
-
-- `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
-  unless every in-scope path was read in full.
-
-### Changed
-
-- CLI and served text now state what the code does. `helm-ai-kernel proxy`
-  prints `Signing: none` when started without `--sign`; `bundle` help describes
-  `bundle build` as compiling Rego or Cedar and printing the bundle identity,
-  with no signature and no CEL; the `helm.evaluate` skill on the A2A agent card
-  no longer offers envelope signature verification; and the packed MCP bundle
-  manifest and `mcp-bundle.json` list only the governance features a shipped
-  command performs.
-
-### Upgrade notes
-
-- The request context gained members that managed policy patterns never
-  read at the top level. `effect_class_source`, and `effect_class_declared`
-  when the kernel bound a class other than the declared one, sort after
-  `effect_class` in the canonical request, with nothing between them but a
-  member whose name begins with `effect_class`. Every pattern is matched
-  against the request without those two members, the text it was written
-  for, so a pattern such as `"effect_class":"E1","principal_id":"..."` matches
-  as it did. In that reading `effect_class` is the class the kernel bound,
-  which for a catalogued effect is the catalog's class and not the declared
-  one; deny and escalate rules are also matched against it with
-  `effect_class` holding the kept declaration. A pattern that names
-  `effect_class_source` or `effect_class_declared` matches only a member of
-  that name the caller nested, so it neither admits nor refuses on the source
-  or the declaration the kernel bound. Where the PDP's ALLOW is not
-  authoritative (no PDP, or the CEL/PRG runtime policy), a PRG expression can
-  refuse caller-declared classes by reading `effect_class_source` from the
-  effect's params; under ManagedPolicyPDP an ALLOW replaces local PRG
-  evaluation, so no rule can refuse a caller-declared class until a typed
-  `effect_class_source` selector lands (helm-tracker#322). A pattern is matched against the whole request, so it also
-  matches a member named `effect_class` or `tool_name` that the caller nested
-  in `args` or in another context member. The `effect_class`, `action` and
-  `resource` selectors read the bound values, and for deny and escalate rules
-  also the kept declaration.
-- A class-keyed allow rule now admits a catalogued action sent with a label in
-  place of its class: on ext-authz or the evaluate route, `SEND_EMAIL` with
-  the effect class `ticket.read` is evaluated as the catalog's `E2`, so a rule
-  that allows `E2` admits it, where before the label selected no class rule.
-- A CEL or PRG expression that restricted on a caller's label for a catalogued
-  effect must read `effect_class_declared`: `effect_class` now holds the
-  catalog's class there.
-- A policy that matched a top-level `tool_name` in request context for an
-  action other than `EXECUTE_TOOL` no longer sees it. Guardian removes that
-  member, because only `EXECUTE_TOOL` has a tool the kernel binds. A
-  `tool_name` nested in `args` or in another context member is left as the
-  caller sent it.
-- MCP refuses a tool call with a top-level argument named `effect_class_source`
-  or `effect_class_declared`, as it already did for `effect_class`: tool
-  arguments become top-level members of the policy input, where those names
-  carry authority. A tool that needs such a parameter must nest it inside
-  another argument or rename it. The evaluate routes and the governed proxy
-  strip the same top-level context members and leave nested ones alone.
-- Effect digests of decisions on the evaluate routes, ext-authz, the governed
-  proxy and MCP change. The effect's params gain `effect_class_source`, and
-  `effect_class_declared` where the kernel bound a class other than the
-  declared one. On the evaluate routes and ext-authz `effect_class` holds the
-  bound class, which for a catalogued action can differ from the declared
-  value. A top-level `tool_name` the caller put in context is no longer in the
-  params of any action but `EXECUTE_TOOL`, whose `tool_name` is the request
-  resource as before.
-- The signed ext-authz response still echoes the request's `effect_class` and
-  `risk_class` as submitted. It does not carry the class the kernel bound or
-  its source, so when the kernel evaluated a higher class the response alone
-  does not say so. The evaluated class is in the decision's effect.
-- The format of the organization-runtime decision attestation is unchanged,
-  and its `effect_class` is still the submitted value, which the control plane
-  verifies against what it sent, also when the kernel checked the activation
-  ceiling against a higher class and refused. Its other values can change,
-  because the activation record's binding check now reads the class the kernel
-  bound. A catalogued action declared below its catalog class is refused with
-  `ACTIVATION_CEILING_EXCEEDED` where its record's ceiling is below the
-  catalog's class. A catalogued action sent with a label in place of its class
-  (`SEND_CHAT_MESSAGE` with `ops.label`) used to fail the binding check
-  (`ACTIVATION_BINDING_MISMATCH`, a presented identity); it is now checked
-  against the catalog's class, so over an E0 record it is refused with
-  `ACTIVATION_CEILING_EXCEEDED`, and the attestation reports a verified
-  identity with the record's ref and hash. The decision record's input context
-  carries the class the ceiling was checked against with its source and
-  declaration, on a refusal as on a pass. The record signed for a refusal of
-  the activation gate carries no effect digest, so its signature does not
-  cover that context.
-
-### Security
 
 - Guardian selects the policy rule, and names an execution intent's allowed
   tool, from the evaluated request. Only `EXECUTE_TOOL` has a tool Guardian
@@ -337,6 +254,242 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   lists the 13 members a `receipt.v5` signature covers, and is empty when the
   signature was not verified.
 
+### Added
+
+- `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
+  unless every in-scope path was read in full.
+
+- Package `core/pkg/verifier/packfs` reads one EvidencePack directory through
+  an `os.Root`: it refuses names and symbolic links that leave the pack,
+  absolute symbolic links and files that are not regular, reads whole files
+  up to 64 MiB (`MaxFileBytes`), and checks the letter case of a name a pack
+  states (`CheckCase`).
+- `core/pkg/tape`: `LoadTape` reads a tape from a file system (`LstatFS`)
+  into a `Tape`, and `Tape.Replay` replays it; `verify` and `replay` both use
+  them. `ParseManifest` decodes `tape_manifest.json` and `EntryFileNames`
+  lists entry files in number order.
+- `helm-ai-kernel verify --require-check <names>` fails the pack when a named
+  check did not run, for example `--require-check chain_integrity` for a pack
+  that must carry a receipt chain. Repeat the flag or separate names with
+  commas; every named check is required.
+- `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
+  `check_counts` and a `status` on every check. `evidence inspect --json`
+  carries `outcome` and `check_counts` too.
+
+### Changed
+
+- CLI and served text now state what the code does. `helm-ai-kernel proxy`
+  prints `Signing: none` when started without `--sign`; `bundle` help describes
+  `bundle build` as compiling Rego or Cedar and printing the bundle identity,
+  with no signature and no CEL; the `helm.evaluate` skill on the A2A agent card
+  no longer offers envelope signature verification; and the packed MCP bundle
+  manifest and `mcp-bundle.json` list only the governance features a shipped
+  command performs.
+
+### Upgrade notes
+
+- The request context gained members that managed policy patterns never
+  read at the top level. `effect_class_source`, and `effect_class_declared`
+  when the kernel bound a class other than the declared one, sort after
+  `effect_class` in the canonical request, with nothing between them but a
+  member whose name begins with `effect_class`. Every pattern is matched
+  against the request without those two members, the text it was written
+  for, so a pattern such as `"effect_class":"E1","principal_id":"..."` matches
+  as it did. In that reading `effect_class` is the class the kernel bound,
+  which for a catalogued effect is the catalog's class and not the declared
+  one; deny and escalate rules are also matched against it with
+  `effect_class` holding the kept declaration. A pattern that names
+  `effect_class_source` or `effect_class_declared` matches only a member of
+  that name the caller nested, so it neither admits nor refuses on the source
+  or the declaration the kernel bound. Where the PDP's ALLOW is not
+  authoritative (no PDP, or the CEL/PRG runtime policy), a PRG expression can
+  refuse caller-declared classes by reading `effect_class_source` from the
+  effect's params; under ManagedPolicyPDP an ALLOW replaces local PRG
+  evaluation, so no rule can refuse a caller-declared class until a typed
+  `effect_class_source` selector lands (helm-tracker#322). A pattern is matched against the whole request, so it also
+  matches a member named `effect_class` or `tool_name` that the caller nested
+  in `args` or in another context member. The `effect_class`, `action` and
+  `resource` selectors read the bound values, and for deny and escalate rules
+  also the kept declaration.
+- A class-keyed allow rule now admits a catalogued action sent with a label in
+  place of its class: on ext-authz or the evaluate route, `SEND_EMAIL` with
+  the effect class `ticket.read` is evaluated as the catalog's `E2`, so a rule
+  that allows `E2` admits it, where before the label selected no class rule.
+- A CEL or PRG expression that restricted on a caller's label for a catalogued
+  effect must read `effect_class_declared`: `effect_class` now holds the
+  catalog's class there.
+- A policy that matched a top-level `tool_name` in request context for an
+  action other than `EXECUTE_TOOL` no longer sees it. Guardian removes that
+  member, because only `EXECUTE_TOOL` has a tool the kernel binds. A
+  `tool_name` nested in `args` or in another context member is left as the
+  caller sent it.
+- MCP refuses a tool call with a top-level argument named `effect_class_source`
+  or `effect_class_declared`, as it already did for `effect_class`: tool
+  arguments become top-level members of the policy input, where those names
+  carry authority. A tool that needs such a parameter must nest it inside
+  another argument or rename it. The evaluate routes and the governed proxy
+  strip the same top-level context members and leave nested ones alone.
+- Effect digests of decisions on the evaluate routes, ext-authz, the governed
+  proxy and MCP change. The effect's params gain `effect_class_source`, and
+  `effect_class_declared` where the kernel bound a class other than the
+  declared one. On the evaluate routes and ext-authz `effect_class` holds the
+  bound class, which for a catalogued action can differ from the declared
+  value. A top-level `tool_name` the caller put in context is no longer in the
+  params of any action but `EXECUTE_TOOL`, whose `tool_name` is the request
+  resource as before.
+- The signed ext-authz response still echoes the request's `effect_class` and
+  `risk_class` as submitted. It does not carry the class the kernel bound or
+  its source, so when the kernel evaluated a higher class the response alone
+  does not say so. The evaluated class is in the decision's effect.
+- The format of the organization-runtime decision attestation is unchanged,
+  and its `effect_class` is still the submitted value, which the control plane
+  verifies against what it sent, also when the kernel checked the activation
+  ceiling against a higher class and refused. Its other values can change,
+  because the activation record's binding check now reads the class the kernel
+  bound. A catalogued action declared below its catalog class is refused with
+  `ACTIVATION_CEILING_EXCEEDED` where its record's ceiling is below the
+  catalog's class. A catalogued action sent with a label in place of its class
+  (`SEND_CHAT_MESSAGE` with `ops.label`) used to fail the binding check
+  (`ACTIVATION_BINDING_MISMATCH`, a presented identity); it is now checked
+  against the catalog's class, so over an E0 record it is refused with
+  `ACTIVATION_CEILING_EXCEEDED`, and the attestation reports a verified
+  identity with the record's ref and hash. The decision record's input context
+  carries the class the ceiling was checked against with its source and
+  declaration, on a refusal as on a pass. The record signed for a refusal of
+  the activation gate carries no effect digest, so its signature does not
+  cover that context.
+
+- `helm-ai-kernel verify` no longer counts a check as passed when the pack
+  gave it nothing to read. The summary is now, for example,
+  `VERIFIED: 5 passed, 0 failed, 8 not run; this result covers only the 5
+  checks that ran`, where it used to be `PASS: 12/12 checks passed`; a failed
+  result starts with `FAILED:` instead of `FAIL:`. In `--json`, such a check
+  has `"pass": false` and `"status": "NOT_RUN"`. Clients that count
+  `pass: false` entries as failures must read `status`, `outcome` or
+  `check_counts` instead. `verified` and the exit code are unchanged for packs
+  that verified before, except a pack whose `manifest.json` does not parse
+  (see Fixed) and the packs named in the notes below. `verifier_version` is
+  `0.3.0`.
+- `helm-ai-kernel replay` now exits 1 for a tape with a missing entry, a
+  changed value, entry files out of sequence order, a manifest that disagrees
+  with the tape on any field it carries, or no entries. It used to exit 0 for
+  all of these unless `--verify` was passed. The hash and sequence checks
+  always run; `--verify` now only adds the `data_class` requirement. A
+  symbolic link in place of `08_TAPES`, the manifest or an entry file exits 2.
+  `--json` gains `entries_replayed` and `seal_checked` (always `false`), and
+  `replay_status` can be `NOT_RUN`.
+- `helm-ai-kernel verify` validates evidence a pack carries even when nothing
+  requires it, so these packs no longer verify: a
+  `02_PROOFGRAPH/determinism_manifest.json` with diverging or missing hashes
+  in a pack that does not declare gate `G2`; a `gates` value that is not a
+  list of gate names; an invalid `eu_ai_act_profile` in a JSON file over
+  2 MiB, in a later document of a line-delimited file or under a repeated
+  key; a file under `host_evidence/` or `11_HOST_EVIDENCE/` named like a
+  correlation or verification report that does not hold one JSON object or
+  array, or that holds a failing receipt chain; and an `00_INDEX.json` or
+  `manifest.json` path that is absolute, contains `..` or resolves outside
+  the pack through a symbolic link.
+- `helm-ai-kernel evidence inspect` exits 1 when the outcome is `FAILED` or
+  `UNVERIFIABLE`, in `--json` mode too; `--json` used to exit 0 whatever the
+  outcome. It now applies the pack layout check `verify` applies, so a pack
+  with an unexpected top-level entry or a missing mandatory directory is
+  `FAILED` there as well.
+- `verify --require-check` with an empty value, or with a name that is not a
+  check, exits 2.
+- `protocols/json-schemas/cli/helm_cli_schema.json` requires `outcome`,
+  `check_counts` and `checks[].status`. A report from a verifier older than
+  `0.3.0` does not validate against it.
+- Text output changed in three places that scripts may match. Read `--json`
+  instead, which keeps the structure:
+  - `verify` prints a `checks: N passed, N failed, N not run` line after the
+    headline in every outcome (with `N unverifiable, ` before the not-run
+    count when a check is unverifiable, and `; this result covers only the
+    checks that ran` after it on a `VERIFIED` result with checks not run),
+    followed by up to 20 `  not run: <check>: <reason>` lines and
+    `  ... and N more not run (use --json for all of them)`.
+  - `evidence inspect` prints `  Outcome:` as the second line, so
+    `  Verified:` and `  Summary:` move down one line, and it ends with the
+    failed and unverifiable checks (`  - <check>: <reason>`) and the same
+    counts block.
+  - `replay` prints `Replay DIVERGED: X of Y tape entries replayed, N issues:`
+    where it printed `Replay DIVERGED (N issues):`, and every result ends with
+    `Run ID:` and `Status:` lines.
+- Text output of `verify`, `evidence inspect` and `replay` writes a backslash
+  from the pack as `\\`, so a Windows path prints as `C:\\path\\file`.
+  Characters that print as blank space (space separators other than the ASCII
+  space, the Hangul fillers, the blank Braille pattern), runs of three or
+  more spaces (each space as `\x20`) and combining marks past the second on
+  one letter (as `\uXXXX`, or `\UXXXXXXXX` above U+FFFF) are escaped too.
+  `--json` is unchanged.
+- `helm-ai-kernel verify` and `evidence inspect` read the pack through an
+  `os.Root` opened on its directory in every check except `roots` and
+  `evidence_pack_seal`, including the conformance signature check and the
+  `--require-eidas` and `--require-tee` checks, and read only regular files.
+  These packs no longer verify: one where a file a check reads is a symbolic
+  link whose target is outside the pack, or an absolute symbolic link (also
+  one that points back into the pack); one where it is a named pipe, a device
+  or a socket; one whose `11_HOST_EVIDENCE` or `host_evidence` directory is a
+  symbolic link out of the pack (the new `external_host:evidence_dir` check
+  fails it); one that holds a `.json` file over 64 MiB, or `.json` files past
+  256 MiB in all, which the EU AI Act scan names instead of reading; one
+  whose `00_INDEX.json` or `manifest.json` names a file in another letter
+  case than the pack directory lists it; one with a host receipt chain file
+  (`.json`, `.jsonl` or `.ndjson` under `host_evidence/` or
+  `11_HOST_EVIDENCE/`) over 64 MiB, which fails `external_host:chain_file`
+  instead of being read whole; and one whose seal file
+  `07_ATTESTATIONS/evidence_pack.sig`, index or an indexed file is a symbolic
+  link or not a regular file (the seal check refuses them before opening).
+  `--require-eidas` also fails, as `eidas:read_anchor`, when
+  `02_PROOFGRAPH/anchors` or `00_INDEX.json` is refused, and `--require-tee`,
+  as `tee:read_receipt`, when `receipts` is. `verify` used to
+  hang on a named pipe in the pack. `evidence inspect` leaves out the launch
+  id and evidence graph it prints when their files are refused.
+- `helm-ai-kernel verify` replays a tape that carries entries with the code
+  `helm-ai-kernel replay` runs, under gate `G2` or not, so a pack whose tape
+  `replay` reports `DIVERGED` (without `--verify`, whose `data_class`
+  requirement `verify` does not apply) no longer verifies; that includes
+  `tape_manifest.json` rows that name entries the tape does not hold. Entry
+  files without a `tape_manifest.json` fail. Under `G2`, an empty file whose
+  name starts with `.` in `05_DIFFS`, such as the launchpad writer's `.keep`,
+  no longer fails the pack.
+- `helm-ai-kernel replay` reports `DIVERGED` for a manifest row that lacks
+  `seq`, `type`, `key`, `sha256` or `size_bytes`, and for an entry whose type
+  is empty or not one the recorder writes. Entry files are read in the order
+  of the number in their name (`entry_2.json` before `entry_12.json`). With
+  `--json`, a tape that cannot be read still prints a result
+  with `replay_status` `NOT_RUN`, `entries_replayed` `0` and the new `error`
+  member, and exits 2 as before.
+- The EU AI Act scan reads past a UTF-8 byte order mark and fails a `.json`
+  file that names `eu_ai_act_profile` and does not parse, wherever the damage
+  is, so a pack with such a file no longer verifies. A file nested deeper than
+  10000 levels, the limit `encoding/json` keeps, is one that does not parse;
+  the scan keeps its own bounded stack and never recurses.
+- The EU AI Act scan matches the member name in any letter case, the way
+  `encoding/json` matches it to the `eu_ai_act_profile` field of the Go
+  types that read a pack, so a pack with an invalid profile under
+  `EU_AI_ACT_PROFILE` no longer verifies. It validates at most 1024 profiles
+  per pack: a pack with more fails `eu_ai_act_profile`, naming the file that
+  holds the 1025th. A failed reason lists the first 10 validation issues and
+  ends `; and N more`.
+- `verify` and `replay` read at most 256 MiB of tape entry files per tape,
+  sized before any is read. A larger tape fails `replay_determinism`, and
+  exits `replay` with 2 (`NOT_RUN` under `--json`), naming the entry file
+  that passes the bound.
+- Under gate `G2`, a tape with no entries fails `replay_determinism`: it
+  replays nothing, which `replay` reports as `NOT_RUN` with exit 1. Without
+  `G2` the check names it as not replayed, as before.
+- The layout check that `verify` and `evidence inspect` add tests the
+  mandatory names, lists the pack directory and `99_EXT`, and reads
+  `00_INDEX.json` through the `os.Root` on the pack. A mandatory name or
+  `99_EXT` that is a symbolic link out of the pack fails as
+  `conform:<name> is not read: ...`; `99_EXT` linked out of the pack is no
+  longer listed, so the names of the files outside are not printed.
+
+### Removed
+
+- `tape.ReadManifest(dir)` in `core/pkg/tape`. Read the file and call
+  `tape.ParseManifest`, or load the whole tape with `tape.LoadTape`.
+
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
@@ -433,6 +586,74 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   are the bytes on disk". It says what it does, and names the receipt whose
   members outside the signature nothing covers: a single receipt, or the last
   of a chain.
+- `helm-ai-kernel verify` reported checks that never ran as passed: a pack
+  with no hash manifest, no connector evidence, no EU AI Act profile, no
+  receipt chain, no replay gate and no signed receipts printed
+  `PASS: 12/12 checks passed`. Every check now ends `VERIFIED`, `FAILED`,
+  `UNVERIFIABLE` or `NOT_RUN`, the counts are stated separately, and a
+  `VERIFIED` result names the checks it does not cover. Evidence the pack is
+  required to carry still fails when missing. The CLI and
+  `POST /api/v1/evidence/verify` now derive their outcome with one rule.
+- `verify` passed a `manifest.json` that does not parse as "no file hashes in
+  manifest". It is now a failed `file_hashes` check.
+- Check details no longer say "verified" for field-presence checks:
+  `eu_ai_act_profile`, `connector_evidence`, `policy_decision_hashes` and
+  `replay_determinism` state what was read and what was not recomputed.
+- External host receipt checks with nothing to read (no hardware root claim,
+  no declared chain hash, no foreign payload to bind, an unsigned receipt with
+  no key required) are `NOT_RUN` instead of passed, in `verify` and in
+  `verify external-receipt`, whose text output now prints the passed, failed
+  and not-run counts and whose `--json` checks carry a `status`.
+- `helm-ai-kernel replay` printed `Replay complete: N entries verified`
+  without replaying anything. It now serves every recorded entry back through
+  the tape replayer and reports tape misses, values that do not match their
+  recorded hash, entry files out of sequence order and every field on which
+  the manifest and the tape disagree (`type`, `key`, `size_bytes`,
+  `component_id` and any other field the manifest carries, not `sha256`
+  alone). It states what `COMPLETE` establishes, that it replays recorded
+  inputs and does not re-execute the run, and that it does not check the pack
+  seal: a tape and manifest rewritten together replay as `COMPLETE`.
+- `verify` reported evidence that is present as absent and left the pack
+  `VERIFIED`: replay material in a pack whose `gates` omit or misspell `G2`,
+  an EU AI Act profile in a file over 2 MiB, and a damaged report file under
+  the host evidence directories. Each is now validated or failed, and a
+  `NOT_RUN` reason says what was looked for. A tape states no replay result,
+  so `replay_determinism` stays `NOT_RUN` on one that replays without a
+  determinism manifest, and says so.
+- `verify` hashed files outside the pack: a `manifest.json` `file_hashes` key
+  such as `../../outside.txt` was `VERIFIED`. Manifest and index paths are
+  now held to one containment rule and are not read outside the pack.
+- `verify` read files outside the pack through symbolic links in every check
+  that reads a fixed name or walks a directory: a
+  `02_PROOFGRAPH/determinism_manifest.json` linked to an outside file with
+  equal hashes was read as the pack's own, and a link to
+  `/dev/stdin` under `12_REPORTS/` or `11_HOST_EVIDENCE/` hung the command.
+  Every check except `roots` and `evidence_pack_seal` now reads through an
+  `os.Root` on the pack and refuses links that leave it, absolute links and
+  files that are not regular files; the result no longer depends on whether
+  the pack path is relative or absolute. `roots` and `evidence_pack_seal`
+  refuse named pipes and devices before opening them, as they already
+  refused symbolic links.
+- `verify` and `replay` disagreed on a tape: under gate `G2` the verifier only
+  parsed `tape_manifest.json`, so a sealed pack whose manifest said `NETWORK`
+  where the entry said `TOOL_OUTPUT` was `VERIFIED`. The replay now lives in
+  `core/pkg/tape` and both run it.
+- `verify` and `evidence inspect` disagreed on one pack: a sealed pack with a
+  valid `manifest.json` was `FAILED` by `verify` (`unexpected top-level
+  entry: manifest.json`) and `VERIFIED` by `evidence inspect`, so
+  `--require-check file_hashes` could not be satisfied. Both commands now
+  reach the verdict through the same code, and `manifest.json` is a legal
+  top-level entry.
+- `verify --require-check` given twice kept only the last value, so
+  `--require-check chain_integrity --require-check structure` verified a pack
+  without a receipt chain.
+- Text output of `verify`, `evidence inspect` and `replay` printed
+  pack-controlled strings raw: an `envelope_id` with line breaks added a
+  forged `VERIFIED` line below the real verdict. Control characters, line
+  breaks and terminal escapes are now shown as visible escapes; `--json`
+  keeps the raw value.
+- `roots` was `VERIFIED` on an `00_INDEX.json` that lists no entries while
+  `index_integrity` was `NOT_RUN`. Both are `NOT_RUN` there.
 
 ## [0.12.0]
 

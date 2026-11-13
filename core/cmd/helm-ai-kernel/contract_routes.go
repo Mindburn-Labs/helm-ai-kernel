@@ -35,6 +35,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 const (
@@ -1790,33 +1791,16 @@ func (v *evidenceVerification) add(name string, status receiptverify.Verdict, de
 // fails the bundle; otherwise any UNVERIFIABLE check, or a required check that
 // did not run, leaves it UNVERIFIABLE; only a full set of VERIFIED checks
 // verifies it. No checks at all is FAILED, never a pass.
+//
+// The rule itself is verifier.Conclude, the same one `helm-ai-kernel verify`
+// reports with, so the route and the CLI cannot drift apart on what a missing
+// or unverifiable check means.
 func (v *evidenceVerification) conclude() {
-	v.Outcome = receiptverify.VerdictFailed
-	if len(v.ChecksRun) == 0 {
-		return
-	}
-	ran := make(map[string]bool, len(v.ChecksRun))
-	unverifiable := false
+	outcomes := make([]verifier.CheckOutcome, 0, len(v.ChecksRun))
 	for _, check := range v.ChecksRun {
-		ran[check.Name] = true
-		switch check.Status {
-		case receiptverify.VerdictVerified:
-		case receiptverify.VerdictUnverifiable:
-			unverifiable = true
-		default:
-			return
-		}
+		outcomes = append(outcomes, verifier.CheckOutcome{Name: check.Name, Status: verifier.CheckStatus(check.Status)})
 	}
-	for _, name := range evidenceChecksRequiredForVerified {
-		if !ran[name] {
-			unverifiable = true
-		}
-	}
-	if unverifiable {
-		v.Outcome = receiptverify.VerdictUnverifiable
-		return
-	}
-	v.Outcome = receiptverify.VerdictVerified
+	v.Outcome = verifier.Conclude(outcomes, evidenceChecksRequiredForVerified).Outcome
 }
 
 func verifyEvidenceRequest(r *http.Request, svc *Services) evidenceVerification {

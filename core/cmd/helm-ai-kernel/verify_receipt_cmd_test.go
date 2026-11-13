@@ -282,6 +282,10 @@ func TestVerifyReceiptCLISaysWhatTheSignatureCovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	members["tool_name"], members["executor_id"], members["timestamp"] = "wire_transfer", "someone-else", "2031-01-01T00:00:00Z"
+	// The signed-members report came from #305; #308 must also escape the
+	// untrusted member names it adds to the human-readable output.
+	const unsafeMember = "annotation\x1b[2J\nFORGED"
+	members[unsafeMember] = "outside the signed envelope"
 	rewritten, err := json.Marshal(members)
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +317,7 @@ func TestVerifyReceiptCLISaysWhatTheSignatureCovers(t *testing.T) {
 	if len(signed) != 13 || !signed["verdict"] || !signed["receipt_id"] || !signed["session_id"] {
 		t.Fatalf("signed_members must name the 13 members the signature covers, got %v", report["signed_members"])
 	}
-	for _, name := range []string{"tool_name", "executor_id", "timestamp", "key_id", "public_key_set"} {
+	for _, name := range []string{"tool_name", "executor_id", "timestamp", "key_id", "public_key_set", unsafeMember} {
 		if !unsigned[name] || signed[name] {
 			t.Fatalf("unsigned_members must name %q, a member of this file no signature covers: signed %v, unsigned %v", name, report["signed_members"], report["unsigned_members"])
 		}
@@ -355,6 +359,9 @@ func TestVerifyReceiptCLISaysWhatTheSignatureCovers(t *testing.T) {
 	}
 	if strings.Contains(text, "wire_transfer") {
 		t.Fatalf("the text report prints the value of an unsigned member as if it were established:\n%s", text)
+	}
+	if strings.Contains(text, unsafeMember) || !strings.Contains(text, `annotation\x1b[2J\nFORGED`) {
+		t.Fatalf("unsigned member names must retain their identity in JSON and be escaped in text: %q", text)
 	}
 }
 

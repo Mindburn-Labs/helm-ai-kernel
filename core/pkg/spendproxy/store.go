@@ -44,13 +44,22 @@ const (
 	// released, so a restart does not hold it again: because no byte of its
 	// request left the proxy, or because an operator released it with a
 	// reason (`spend-proxy reconcile --release`). It carries the dispatch's
-	// route quote, whose metadata release_reason says why, signed.
+	// route quote, whose signed metadata binds the versioned release action
+	// and its reason. Its signed tenant and intent must match this record.
 	RecordDispatchReleased RecordKind = "dispatch_released"
 )
 
 // MetadataReleaseReason is the route-quote metadata key of a release record
 // that says why the hold was released.
 const MetadataReleaseReason = "release_reason"
+
+// MetadataReleaseAction distinguishes an authorized release from a dispatch
+// journal that carries the same RouteQuote type. This uses the existing signed
+// RouteQuote metadata, not a new signature format. The v1 action also requires
+// a nonempty reason and matching signed tenant/intent identities.
+const MetadataReleaseAction = "release_action"
+
+const releaseActionV1 = "dispatch_released/v1"
 
 // The route-quote metadata keys of a settle_failed record: the actual cost, in
 // cents (the provider's bill and the platform fee on it), and the overage,
@@ -156,6 +165,15 @@ func (r *ReceiptRecord) checkPayload() error {
 	if len(carried) != 1 || carried[0] != want {
 		sort.Strings(carried)
 		return fmt.Errorf("a %s line must carry exactly its %s payload, and it carries %v", r.Kind, want, carried)
+	}
+	if r.Kind == RecordDispatchReleased {
+		q := r.RouteQuote
+		if q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == "" {
+			return errors.New("dispatch_released requires its signed release_action dispatch_released/v1 and release_reason")
+		}
+		if q.SpendIntentID == "" || r.SpendIntentID != q.SpendIntentID || q.TenantID == "" || r.TenantID != q.TenantID {
+			return errors.New("dispatch_released tenant and intent must match the signed route quote")
+		}
 	}
 	return nil
 }
@@ -276,6 +294,9 @@ func verifyBookLines(records []*ReceiptRecord, trusted func(string) (ed25519.Pub
 	for i, rec := range records {
 		if !bookKinds[rec.Kind] {
 			continue
+		}
+		if err := rec.checkPayload(); err != nil {
+			return fmt.Errorf("spendproxy: receipt log record %d: %w", i+1, err)
 		}
 		var problem string
 		pub, known := trusted(rec.PayloadSignatureKeyID)
@@ -549,7 +570,7 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 				order = append(order, rec.SpendIntentID)
 			}
 			open[rec.SpendIntentID] = rec
-		case rec.Kind == RecordUsage || rec.Kind == RecordSettlement:
+		case rec.Kind == RecordUsage || rec.Kind == RecordSettlement || rec.Kind == RecordSettleFailed:
 			billed[rec.SpendIntentID] = true
 		}
 	}
@@ -565,8 +586,8 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 		}
 		hold := rec.RouteQuote.MaxAmountCents
 		if billed[intentID] {
-			// Its usage or settlement line reached the log without the other:
-			// the provider billed it what that line records.
+			// A failed settlement or an incomplete receipt pair records what
+			// the provider billed, even when that liability exceeds the balance.
 			actual, _ := recordedActual(records, intentID)
 			hold = max(hold, actual)
 		}

@@ -1835,7 +1835,7 @@
       "id": "CTL-016",
       "title": "Spend proxy quotes before dispatch",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "In `helm-ai-kernel spend-proxy`, an inference request is dispatched only after an allowing quote, and a replayed idempotency key never reaches the provider; with caller credentials a key is its caller's, and a request that names none gets a minted one. A request is read against the model gateway's closed list for its route (core/pkg/gateway/modelbound), cache_control included, and refused with 400 when its bill could escape the quote, and the hold counts one input token per byte of the forwarded request plus the image and tool floors and the output ceiling, at the configured price with the platform fee on it. The hold is reserved against the spend envelope's max_amount_cents for its period and the balance in one step, so concurrent requests cannot both take the last cents; settlement moves the reservation to used, a provider bill within its part of the hold is debited no more than the hold, and the budget-verdict receipt (OK_WITHIN_ENVELOPE) exists only when that reservation succeeded. A provider bill above its part of the hold is debited as billed, its usage receipt says ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT and names the windows it closed, and the envelope takes no further dispatch in the period of the reservation or the period the settlement falls in, also when the settlement fails, after a restart, and when its usage or its settlement line was lost; a released reservation cannot be settled, and an unreserved settlement is decided against its envelope. A dispatch that may have reached the provider is debited at its hold and its key is spent; only an error before the upstream connection opened releases it. A dispatch journalled before its provider call without a committed settlement is held again on start, at its hold, or at the actual cost its usage or settlement line records when that line reached the log without the other and the cost is more (a settle_failed line keeps the hold, as the live proxy does), until `spend-proxy reconcile`, which takes the receipts directory's lock and signs with the seed's key (without a seed, the one generated in the receipts directory), settles or releases it in a signed line; a dispatch another key journalled is reconciled only under a key trusted_keys.json registers, and only when it also registers the journal's key or --journal-key-reason says why, and the line names that key. A dispatch the log records billed is never released, nor settled below the recorded actual without an override reason. A start refuses usage, settlement, release and settle_failed lines it cannot verify. An answer is priced by the model it names. The principal in a spend receipt is the envelope's, and with caller credentials configured each request's agent, envelope and workspace are its credential's, and /v1/models and /helm/spend/health need it; without them the proxy serves one principal. A receipt-log line carries exactly the payload its kind names, and `spend-proxy export` reports a signature verified only when it checked it against a --public-key from outside the receipts directory, one per key that signed the log (helm-tracker#313).",
+      "claim": "In `helm-ai-kernel spend-proxy`, an inference request is dispatched only after an allowing quote, and a replayed idempotency key never reaches the provider; with caller credentials a key is its caller's, and a request that names none gets a minted one. A request is read against the model gateway's closed list for its route (core/pkg/gateway/modelbound), cache_control included, and refused with 400 when its bill could escape the quote, and the hold counts one input token per byte of the forwarded request plus the image and tool floors and the output ceiling, at the configured price with the platform fee on it. The hold is reserved against the spend envelope's max_amount_cents for its period and the balance in one step, so concurrent requests cannot both take the last cents; settlement moves the reservation to used, a provider bill within its part of the hold is debited no more than the hold, and the budget-verdict receipt (OK_WITHIN_ENVELOPE) exists only when that reservation succeeded. A provider bill above its part of the hold is debited as billed, its usage receipt says ESCALATE / ERR_SPEND_PER_REQUEST_LIMIT and names the windows it closed, and the envelope takes no further dispatch in the period of the reservation or the period the settlement falls in, also when the settlement fails, after a restart, and when its usage or its settlement line was lost; a released reservation cannot be settled, and an unreserved settlement is decided against its envelope. A dispatch that may have reached the provider is debited at its hold and its key is spent; only an error before the upstream connection opened releases it. A dispatch journalled before its provider call without a committed settlement is held again on start, at its hold, or at the actual cost its usage, settlement or settle_failed line records when the cost is more. A failed debit keeps that known liability reserved in the live proxy too; settlement excludes its own hold before checking funds, so an unfunded recovery hold never manufactures an available balance. The liability stays held until `spend-proxy reconcile`, which takes the receipts directory's lock and signs with the seed's key (without a seed, the one generated in the receipts directory), settles or releases it in a signed line; a dispatch another key journalled is reconciled only under a key trusted_keys.json registers, and only when it also registers the journal's key or --journal-key-reason says why, and the line names that key. A dispatch the log records billed is never released, nor settled below the recorded actual without an override reason. A start refuses usage, settlement, release and settle_failed lines it cannot verify. A release requires the signed release_action dispatch_released/v1 and its reason, with the outer tenant and intent matching the signed quote; a journal cannot be relabeled as a release, nor can a release target another intent. Export checks those bindings too. An answer is priced by the model it names. The principal in a spend receipt is the envelope's, and with caller credentials configured each request's agent, envelope and workspace are its credential's, and /v1/models and /helm/spend/health need it; without them the proxy serves one principal. A receipt-log line carries exactly the payload its kind names, and `spend-proxy export` reports a signature verified only when it checked it against a --public-key from outside the receipts directory, one per key that signed the log (helm-tracker#313).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -2038,7 +2038,12 @@
           "core/pkg/spendproxy.TestASigningSeedReadableByOthersIsRefused",
           "core/pkg/spendproxy.TestASymlinkedSigningSeedIsRefused",
           "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote",
-          "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
+          "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys",
+          "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord",
+          "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability",
+          "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold",
+          "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds",
+          "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
         ],
         "removal": [
           "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider",
@@ -2133,11 +2138,54 @@
           "core/pkg/spendproxy.TestABlankIdempotencyKeyIsMinted",
           "core/pkg/spendproxy.TestReconcileComparesTheDebitWithTheRecordedActual",
           "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart",
-          "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
+          "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope",
+          "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord",
+          "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability",
+          "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold",
+          "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds",
+          "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
         ],
         "bypass": []
       },
       "removal_proofs": [
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/export.go",
+          "tests": [
+            "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+          ]
+        },
+        {
+          "file": "core/pkg/spendproxy/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold",
+            "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
+          ]
+        },
+        {
+          "file": "core/pkg/inferencegateway/store.go",
+          "tests": [
+            "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability",
+            "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
+          ]
+        },
         {
           "file": "core/pkg/api/governed_gateway.go",
           "tests": [

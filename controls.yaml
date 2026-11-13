@@ -419,6 +419,44 @@ removal_proofs:
     tests:
       - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
   - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tif q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\" {\n"
+    replace: "\t\tif false {\n"
+    tests:
+      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tif q.SpendIntentID == \"\" || r.SpendIntentID != q.SpendIntentID || q.TenantID == \"\" || r.TenantID != q.TenantID {\n"
+    replace: "\t\tif false {\n"
+    tests:
+      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\tif err := rec.checkPayload(); err != nil {\n\t\t\treturn nil, nil, fmt.Errorf(\"spendproxy: intent %s: %w\", intentID, err)\n\t\t}\n"
+    replace: ""
+    tests:
+      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tcase rec.Kind == RecordUsage || rec.Kind == RecordSettlement || rec.Kind == RecordSettleFailed:\n"
+    replace: "\t\tcase rec.Kind == RecordUsage || rec.Kind == RecordSettlement:\n"
+    tests:
+      - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/store.go
+    find: "\t\tavailable = l.account.BalanceCents - (l.account.HoldCents - reservation.AmountCents)\n"
+    replace: "\t\tavailable += reservation.AmountCents\n"
+    tests:
+      - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
+      - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
+  - control: CTL-016
+    file: core/pkg/inferencegateway/store.go
+    find: "\t\tif err := l.retainActualHoldLocked(reservation, debit, now); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"inferencegateway: balance debit exceeds available funds; retain actual liability: %w\", err)\n\t\t}\n"
+    replace: ""
+    tests:
+      - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
+      - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
+  - control: CTL-016
     file: core/pkg/api/governed_gateway.go
     find: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); ok {\n"
     replace: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); false && ok {\n"
@@ -536,8 +574,8 @@ removal_proofs:
       - "core/pkg/spendproxy.TestRestartClosesALegacyClosureInTheWindowOfItsLine"
   - control: CTL-016
     file: core/pkg/spendproxy/store.go
-    find: "\t\tif err := rec.checkPayload(); err != nil {\n"
-    replace: "\t\tif err := rec.checkPayload(); false && err != nil {\n"
+    find: "\t\tif err := rec.checkPayload(); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"spendproxy: receipt log %s line %d: %w\", path, lineNo, err)\n"
+    replace: "\t\tif err := rec.checkPayload(); false && err != nil {\n\t\t\treturn nil, fmt.Errorf(\"spendproxy: receipt log %s line %d: %w\", path, lineNo, err)\n"
     tests:
       - "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind"
   - control: CTL-016
@@ -3930,9 +3968,11 @@ controls:
       spent; only an error before the upstream connection opened releases it.
       A dispatch journalled before its provider call without a committed
       settlement is held again on start, at its hold, or at the actual cost
-      its usage or settlement line records when that line reached the log
-      without the other and the cost is more (a settle_failed line keeps the
-      hold, as the live proxy does), until `spend-proxy reconcile`, which
+      its usage, settlement or settle_failed line records when the cost is
+      more. A failed debit keeps that known liability reserved in the live
+      proxy too; settlement excludes its own hold before checking funds, so
+      an unfunded recovery hold never manufactures an available balance.
+      The liability stays held until `spend-proxy reconcile`, which
       takes the receipts directory's lock and signs with the seed's key
       (without a seed, the one generated in the receipts directory), settles
       or releases it in a signed line; a dispatch another key journalled is
@@ -3941,7 +3981,11 @@ controls:
       and the line names that key. A dispatch the log records billed is
       never released, nor settled below the recorded actual without an
       override reason. A start refuses usage, settlement, release and
-      settle_failed lines it cannot verify. An answer is priced by the model it names. The principal
+      settle_failed lines it cannot verify. A release requires the signed
+      release_action dispatch_released/v1 and its reason, with the outer
+      tenant and intent matching the signed quote; a journal cannot be
+      relabeled as a release, nor can a release target another intent.
+      Export checks those bindings too. An answer is priced by the model it names. The principal
       in a spend receipt is the envelope's, and with caller credentials
       configured each request's agent, envelope and workspace are its
       credential's, and /v1/models and /helm/spend/health need it; without
@@ -4100,6 +4144,11 @@ controls:
         - "core/pkg/spendproxy.TestASymlinkedSigningSeedIsRefused"
         - "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote"
         - "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
+        - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+        - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
+        - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
+        - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
+        - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
       removal:
         - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
         - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
@@ -4194,6 +4243,11 @@ controls:
         - "core/pkg/spendproxy.TestReconcileComparesTheDebitWithTheRecordedActual"
         - "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart"
         - "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
+        - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+        - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
+        - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
+        - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
+        - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
       bypass: []
 
   - id: CTL-017

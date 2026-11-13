@@ -421,11 +421,12 @@ func settleFailedRecord(meta *api.GatewayMetadata, note string) *ReceiptRecord {
 // route quote, whose metadata says why it was released.
 func releaseRecord(quote *economic.RouteQuote, reason string) *ReceiptRecord {
 	released := *quote
-	released.Metadata = make(map[string]string, len(quote.Metadata)+1)
+	released.Metadata = make(map[string]string, len(quote.Metadata)+2)
 	for k, v := range quote.Metadata {
 		released.Metadata[k] = v
 	}
 	released.Metadata[MetadataReleaseReason] = reason
+	released.Metadata[MetadataReleaseAction] = releaseActionV1
 	return &ReceiptRecord{
 		Kind:          RecordDispatchReleased,
 		TenantID:      quote.TenantID,

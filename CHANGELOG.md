@@ -776,6 +776,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Fixed
 
+- Spend-proxy releases bind their versioned action, tenant and target intent
+  through the existing signed RouteQuote payload. Startup and export refuse
+  relabeled journals and redirected releases. Failed settlements retain the
+  known actual liability both live and after restart; reconciliation excludes
+  its own hold before checking funds, so an unfunded recovery hold cannot
+  manufacture prepaid balance or consume another pending dispatch's funds.
 - Skill Pack verification no longer trusts what a pack says about itself. The
   check compared the manifest's publisher, a `signature_ref` that follows from
   the pack name and version, and the `SKILL.md` hash, so any pack that copied

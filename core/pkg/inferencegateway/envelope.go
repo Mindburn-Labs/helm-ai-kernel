@@ -216,6 +216,32 @@ func (l *BalanceLedger) restorePending(key string, env *economic.AgentSpendEnvel
 	return res, nil
 }
 
+// retainActualHoldLocked keeps a provider's known bill reserved when settlement
+// cannot debit it. Otherwise another envelope could spend the unfunded bill's
+// remaining balance before a restart restores it. Callers must hold l.mu.
+func (l *BalanceLedger) retainActualHoldLocked(res *Reservation, actual int64, now time.Time) error {
+	if res == nil || actual <= res.AmountCents {
+		return nil
+	}
+	extra := actual - res.AmountCents
+	entry := economic.NewUsageLedgerEntry(l.nextEntryIDLocked("reserve"), l.account.TenantID, l.account.ID,
+		economic.UsageLedgerReserve, economic.SettlementDebit, extra, l.account.Currency,
+		economic.SpendReasonSettlementMissing, res.ReceiptHash)
+	if err := entry.Validate(); err != nil {
+		return err
+	}
+	l.account.HoldCents += extra
+	l.account.UpdatedAt = now.UTC()
+	res.AmountCents = actual
+	res.Pending = true
+	if res.EnvelopeID != "" {
+		spend := l.envelopeSpendLocked(envelopeWindow{envelopeID: res.EnvelopeID, window: res.EnvelopeWindow})
+		spend.reserved = addSaturating(spend.reserved, extra)
+	}
+	l.entries = append(l.entries, entry)
+	return nil
+}
+
 // releaseEnvelopeLocked frees a reservation's envelope cents. Callers must
 // hold l.mu.
 func (l *BalanceLedger) releaseEnvelopeLocked(res *Reservation) {

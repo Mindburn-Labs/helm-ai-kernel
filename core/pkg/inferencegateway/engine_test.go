@@ -681,8 +681,20 @@ func TestFailedSettlementKeepsTheHold(t *testing.T) {
 	if settle == nil || settle.ActualAmountCents != 220_000 {
 		t.Fatalf("failed settle = %+v, want the actual cost reported", settle)
 	}
-	if h.ledger.HoldCents() != q.Quote.MaxAmountCents || h.ledger.BalanceCents() != 100_000 {
-		t.Fatalf("hold/balance = %d/%d, want the hold kept and no debit", h.ledger.HoldCents(), h.ledger.BalanceCents())
+	if h.ledger.HoldCents() != 220_000 || h.ledger.BalanceCents() != 100_000 || h.ledger.AvailableCents() != 0 {
+		t.Fatalf("hold/balance = %d/%d, want the full known bill held and no debit", h.ledger.HoldCents(), h.ledger.BalanceCents())
+	}
+	if got := h.ledger.envelopeConsumed(h.env, h.now); got != 220_000 {
+		t.Fatalf("the envelope retained %d cents, want the full 220000-cent liability", got)
+	}
+	if _, err := h.engine.Settle(q.Quote, "prov-req-broke", 200_000, 1000, 99_999); err == nil || h.ledger.HoldCents() != 220_000 {
+		t.Fatalf("repeated failure changed the liability: %v, hold %d", err, h.ledger.HoldCents())
+	}
+	if _, err := h.ledger.TopUp("fund-liability", 200_000, "fund-liability", "evidence://fund-liability"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.engine.Settle(q.Quote, "prov-req-broke", 200_000, 1000, 99_999); err != nil || h.ledger.BalanceCents() != 80_000 || h.ledger.HoldCents() != 0 {
+		t.Fatalf("funded retry: %v, balance/hold %d/%d", err, h.ledger.BalanceCents(), h.ledger.HoldCents())
 	}
 }
 

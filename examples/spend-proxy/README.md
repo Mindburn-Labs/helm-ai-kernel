@@ -197,7 +197,11 @@ helm-ai-kernel spend-proxy reconcile --config <config> --receipts-dir <dir> \
 `--settle-cents` settles the dispatch at that provider cost (the platform fee
 is added), as usage and settlement lines whose usage receipt carries
 `reconciled_by` and `reconcile_reason`; `--release` frees the hold with a
-`dispatch_released` line whose route quote carries `release_reason`. Both are
+`dispatch_released` line whose signed route quote carries `release_reason`
+and `release_action: dispatch_released/v1`. The outer tenant and intent must
+match that signed quote. A journal relabeled as a release, a redirected
+release, or an unversioned/unknown release action is refused by startup and
+export; a payload signature alone does not authorize those actions. Both are
 signed by the key of the seed (`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`, or
 without either the seed the proxy generated in the receipts directory), and
 the next start replays them. That key should be the one that signed the
@@ -220,7 +224,11 @@ refused, and `--settle-cents` must debit at least the actual cost recorded
 unless `--override-reason` says why; the override is recorded and signed on
 the usage receipt as `reconcile_override_reason`. A settlement above the
 balance fails as any debit does: raise `balance.opening_cents` in the config
-first. Exit 0 on success, 2 on a usage or config error, 1 when the intent is
+first. A failed settlement retains its known actual liability against the
+balance and envelope, both live and after restart, even when neither a usage
+nor a settlement line was committed. An unfunded recovery hold permits no
+debit beyond the balance remaining after other holds; it does not create funds.
+Exit 0 on success, 2 on a usage or config error, 1 when the intent is
 not pending, the seed is missing, not a regular file or readable by others,
 the dispatch's key is one reconcile may not sign for, a proxy holds the
 directory (the list form, without `--intent`, runs beside a proxy), the log's

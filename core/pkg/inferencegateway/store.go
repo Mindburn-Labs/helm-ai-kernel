@@ -345,7 +345,10 @@ func (l *BalanceLedger) commit(
 	available := l.account.AvailableCents()
 	reservation := l.openReservationLocked(reservationKey)
 	if reservation != nil {
-		available += reservation.AmountCents
+		// Recovery can retain liabilities greater than the balance. Remove
+		// this hold before checking funds: adding it to the clamped available
+		// balance would manufacture funds and spend other outstanding holds.
+		available = l.account.BalanceCents - (l.account.HoldCents - reservation.AmountCents)
 		closed := l.closeAboveHoldLocked(reservation, debit, now)
 		recordEnvelopeWindows(usage, reservation.EnvelopeID, reservation.EnvelopeWindow, closed)
 	} else if err := l.decideUnreservedLocked(usage, debit, now); err != nil {
@@ -354,6 +357,9 @@ func (l *BalanceLedger) commit(
 		recordEnvelopeWindows(usage, w.envelopeID, w.window, nil)
 	}
 	if debit > available {
+		if err := l.retainActualHoldLocked(reservation, debit, now); err != nil {
+			return nil, fmt.Errorf("inferencegateway: balance debit exceeds available funds; retain actual liability: %w", err)
+		}
 		return nil, errors.New("inferencegateway: balance debit exceeds available funds")
 	}
 

@@ -209,6 +209,9 @@ func verifyIntentSignatures(pinned map[string]ed25519.PublicKey, intentID string
 	var checked []string
 	signers := make(map[string]bool)
 	for _, rec := range records {
+		if err := rec.checkPayload(); err != nil {
+			return nil, nil, fmt.Errorf("spendproxy: intent %s: %w", intentID, err)
+		}
 		payload := rec.Payload()
 		if payload == nil {
 			continue

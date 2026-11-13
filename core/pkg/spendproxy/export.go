@@ -208,9 +208,24 @@ func ExportEvidencePacks(opts ExportOptions) ([]ExportResult, error) {
 func verifyIntentSignatures(pinned map[string]ed25519.PublicKey, intentID string, records []*ReceiptRecord, budget *economic.BudgetVerdictReceipt) ([]string, []string, error) {
 	var checked []string
 	signers := make(map[string]bool)
+	// A settlement has no intrinsic intent ID. Its signed usage binding must
+	// resolve to a usage receipt in this intent before the export can attest
+	// that the settlement belongs here.
+	usageByHash := make(map[string]*economic.UsageReceipt)
+	for _, rec := range records {
+		if rec.Usage != nil && rec.Usage.SpendIntentID == intentID {
+			usageByHash[rec.Usage.ContentHash] = rec.Usage
+		}
+	}
 	for _, rec := range records {
 		if err := rec.checkPayload(); err != nil {
 			return nil, nil, fmt.Errorf("spendproxy: intent %s: %w", intentID, err)
+		}
+		if s := rec.Settlement; s != nil {
+			u := usageByHash[s.SourceUsageReceiptHash]
+			if u == nil || u.TenantID != s.TenantID || u.ID != s.UsageReceiptID || u.RouteQuoteID != s.RouteQuoteID {
+				return nil, nil, fmt.Errorf("spendproxy: settlement of intent %s lacks its matching signed usage receipt", intentID)
+			}
 		}
 		payload := rec.Payload()
 		if payload == nil {

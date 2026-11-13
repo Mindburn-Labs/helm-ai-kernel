@@ -60,18 +60,6 @@ func requireListenerAuth(server, bindAddr string, authenticated bool, remedy str
 	return fmt.Errorf("%s bind address %q is not loopback and no authentication is configured; %s", server, bindAddr, remedy)
 }
 
-// requireLoopbackListener refuses any bind beyond loopback, whatever
-// authentication is configured: why says what makes the listener loopback
-// only. It decides through requireListenerAuth, with no authentication that
-// could lift the refusal, and words its own reason (helm-tracker#313 r2,
-// finding 13).
-func requireLoopbackListener(server, bindAddr, why string) error {
-	if requireListenerAuth(server, bindAddr, false, "") == nil {
-		return nil
-	}
-	return fmt.Errorf("%s bind address %q is not loopback; %s", server, bindAddr, why)
-}
-
 // secretEqual compares a presented credential with the configured one in
 // constant time, so response timing does not reveal a matching prefix.
 func secretEqual(provided, expected string) bool {

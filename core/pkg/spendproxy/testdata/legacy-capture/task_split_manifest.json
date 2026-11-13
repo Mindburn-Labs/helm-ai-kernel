@@ -1,0 +1,40 @@
+{
+  "schema_version": "helm-savings-task-split.v1",
+  "run_id": "run-e2e",
+  "tenant_id": "tenant-test",
+  "task_set_sha256": "sha256:test-task-set",
+  "baseline_envelope_id": "env-direct",
+  "baseline_model_id": "base-model",
+  "candidate_routes": [
+    {
+      "envelope_id": "env-sub",
+      "model_id": "mini-model"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "sel-A",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-B",
+      "subset": "selection"
+    },
+    {
+      "task_id": "hold-A",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-B",
+      "subset": "holdout"
+    }
+  ],
+  "selection_freeze": {
+    "frozen_at": "2026-11-13T21:05:01.411435Z",
+    "chosen_substitute_envelope_id": "env-sub",
+    "chosen_substitute_model_id": "mini-model",
+    "parity_results_sha256": "sha256:ad840003b65eb520b89ab231f1ef40e0c106ebc4118c3200c384e3975f02ebaf",
+    "git_commit": "e2e-test",
+    "rationale": "only candidate with selection parity"
+  }
+}

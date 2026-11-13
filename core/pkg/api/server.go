@@ -17,7 +17,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -214,10 +213,4 @@ type ServerConfig struct {
 	// ReceiptSigner signs V5 evaluation receipts. Production callers must
 	// provide a persistent signer; otherwise evaluate fails closed.
 	ReceiptSigner helmcrypto.Signer
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
 }

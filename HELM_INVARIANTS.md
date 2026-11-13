@@ -113,7 +113,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
 | CTL-015 | Effect reservation before dispatch | observed-only | Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule. |
-| CTL-016 | Spend proxy quotes before dispatch | enforced | — |
+| CTL-016 | Historical spend receipt evidence verification | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 | CTL-018 | Tainted-data egress deny | enforced | — |
 | CTL-019 | Guardian threat-scan gate | enforced | — |

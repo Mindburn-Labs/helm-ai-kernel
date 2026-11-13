@@ -1,0 +1,22 @@
+{
+  "schema_version": "helm-savings-parity-prerun.v1",
+  "run_id": "run-e2e",
+  "selection_task_ids": [
+    "sel-A",
+    "sel-B"
+  ],
+  "baseline": {
+    "envelope_id": "env-direct",
+    "dispatched_model_id": "base-model",
+    "tasks_run": 2,
+    "tasks_passed": 2
+  },
+  "candidates": [
+    {
+      "envelope_id": "env-sub",
+      "dispatched_model_id": "mini-model",
+      "tasks_run": 2,
+      "tasks_passed": 2
+    }
+  ]
+}

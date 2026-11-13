@@ -12,6 +12,20 @@ Codex) point their base URL at it and speak their own API. Code:
 `core/pkg/gateway/modelgw`, `core/pkg/gateway/custody/providerkeys.go`,
 `core/pkg/gateway/runtime/runtime.go`.
 
+## Retired local spend path
+
+`helm-ai-kernel spend-proxy` no longer starts a model listener or applies
+local-file reconciliation. `helm-gateway` is the live entry point. Its
+`authority_counters`, effect attempts, model-call records and postings own the
+budget in Postgres; creating another gateway instance does not reset it.
+Two independent gateway instances contend on the same transactional counters.
+
+Migrate clients using the existing identity, mandate, provider-route and
+Postgres configuration below. Legacy price/envelope JSON and receipt directories
+do not mint new authority or initialize the gateway's budget. Historical
+receipts remain usable through the [offline export commands](../../examples/spend-proxy/README.md).
+The retired proxy's embeddings endpoint is not served by this gateway.
+
 ## Endpoints
 
 | Endpoint | Client | Rules |
@@ -35,8 +49,7 @@ effect only through the gateway's own tools, which the sandbox's network rules
 enforce.
 
 A request is also read against a closed list of what the quote understands
-(`core/pkg/gateway/modelbound`, which the spend proxy's governed gateway reads
-requests through too); anything outside it is refused with 400 before any
+(`core/pkg/gateway/modelbound`); anything outside it is refused with 400 before any
 attempt exists, and the error names it:
 
 | API | Members the quote understands | Content the quote understands |
@@ -44,7 +57,6 @@ attempt exists, and the error names it:
 | Responses | `model`, `input`, `instructions` (a string), `max_output_tokens`, `stream` (a boolean), `stream_options`, `temperature`, `top_p`, `top_logprobs`, `tools`, `tool_choice`, `parallel_tool_calls`, `max_tool_calls`, `reasoning` (`effort`, `summary`, `generate_summary`), `text` (`verbosity`, `format` of type `text`, `json_object` or `json_schema`), `include`, `metadata`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier` (`default`, `flex`, `auto`), `truncation`, `store` (`false`), `background` (`false`) | input items, each with only its members (`type` and `id` on every one): `message` (`role`, `content`, `status`), `function_call` (`call_id`, `name`, `arguments`, `status`), `function_call_output` (`call_id`, `output`, `status`), `custom_tool_call` (`call_id`, `name`, `input`, `status`), `custom_tool_call_output` (`call_id`, `output`), `local_shell_call` (`call_id`, `action`, `status`), `local_shell_call_output` (`output`, `status`), `apply_patch_call` (`call_id`, `operation`, `status`), `apply_patch_call_output` (`call_id`, `output`, `status`), and `reasoning` (`summary`, `content`, `status`) with its `encrypted_content`; an item that names an `id` must carry its content (a message its `content`, a call its `call_id`, `name` and arguments or input, an output its `output`); parts, each with only its members (`type` on every one): `input_text`, `summary_text` and `reasoning_text` (`text`), `output_text` (`text`, `annotations`, `logprobs`), `refusal` (`refusal`), and `input_image` (`image_url`, an inline `data:image/` URL, and `detail`) |
 | Chat Completions | `model`, `messages`, `max_tokens`, `max_completion_tokens`, `stream` (a boolean), `stream_options`, `temperature`, `top_p`, `n` (1), `stop`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `seed`, `user`, `safety_identifier`, `prompt_cache_key`, `prompt_cache_retention`, `response_format`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `reasoning_effort`, `verbosity`, `metadata`, `store` (`false`), `service_tier` (`default`, `flex`, `auto`), `modalities` (`text` only) | message members `role`, `content`, `name`, `tool_calls`, `tool_call_id`, `function_call`, `refusal`; parts, each with only its members (`type` on every one): `text` (`text`, `cache_control`), `refusal` (`refusal`), and `image_url` (`image_url`, a string or an object of `url`, an inline `data:image/` URL, and `detail`; `cache_control`) |
 | Messages | `model`, `messages`, `max_tokens`, `system`, `stream` (a boolean), `temperature`, `top_p`, `top_k`, `stop_sequences`, `metadata`, `tools`, `tool_choice`, `thinking` (`type` `enabled`, `disabled` or `adaptive`; `budget_tokens`; `display`), `context_management` (`edits` of type `clear_tool_uses_*` or `clear_thinking_*` only, with `trigger`, `keep`, `clear_at_least`, `exclude_tools`, `clear_tool_inputs`), `service_tier` (`standard_only`, `auto`), `output_config` (`effort`, `format` of type `json_schema`), `output_format` (type `json_schema`) | message members `role`, `content`; blocks, in a message and in `system`, each with only its members (`type` on every one): `text` (`text`, `cache_control`, `citations`), `tool_use` (`id`, `name`, `input`, `cache_control`), `tool_result` (`tool_use_id`, `content`, `is_error`, `cache_control`), `thinking` (`thinking`, `signature`), `redacted_thinking` (`data`), `image` (`source`, `cache_control`) with a `base64` source (`media_type`, `data`), `document` (`source`, `title`, `context`, `citations`, `cache_control`) with a `text` source (`media_type`, `data`) or a `content` source (`content`) and no `citations` enabled |
-| Embeddings (spend proxy only) | `model`, `input`, `encoding_format`, `dimensions`, `user` | `input` a string, a list of strings, a list of token ids or a list of token-id lists |
 
 So `previous_response_id`, `conversation`, a stored `prompt`, `store: true`, an
 `item_reference`, a reasoning item without `encrypted_content`, an input item
@@ -68,10 +80,8 @@ carries inside those is counted by its bytes and not read further: tool
 definitions beyond their type, `tool_calls` and `tool_choice` beyond their
 type, JSON schemas, `metadata`, `stream_options`, `include`, a reasoning
 item's `summary` and `content`, a call's `arguments`, `input`, `action` or
-`operation`, a block's `citations` and an edit's parameters. The spend proxy's
-governed gateway prices no prompt-cache write, so it also refuses any request
-that names `cache_control` at any depth; the model gateway prices the write
-(step 3).
+`operation`, a block's `citations` and an edit's parameters. Prompt-cache writes
+are included in the gateway quote (step 3).
 
 Two members are set by the gateway rather than left to the provider's account:
 

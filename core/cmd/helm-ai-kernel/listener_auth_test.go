@@ -29,6 +29,22 @@ func TestIsLoopbackBindAddr(t *testing.T) {
 	}
 }
 
+// Exercise the admission to a listener without starting a server: removing
+// this check must fail the proof immediately, never bind and wait for traffic.
+func TestListenerBindRequiresAuth(t *testing.T) {
+	for _, host := range []string{"0.0.0.0", "::", "10.0.0.5", "example.com"} {
+		if err := requireListenerAuth("test", host, false, "configure a token"); err == nil {
+			t.Fatalf("unauthenticated listener allowed on %s", host)
+		}
+		if err := requireListenerAuth("test", host, true, ""); err != nil {
+			t.Fatalf("authenticated listener refused on %s: %v", host, err)
+		}
+	}
+	if err := requireListenerAuth("test", "127.0.0.1", false, ""); err != nil {
+		t.Fatalf("loopback listener refused: %v", err)
+	}
+}
+
 // TestListenerBindIgnoresSharedBindAddr: HELM_BIND_ADDR exposes `serve`; the
 // sidecars read only their own variable (S-01, S-02).
 func TestListenerBindIgnoresSharedBindAddr(t *testing.T) {

@@ -757,73 +757,22 @@ func TestCredentialsRequestPathLoggingCarriesRequestContext(t *testing.T) {
 	}
 }
 
-// ctxlogAPIConvertedFile is the file in core/pkg/api whose request-path 500s
-// carry the request, and ctxlogAPIConvertedSites is how many it has. HELM-495
-// converted TrustKeyHandler's two sites; HELM-756 deleted that unrouted handler
-// and converted GovernedGateway.handleInference instead, a live route, so the
-// positive half of this contract still pins a real conversion.
+// The API error helper must forward the request to the shared error writer.
+// The legacy governed gateway has been retired; this surviving helper is used
+// by the CLI's HTTP handlers, whose call sites are checked above.
 const (
-	ctxlogAPIConvertedFile  = "governed_gateway.go"
+	ctxlogAPIConvertedFile  = "apierror.go"
 	ctxlogAPIConvertedSites = 1
 )
 
-// ctxlogAPIContextFreeBaseline is the package's KNOWN, COUNTED set of
-// context-free emitters still reached while serving a request, by file. SIX
-// sites, none of them part of the HELM-495 diff:
-//
-//	handlers.go          2  MemoryService.HandleIngest, .HandleSearch
-//	(decision_handler.go was deleted as dead code, helm-tracker#266)
-//	(autonomy_handler.go was deleted as dead code, helm-tracker#266)
-//
-// Seven, not the six a `grep WriteInternal` reports. Six is the count of
-// context-free WriteInternal(w, err) calls; the contract is wider than that one
-// helper and also catches decision_handler.go's bare
-// slog.Error("failed to persist expired decision state", ...), which runs
-// inside handleResolve(w, r, id) and drops a trace_id for the same reason. The
-// number below is what the scanner measured, not what a grep suggested — this
-// baseline was written at seven first and the guard rejected it.
-//
-// They are recorded rather than converted because core/pkg/api is a protected
-// path: it is mirrored read-only into the downstream repo against
-// tools/helm-ai-kernel.lock with a SHA256 manifest, so touching it here widens
-// this diff into a boundary-sync change for no behavioural gain. Converting
-// them is its own PR.
-//
-// Counts, not file:line. Line numbers churn on every unrelated edit to those
-// files and would make this guard a nuisance that gets deleted; a per-file
-// count still cannot grow silently, which is the whole point — a ninth
-// context-free site anywhere in the package either bumps one of these numbers
-// or introduces a file that is not in the table, and both fail.
+// The remaining tolerated request-path emitters are the two MemoryService
+// handlers. Counts are pinned by file so this baseline cannot grow silently.
 var ctxlogAPIContextFreeBaseline = map[string]int{
 	"handlers.go": 2,
 }
 
-// TestAPIRequestPathLoggingCarriesRequestContext holds core/pkg/api to the
-// contract.
-//
-// Why this function has to exist: the HELM-495 diff converted two sites in this
-// package, and neither of the two test functions above scans it — the first
-// scans ".", the second core/pkg/credentials. Reverting
-// the converted WriteInternalR sites left the entire suite green, so the
-// conversions were pinned by nothing.
-//
-// It is a THIRD function rather than a third directory fed to one of the others
-// because this package needs something they do not: a tolerated baseline. The
-// gate here is two-sided —
-//
-//   - the converted site must stay converted (asserted positively, by count,
-//     on the file that holds it), and
-//   - the seven that are not yet converted must stay exactly seven, in exactly
-//     those files.
-//
-// The second half is not bookkeeping. Without it the honest way to satisfy a
-// package-wide "no context-free emitter on a request path" rule would be to
-// convert seven sites on a protected path inside an unrelated diff; with it,
-// the contract records what is not yet converted and fails the moment that set
-// changes in either direction.
-//
-// Nothing here writes to core/pkg/api. The scanner only reads it, so the
-// boundary manifest is unaffected.
+// TestAPIRequestPathLoggingCarriesRequestContext checks the request forwarding
+// helper and keeps the tolerated context-free emitter baseline from growing.
 func TestAPIRequestPathLoggingCarriesRequestContext(t *testing.T) {
 	const dir = "../../pkg/api"
 
@@ -845,10 +794,10 @@ func TestAPIRequestPathLoggingCarriesRequestContext(t *testing.T) {
 		len(files), dir, s.sawWriteInternalR, s.sawWriteInternalRByFile[ctxlogAPIConvertedFile],
 		ctxlogAPIConvertedFile, s.sawSlogContext, s.sawContextCall, s.sawContextFree, s.sawRequestPath)
 
-	// Scanner-rot floor. Measured by running this guard: the package holds
-	// thousands of calls on a request path, so a handful means the walker went
-	// blind rather than that the package shrank.
-	if s.sawRequestPath < 150 {
+	// Scanner liveness: 136 request-path calls remain after the legacy
+	// governed gateway was deleted. Mutations below prove the detector still
+	// catches both lost request forwarding and a new context-free emitter.
+	if s.sawRequestPath < 100 {
 		t.Fatalf("analyzer saw only %d calls on a request path in %s — the walker is broken, "+
 			"not the tree clean", s.sawRequestPath, dir)
 	}
@@ -882,10 +831,10 @@ func TestAPIRequestPathLoggingCarriesRequestContext(t *testing.T) {
 func ctxlogAPIProblems(dir string, s *ctxlogScanner) []string {
 	var problems []string
 
-	// Half one: the two sites this diff converted are still converted.
+	// The surviving helper still forwards its request.
 	if got := s.sawWriteInternalRByFile[ctxlogAPIConvertedFile]; got != ctxlogAPIConvertedSites {
 		problems = append(problems, fmt.Sprintf("%s/%s holds %d api.WriteInternalR call sites, "+
-			"want %d — the conversion in GovernedGateway.handleInference was changed. "+
+			"want %d — the request forwarding in api.WriteInternalR was changed. "+
 			"The 500 must keep carrying the request, or they emit with no trace_id and cannot "+
 			"be joined to their span.", dir, ctxlogAPIConvertedFile, got, ctxlogAPIConvertedSites))
 	}
@@ -1004,7 +953,7 @@ func TestAPIContextContractCatchesRegressions(t *testing.T) {
 		wantSubstr string
 	}{
 		{
-			name:       "reverted_gateway_conversion",
+			name:       "reverted_error_helper_request_forwarding",
 			file:       ctxlogAPIConvertedFile,
 			old:        "WriteInternalR(w, r, err)",
 			new:        "WriteInternal(w, err)",

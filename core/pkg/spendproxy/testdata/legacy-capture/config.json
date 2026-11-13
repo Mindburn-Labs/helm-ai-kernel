@@ -1,0 +1,54 @@
+{
+  "tenant_id": "tenant-test",
+  "treasury_id": "treasury-test",
+  "route_policy_id": "test-policy-v1",
+  "currency": "USD",
+  "platform_fee_bps": 0,
+  "quote_ttl_seconds": 300,
+  "price_ttl_hours": 24,
+  "balance": {"account_id": "balance-test", "opening_cents": 2000},
+  "request_defaults": {
+    "workspace_id": "ws-test",
+    "agent_id": "agent-live",
+    "principal_id": "principal-test",
+    "envelope_id": "env-direct"
+  },
+  "providers": [
+    {"id": "mockai", "account_mode": "DIRECT", "terms_version": "2026-08-17", "legal_review_ref": "linear:HELM-615"}
+  ],
+  "prices": [
+    {"provider_id": "mockai", "model_id": "base-model", "input_token_micro_cents": 5000, "output_token_micro_cents": 10000},
+    {"provider_id": "mockai", "model_id": "mini-model", "input_token_micro_cents": 1000, "output_token_micro_cents": 2000}
+  ],
+  "envelopes": [
+    {
+      "id": "env-direct",
+      "agent_id": "agent-live",
+      "principal_id": "principal-test",
+      "budget_id": "budget-direct",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["mockai"],
+      "allowed_models": ["base-model", "mini-model"],
+      "fallback_routes": [
+        {"provider_id": "mockai", "model_id": "base-model"},
+        {"provider_id": "mockai", "model_id": "mini-model"}
+      ],
+      "allow_model_substitution": false
+    },
+    {
+      "id": "env-sub",
+      "agent_id": "agent-replay",
+      "principal_id": "principal-test",
+      "budget_id": "budget-sub",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["mockai"],
+      "allowed_models": ["mini-model"],
+      "fallback_routes": [
+        {"provider_id": "mockai", "model_id": "mini-model"}
+      ],
+      "allow_model_substitution": true
+    }
+  ]
+}

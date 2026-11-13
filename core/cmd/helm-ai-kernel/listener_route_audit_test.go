@@ -3,7 +3,7 @@ package main
 // C-03 / HELM-747: every route the binary serves is declared. The API listener
 // is TestRuntimeRouteCatalogEqualsRegistry's; these tests cover the binary's
 // other listeners: the server's health and metrics listeners and the mcp serve,
-// proxy and spend-proxy subcommands. Each walks the production registrar on the
+// proxy subcommand. Each walks the production registrar on the
 // checked mux, so a route cannot escape by living in another file or taking
 // its path from a constant.
 
@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy"
 )
 
 // listenerRouteMuxes mounts every listener's production routes, under each
@@ -39,10 +38,7 @@ func listenerRouteMuxes() []*runtimeRouteMux {
 	proxy := newListenerRouteMux(listenerProxy)
 	registerProxyRoutes(proxy, &proxyRuntime{handler: http.NotFoundHandler()})
 
-	spend := newListenerRouteMux(listenerSpendProxy)
-	(&spendproxy.Server{}).RegisterRoutes(spend)
-
-	return []*runtimeRouteMux{healthWithMetrics, healthOnly, metrics, mcp, proxy, spend}
+	return []*runtimeRouteMux{healthWithMetrics, healthOnly, metrics, mcp, proxy}
 }
 
 // mountListenerRoutes reports the checked mux's refusal of an undeclared route

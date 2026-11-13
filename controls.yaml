@@ -140,6 +140,30 @@ sections:
 # They sit apart from the entries because they are anchored to code:
 # when the code moves, the anchor stops matching and the gate says so.
 removal_proofs:
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); err != nil {\n"
+    replace: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); false && err != nil {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\tif tenant == \"\" || r.TenantID != tenant || (hasIntent && (intent == \"\" || r.SpendIntentID != intent)) {\n"
+    replace: "\tif false && (tenant == \"\" || r.TenantID != tenant || (hasIntent && (intent == \"\" || r.SpendIntentID != intent))) {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tif q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\" {\n"
+    replace: "\t\tif false && (q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\") {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\t\tif u == nil || u.TenantID != s.TenantID || u.ID != s.UsageReceiptID || u.RouteQuoteID != s.RouteQuoteID {\n"
+    replace: "\t\t\tif false && (u == nil || u.TenantID != s.TenantID || u.ID != s.UsageReceiptID || u.RouteQuoteID != s.RouteQuoteID) {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
   - control: INV-001
     file: core/pkg/canonicalize/jcs.go
     find: "\tif isASCII(a) && isASCII(b) {\n\t\treturn a < b\n\t}\n"
@@ -418,595 +442,6 @@ removal_proofs:
     replace: "\t\tadmission.EffectHash != request.EffectHash || admission.Action != request.Action {\n\t\treturn nil\n"
     tests:
       - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\tif journal == nil || attemptOf(journal.RouteQuote) != attempt {\n"
-    replace: "\t\t\tif journal == nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\treleased[attempt] = true\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tcase isDispatchJournal(rec):\n\t\t\tattempt := attemptOf(rec.RouteQuote)\n\t\t\tif released[attempt] {\n"
-    replace: "\t\tcase isDispatchJournal(rec):\n\t\t\tattempt := attemptOf(rec.RouteQuote)\n\t\t\tif false {\n"
-    tests:
-      - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\t\tif attemptOf(journal.RouteQuote) != attempt {\n"
-    replace: "\t\t\t\tif false && attemptOf(journal.RouteQuote) != attempt {\n"
-    tests:
-      - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tif q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\" {\n"
-    replace: "\t\tif false {\n"
-    tests:
-      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tif q.SpendIntentID == \"\" || r.SpendIntentID != q.SpendIntentID || q.TenantID == \"\" || r.TenantID != q.TenantID {\n"
-    replace: "\t\tif false {\n"
-    tests:
-      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
-  - control: CTL-016
-    file: core/pkg/spendproxy/export.go
-    find: "\t\tif err := rec.checkPayload(); err != nil {\n\t\t\treturn nil, nil, fmt.Errorf(\"spendproxy: intent %s: %w\", intentID, err)\n\t\t}\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tcase rec.Kind == RecordUsage || rec.Kind == RecordSettlement || rec.Kind == RecordSettleFailed:\n"
-    replace: "\t\tcase rec.Kind == RecordUsage || rec.Kind == RecordSettlement:\n"
-    tests:
-      - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\t\tavailable = l.account.BalanceCents - (l.account.HoldCents - reservation.AmountCents)\n"
-    replace: "\t\tavailable += reservation.AmountCents\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
-      - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\t\tif err := l.retainActualHoldLocked(reservation, debit, now); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"inferencegateway: balance debit exceeds available funds; retain actual liability: %w\", err)\n\t\t}\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
-      - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); ok {\n"
-    replace: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); false && ok {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine_lifecycle.go
-    find: "\t\tdecision = decideSpend(res.env, state, quote.MaxAmountCents,"
-    replace: "\t\tdecision = decideSpend(res.env, envelopeSpend{}, quote.MaxAmountCents,"
-    tests:
-      - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/envelope.go
-    find: "\t\tspend.used = addSaturating(spend.used, debitCents)\n\t\treturn\n"
-    replace: "\t\t_ = debitCents\n\t\treturn\n"
-    tests:
-      - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
-      - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
-      - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tif derr != nil && errors.Is(derr, ErrDispatchNotSent) {\n"
-    replace: "\tif derr != nil {\n"
-    tests:
-      - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
-      - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "\t\tif !connected.Load() {\n"
-    replace: "\t\tif true {\n"
-    tests:
-      - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tpending, err := RestorePendingDispatches(records, engine, envelopes)\n"
-    replace: "\tpending, err := RestorePendingDispatches(nil, engine, envelopes)\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tfieldList, bound, refusal := modelbound.CheckBody(routeAPI(r.URL.Path), body, modelbound.Options{})\n\tif refusal != nil {\n"
-    replace: "\tfieldList, bound, refusal := modelbound.CheckBody(routeAPI(r.URL.Path), body, modelbound.Options{})\n\tif false && refusal != nil {\n"
-    tests:
-      - "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice"
-      - "core/pkg/api.TestGatewayRefusesRoutingMembers"
-      - "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice"
-      - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\testInput, estOutput := holdTokens(quoted, bound.ExtraInputTokens, outputLimit)\n"
-    replace: "\testInput, estOutput := holdTokens(quoted[:len(quoted)/4], 0, outputLimit)\n"
-    tests:
-      - "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tfor _, f := range bound.Set {\n"
-    replace: "\tfor _, f := range bound.Set[:0] {\n"
-    tests:
-      - "core/pkg/api.TestGatewayResponsesAreNotStored"
-      - "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/envelope.go
-    find: "\tif res == nil || res.EnvelopeID == \"\" || debitCents <= res.AmountCents {\n\t\treturn nil\n"
-    replace: "\tif true || res == nil || res.EnvelopeID == \"\" || debitCents <= res.AmountCents {\n\t\treturn nil\n"
-    tests:
-      - "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
-      - "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope"
-      - "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
-      - "core/pkg/spendproxy.TestAnOverageWhoseSettlementFailsStaysClosed"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "\t\tusage.ReasonCode = economic.SpendReasonPerRequestLimit\n"
-    replace: ""
-    tests:
-      - "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "journal.Note == NoteDispatchJournal && debit > journal.RouteQuote.MaxAmountCents"
-    replace: "debit > journal.RouteQuote.MaxAmountCents"
-    tests:
-      - "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "journal != nil && journal.RouteQuote.EnvelopeID == rec.EnvelopeClosed {"
-    replace: "(journal == nil || journal != nil) {"
-    tests:
-      - "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, cents, legacyWindows(env, rec.RecordedAt, closed))\n"
-    replace: "\t\tledger.RestoreEnvelopeUse(env, rec.RecordedAt, window, cents, nil)\n"
-    tests:
-      - "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
-      - "core/pkg/spendproxy.TestRestartClosesTheWindowsTheReceiptNames"
-      - "core/pkg/spendproxy.TestAnOverageWhoseSettlementLineIsLostStaysClosed"
-      - "core/pkg/spendproxy.TestAnOverageWhoseUsageLineIsLostStaysClosed"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\thold = max(hold, actual)\n"
-    replace: "\t\t\thold = max(hold, 0*actual)\n"
-    tests:
-      - "core/pkg/spendproxy.TestAnOverageWhoseSettlementLineIsLostStaysClosed"
-      - "core/pkg/spendproxy.TestAnOverageWhoseUsageLineIsLostStaysClosed"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\t\tenv, closed = envelopes[rec.EnvelopeClosed], rec.EnvelopeClosedWindows\n"
-    replace: "\t\t\t\tenv = envelopes[rec.EnvelopeClosed]\n"
-    tests:
-      - "core/pkg/spendproxy.TestASettlementLineNamesTheWindowsItsUsageClosed"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\t\tclosed = []string{\"\"} // a legacy receipt: the window of its line\n"
-    replace: "\t\t\t\tclosed = nil\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartClosesALegacyClosureInTheWindowOfItsLine"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tif err := rec.checkPayload(); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"spendproxy: receipt log %s line %d: %w\", path, lineNo, err)\n"
-    replace: "\t\tif err := rec.checkPayload(); false && err != nil {\n\t\t\treturn nil, fmt.Errorf(\"spendproxy: receipt log %s line %d: %w\", path, lineNo, err)\n"
-    tests:
-      - "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\tswitch payloadKinds[r.Kind] {\n"
-    replace: "\tswitch \"route_quote\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind"
-  - control: CTL-016
-    file: core/pkg/spendproxy/export.go
-    find: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); err != nil {\n"
-    replace: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); false && err != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
-  - control: CTL-016
-    file: core/pkg/spendproxy/export.go
-    find: "\t\tif rec.PayloadSignature == \"\" || rec.PayloadSignatureKeyID == \"\" {\n"
-    replace: "\t\tif false && (rec.PayloadSignature == \"\" || rec.PayloadSignatureKeyID == \"\") {\n"
-    tests:
-      - "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "\tcase sameModel(responded, quoted):\n"
-    replace: "\tcase true:\n"
-    tests:
-      - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "\tcase responded == \"\":\n\t\treturn quotedCost, map[string]string{\"model_mismatch\": MismatchNoModel}\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestAnswerModelRule"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "\t\t\tcost = quote.MaxAmountCents\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestAnswerModelRule"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "`^-(\\d{4}-\\d{2}-\\d{2}|\\d{8})$`"
-    replace: "`^-(\\d{4}-\\d{2}-\\d{2})$`"
-    tests:
-      - "core/pkg/spendproxy.TestAnswerModelRule"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "\tif req.PrincipalID != \"\" && req.PrincipalID != env.PrincipalID {\n"
-    replace: "\tif false && req.PrincipalID != \"\" && req.PrincipalID != env.PrincipalID {\n"
-    tests:
-      - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "\tquote.PrincipalID = env.PrincipalID\n"
-    replace: "\tquote.PrincipalID = req.PrincipalID\n"
-    tests:
-      - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\t\tif subtle.ConstantTimeCompare([]byte(presented), []byte(s.cfg.Callers[i].TokenSHA256)) == 1 {\n"
-    replace: "\t\tif subtle.ConstantTimeCompare([]byte(presented), []byte(s.cfg.Callers[i].TokenSHA256)) == 1 || true {\n"
-    tests:
-      - "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\tcase !slices.Contains(caller.Envelopes, envelope):\n"
-    replace: "\tcase false:\n"
-    tests:
-      - "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "ws != \"\" && ws != s.cfg.Defaults.WorkspaceID {"
-    replace: "false && ws != s.cfg.Defaults.WorkspaceID {"
-    tests:
-      - "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered"
-  - control: CTL-016
-    file: core/pkg/spendproxy/config.go
-    find: "\t\tif len(principals) > 1 {\n"
-    replace: "\t\tif false {\n"
-    tests:
-      - "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal"
-  - control: CTL-016
-    file: core/pkg/spendproxy/config.go
-    find: "\t\t\tif e.ID == c.Defaults.EnvelopeID && c.Defaults.PrincipalID != \"\" && c.Defaults.PrincipalID != e.PrincipalID {\n"
-    replace: "\t\t\tif false && e.ID == c.Defaults.EnvelopeID && c.Defaults.PrincipalID != \"\" && c.Defaults.PrincipalID != e.PrincipalID {\n"
-    tests:
-      - "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\tif res, ok := l.reservations[reservationKey]; ok && res.Released {\n"
-    replace: "\tif res, ok := l.reservations[reservationKey]; false && ok && res.Released {\n"
-    tests:
-      - "core/pkg/inferencegateway.TestReleasedReservationCannotSettle"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\t} else if err := l.decideUnreservedLocked(usage, debit, now); err != nil {\n"
-    replace: "\t} else if err := l.decideUnreservedLocked(usage, debit, now); false && err != nil {\n"
-    tests:
-      - "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope"
-  - control: CTL-016
-    file: core/pkg/contracts/economic/spend_authority.go
-    find: "\t\tcase spent >= remaining:\n"
-    replace: "\t\tcase false:\n"
-    tests:
-      - "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap"
-      - "core/pkg/inferencegateway.TestRemainingCentsCannotWrap"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\tcase rec.Kind == RecordDispatchReleased:\n"
-    replace: "\t\tcase rec.Kind == RecordDispatchReleased || rec.Kind == RecordSettlement:\n"
-    tests:
-      - "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine_lifecycle.go
-    find: "\tif _, settled := e.cfg.Ledger.Lookup(idempotencyFromIntent(quote.SpendIntentID)); settled {\n"
-    replace: "\tif _, settled := e.cfg.Ledger.Lookup(idempotencyFromIntent(quote.SpendIntentID)); false && settled {\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/envelope.go
-    find: "\tres, err := l.reserveLocked(key, amountCents, boundHash, true)\n"
-    replace: "\tres, err := l.reserveLocked(key, amountCents, boundHash, false)\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\trestoreEnvelopeUse(records, ledger, envelopes)\n"
-    replace: "\trestoreEnvelopeUse(nil, ledger, envelopes)\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\treturn rec.Note == NoteDispatchJournal || rec.Note == \"\"\n"
-    replace: "\treturn rec.Note == NoteDispatchJournal\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine_lifecycle.go
-    find: "\tif quote.RoutePolicyHash != e.routePolicyHash || quote.EnvelopeID != res.env.ID {\n"
-    replace: "\tif false && (quote.RoutePolicyHash != e.routePolicyHash || quote.EnvelopeID != res.env.ID) {\n"
-    tests:
-      - "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "s.upstream.Dispatch(context.WithoutCancel(r.Context()), r.URL.Path, quote, body)"
-    replace: "s.upstream.Dispatch(func() context.Context { return r.Context() }(), r.URL.Path, quote, body)"
-    tests:
-      - "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\t\tif err := s.appendSigned(rec); err != nil {\n"
-    replace: "\t\tif err := error(nil); rec == nil && err != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines"
-      - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tif journalKey == signer {\n\t\treturn nil, nil\n"
-    replace: "\tif true || journalKey == signer {\n\t\treturn nil, nil\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey"
-      - "core/pkg/spendproxy.TestReconcileRefusesAJournalUnderAnUnknownKey"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tif err := verifyDetached(pub, p.Journal.Payload(), p.Journal.PayloadSignature); err != nil {\n"
-    replace: "\tif err := verifyDetached(pub, p.Journal.Payload(), p.Journal.PayloadSignature); false && err != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileRefusesAnEditedJournalLine"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "\tholdCents, ok := e.holdFor(quotedCents)\n"
-    replace: "\tholdCents, ok := quotedCents, true\n"
-    tests:
-      - "core/pkg/inferencegateway.TestPlatformFeeIsInsideTheHold"
-      - "core/pkg/spendproxy.TestAPlatformFeeIsInsideTheProxysHold"
-      - "core/pkg/api.TestGatewayHoldIncludesThePlatformFee"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "ok && providerCostCents <= part && platformFee > quote.MaxAmountCents-providerCostCents {"
-    replace: "false && ok && providerCostCents <= part && platformFee > quote.MaxAmountCents-providerCostCents {"
-    tests:
-      - "core/pkg/inferencegateway.TestPlatformFeeIsInsideTheHold"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "e.providerCeiling(mandateCeilingCents(effective, route))"
-    replace: "mandateCeilingCents(effective, route)"
-    tests:
-      - "core/pkg/inferencegateway.TestPlatformFeeFitsTheClampedOutput"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/engine.go
-    find: "ProviderCostCents: provider, Notes: merged}, quote.MaxAmountCents-provider, true)"
-    replace: "ProviderCostCents: provider, Notes: merged}, 0, true)"
-    tests:
-      - "core/pkg/inferencegateway.TestSettleAtHoldDebitsTheFeeInclusiveHold"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/envelope.go
-    find: "\t\tif current := periodWindow(env.Period, now); current != res.EnvelopeWindow {\n"
-    replace: "\t\tif current := periodWindow(env.Period, now); false && current != res.EnvelopeWindow {\n"
-    tests:
-      - "core/pkg/inferencegateway.TestAnOverageClosesTheWindowItSettlesIn"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\t\trecordEnvelopeWindows(usage, reservation.EnvelopeID, reservation.EnvelopeWindow, closed)\n"
-    replace: "\t\t_ = closed\n"
-    tests:
-      - "core/pkg/inferencegateway.TestAnOverageClosesTheWindowItSettlesIn"
-      - "core/pkg/spendproxy.TestASettlementLineNamesTheWindowsItsUsageClosed"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/store.go
-    find: "\t\trecordEnvelopeWindows(usage, w.envelopeID, w.window, nil)"
-    replace: "\t\trecordEnvelopeWindows(usage, w.envelopeID, w.window, []string{w.window})"
-    tests:
-      - "core/pkg/inferencegateway.TestEnvelopeClosedOnlyWithAReservation"
-  - control: CTL-016
-    file: core/pkg/inferencegateway/envelope.go
-    find: "\tif window != \"\" {\n\t\tw.window = window\n\t}\n"
-    replace: ""
-    tests:
-      - "core/pkg/inferencegateway.TestRestoredEnvelopeUseIsTheRecordedWindows"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\twindow = meta[inferencegateway.MetadataEnvelopeWindow]\n"
-    replace: "\t\t\twindow = \"\"\n"
-    tests:
-      - "core/pkg/spendproxy.TestRestartBooksTheRecordedWindow"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\t\tfailed.Metadata[inferencegateway.MetadataEnvelopeClosed] = meta.EnvelopeClosed\n"
-    replace: ""
-    tests:
-      - "core/pkg/spendproxy.TestAnOverageWhoseSettlementFailsStaysClosed"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\t\tledger.RestoreEnvelopeUse(env, rec.RecordedAt, \"\", 0, closedWindows(rec.RouteQuote.Metadata))\n"
-    replace: "\t\t\t\t_ = env\n"
-    tests:
-      - "core/pkg/spendproxy.TestAnOverageWhoseSettlementFailsStaysClosed"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\t\tif evidence != \"\" {\n"
-    replace: "\t\tif false && evidence != \"\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileRefusesToReleaseABilledDispatch"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tif debit < actual {\n"
-    replace: "\tif false && debit < actual {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileSettlesAtLeastTheRecordedActual"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tif strings.TrimSpace(opts.Reason) == \"\" {\n"
-    replace: "\tif false && strings.TrimSpace(opts.Reason) == \"\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileNeedsAReason"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tsecret, seedPath, err := signingSeed(opts.ReceiptsDir, opts.SigningSecret, createSeed)\n"
-    replace: "\tsecret, seedPath, err := opts.SigningSecret, \"\", error(nil)\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileWorksInTheDefaultMode"
-      - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileInTheDefaultMode"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tlock, err := lockReceiptsDir(opts.ReceiptsDir)\n"
-    replace: "\tlock, err := &dirLock{release: func() {}}, error(nil)\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileRefusesWhileTheProxyRuns"
-      - "core/pkg/spendproxy.TestASecondProxyRefusesTheReceiptsDir"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tif err := verifyBookLines(records, trusted); err != nil {\n"
-    replace: "\tif err := verifyBookLines(records, trusted); false && err != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestStartRefusesAnUnsignedReleaseLine"
-      - "core/pkg/spendproxy.TestStartRefusesALineSignedByAnUnknownKey"
-      - "core/pkg/spendproxy.TestStartRefusesAnUnsignedSettleFailedLine"
-      - "core/pkg/spendproxy.TestStartRefusesALineWhoseSignatureDoesNotVerify"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "RecordDispatchReleased: true, RecordSettleFailed: true}"
-    replace: "RecordDispatchReleased: true}"
-    tests:
-      - "core/pkg/spendproxy.TestStartRefusesAnUnsignedSettleFailedLine"
-  - control: CTL-016
-    file: core/pkg/spendproxy/store.go
-    find: "\t\t\tif err := verifyDetached(pub, rec.Payload(), rec.PayloadSignature); err != nil {\n"
-    replace: "\t\t\tif err := verifyDetached(pub, rec.Payload(), rec.PayloadSignature); false && err != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestStartRefusesALineWhoseSignatureDoesNotVerify"
-  - control: CTL-016
-    file: core/pkg/spendproxy/issuer.go
-    find: "info.Mode().Perm()&0o077 != 0 {"
-    replace: "info.Mode().Perm()&0o077 != 0 && false {"
-    tests:
-      - "core/pkg/spendproxy.TestASigningSeedReadableByOthersIsRefused"
-  - control: CTL-016
-    file: core/pkg/spendproxy/issuer.go
-    find: "\t\tif !info.Mode().IsRegular() {\n"
-    replace: "\t\tif false && !info.Mode().IsRegular() {\n"
-    tests:
-      - "core/pkg/spendproxy.TestASymlinkedSigningSeedIsRefused"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\t\t\t\tif m := legacySettleFailedActual.FindStringSubmatch(rec.Note); m != nil {\n"
-    replace: "\t\t\t\tif m := legacySettleFailedActual.FindStringSubmatch(rec.Note); false && m != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tdebit, err := s.engine.DebitFor(quote, opts.SettleCents)\n"
-    replace: "\tdebit, err := opts.SettleCents, error(nil)\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileComparesTheDebitWithTheRecordedActual"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\"caller:\"+strconv.Itoa(len(caller.ID))+\":\"+caller.ID+\":\"+key"
-    replace: "\"caller:\"+caller.ID+\":\"+key+strconv.Itoa(0)[:0]"
-    tests:
-      - "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tpub, registered := s.keys.PublicKeyFor(journalKey)\n\tif !registered {\n"
-    replace: "\tpub, registered := s.keys.PublicKeyFor(journalKey)\n\tif true || !registered {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileSignsForAJournalUnderARegisteredKey"
-      - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileSignsForARegisteredJournalKey"
-  - control: CTL-016
-    file: core/pkg/spendproxy/reconcile.go
-    find: "\tif strings.TrimSpace(reason) != \"\" {\n\t\tnotes[MetadataReconcileJournalKeyReason] = reason\n"
-    replace: "\tif false && strings.TrimSpace(reason) != \"\" {\n\t\tnotes[MetadataReconcileJournalKeyReason] = reason\n"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileAcknowledgesAnUnknownJournalKey"
-      - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileAcknowledgesAnUnknownJournalKey"
-  - control: CTL-016
-    file: core/pkg/spendproxy/export.go
-    find: "append([]ed25519.PublicKey{opts.PublicKey}, opts.PublicKeys...)"
-    replace: "[]ed25519.PublicKey{opts.PublicKey}"
-    tests:
-      - "core/pkg/spendproxy.TestReconcileAcknowledgesAnUnknownJournalKey"
-      - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileSignsForARegisteredJournalKey"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tif strings.TrimSpace(r.Header.Get(inferencegateway.HeaderIdempotencyKey)) == \"\" {\n\t\tr.Header.Set(inferencegateway.HeaderIdempotencyKey, mintIdempotencyKey(body))\n\t}\n\tif s.cfg.Defaults.EnvelopeID == \"\" {\n"
-    replace: "\tif s.cfg.Defaults.EnvelopeID == \"\" {\n\t\treturn\n\t}\n\tif strings.TrimSpace(r.Header.Get(inferencegateway.HeaderIdempotencyKey)) == \"\" {\n\t\tr.Header.Set(inferencegateway.HeaderIdempotencyKey, mintIdempotencyKey(body))\n\t}\n\tif s.cfg.Defaults.EnvelopeID == \"\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestCallersModeServesAStockClient"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tif strings.TrimSpace(r.Header.Get(inferencegateway.HeaderIdempotencyKey)) == \"\" {\n"
-    replace: "\tif r.Header.Get(inferencegateway.HeaderIdempotencyKey) == \"\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestABlankIdempotencyKeyIsMinted"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "\tscopeIdempotencyKey(r.Header, caller)\n"
-    replace: "\t_ = caller\n"
-    tests:
-      - "core/pkg/spendproxy.TestIdempotencyKeysAreScopedToTheCaller"
-  - control: CTL-016
-    file: core/pkg/spendproxy/server.go
-    find: "s.requireCaller(s.handleHealth)"
-    replace: "s.handleHealth"
-    tests:
-      - "core/pkg/spendproxy.TestHealthAndModelsNeedTheCallerCredential"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\t\tif len(s.cfg.Callers) > 0 {\n\t\t\tif _, refused := s.authenticate(r.Header); refused != nil {\n"
-    replace: "\t\tif false && len(s.cfg.Callers) > 0 {\n\t\t\tif _, refused := s.authenticate(r.Header); refused != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestHealthAndModelsNeedTheCallerCredential"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\tif !strings.EqualFold(scheme, \"Bearer\") || token == \"\" {\n"
-    replace: "\tif scheme != \"Bearer\" || token == \"\" {\n"
-    tests:
-      - "core/pkg/spendproxy.TestBearerSchemeIsCaseInsensitive"
-  - control: CTL-016
-    file: core/pkg/spendproxy/caller.go
-    find: "\tif len(token) < MinCallerTokenBytes {\n"
-    replace: "\tif false && len(token) < MinCallerTokenBytes {\n"
-    tests:
-      - "core/pkg/spendproxy.TestShortCallerTokensAreRefused"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tif settled.UsageReceipt != nil && settled.UsageReceipt.BudgetVerdict != \"\" {\n"
-    replace: "\tif false && settled.UsageReceipt != nil && settled.UsageReceipt.BudgetVerdict != \"\" {\n"
-    tests:
-      - "core/pkg/api.TestGatewayReplayReportsTheUsageReceiptsVerdict"
-  - control: CTL-016
-    file: core/pkg/gateway/modelbound/bound.go
-    find: "\tif !opts.CacheWrites {\n\t\tif e := cacheWrite(fields); e != nil {\n"
-    replace: "\tif false && !opts.CacheWrites {\n\t\tif e := cacheWrite(fields); e != nil {\n"
-    tests:
-      - "core/pkg/spendproxy.TestSpendProxyRefusesCacheWrites"
-      - "core/pkg/api.TestGatewayRefusesCacheWrites"
-  - control: CTL-016
-    file: core/pkg/gateway/modelbound/bound.go
-    find: "\t\tif !IsNull(obj[key]) && !slices.Contains(allowed, key) {\n"
-    replace: "\t\tif false && !IsNull(obj[key]) && !slices.Contains(allowed, key) {\n"
-    tests:
-      - "core/pkg/spendproxy.TestSpendProxyRefusesUnknownPartMembers"
-  - control: CTL-016
-    file: core/pkg/spendproxy/dispatch.go
-    find: "\t\tcost, _ := u.answeredCost(quote, responded, in, out)\n\t\treturn max(quotedCost, cost),"
-    replace: "\t\tcost, _ := u.answeredCost(quote, responded, in, out)\n\t\t_ = cost\n\t\treturn quotedCost,"
-    tests:
-      - "core/pkg/spendproxy.TestAVersionSuffixIsPricedAtTheDearerAnsweredPrice"
   - control: CTL-018
     file: core/pkg/guardian/guardian.go
     find: "\treturn contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)\n}\n"
@@ -1068,7 +503,7 @@ removal_proofs:
     find: "\tif authenticated || isLoopbackBindAddr(bindAddr) {\n"
     replace: "\tif true || authenticated || isLoopbackBindAddr(bindAddr) {\n"
     tests:
-      - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+      - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
   - control: CTL-026
     file: core/cmd/helm-ai-kernel/listener_auth.go
     find: "\t\tif !ok || !secretEqual(provided, token) {\n\t\t\tw.Header().Set(\"WWW-Authenticate\", `Bearer realm=\"helm-proxy\"`)\n"
@@ -3963,325 +3398,41 @@ controls:
       bypass: []
 
   - id: CTL-016
-    title: "Spend proxy quotes before dispatch"
+    title: "Historical spend receipt evidence verification"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      In `helm-ai-kernel spend-proxy`, an inference request is dispatched only
-      after an allowing quote, and a replayed idempotency key never reaches the
-      provider; with caller credentials a key is its caller's, and a request
-      that names none gets a minted one. A request is read against the model
-      gateway's closed list for its route (core/pkg/gateway/modelbound),
-      cache_control included, and refused with 400 when its bill could escape
-      the quote, and the hold counts one input token per byte of the forwarded
-      request plus the image and tool floors and the output ceiling, at the
-      configured price with the platform fee on it. The hold is reserved
-      against the spend envelope's max_amount_cents for its period and the
-      balance in one step, so concurrent requests cannot both take the last
-      cents; settlement moves the reservation to used, a provider bill within
-      its part of the hold is debited no more than the hold, and the
-      budget-verdict receipt (OK_WITHIN_ENVELOPE) exists only when that
-      reservation succeeded. A provider bill above its part of the hold is
-      debited as billed, its usage receipt says ESCALATE /
-      ERR_SPEND_PER_REQUEST_LIMIT and names the windows it closed, and the
-      envelope takes no further dispatch in the period of the reservation or
-      the period the settlement falls in, also when the settlement fails,
-      after a restart, and when its usage or its settlement line was lost; a
-      released reservation cannot be settled, and an
-      unreserved settlement is decided against its envelope. A dispatch that
-      may have reached the provider is debited at its hold and its key is
-      spent; only an error before the upstream connection opened releases it.
-      A dispatch journalled before its provider call without a committed
-      settlement is held again on start, at its hold, or at the actual cost
-      its usage, settlement or settle_failed line records when the cost is
-      more. A failed debit keeps that known liability reserved in the live
-      proxy too; settlement excludes its own hold before checking funds, so
-      an unfunded recovery hold never manufactures an available balance.
-      The liability stays held until `spend-proxy reconcile`, which
-      takes the receipts directory's lock and signs with the seed's key
-      (without a seed, the one generated in the receipts directory), settles
-      or releases it in a signed line; a dispatch another key journalled is
-      reconciled only under a key trusted_keys.json registers, and only when
-      it also registers the journal's key or --journal-key-reason says why,
-      and the line names that key. A dispatch the log records billed is
-      never released, nor settled below the recorded actual without an
-      override reason. A start refuses usage, settlement, release and
-      settle_failed lines it cannot verify. A release requires the signed
-      release_action dispatch_released/v1 and its reason, with the outer
-      tenant and intent matching the signed quote; a journal cannot be
-      relabeled as a release, nor can a release target another intent.
-      Export checks those bindings too. Recovery matches a release to the
-      active quote's signed attempt fields, remembers consumed attempts and
-      refuses overlapping unreleased attempts. Replaying an old release or
-      journal cannot clear or replace a newer retry's hold.
-      An answer is priced by the model it names. The principal
-      in a spend receipt is the envelope's, and with caller credentials
-      configured each request's agent, envelope and workspace are its
-      credential's, and /v1/models and /helm/spend/health need it; without
-      them the proxy serves one principal. A receipt-log line carries exactly
-      the payload its kind names, and `spend-proxy export` reports a signature
-      verified only when it checked it against a --public-key from outside the
-      receipts directory, one per key that signed the log (helm-tracker#313).
+      Offline spend exports verify historical receipt hashes and detached
+      signatures against pinned issuer keys. Record identities match their
+      signed payloads, and a settlement binds its intent through its signed
+      usage receipt. Relabeled release records require the signed versioned
+      action and reason. These files never authorize new spending or change
+      the canonical Postgres ledger. The legacy live gateway and local-file
+      reconciliation have been retired; helm-gateway owns model effects.
     status: enforced
     entry_points:
-      - "core/pkg/api.GovernedGateway.handleInference"
-      - "core/pkg/gateway/modelbound.CheckBody"
-      - "core/pkg/inferencegateway.Engine.Quote"
-      - "core/pkg/inferencegateway.Engine.ReserveForDispatch"
-      - "core/pkg/inferencegateway.Engine.SettleUsage"
-      - "core/pkg/inferencegateway.Engine.SettleAtHold"
-      - "core/pkg/inferencegateway.Engine.RestorePendingDispatch"
-      - "core/pkg/inferencegateway.Engine.DebitFor"
-      - "core/pkg/spendproxy.NewServer"
-      - "core/pkg/spendproxy.Server.bindCaller"
-      - "core/pkg/spendproxy.Upstream.Dispatch"
       - "core/pkg/spendproxy.LoadRecords"
-      - "core/pkg/spendproxy.RestorePendingDispatches"
-      - "core/pkg/spendproxy.Reconcile"
       - "core/pkg/spendproxy.ExportEvidencePacks"
+      - "core/pkg/spendproxy.ExportSavingsEvidencePack"
+      - "core/pkg/spendproxy.VerifySavingsPackDirWithIssuer"
     config:
-      - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
-      - "The spend-proxy config's envelopes (max_amount_cents per UTC day, per_request_max_cents, principal_id; one principal across them unless callers are configured) and request_defaults.principal_id, which must be the default envelope's."
-      - "The spend-proxy config's callers: id, token_sha256 (the SHA-256 of the bearer token, never the token), agent_id, envelopes, workspaces."
-      - "spend-proxy export --public-key, repeated for each key that signed the log: the issuer's Ed25519 public key, printed at start and served as signing_public_key by /helm/spend/health."
-      - "spend-proxy reconcile --intent with --settle-cents or --release, --reason, --override-reason (a settlement below the recorded actual), --journal-key-reason (a dispatch journalled under a key trusted_keys.json does not register), and --sign (the proxy's seed)."
-      - "spend-proxy --sign or HELM_SPEND_PROXY_SIGNING_SEED; without either, <receipts-dir>/signing-seed, generated on the first start (mode 0600). <receipts-dir>/spend-proxy.lock is held while a proxy or a reconcile runs."
-      - "The spend-proxy config's platform_fee_bps, which the hold carries."
+      - "spend-proxy export --public-key (repeatable pinned issuer keys)"
+      - "spend-proxy savings-verify --issuer-key-id and --issuer-public-key"
     protected_operations:
-      - "Inference requests through the spend proxy."
-      - "Reserving, settling and releasing a dispatch against its envelope and the balance."
-      - "Restarting the spend proxy on an existing receipt log, and reconciling a pending dispatch."
-      - "Exporting spend EvidencePacks with signature verification."
+      - "Offline export and verification of historical spend evidence."
     bypass_assumptions:
-      - "The ledger is a JSONL file, not Postgres (R5); envelope spend, closed envelopes and pending holds are rebuilt from it on start. A receipt-log writer can delete lines; the log is not a hash chain. A start verifies the lines that debit or free a hold against the proxy's key and the keys trusted_keys.json registered, so a writer of the receipts directory who also registers a key there, or who can read the generated signing-seed, can still forge them."
-      - "The receipts directory lock is an OS file lock (flock, LockFileEx); on a platform without one it is not taken, and one proxy per directory, reconciled only while stopped, is the operator's rule."
-      - "The listener binds loopback only; any process on the host can reach it. Caller credentials are bearer tokens on plain HTTP, stored as their unsalted SHA-256: a token is at least 32 bytes and assumed random. Without them headers pick among the envelopes of the one configured principal. The tenant comes from configuration."
-      - "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
-      - "The hold bounds the bill under the model gateway's assumptions (docs/architecture/model-gateway.md): one token per byte, the image and tool floors, an honoured output maximum (an upstream's reasoning_effort budget within it), encrypted reasoning and thinking signatures costing no more than their bytes, the configured price at the upstream's tier when no service_tier is named, and no cache write, which the proxy refuses. A bill above the hold anyway passes the envelope's limit by at most the overages of the dispatches in flight when it settles; the envelope then closes for the reservation's and the settlement's period."
-      - "Reconcile appends lines to the log of a stopped proxy: it takes the receipts directory's lock, which a running proxy holds. The recorded actual it guards is what the log's settle_failed, usage and settlement lines say; an override reason lets an operator settle below it, and a journal key reason lets one clear a dispatch whose journal key no registry names."
-      - "A settlement line names the windows its usage receipt closed outside its signed payload, so a start only closes windows by them; a usage or settlement line whose signed debit exceeds its journal line's hold closes the journal's window without them."
-      - "Without --public-key export checks no signature."
+      - "The verifier's issuer keys must be obtained independently of the receipt directory."
+      - "Historical evidence proves only its recorded checks, never current spending authority."
     tests:
       allowed:
-        - "core/pkg/spendproxy.TestGovernedRouteEndToEnd"
-        - "core/pkg/spendproxy.TestExportEvidencePacksOfflineVerifiable"
-        - "core/pkg/spendproxy.TestDispatchThatNeverLeftReleasesTheHold"
-        - "core/pkg/spendproxy.TestReconcileReleasesAPendingHold"
-        - "core/pkg/api.TestGatewayDispatchNeverSentReleases"
-        - "core/pkg/api.TestGatewayAnswerWithoutUsageSettlesAtTheHold"
-        - "core/pkg/inferencegateway.TestReleaseFreesTheEnvelopeAndTheNextPeriodResets"
-        - "core/pkg/inferencegateway.TestSettleAtHoldDebitsTheCeiling"
-        - "core/pkg/inferencegateway.TestPlatformFeeFitsTheClampedOutput"
-        - "core/pkg/spendproxy.TestAPlatformFeeIsInsideTheProxysHold"
-        - "core/pkg/spendproxy.TestCallersModeServesAStockClient"
-        - "core/pkg/spendproxy.TestBearerSchemeIsCaseInsensitive"
-        - "core/pkg/spendproxy.TestReconcileWorksInTheDefaultMode"
-        - "core/pkg/spendproxy.TestReconcileOverrideRecordsWhy"
-        - "core/pkg/api.TestGatewayHoldIncludesThePlatformFee"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileInTheDefaultMode"
-        - "core/pkg/spendproxy.TestReconcileSignsForAJournalUnderARegisteredKey"
-        - "core/pkg/spendproxy.TestReconcileAcknowledgesAnUnknownJournalKey"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileSignsForARegisteredJournalKey"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileAcknowledgesAnUnknownJournalKey"
-        - "core/pkg/spendproxy.TestABlankIdempotencyKeyIsMinted"
-        - "core/pkg/spendproxy.TestReconcileComparesTheDebitWithTheRecordedActual"
+        - "core/pkg/spendproxy.TestLegacySpendEvidenceStillExportsOffline"
+        - "core/pkg/spendproxy.TestLegacySavingsStillExportsAndVerifiesOffline"
       forbidden:
-        - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
-        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
-        - "core/pkg/spendproxy.TestUnknownEnvelopeFailsClosed"
-        - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
-        - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
-        - "core/pkg/spendproxy.TestClientThatLeavesDoesNotFreeTheHold"
-        - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
-        - "core/pkg/spendproxy.TestRestoreHoldsAJournalAfterARelease"
-        - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
-        - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
-        - "core/pkg/spendproxy.TestHeaderCannotAssertTheSealedPrincipal"
-        - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice"
-        - "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
-        - "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored"
-        - "core/pkg/spendproxy.TestAnswerModelRule"
-        - "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall"
-        - "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
-        - "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal"
-        - "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered"
-        - "core/pkg/spendproxy.TestCallerConfigRefusesWhatItCannotBind"
-        - "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes"
-        - "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind"
-        - "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind"
-        - "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord"
-        - "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart"
-        - "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch"
-        - "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance"
-        - "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine"
-        - "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse"
-        - "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines"
-        - "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey"
-        - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
-        - "core/pkg/inferencegateway.TestConcurrentRequestsCannotBothTakeTheLastCents"
-        - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
-        - "core/pkg/inferencegateway.TestRestoredPendingDispatchHoldsTheEnvelope"
-        - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
-        - "core/pkg/inferencegateway.TestReleasedReservationCannotSettle"
-        - "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope"
-        - "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
-        - "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine"
-        - "core/pkg/inferencegateway.TestRemainingCentsCannotWrap"
-        - "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap"
-        - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
-        - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
-        - "core/pkg/api.TestGatewayRefusesRoutingMembers"
-        - "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice"
-        - "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors"
-        - "core/pkg/api.TestGatewayResponsesAreNotStored"
-        - "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyExportRefusesAMalformedPublicKey"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold"
-        - "core/pkg/inferencegateway.TestPlatformFeeIsInsideTheHold"
-        - "core/pkg/inferencegateway.TestSettleAtHoldDebitsTheFeeInclusiveHold"
-        - "core/pkg/inferencegateway.TestAnOverageClosesTheWindowItSettlesIn"
-        - "core/pkg/inferencegateway.TestRestoredEnvelopeUseIsTheRecordedWindows"
-        - "core/pkg/inferencegateway.TestEnvelopeClosedOnlyWithAReservation"
-        - "core/pkg/spendproxy.TestAnOverageWhoseSettlementFailsStaysClosed"
-        - "core/pkg/spendproxy.TestRestartClosesTheWindowsTheReceiptNames"
-        - "core/pkg/spendproxy.TestRestartBooksTheRecordedWindow"
-        - "core/pkg/spendproxy.TestReconcileRefusesToReleaseABilledDispatch"
-        - "core/pkg/spendproxy.TestReconcileSettlesAtLeastTheRecordedActual"
-        - "core/pkg/spendproxy.TestReconcileNeedsAReason"
-        - "core/pkg/spendproxy.TestReconcileRefusesWhileTheProxyRuns"
-        - "core/pkg/spendproxy.TestASecondProxyRefusesTheReceiptsDir"
-        - "core/pkg/spendproxy.TestIdempotencyKeysAreScopedToTheCaller"
-        - "core/pkg/spendproxy.TestHealthAndModelsNeedTheCallerCredential"
-        - "core/pkg/spendproxy.TestShortCallerTokensAreRefused"
-        - "core/pkg/spendproxy.TestStartRefusesAnUnsignedReleaseLine"
-        - "core/pkg/spendproxy.TestStartRefusesALineSignedByAnUnknownKey"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesCacheWrites"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesUnknownPartMembers"
-        - "core/pkg/spendproxy.TestAVersionSuffixIsPricedAtTheDearerAnsweredPrice"
-        - "core/pkg/api.TestGatewayReplayReportsTheUsageReceiptsVerdict"
-        - "core/pkg/api.TestGatewayRefusesCacheWrites"
-        - "core/pkg/spendproxy.TestAnOverageWhoseSettlementLineIsLostStaysClosed"
-        - "core/pkg/spendproxy.TestAnOverageWhoseUsageLineIsLostStaysClosed"
-        - "core/pkg/spendproxy.TestASettlementLineNamesTheWindowsItsUsageClosed"
-        - "core/pkg/spendproxy.TestRestartClosesALegacyClosureInTheWindowOfItsLine"
-        - "core/pkg/spendproxy.TestReconcileRefusesAJournalUnderAnUnknownKey"
-        - "core/pkg/spendproxy.TestReconcileRefusesAnEditedJournalLine"
-        - "core/pkg/spendproxy.TestStartRefusesAnUnsignedSettleFailedLine"
-        - "core/pkg/spendproxy.TestStartRefusesALineWhoseSignatureDoesNotVerify"
-        - "core/pkg/spendproxy.TestASigningSeedReadableByOthersIsRefused"
-        - "core/pkg/spendproxy.TestASymlinkedSigningSeedIsRefused"
-        - "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote"
-        - "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
-        - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
-        - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
-        - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
-        - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
-        - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
-        - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
-        - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
-        - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
+        - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+        - "core/pkg/spendproxy.TestLegacySavingsRefusesIncompleteOrUnboundCapture"
+        - "core/cmd/helm-ai-kernel.TestSpendProxyLiveCommandIsRetired"
+        - "core/cmd/helm-ai-kernel.TestSpendProxyCannotReconcileAuthorityInLocalFiles"
       removal:
-        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
-        - "core/pkg/inferencegateway.TestReservationDecidesAgainstWhatOthersReserved"
-        - "core/pkg/api.TestGatewayEnvelopeLimitIsConsumed"
-        - "core/pkg/inferencegateway.TestEnvelopeLimitIsConsumed"
-        - "core/pkg/spendproxy.TestEnvelopeLimitStopsSpendThroughTheProxy"
-        - "core/pkg/api.TestGatewayDispatchThatMayHaveReachedTheProviderIsDebitedAtItsHold"
-        - "core/pkg/spendproxy.TestDispatchThatMayHaveReachedTheProviderIsNeverReleased"
-        - "core/pkg/spendproxy.TestRestartRecoversAnUnsettledDispatchAsReserved"
-        - "core/pkg/api.TestGatewayRefusesRoutingMembers"
-        - "core/pkg/spendproxy.TestRoutingMembersAreRefused"
-        - "core/pkg/api.TestGatewayRefusesWhatTheQuoteCannotPrice"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesWhatTheQuoteCannotPrice"
-        - "core/pkg/api.TestGatewayHoldsOneTokenPerByteAndTheFloors"
-        - "core/pkg/api.TestGatewayResponsesAreNotStored"
-        - "core/pkg/spendproxy.TestSpendProxyResponsesAreNotStored"
-        - "core/pkg/inferencegateway.TestSettlementAboveTheHoldClosesTheEnvelope"
-        - "core/pkg/api.TestGatewayBillAboveTheHoldClosesTheEnvelope"
-        - "core/pkg/spendproxy.TestABillAboveTheHoldClosesTheEnvelope"
-        - "core/pkg/spendproxy.TestReceiptLogRefusesALineWhosePayloadIsNotItsKind"
-        - "core/pkg/spendproxy.TestRecordPayloadIsPickedByKind"
-        - "core/pkg/spendproxy.TestExportDoesNotClaimSignaturesItDidNotCheck"
-        - "core/pkg/spendproxy.TestExportRefusesAnUnsignedRecord"
-        - "core/pkg/spendproxy.TestResponseModelMismatchIsDebitedAtTheHigherPrice"
-        - "core/pkg/spendproxy.TestAnswerModelRule"
-        - "core/pkg/inferencegateway.TestQuotePrincipalIsTheEnvelopes"
-        - "core/pkg/spendproxy.TestCallerCredentialBindsTheIdentity"
-        - "core/pkg/spendproxy.TestWorkspaceHeaderIsNotSealedUnlessCovered"
-        - "core/pkg/spendproxy.TestWithoutCredentialsTheProxyServesOnePrincipal"
-        - "core/pkg/spendproxy.TestDefaultPrincipalMustBeTheEnvelopes"
-        - "core/pkg/inferencegateway.TestReleasedReservationCannotSettle"
-        - "core/pkg/inferencegateway.TestSettlementWithoutReservationIsDecidedAgainstTheEnvelope"
-        - "core/pkg/contracts/economic.TestRemainingCentsDoesNotWrap"
-        - "core/pkg/inferencegateway.TestRemainingCentsCannotWrap"
-        - "core/pkg/spendproxy.TestSettlementWithoutItsUsageLineIsHeldOnRestart"
-        - "core/pkg/spendproxy.TestRestartDoesNotHoldASettledDispatch"
-        - "core/pkg/spendproxy.TestRestoredHoldIsPlacedPastTheBalance"
-        - "core/pkg/spendproxy.TestRestartKeepsEnvelopeUse"
-        - "core/pkg/spendproxy.TestRestartHoldsALegacyJournalLine"
-        - "core/pkg/inferencegateway.TestReservationRefusesAQuoteFromAnotherEngine"
-        - "core/pkg/spendproxy.TestClientThatLeavesDoesNotCancelTheProviderCall"
-        - "core/pkg/spendproxy.TestReconcileSettlesAPendingHoldWithSignedLines"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileClearsAPendingHold"
-        - "core/pkg/spendproxy.TestReconcileNeedsTheProxysKey"
-        - "core/pkg/inferencegateway.TestPlatformFeeIsInsideTheHold"
-        - "core/pkg/spendproxy.TestAPlatformFeeIsInsideTheProxysHold"
-        - "core/pkg/api.TestGatewayHoldIncludesThePlatformFee"
-        - "core/pkg/inferencegateway.TestPlatformFeeFitsTheClampedOutput"
-        - "core/pkg/inferencegateway.TestSettleAtHoldDebitsTheFeeInclusiveHold"
-        - "core/pkg/inferencegateway.TestAnOverageClosesTheWindowItSettlesIn"
-        - "core/pkg/inferencegateway.TestRestoredEnvelopeUseIsTheRecordedWindows"
-        - "core/pkg/inferencegateway.TestEnvelopeClosedOnlyWithAReservation"
-        - "core/pkg/spendproxy.TestAnOverageWhoseSettlementFailsStaysClosed"
-        - "core/pkg/spendproxy.TestRestartClosesTheWindowsTheReceiptNames"
-        - "core/pkg/spendproxy.TestRestartBooksTheRecordedWindow"
-        - "core/pkg/spendproxy.TestReconcileRefusesToReleaseABilledDispatch"
-        - "core/pkg/spendproxy.TestReconcileSettlesAtLeastTheRecordedActual"
-        - "core/pkg/spendproxy.TestReconcileNeedsAReason"
-        - "core/pkg/spendproxy.TestReconcileWorksInTheDefaultMode"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileInTheDefaultMode"
-        - "core/pkg/spendproxy.TestReconcileRefusesWhileTheProxyRuns"
-        - "core/pkg/spendproxy.TestASecondProxyRefusesTheReceiptsDir"
-        - "core/pkg/spendproxy.TestStartRefusesAnUnsignedReleaseLine"
-        - "core/pkg/spendproxy.TestStartRefusesALineSignedByAnUnknownKey"
-        - "core/pkg/spendproxy.TestCallersModeServesAStockClient"
-        - "core/pkg/spendproxy.TestIdempotencyKeysAreScopedToTheCaller"
-        - "core/pkg/spendproxy.TestHealthAndModelsNeedTheCallerCredential"
-        - "core/pkg/spendproxy.TestBearerSchemeIsCaseInsensitive"
-        - "core/pkg/spendproxy.TestShortCallerTokensAreRefused"
-        - "core/pkg/api.TestGatewayReplayReportsTheUsageReceiptsVerdict"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesCacheWrites"
-        - "core/pkg/api.TestGatewayRefusesCacheWrites"
-        - "core/pkg/spendproxy.TestSpendProxyRefusesUnknownPartMembers"
-        - "core/pkg/spendproxy.TestAVersionSuffixIsPricedAtTheDearerAnsweredPrice"
-        - "core/pkg/spendproxy.TestAnOverageWhoseSettlementLineIsLostStaysClosed"
-        - "core/pkg/spendproxy.TestAnOverageWhoseUsageLineIsLostStaysClosed"
-        - "core/pkg/spendproxy.TestASettlementLineNamesTheWindowsItsUsageClosed"
-        - "core/pkg/spendproxy.TestRestartClosesALegacyClosureInTheWindowOfItsLine"
-        - "core/pkg/spendproxy.TestReconcileRefusesAJournalUnderAnUnknownKey"
-        - "core/pkg/spendproxy.TestReconcileRefusesAnEditedJournalLine"
-        - "core/pkg/spendproxy.TestStartRefusesAnUnsignedSettleFailedLine"
-        - "core/pkg/spendproxy.TestStartRefusesALineWhoseSignatureDoesNotVerify"
-        - "core/pkg/spendproxy.TestASigningSeedReadableByOthersIsRefused"
-        - "core/pkg/spendproxy.TestASymlinkedSigningSeedIsRefused"
-        - "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote"
-        - "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
-        - "core/pkg/spendproxy.TestReconcileSignsForAJournalUnderARegisteredKey"
-        - "core/pkg/spendproxy.TestReconcileAcknowledgesAnUnknownJournalKey"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileSignsForARegisteredJournalKey"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyReconcileAcknowledgesAnUnknownJournalKey"
-        - "core/pkg/spendproxy.TestABlankIdempotencyKeyIsMinted"
-        - "core/pkg/spendproxy.TestReconcileComparesTheDebitWithTheRecordedActual"
-        - "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart"
-        - "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
-        - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
-        - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
-        - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
-        - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
-        - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
-        - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
-        - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
-        - "core/pkg/inferencegateway.TestFailedSettlementKeepsTheHold"
+        - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
       bypass: []
 
   - id: CTL-017
@@ -4539,35 +3690,30 @@ controls:
     title: "Non-loopback listeners require auth"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback
-      address without authentication, and the proxy requires its token as a
-      bearer. The spend-proxy never binds beyond loopback, with or without its
-      caller credentials (CTL-016), which are bearer tokens on plain HTTP, and
-      its refusal says that, not that no authentication is configured: it
-      spends the upstream provider key.
+      The proxy and MCP listeners refuse to start on a non-loopback address
+      without authentication, and the proxy requires its token as a bearer.
+      The retired spend-proxy command starts no listener.
     status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.requireListenerAuth"
-      - "core/cmd/helm-ai-kernel.requireLoopbackListener"
       - "core/cmd/helm-ai-kernel.wrapProxyAuth"
     config:
       - "helm-ai-kernel proxy and mcp serve bind flags and tokens"
-      - "helm-ai-kernel spend-proxy --addr"
     protected_operations:
-      - "Starting the proxy, MCP or spend-proxy listener on a non-loopback address."
+      - "Starting the proxy or MCP listener on a non-loopback address."
       - "Calling the proxy when its token is configured."
     bypass_assumptions:
       - "A loopback bind needs no authentication; anything on the host can reach it."
-      - "Removal of the bind check is proven through the spend-proxy refusal, which fails without serving. The proxy and MCP refusal tests would start a listener and block instead of failing, so they are forbidden tests only."
+      - "The bind-check removal proof calls the listener admission function directly, so it fails without opening a socket or waiting for traffic."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       forbidden:
         - "core/cmd/helm-ai-kernel.TestProxyRefusesNonLoopbackBindWithoutToken"
         - "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+        - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
       removal:
-        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+        - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
         - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       bypass:
         - "core/cmd/helm-ai-kernel.TestMetricsLoopbackOnlyOrAuthenticated"
@@ -5418,6 +4564,7 @@ controls:
       - "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
     tests:
       allowed:
+        - "core/pkg/gateway/modelgw.TestPostgresModelBudgetSurvivesGatewayRecreation"
         - "core/pkg/gateway/admission.TestPostgresProposeAdmitsDeniesAndEscalates"
         - "core/pkg/gateway/server.TestPostgresGatewayAPIOnTheWire"
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"

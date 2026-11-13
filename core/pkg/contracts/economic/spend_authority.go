@@ -95,208 +95,6 @@ type AgentSpendEnvelope struct {
 	ContentHash                string            `json:"content_hash"`
 }
 
-// NewAgentSpendEnvelope creates an active envelope and computes its content hash.
-func NewAgentSpendEnvelope(id, tenantID, agentID, principalID, budgetID, currency string, period SpendPeriod, maxAmountCents, perRequestMaxCents int64, policyHash string) *AgentSpendEnvelope {
-	e := &AgentSpendEnvelope{
-		ID:                 id,
-		TenantID:           tenantID,
-		AgentID:            agentID,
-		PrincipalID:        principalID,
-		BudgetID:           budgetID,
-		Currency:           currency,
-		Period:             period,
-		MaxAmountCents:     maxAmountCents,
-		PerRequestMaxCents: perRequestMaxCents,
-		Active:             true,
-		PolicyHash:         policyHash,
-		EffectiveAt:        time.Now().UTC(),
-	}
-	e.ContentHash = e.computeHash()
-	return e
-}
-
-// RemainingCents returns unspent and unreserved cents. Negative balances clamp
-// to zero, and so does used or reserved spend at the int64 limit: the
-// subtraction never wraps (helm-tracker#313 r1, F12).
-func (e *AgentSpendEnvelope) RemainingCents() int64 {
-	if e == nil {
-		return 0
-	}
-	remaining := e.MaxAmountCents
-	for _, spent := range []int64{e.UsedAmountCents, e.ReservedAmountCents} {
-		switch {
-		case spent <= 0:
-		case spent >= remaining:
-			return 0
-		default:
-			remaining -= spent
-		}
-	}
-	return max(remaining, 0)
-}
-
-// RequiresApproval reports whether the amount crosses the envelope's approval gate.
-func (e *AgentSpendEnvelope) RequiresApproval(amountCents int64) bool {
-	return e != nil && e.ApprovalRequiredAboveCents > 0 && amountCents >= e.ApprovalRequiredAboveCents
-}
-
-// AllowsProvider fails closed when the provider allow-list is empty or missing the provider.
-func (e *AgentSpendEnvelope) AllowsProvider(providerID string) bool {
-	return e != nil && providerID != "" && containsString(e.AllowedProviders, providerID)
-}
-
-// AllowsModel fails closed when the model allow-list is empty or missing the model.
-func (e *AgentSpendEnvelope) AllowsModel(modelID string) bool {
-	return e != nil && modelID != "" && containsString(e.AllowedModels, modelID)
-}
-
-// EvaluateSpend returns the fail-closed budget verdict for a selected route.
-func (e *AgentSpendEnvelope) EvaluateSpend(amountCents int64, providerID, modelID string) SpendAuthorityDecision {
-	if e == nil {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeNotFound, "spend envelope not found", 0, "")
-	}
-	if !e.Active {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeInactive, "spend envelope is inactive", e.RemainingCents(), e.ContentHash)
-	}
-	now := time.Now().UTC()
-	if e.EffectiveAt.After(now) {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeNotYetEffective, "spend envelope is not yet effective", e.RemainingCents(), e.ContentHash)
-	}
-	if e.ExpiresAt != nil && !now.Before(*e.ExpiresAt) {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeExpired, "spend envelope is expired", e.RemainingCents(), e.ContentHash)
-	}
-	if e.EmergencyStop {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEmergencyStop, "spend envelope emergency stop is active", e.RemainingCents(), e.ContentHash)
-	}
-	if amountCents <= 0 {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonInvalidAmount, "spend amount must be positive", e.RemainingCents(), e.ContentHash)
-	}
-	if amountCents > e.RemainingCents() {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonBalanceInsufficient, "spend exceeds remaining envelope balance", e.RemainingCents(), e.ContentHash)
-	}
-	if e.PerRequestMaxCents > 0 && amountCents > e.PerRequestMaxCents {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonPerRequestLimit, "spend exceeds per-request envelope limit", e.RemainingCents(), e.ContentHash)
-	}
-	if !e.AllowsProvider(providerID) {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonProviderNotAllowed, "provider is not allowed by spend envelope", e.RemainingCents(), e.ContentHash)
-	}
-	if !e.AllowsModel(modelID) {
-		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonModelNotAllowed, "model is not allowed by spend envelope", e.RemainingCents(), e.ContentHash)
-	}
-	if e.RequiresApproval(amountCents) {
-		return newSpendAuthorityDecision(BudgetVerdictEscalate, SpendReasonApprovalRequired, "spend requires approval", e.RemainingCents(), e.ContentHash)
-	}
-	return newSpendAuthorityDecision(BudgetVerdictAllow, SpendReasonOKWithinEnvelope, "spend is within envelope", e.RemainingCents(), e.ContentHash)
-}
-
-// Validate ensures the envelope is well-formed. Runtime state can still deny it.
-func (e *AgentSpendEnvelope) Validate() error {
-	if e == nil {
-		return errors.New("agent_spend_envelope: envelope is nil")
-	}
-	if e.ID == "" {
-		return errors.New("agent_spend_envelope: id is required")
-	}
-	if e.TenantID == "" {
-		return errors.New("agent_spend_envelope: tenant_id is required")
-	}
-	if e.AgentID == "" {
-		return errors.New("agent_spend_envelope: agent_id is required")
-	}
-	if e.PrincipalID == "" {
-		return errors.New("agent_spend_envelope: principal_id is required")
-	}
-	if e.BudgetID == "" {
-		return errors.New("agent_spend_envelope: budget_id is required")
-	}
-	if e.Currency == "" {
-		return errors.New("agent_spend_envelope: currency is required")
-	}
-	if e.Period == "" {
-		return errors.New("agent_spend_envelope: period is required")
-	}
-	if e.MaxAmountCents <= 0 {
-		return errors.New("agent_spend_envelope: max_amount_cents must be positive")
-	}
-	if e.UsedAmountCents < 0 {
-		return errors.New("agent_spend_envelope: used_amount_cents cannot be negative")
-	}
-	if e.ReservedAmountCents < 0 {
-		return errors.New("agent_spend_envelope: reserved_amount_cents cannot be negative")
-	}
-	if e.UsedAmountCents > e.MaxAmountCents || e.ReservedAmountCents > e.MaxAmountCents-e.UsedAmountCents {
-		return errors.New("agent_spend_envelope: used plus reserved exceeds max_amount_cents")
-	}
-	if e.PerRequestMaxCents <= 0 {
-		return errors.New("agent_spend_envelope: per_request_max_cents must be positive")
-	}
-	if e.PerRequestMaxCents > e.MaxAmountCents {
-		return errors.New("agent_spend_envelope: per_request_max_cents exceeds max_amount_cents")
-	}
-	if e.ApprovalRequiredAboveCents < 0 {
-		return errors.New("agent_spend_envelope: approval_required_above_cents cannot be negative")
-	}
-	if len(e.AllowedProviders) == 0 {
-		return errors.New("agent_spend_envelope: at least one allowed provider is required")
-	}
-	if len(e.AllowedModels) == 0 {
-		return errors.New("agent_spend_envelope: at least one allowed model is required")
-	}
-	if e.PolicyHash == "" {
-		return errors.New("agent_spend_envelope: policy_hash is required")
-	}
-	if e.ExpiresAt != nil && e.ExpiresAt.Before(e.EffectiveAt) {
-		return errors.New("agent_spend_envelope: expires_at must be after effective_at")
-	}
-	return nil
-}
-
-func (e *AgentSpendEnvelope) computeHash() string {
-	return hashSpendAuthorityCanonical(struct {
-		ID                  string       `json:"id"`
-		TenantID            string       `json:"tenant_id"`
-		WorkspaceID         string       `json:"workspace_id,omitempty"`
-		AgentID             string       `json:"agent_id"`
-		PrincipalID         string       `json:"principal_id"`
-		BudgetID            string       `json:"budget_id"`
-		Currency            string       `json:"currency"`
-		Period              SpendPeriod  `json:"period"`
-		MaxAmountCents      int64        `json:"max_amount_cents"`
-		UsedAmountCents     int64        `json:"used_amount_cents"`
-		ReservedAmountCents int64        `json:"reserved_amount_cents"`
-		PerRequestMaxCents  int64        `json:"per_request_max_cents"`
-		ApprovalAboveCents  int64        `json:"approval_required_above_cents,omitempty"`
-		AllowedProviders    []string     `json:"allowed_providers"`
-		AllowedModels       []string     `json:"allowed_models"`
-		FallbackModels      []ModelRoute `json:"fallback_models,omitempty"`
-		ModelSubstitution   bool         `json:"allow_model_substitution"`
-		EmergencyStop       bool         `json:"emergency_stop"`
-		Active              bool         `json:"active"`
-		PolicyHash          string       `json:"policy_hash"`
-	}{
-		e.ID,
-		e.TenantID,
-		e.WorkspaceID,
-		e.AgentID,
-		e.PrincipalID,
-		e.BudgetID,
-		e.Currency,
-		e.Period,
-		e.MaxAmountCents,
-		e.UsedAmountCents,
-		e.ReservedAmountCents,
-		e.PerRequestMaxCents,
-		e.ApprovalRequiredAboveCents,
-		e.AllowedProviders,
-		e.AllowedModels,
-		e.FallbackModels,
-		e.AllowModelSubstitution,
-		e.EmergencyStop,
-		e.Active,
-		e.PolicyHash,
-	})
-}
-
 // SpendAuthorityDecision is the auditable outcome of envelope evaluation.
 type SpendAuthorityDecision struct {
 	Verdict        BudgetVerdict   `json:"verdict"`
@@ -305,18 +103,6 @@ type SpendAuthorityDecision struct {
 	RemainingCents int64           `json:"remaining_cents"`
 	EnvelopeHash   string          `json:"envelope_hash,omitempty"`
 	ContentHash    string          `json:"content_hash"`
-}
-
-func newSpendAuthorityDecision(verdict BudgetVerdict, code SpendReasonCode, reason string, remainingCents int64, envelopeHash string) SpendAuthorityDecision {
-	d := SpendAuthorityDecision{
-		Verdict:        verdict,
-		ReasonCode:     code,
-		Reason:         reason,
-		RemainingCents: remainingCents,
-		EnvelopeHash:   envelopeHash,
-	}
-	d.ContentHash = d.computeHash()
-	return d
 }
 
 func (d SpendAuthorityDecision) computeHash() string {
@@ -375,32 +161,6 @@ type RouteQuote struct {
 	CreatedAt                 time.Time         `json:"created_at"`
 	ExpiresAt                 time.Time         `json:"expires_at"`
 	ContentHash               string            `json:"content_hash"`
-}
-
-// NewRouteQuote creates a route quote with deterministic content hash.
-func NewRouteQuote(id, tenantID, spendIntentID, envelopeID, agentID string, selected ModelRoute, quotedAmountCents, maxAmountCents int64, currency, routePolicyHash string, expiresAt time.Time, decision SpendAuthorityDecision) *RouteQuote {
-	q := &RouteQuote{
-		ID:                        id,
-		TenantID:                  tenantID,
-		SpendIntentID:             spendIntentID,
-		EnvelopeID:                envelopeID,
-		AgentID:                   agentID,
-		RequestedProviderID:       selected.ProviderID,
-		RequestedModelID:          selected.ModelID,
-		SelectedProviderID:        selected.ProviderID,
-		SelectedModelID:           selected.ModelID,
-		ProviderPriceSnapshotHash: selected.PriceSnapshotHash,
-		QuotedAmountCents:         quotedAmountCents,
-		MaxAmountCents:            maxAmountCents,
-		Currency:                  currency,
-		RoutePolicyHash:           routePolicyHash,
-		BudgetVerdict:             decision.Verdict,
-		ReasonCode:                decision.ReasonCode,
-		CreatedAt:                 time.Now().UTC(),
-		ExpiresAt:                 expiresAt,
-	}
-	q.ContentHash = q.computeHash()
-	return q
 }
 
 // Expired reports whether the quote can no longer be used.
@@ -538,32 +298,6 @@ type BudgetVerdictReceipt struct {
 	ContentHash               string          `json:"content_hash"`
 	SignatureKeyID            string          `json:"signature_key_id"`
 	Signature                 string          `json:"signature"`
-}
-
-// NewBudgetVerdictReceipt creates an unsigned pre-dispatch receipt.
-func NewBudgetVerdictReceipt(id, tenantID, spendIntentID, envelopeID, agentID, providerID, modelID string, quotedAmountCents, maxAmountCents int64, currency, providerPriceSnapshotHash, routePolicyHash, evidencePackRef string, decision SpendAuthorityDecision) *BudgetVerdictReceipt {
-	r := &BudgetVerdictReceipt{
-		ID:                        id,
-		TenantID:                  tenantID,
-		SpendIntentID:             spendIntentID,
-		EnvelopeID:                envelopeID,
-		AgentID:                   agentID,
-		ProviderID:                providerID,
-		ModelID:                   modelID,
-		ProviderPriceSnapshotHash: providerPriceSnapshotHash,
-		QuotedAmountCents:         quotedAmountCents,
-		MaxAmountCents:            maxAmountCents,
-		Currency:                  currency,
-		BudgetVerdict:             decision.Verdict,
-		ReasonCode:                decision.ReasonCode,
-		DecisionHash:              decision.ContentHash,
-		EnvelopeHash:              decision.EnvelopeHash,
-		RoutePolicyHash:           routePolicyHash,
-		EvidencePackRef:           evidencePackRef,
-		CreatedAt:                 time.Now().UTC(),
-	}
-	r.ContentHash = r.computeHash()
-	return r
 }
 
 // Seal signs the canonical receipt hash with an Ed25519 key.
@@ -823,34 +557,6 @@ type UsageReceipt struct {
 	ContentHash               string            `json:"content_hash"`
 }
 
-// NewUsageReceipt creates a completed usage receipt with deterministic hash.
-func NewUsageReceipt(id, tenantID, routeQuoteID, spendIntentID, envelopeID, agentID, providerID, modelID string, quotedAmountCents, providerCostCents, platformFeeCents int64, currency, policyHash, evidencePackRef string) *UsageReceipt {
-	actualAmountCents := providerCostCents + platformFeeCents
-	r := &UsageReceipt{
-		ID:                id,
-		TenantID:          tenantID,
-		RouteQuoteID:      routeQuoteID,
-		SpendIntentID:     spendIntentID,
-		EnvelopeID:        envelopeID,
-		AgentID:           agentID,
-		ProviderID:        providerID,
-		ModelID:           modelID,
-		QuotedAmountCents: quotedAmountCents,
-		ActualAmountCents: actualAmountCents,
-		ProviderCostCents: providerCostCents,
-		PlatformFeeCents:  platformFeeCents,
-		BalanceDebitCents: actualAmountCents,
-		Currency:          currency,
-		BudgetVerdict:     BudgetVerdictAllow,
-		ReasonCode:        SpendReasonOKWithinEnvelope,
-		PolicyHash:        policyHash,
-		EvidencePackRef:   evidencePackRef,
-		CreatedAt:         time.Now().UTC(),
-	}
-	r.ContentHash = r.computeHash()
-	return r
-}
-
 // Reseal recomputes ContentHash after settlement-linkage fields
 // (SettlementReceiptHash, LedgerEntryIDs) are populated post-construction.
 func (r *UsageReceipt) Reseal() string {
@@ -1005,24 +711,6 @@ type SettlementReceipt struct {
 	ContentHash            string                  `json:"content_hash"`
 }
 
-// NewSettlementReceipt creates a settlement receipt with deterministic hash.
-func NewSettlementReceipt(id, tenantID, usageReceiptID, routeQuoteID, treasuryAccountID, sourceUsageReceiptHash, currency, evidencePackRef string, entries []SettlementLedgerEntry) *SettlementReceipt {
-	s := &SettlementReceipt{
-		ID:                     id,
-		TenantID:               tenantID,
-		UsageReceiptID:         usageReceiptID,
-		RouteQuoteID:           routeQuoteID,
-		TreasuryAccountID:      treasuryAccountID,
-		SourceUsageReceiptHash: sourceUsageReceiptHash,
-		LedgerEntries:          entries,
-		Currency:               currency,
-		EvidencePackRef:        evidencePackRef,
-		CreatedAt:              time.Now().UTC(),
-	}
-	s.ContentHash = s.computeHash()
-	return s
-}
-
 // Balanced reports whether debits equal credits.
 func (s *SettlementReceipt) Balanced() bool {
 	if s == nil {
@@ -1137,13 +825,4 @@ func hashSpendAuthorityCanonical(value any) string {
 	canon, _ := json.Marshal(value)
 	h := sha256.Sum256(canon)
 	return "sha256:" + hex.EncodeToString(h[:])
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }

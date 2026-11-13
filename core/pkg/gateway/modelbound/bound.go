@@ -184,20 +184,6 @@ type bounder struct {
 	toolPrompt   bool
 }
 
-// CheckBody parses body as one JSON object, refuses a key repeated at any
-// depth, and checks it with Check. The Bound is never nil.
-func CheckBody(api string, body []byte, opts Options) ([]Field, *Bound, *Refusal) {
-	fields, err := ParseObject(body)
-	if err != nil {
-		return nil, &Bound{}, &Refusal{Code: "invalid_json", Message: err.Error()}
-	}
-	if err := CheckNoDuplicateKeys(body); err != nil {
-		return fields, &Bound{}, &Refusal{Code: "invalid_json", Message: "the request body " + err.Error()}
-	}
-	bound, refusal := Check(api, fields, opts)
-	return fields, bound, refusal
-}
-
 // Check refuses what the quote of a request with these top-level members
 // cannot see, and returns the floors of what it keeps and the members to set
 // in the forwarded request. The caller has refused keys repeated at any depth.

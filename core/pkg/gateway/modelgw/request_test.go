@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelbound"
 )
 
 func inspectFor(t *testing.T, api, body string) (*call, *apiError) {
@@ -29,9 +30,11 @@ func TestOnlyDefaultOutputCapsShrinkToAnAffordableQuoteAcrossAPIs(t *testing.T) 
 	for _, tc := range []struct {
 		api, body, capField string
 	}{
-		{effectargs.APIOpenAIResponses, `{"model":"gpt-6-sol","input":"budget"}`, "max_output_tokens"},
-		{effectargs.APIOpenAIChat, `{"model":"gpt-6-sol","messages":[{"role":"user","content":"budget"}]}`, "max_completion_tokens"},
-		{effectargs.APIAnthropicMessages, `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"budget"}]}`, "max_tokens"},
+		// The bodies name store false and the standard service tier, which the
+		// gateway otherwise sets, so an explicit cap leaves them untouched.
+		{effectargs.APIOpenAIResponses, `{"model":"gpt-6-sol","input":"budget","store":false,"service_tier":"default"}`, "max_output_tokens"},
+		{effectargs.APIOpenAIChat, `{"model":"gpt-6-sol","messages":[{"role":"user","content":"budget"}],"service_tier":"default"}`, "max_completion_tokens"},
+		{effectargs.APIAnthropicMessages, `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"budget"}],"service_tier":"standard_only"}`, "max_tokens"},
 	} {
 		t.Run(tc.api, func(t *testing.T) {
 			c, refusal := inspectFor(t, tc.api, tc.body)
@@ -71,7 +74,7 @@ func TestOnlyDefaultOutputCapsShrinkToAnAffordableQuoteAcrossAPIs(t *testing.T) 
 func TestEscapedPromptCacheKeysReserveTheCacheWriteTariff(t *testing.T) {
 	for _, key := range []string{`cache_control`, `\u0063ache_control`, `cache_\u0063ontrol`, `\u0063\u0061\u0063\u0068\u0065\u005f\u0063\u006f\u006e\u0074\u0072\u006f\u006c`} {
 		t.Run(key, func(t *testing.T) {
-			body := `{"model":"claude-sonnet-5-5","max_tokens":1,"messages":[{"role":"user","content":[{"type":"text","text":"cache this","` + key + `":{"type":"ephemeral","ttl":"1h"}}]}]}`
+			body := `{"model":"claude-sonnet-5-5","max_tokens":1,"service_tier":"standard_only","messages":[{"role":"user","content":[{"type":"text","text":"cache this","` + key + `":{"type":"ephemeral","ttl":"1h"}}]}]}`
 			c, refusal := inspectFor(t, effectargs.APIAnthropicMessages, body)
 			if refusal != nil {
 				t.Fatal(refusal)
@@ -109,9 +112,9 @@ func TestAnUntouchedRequestIsForwardedByteForByte(t *testing.T) {
 	for api, body := range map[string]string{
 		effectargs.APIAnthropicMessages: `{"model": "claude-sonnet-5-5",  "max_tokens": 1024, "stream": true, "messages": [{"role":"user","content":"hi"}],
 		 "system":[{"type":"text","text":"x","cache_control":{"type":"ephemeral"}}], "tools":[{"name":"get","input_schema":{"type":"object"}},{"type":"bash_20250124","name":"bash"}],
-		 "thinking":{"type":"enabled","budget_tokens":512}}`,
-		effectargs.APIOpenAIResponses: `{"model":"gpt-6-sol","input":"hi","max_output_tokens":2048,"stream":true,"tools":[{"type":"function","name":"f","parameters":{}},{"type":"custom","name":"apply_patch"},{"type":"local_shell"}]}`,
-		effectargs.APIOpenAIChat:      `{"model":"gpt-6-sol","messages":[{"role":"user","content":"hi"}],"max_completion_tokens":2048,"stream":true,"stream_options":{"include_usage":true},"tools":[{"type":"function","function":{"name":"f"}}]}`,
+		 "thinking":{"type":"enabled","budget_tokens":512}, "service_tier":"standard_only"}`,
+		effectargs.APIOpenAIResponses: `{"model":"gpt-6-sol","input":"hi","max_output_tokens":2048,"stream":true,"store":false,"service_tier":"flex","tools":[{"type":"function","name":"f","parameters":{}},{"type":"custom","name":"apply_patch"},{"type":"local_shell"}]}`,
+		effectargs.APIOpenAIChat:      `{"model":"gpt-6-sol","messages":[{"role":"user","content":"hi"}],"max_completion_tokens":2048,"stream":true,"stream_options":{"include_usage":true},"service_tier":"default","tools":[{"type":"function","function":{"name":"f"}}]}`,
 	} {
 		c, err := inspectFor(t, api, body)
 		if err != nil {
@@ -140,7 +143,7 @@ func TestMaximumOutputTokensAreClampedOrInjected(t *testing.T) {
 		"messages: null takes the default":                   {effectargs.APIAnthropicMessages, `{"model":"claude-haiku-4-5-20251001","max_tokens":null,"messages":[]}`, want{"max_tokens", 4096}, 4096},
 		"messages: above the clamp is clamped":               {effectargs.APIAnthropicMessages, `{"model":"claude-haiku-4-5-20251001","max_tokens":999999,"messages":[]}`, want{"max_tokens", 32000}, 32000},
 		"messages: an enormous integer is clamped":           {effectargs.APIAnthropicMessages, `{"model":"claude-haiku-4-5-20251001","max_tokens":123456789012345678901234567890,"messages":[]}`, want{"max_tokens", 32000}, 32000},
-		"messages: within the clamp is the client's":         {effectargs.APIAnthropicMessages, `{"model":"claude-haiku-4-5-20251001","max_tokens":100,"messages":[]}`, want{}, 100},
+		"messages: within the clamp is the client's":         {effectargs.APIAnthropicMessages, `{"model":"claude-haiku-4-5-20251001","max_tokens":100,"messages":[],"service_tier":"standard_only"}`, want{}, 100},
 		"responses: absent":                                  {effectargs.APIOpenAIResponses, `{"model":"gpt-6-sol","input":"x"}`, want{"max_output_tokens", 8192}, 8192},
 		"responses: above the clamp":                         {effectargs.APIOpenAIResponses, `{"model":"gpt-6-sol","input":"x","max_output_tokens":100000}`, want{"max_output_tokens", 32000}, 32000},
 		"chat: absent on openai takes max_completion_tokens": {effectargs.APIOpenAIChat, `{"model":"gpt-6-sol","messages":[]}`, want{"max_completion_tokens", 8192}, 8192},
@@ -317,11 +320,11 @@ func TestACacheMarkerMakesTheQuoteCoverCacheWrites(t *testing.T) {
 }
 
 func TestRebuildKeepsOrderAndValuesAndEscapesKeys(t *testing.T) {
-	fields, err := parseObject([]byte(`{"a": 1, "b":  {"x": [1, 2]}, "c\"d": "e"}`))
+	fields, err := modelbound.ParseObject([]byte(`{"a": 1, "b":  {"x": [1, 2]}, "c\"d": "e"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := rebuild(fields, map[string]json.RawMessage{"a": json.RawMessage("9"), "z": json.RawMessage("true")}, []string{"z"})
+	out := modelbound.Rebuild(fields, map[string]json.RawMessage{"a": json.RawMessage("9"), "z": json.RawMessage("true")}, []string{"z"})
 	if string(out) != `{"a":9,"b":{"x": [1, 2]},"c\"d":"e","z":true}` {
 		t.Fatalf("rebuilt = %s", out)
 	}

@@ -140,6 +140,30 @@ sections:
 # They sit apart from the entries because they are anchored to code:
 # when the code moves, the anchor stops matching and the gate says so.
 removal_proofs:
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); err != nil {\n"
+    replace: "\t\tif err := verifyDetached(pub, payload, rec.PayloadSignature); false && err != nil {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\tif tenant == \"\" || r.TenantID != tenant || (hasIntent && (intent == \"\" || r.SpendIntentID != intent)) {\n"
+    replace: "\tif false && (tenant == \"\" || r.TenantID != tenant || (hasIntent && (intent == \"\" || r.SpendIntentID != intent))) {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tif q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\" {\n"
+    replace: "\t\tif false && (q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\") {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+  - control: CTL-016
+    file: core/pkg/spendproxy/export.go
+    find: "\t\t\tif u == nil || u.TenantID != s.TenantID || u.ID != s.UsageReceiptID || u.RouteQuoteID != s.RouteQuoteID {\n"
+    replace: "\t\t\tif false && (u == nil || u.TenantID != s.TenantID || u.ID != s.UsageReceiptID || u.RouteQuoteID != s.RouteQuoteID) {\n"
+    tests:
+      - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
   - control: INV-001
     file: core/pkg/canonicalize/jcs.go
     find: "\tif isASCII(a) && isASCII(b) {\n\t\treturn a < b\n\t}\n"
@@ -418,12 +442,6 @@ removal_proofs:
     replace: "\t\tadmission.EffectHash != request.EffectHash || admission.Action != request.Action {\n\t\treturn nil\n"
     tests:
       - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
-  - control: CTL-016
-    file: core/pkg/api/governed_gateway.go
-    find: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); ok {\n"
-    replace: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); false && ok {\n"
-    tests:
-      - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
   - control: CTL-018
     file: core/pkg/guardian/guardian.go
     find: "\treturn contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)\n}\n"
@@ -485,7 +503,7 @@ removal_proofs:
     find: "\tif authenticated || isLoopbackBindAddr(bindAddr) {\n"
     replace: "\tif true || authenticated || isLoopbackBindAddr(bindAddr) {\n"
     tests:
-      - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+      - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
   - control: CTL-026
     file: core/cmd/helm-ai-kernel/listener_auth.go
     find: "\t\tif !ok || !secretEqual(provided, token) {\n\t\t\tw.Header().Set(\"WWW-Authenticate\", `Bearer realm=\"helm-proxy\"`)\n"
@@ -1826,7 +1844,130 @@ removal_proofs:
     replace: 'fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)'
     tests:
       - "core/cmd/helm-ai-kernel.TestSkillsPublisherTextCannotForgeAVerdict"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif !slices.Contains(names, f.Key) {\n"
+    replace: "\t\tif false && !slices.Contains(names, f.Key) {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/request.go
+    find: "\tset, refusal := boundRequest(cfg, c, fields)\n\tif refusal != nil {\n"
+    replace: "\tset, refusal := boundRequest(cfg, c, fields)\n\tif false && refusal != nil {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/handler.go
+    find: "\theld, err := p.route.Quote(p.call.inputBound(p.call.Body), p.call.MaxOutputTokens, p.call.MayWriteCache)\n"
+    replace: "\theld, err := p.route.Quote(int64(len(p.call.Body)), p.call.MaxOutputTokens, p.call.MayWriteCache)\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/request.go
+    find: "\t\tquote, err := c.Route.Quote(c.inputBound(body), tokens, c.MayWriteCache)\n"
+    replace: "\t\tquote, err := c.Route.Quote(int64(len(body)), tokens, c.MayWriteCache)\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "beta != \"\" && !anthropicBetas[beta] {"
+    replace: "false && !anthropicBetas[beta] {"
+    tests:
+      - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+      - "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif e := storedByID(obj, where, kind, carried); e != nil {\n"
+    replace: "\t\tif e := storedByID(obj, where, kind, carried); false && e != nil {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif raw, ok := Lookup(fields, \"store\"); !ok || IsNull(raw) {\n"
+    replace: "\t\tif raw, ok := Lookup(fields, \"store\"); false && (!ok || IsNull(raw)) {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestResponsesAreNotStored"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif !ok || IsNull(raw) || name == \"auto\" {\n"
+    replace: "\t\tif false && (!ok || IsNull(raw) || name == \"auto\") {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\t\treturn unquoted(\"unsupported_member\", \"%s has the member %q, which the gateway's quote does not understand\", where, key)\n"
+    replace: "\t\t\tcontinue\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\t\t\tif !strings.HasPrefix(kind, \"clear_tool_uses_\") && !strings.HasPrefix(kind, \"clear_thinking_\") {\n"
+    replace: "\t\t\t\tif false {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\t\tif e := citations(block[\"citations\"], at); e != nil {\n"
+    replace: "\t\t\tif e := citations(block[\"citations\"], at); false && e != nil {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "func inlineImage(url string) bool { return strings.HasPrefix(url, \"data:image/\") }"
+    replace: "func inlineImage(url string) bool { return strings.HasPrefix(url, \"data:\") }"
+    tests:
+      - "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\t\tif !chatMessageMembers[key] {\n"
+    replace: "\t\t\tif false && !chatMessageMembers[key] {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed"
 
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif !IsNull(obj[key]) && !slices.Contains(allowed, key) {\n"
+    replace: "\t\tif false && !IsNull(obj[key]) && !slices.Contains(allowed, key) {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestPartMembersAreClosedOnTheModelGateway"
+      - "core/pkg/gateway/modelbound.TestPartItemAndBlockMembersAreClosed"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif _, isString := String(raw); !isString {\n\t\t\treturn memberRefusal(\"instructions\""
+    replace: "\t\tif _, isString := String(raw); false && !isString {\n\t\t\treturn memberRefusal(\"instructions\""
+    tests:
+      - "core/pkg/gateway/modelgw.TestPartMembersAreClosedOnTheModelGateway"
+      - "core/pkg/gateway/modelbound.TestPartItemAndBlockMembersAreClosed"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "\t\tif json.Unmarshal(raw, &stream) != nil {\n\t\t\treturn &Refusal{Code: \"invalid_stream\""
+    replace: "\t\tif false && json.Unmarshal(raw, &stream) != nil {\n\t\t\treturn &Refusal{Code: \"invalid_stream\""
+    tests:
+      - "core/pkg/gateway/modelbound.TestStreamMustBeABoolean"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/upstream.go
+    find: "\t\tif c.API != effectargs.APIAnthropicMessages && slices.Contains(anthropicOnlyHeaders, name) {\n"
+    replace: "\t\tif false && c.API != effectargs.APIAnthropicMessages && slices.Contains(anthropicOnlyHeaders, name) {\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestAnthropicBetaIsNotForwardedOffTheMessagesAPI"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/config.go
+    find: "\t\tr.Price.defaultCacheWrites()\n"
+    replace: "\t\t_ = r.Price\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestCacheWritesAreHeldAtTheWritePrice"
+  - control: CTL-066
+    file: core/pkg/gateway/modelgw/config.go
+    find: "\t\tv := (input*5 + 3) / 4\n"
+    replace: "\t\tv := (input * 5) / 4\n"
+    tests:
+      - "core/pkg/gateway/modelgw.TestTheFiveMinuteWriteDefaultRoundsUp"
+  - control: CTL-066
+    file: core/pkg/gateway/modelbound/bound.go
+    find: "AnthropicToolSystemTokens = 600"
+    replace: "AnthropicToolSystemTokens = 0"
+    tests:
+      - "core/pkg/gateway/modelbound.TestFloorsArePinned"
 controls:
 
   - id: INV-001
@@ -3257,33 +3398,41 @@ controls:
       bypass: []
 
   - id: CTL-016
-    title: "Spend proxy quotes before dispatch"
+    title: "Historical spend receipt evidence verification"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      In `helm-ai-kernel spend-proxy`, an inference request is dispatched only
-      after an allowing quote, and a replayed idempotency key never reaches the
-      provider.
+      Offline spend exports verify historical receipt hashes and detached
+      signatures against pinned issuer keys. Record identities match their
+      signed payloads, and a settlement binds its intent through its signed
+      usage receipt. Relabeled release records require the signed versioned
+      action and reason. These files never authorize new spending or change
+      the canonical Postgres ledger. The legacy live gateway and local-file
+      reconciliation have been retired; helm-gateway owns model effects.
     status: enforced
     entry_points:
-      - "core/pkg/api.GovernedGateway.handleInference"
-      - "core/pkg/inferencegateway.Engine.Quote"
+      - "core/pkg/spendproxy.LoadRecords"
+      - "core/pkg/spendproxy.ExportEvidencePacks"
+      - "core/pkg/spendproxy.ExportSavingsEvidencePack"
+      - "core/pkg/spendproxy.VerifySavingsPackDirWithIssuer"
     config:
-      - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
+      - "spend-proxy export --public-key (repeatable pinned issuer keys)"
+      - "spend-proxy savings-verify --issuer-key-id and --issuer-public-key"
     protected_operations:
-      - "Inference requests through the spend proxy."
+      - "Offline export and verification of historical spend evidence."
     bypass_assumptions:
-      - "The ledger is a JSONL file, not Postgres (R5)."
-      - "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration."
-      - "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
+      - "The verifier's issuer keys must be obtained independently of the receipt directory."
+      - "Historical evidence proves only its recorded checks, never current spending authority."
     tests:
       allowed:
-        - "core/pkg/spendproxy.TestGovernedRouteEndToEnd"
+        - "core/pkg/spendproxy.TestLegacySpendEvidenceStillExportsOffline"
+        - "core/pkg/spendproxy.TestLegacySavingsStillExportsAndVerifiesOffline"
       forbidden:
-        - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
-        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
-        - "core/pkg/spendproxy.TestUnknownEnvelopeFailsClosed"
+        - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
+        - "core/pkg/spendproxy.TestLegacySavingsRefusesIncompleteOrUnboundCapture"
+        - "core/cmd/helm-ai-kernel.TestSpendProxyLiveCommandIsRetired"
+        - "core/cmd/helm-ai-kernel.TestSpendProxyCannotReconcileAuthorityInLocalFiles"
       removal:
-        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
+        - "core/pkg/spendproxy.TestLegacySpendExportRefusesForgedRecords"
       bypass: []
 
   - id: CTL-017
@@ -3541,32 +3690,30 @@ controls:
     title: "Non-loopback listeners require auth"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback
-      address without authentication, and the proxy requires its token as a
-      bearer. The spend-proxy has no caller credential, so it never binds
-      beyond loopback.
+      The proxy and MCP listeners refuse to start on a non-loopback address
+      without authentication, and the proxy requires its token as a bearer.
+      The retired spend-proxy command starts no listener.
     status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.requireListenerAuth"
       - "core/cmd/helm-ai-kernel.wrapProxyAuth"
     config:
       - "helm-ai-kernel proxy and mcp serve bind flags and tokens"
-      - "helm-ai-kernel spend-proxy --addr"
     protected_operations:
-      - "Starting the proxy, MCP or spend-proxy listener on a non-loopback address."
+      - "Starting the proxy or MCP listener on a non-loopback address."
       - "Calling the proxy when its token is configured."
     bypass_assumptions:
       - "A loopback bind needs no authentication; anything on the host can reach it."
-      - "Removal of the bind check is proven through the spend-proxy refusal, which fails without serving. The proxy and MCP refusal tests would start a listener and block instead of failing, so they are forbidden tests only."
+      - "The bind-check removal proof calls the listener admission function directly, so it fails without opening a socket or waiting for traffic."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       forbidden:
         - "core/cmd/helm-ai-kernel.TestProxyRefusesNonLoopbackBindWithoutToken"
         - "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth"
-        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+        - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
       removal:
-        - "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+        - "core/cmd/helm-ai-kernel.TestListenerBindRequiresAuth"
         - "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
       bypass:
         - "core/cmd/helm-ai-kernel.TestMetricsLoopbackOnlyOrAuthenticated"
@@ -4417,6 +4564,7 @@ controls:
       - "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
     tests:
       allowed:
+        - "core/pkg/gateway/modelgw.TestPostgresModelBudgetSurvivesGatewayRecreation"
         - "core/pkg/gateway/admission.TestPostgresProposeAdmitsDeniesAndEscalates"
         - "core/pkg/gateway/server.TestPostgresGatewayAPIOnTheWire"
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
@@ -5803,3 +5951,96 @@ controls:
         - "core/pkg/skillpacks.TestLoadDirReportsAnUnreadableManifest"
         - "core/pkg/skillpacks.TestLoadDirRefusesNamedPipesBeforeScanning"
         - "core/cmd/helm-ai-kernel.TestSkillsSearchInspectAndListReportComputedPublisherState"
+  - id: CTL-066
+    title: "A model call's hold bounds what the provider can bill"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway's model gateway quotes a call at one token per request byte
+      plus a token floor for each inline image and each tool definition the
+      provider adds, and the clamped output maximum at the route's price, the
+      input at the dearest cache-write price when the request may write a
+      prompt cache (on an anthropic or openai-compatible route that names
+      none, 1.25 and 2 times input), and refuses with 400, before any attempt
+      exists, every request form whose bill that quote does not bound: a
+      member of the request, of a message, of an input item, of a content
+      part, of a block or block source, or of reasoning, text, thinking,
+      output_config, output_format or context_management outside a closed
+      list per API (core/pkg/gateway/modelbound), Responses instructions that
+      are not a string, so a stored conversation, a stored prompt, store true,
+      a reasoning item without its encrypted content, an item named by its id
+      alone, remote or uploaded media, a data URL that is not an image, PDFs,
+      cited documents, audio, predicted outputs, routing members, priority
+      tiers, compaction and Anthropic's speed and inference_geo, and an
+      anthropic-beta outside its allowlist, which it forwards on the Messages
+      API only. It forwards a Responses request with store false unless it
+      names it, and on a vendor route the standard service tier when the
+      request names none or auto (helm-tracker#313).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/modelgw.inspect"
+      - "core/pkg/gateway/modelgw.boundRequest"
+      - "core/pkg/gateway/modelgw.anthropicBetaRefusal"
+      - "core/pkg/gateway/modelgw.Route.Quote"
+      - "core/pkg/gateway/modelbound.Check"
+      - "core/pkg/gateway/modelbound.BetaRefusal"
+      - "core/pkg/gateway/modelgw.ParseConfig"
+    config:
+      - "HELM_GATEWAY_MODEL_ROUTES_FILE: each route's price, output maximum and provider kind (openai and anthropic get the standard service tier named; anthropic and openai-compatible routes that name no cache_write_5m or cache_write_1h get 1.25 and 2 times input)."
+    protected_operations:
+      - "Every model call on helm-gateway serve's /v1/responses, /v1/chat/completions and /v1/messages, on the main and the worker listener."
+    bypass_assumptions:
+      - "Bytes bound tokens because the providers' tokenizers emit at most one token per byte, and chat templates and tool definitions rendered from a request's JSON cost no more tokens than their bytes."
+      - "The image and tool floors are at or above the costs the providers document (docs/architecture/model-gateway.md); a provider that bills more for an image or a hidden tool definition than documented is not bounded."
+      - "The provider honours the output maximum, and the route's price is the provider's highest for a request of max_request_bytes at the tier the gateway sends; on an openai-compatible route an absent service tier is assumed to bill at the route's price."
+      - "An input item that carries its content is billed for that content, not for a stored item of the same id."
+      - "Headers other than anthropic-beta change nothing the provider bills; anthropic-beta and anthropic-version are forwarded on the Messages API only."
+      - "Encrypted reasoning (encrypted_content), thinking signatures and redacted_thinking data a request carries cost no more input tokens than their bytes; an openai-compatible upstream keeps the reasoning budget reasoning_effort asks for within the forwarded output maximum."
+      - "A cache write bills at most the route's cache-write price; on an openai-compatible route the gateway reads no cache-write count and settles a write at the input price, though the hold covers it."
+      - "A provider that bills above the hold anyway is recorded: the confirmed amount stays on the budget counter and billable is capped at the hold."
+    tests:
+      allowed:
+        - "core/pkg/gateway/modelgw.TestRequestsTheQuoteUnderstandsStillPass"
+        - "core/pkg/gateway/modelgw.TestHiddenToolDefinitionsAreInTheHold"
+        - "core/pkg/gateway/modelgw.TestResponsesAreNotStored"
+        - "core/pkg/gateway/modelbound.TestKnownMembersPass"
+      forbidden:
+        - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+        - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+        - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+        - "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted"
+        - "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused"
+        - "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier"
+        - "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+        - "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused"
+        - "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage"
+        - "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed"
+        - "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
+        - "core/pkg/gateway/modelgw.TestPartMembersAreClosedOnTheModelGateway"
+        - "core/pkg/gateway/modelgw.TestAnthropicBetaIsNotForwardedOffTheMessagesAPI"
+        - "core/pkg/gateway/modelgw.TestCacheWritesAreHeldAtTheWritePrice"
+        - "core/pkg/gateway/modelgw.TestTheFiveMinuteWriteDefaultRoundsUp"
+        - "core/pkg/gateway/modelbound.TestPartItemAndBlockMembersAreClosed"
+        - "core/pkg/gateway/modelbound.TestFloorsArePinned"
+        - "core/pkg/gateway/modelbound.TestStreamMustBeABoolean"
+        - "core/pkg/gateway/modelbound.TestCacheWritesNeedTheOption"
+      removal:
+        - "core/pkg/gateway/modelgw.TestRequestFormsWhoseCostTheQuoteCannotSeeAreRefused"
+        - "core/pkg/gateway/modelgw.TestTheHoldCoversWhatAnAllowedRequestCanBill"
+        - "core/pkg/gateway/modelgw.TestLongContextBetaIsRefused"
+        - "core/pkg/gateway/modelgw.TestAnthropicBetasAreAllowlisted"
+        - "core/pkg/gateway/modelgw.TestStoredStateNamedByIDIsRefused"
+        - "core/pkg/gateway/modelgw.TestResponsesAreNotStored"
+        - "core/pkg/gateway/modelgw.TestServiceTierIsTheStandardTier"
+        - "core/pkg/gateway/modelgw.TestNestedMembersAreClosed"
+        - "core/pkg/gateway/modelgw.TestCitedDocumentsAreRefused"
+        - "core/pkg/gateway/modelgw.TestInlineMediaMustBeAnImage"
+        - "core/pkg/gateway/modelgw.TestChatMessageMembersAreClosed"
+        - "core/pkg/gateway/modelgw.TestFittedDefaultOutputCountsTheFloors"
+        - "core/pkg/gateway/modelgw.TestPartMembersAreClosedOnTheModelGateway"
+        - "core/pkg/gateway/modelbound.TestPartItemAndBlockMembersAreClosed"
+        - "core/pkg/gateway/modelgw.TestAnthropicBetaIsNotForwardedOffTheMessagesAPI"
+        - "core/pkg/gateway/modelgw.TestCacheWritesAreHeldAtTheWritePrice"
+        - "core/pkg/gateway/modelgw.TestTheFiveMinuteWriteDefaultRoundsUp"
+        - "core/pkg/gateway/modelbound.TestFloorsArePinned"
+        - "core/pkg/gateway/modelbound.TestStreamMustBeABoolean"
+      bypass: []

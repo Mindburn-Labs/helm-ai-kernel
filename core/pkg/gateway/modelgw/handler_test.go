@@ -209,7 +209,7 @@ func TestTheQuotePricesTheWorstCaseAndZeroFillsOtherSummedUnits(t *testing.T) {
 			return admission.Attempt{ID: "01a0f278-0000-7000-8000-0000000000aa", State: "DENIED", ReasonCode: string(contracts.ReasonBudgetExceeded)}, false, nil
 		}}
 	url := stubbed(t, ledger, true)
-	body := `{"model":"claude-sonnet-5-5","max_tokens":1000,"messages":[]}`
+	body := `{"model":"claude-sonnet-5-5","max_tokens":1000,"messages":[],"service_tier":"standard_only"}`
 	post(t, url, "/v1/messages", map[string]string{"Authorization": "Bearer " + tokenAgent}, body)
 	in := ledger.proposed[0]
 	sonnet := mustRoute(t, routeSonnet)

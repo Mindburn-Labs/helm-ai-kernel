@@ -49,7 +49,7 @@ func buildSavingsReceiptSet(t *testing.T, intentID, envelopeID, requestedModel, 
 	t.Helper()
 
 	decision := economicAllow(100_000, "sha256:env-sav")
-	quote := economic.NewRouteQuote(
+	quote := fixtureNewRouteQuote(
 		"rq-"+intentID, fixTenant, intentID, envelopeID, "agent-sav",
 		economic.ModelRoute{ProviderID: "digitalocean", ModelID: selectedModel, PriceSnapshotHash: priceSHA},
 		debitCents, 50, "USD", "sha256:route-policy-sav", at.Add(10*time.Minute), decision,
@@ -59,7 +59,7 @@ func buildSavingsReceiptSet(t *testing.T, intentID, envelopeID, requestedModel, 
 	quote.CreatedAt = at
 	quote.Reseal()
 
-	budget := economic.NewBudgetVerdictReceipt(
+	budget := fixtureNewBudgetVerdictReceipt(
 		"bv-"+intentID, fixTenant, intentID, envelopeID, "agent-sav", "digitalocean", selectedModel,
 		debitCents, 50, "USD", priceSHA, "sha256:route-policy-sav", "evidence://"+intentID, decision,
 	)
@@ -67,7 +67,7 @@ func buildSavingsReceiptSet(t *testing.T, intentID, envelopeID, requestedModel, 
 		t.Fatalf("seal budget verdict: %v", err)
 	}
 
-	usage := economic.NewUsageReceipt(
+	usage := fixtureNewUsageReceipt(
 		"ur-"+intentID, fixTenant, "rq-"+intentID, intentID, envelopeID, "agent-sav", "digitalocean", selectedModel,
 		debitCents, debitCents, 0, "USD", "sha256:policy-sav", "evidence://"+intentID,
 	)
@@ -81,7 +81,7 @@ func buildSavingsReceiptSet(t *testing.T, intentID, envelopeID, requestedModel, 
 		{ID: "sle-" + intentID + "-debit", AccountID: "balance-sav", Direction: economic.SettlementDebit, AmountCents: usage.BalanceDebitCents, Currency: "USD", Reference: "balance:balance-sav"},
 		{ID: "sle-" + intentID + "-credit", AccountID: "treasury-sav", Direction: economic.SettlementCredit, AmountCents: usage.BalanceDebitCents, Currency: "USD", Reference: "treasury:treasury-sav"},
 	}
-	settlement := economic.NewSettlementReceipt("settle-"+intentID, fixTenant, "ur-"+intentID, "rq-"+intentID, "treasury-sav", usage.ContentHash, "USD", "evidence://"+intentID, entries)
+	settlement := fixtureNewSettlementReceipt("settle-"+intentID, fixTenant, "ur-"+intentID, "rq-"+intentID, "treasury-sav", usage.ContentHash, "USD", "evidence://"+intentID, entries)
 
 	usage.LedgerEntryIDs = []string{entries[0].ID, entries[1].ID}
 	usage.SettlementReceiptHash = settlement.ContentHash

@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-90 controls: 52 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
+91 controls: 53 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -113,7 +113,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
 | CTL-015 | Effect reservation before dispatch | observed-only | Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule. |
-| CTL-016 | Spend proxy quotes before dispatch | enforced | — |
+| CTL-016 | Historical spend receipt evidence verification | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 | CTL-018 | Tainted-data egress deny | enforced | — |
 | CTL-019 | Guardian threat-scan gate | enforced | — |
@@ -163,6 +163,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-063 | The evaluated action and its effect class come from the request tuple and the catalog | enforced | — |
 | CTL-064 | Receipt verifiers match member names exactly and do not check unversioned receipts | enforced | — |
 | CTL-065 | A Skill Pack is first party only by a digest compiled into the binary | enforced | — |
+| CTL-066 | A model call's hold bounds what the provider can bill | enforced | — |
 
 ---
 

@@ -122,6 +122,19 @@ func TestCorrelateHostReadsAReceiptFileAsItsReaderDoes(t *testing.T) {
 	if code != 2 || !strings.Contains(stderr, "network.json") || !strings.Contains(stderr, "letter case") {
 		t.Fatalf("a receipt file with a letter-case Verdict must stop correlate-host and be named: exit=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
+	for _, tc := range []struct {
+		name, receipt, reason string
+	}{
+		{"duplicate verdict", strings.TrimSuffix(deny, "}") + `,"verdict":"ALLOW"}`, "duplicate object member"},
+		{"invalid JSON", `{"receipt_id":`, "invalid receipt JSON"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := correlate(tc.receipt)
+			if code != 2 || !strings.Contains(stderr, "network.json") || !strings.Contains(stderr, tc.reason) {
+				t.Fatalf("a refused receipt must stop correlate-host and be named: exit=%d stdout=%s stderr=%s", code, stdout, stderr)
+			}
+		})
+	}
 }
 
 func writeCLIHostChain(t *testing.T, dir, workload, ip string) (string, string) {

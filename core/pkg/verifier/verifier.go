@@ -1205,14 +1205,13 @@ func (n receiptNode) matches(succ *contracts.Receipt) bool {
 	if want == "" {
 		return false
 	}
-	ids := n.hashes
-	if succ.SignatureVersion != contracts.ReceiptSignatureV5 && n.declared != "" {
-		ids = append(ids[:len(ids):len(ids)], n.declared)
-	}
-	for _, h := range ids {
+	for _, h := range n.hashes {
 		if normalizeHash(h) == want {
 			return true
 		}
+	}
+	if succ.SignatureVersion != contracts.ReceiptSignatureV5 && n.declared != "" {
+		return normalizeHash(n.declared) == want
 	}
 	return false
 }

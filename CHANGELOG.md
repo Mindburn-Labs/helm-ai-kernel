@@ -314,8 +314,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - In the chain checks of `helm-ai-kernel verify`, a `receipt.v5` receipt links
   only to a predecessor whose `contracts.ReceiptChainHash`, or the SHA-256 of
   whose file, is its `prev_hash`. A `hash` member a receipt declares about
-  itself links only a successor with no `signature_version`. A pack in which
-  a `receipt.v5` receipt names its predecessor only by that predecessor's
+  itself links only a successor whose `signature_version` is not `receipt.v5`.
+  A pack in which a `receipt.v5` receipt names its predecessor only by that predecessor's
   declared `hash` now fails `chain_integrity` and `lamport_monotonicity`: the
   receipt is unreachable from genesis.
 - `helm-ai-kernel evidence correlate-host` applies the same member-name rules
@@ -416,7 +416,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   the pack follows. The chain checks do not see the last receipt of a chain
   deleted, and a chain of receipts with no `signature_version` still links
   through declared hashes, which nothing can recompute (security ledger
-  F-20).
+  F-20). The signature check does not require every receipt file to be signed:
+  removing the successor's signature members also removes this protection,
+  so the operator can still hide a deletion with one fewer checked signature.
 - `helm-ai-kernel evidence correlate-host` read a network receipt that says
   `DENY` by exact member name, with `"Status":"ALLOW"` and
   `"Verdict":"ALLOW"` appended, as allowed, and reported no Boundary Drift

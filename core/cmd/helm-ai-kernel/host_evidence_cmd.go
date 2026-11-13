@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: external host receipts use classical Ed25519 verification;
+// pack inventory hashes use SHA-256. No post-quantum signature assurance is claimed.
+
 import (
 	"context"
 	"encoding/json"

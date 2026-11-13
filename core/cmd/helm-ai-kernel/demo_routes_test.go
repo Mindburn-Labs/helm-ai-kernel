@@ -333,12 +333,6 @@ func TestDemoVerifyReadsTheReceiptAsItsReaderDoes(t *testing.T) {
 	}
 }
 
-// TestDemoRequestMembersAreMatchedExactly is helm-tracker#305 round 2
-// finding 2. The demo routes decoded the request body into a Go struct, so a
-// member spelled "Receipt" stood in for "receipt": a body whose "receipt" says
-// ALLOW by exact name and whose "Receipt" is the genuine DENY came back valid.
-// The body is now read by exact member name, and any member the route does not
-// take, a letter-case variant included, is refused.
 // TestDemoRequestSchemasDeclareTheMembersTheRoutesTake is helm-tracker#305
 // round 3 finding NF4: the demo routes answer 400 for a request member they
 // do not take, and their OpenAPI request schemas must say so, with
@@ -383,6 +377,12 @@ func TestDemoRequestSchemasDeclareTheMembersTheRoutesTake(t *testing.T) {
 	}
 }
 
+// TestDemoRequestMembersAreMatchedExactly is helm-tracker#305 round 2
+// finding 2. The demo routes decoded the request body into a Go struct, so a
+// member spelled "Receipt" stood in for "receipt": a body whose "receipt" says
+// ALLOW by exact name and whose "Receipt" is the genuine DENY came back valid.
+// The body is now read by exact member name, and any member the route does not
+// take, a letter-case variant included, is refused.
 func TestDemoRequestMembersAreMatchedExactly(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("demo-test")
 	if err != nil {

@@ -52,6 +52,45 @@ func TestSpendProxyRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
+// The spend proxy holds the upstream provider key and has no caller
+// credential, so it follows the listener rule of `proxy` and `mcp serve`: an
+// unauthenticated listener binds loopback only. The config is invalid on
+// purpose, so a build without the refusal fails on it instead of serving, and
+// this test fails rather than hangs.
+func TestSpendProxyRefusesNonLoopbackBind(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(config, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	receipts := filepath.Join(dir, "receipts")
+	t.Setenv("HELM_SPEND_PROXY_UPSTREAM_KEY", "test-key")
+	t.Setenv("HELM_SPEND_PROXY_SIGNING_SEED", "")
+
+	run := func(addr string) (int, string) {
+		var stdout, stderr bytes.Buffer
+		code := runSpendProxyCmd([]string{"--config", config, "--receipts-dir", receipts, "--addr", addr}, &stdout, &stderr)
+		return code, stderr.String()
+	}
+
+	for _, addr := range []string{"0.0.0.0", "::", "", "10.0.0.5", "example.com"} {
+		code, msg := run(addr)
+		if code != 2 || !strings.Contains(msg, "not loopback") || !strings.Contains(msg, "no caller credential") {
+			t.Fatalf("--addr %q: exit = %d, stderr = %q, want a refusal that says why", addr, code, msg)
+		}
+	}
+	if _, err := os.Stat(receipts); !os.IsNotExist(err) {
+		t.Fatalf("refused spend-proxy still created state: %v", err)
+	}
+
+	for _, addr := range []string{"127.0.0.1", "::1", "localhost"} {
+		code, msg := run(addr)
+		if code != 2 || strings.Contains(msg, "not loopback") || !strings.Contains(msg, "tenant_id is required") {
+			t.Fatalf("--addr %q: exit = %d, stderr = %q, want the loopback bind accepted and the config rejected", addr, code, msg)
+		}
+	}
+}
+
 func TestSpendProxyExampleConfigLoads(t *testing.T) {
 	// The checked-in dogfood config must stay loadable: it is the price-book
 	// source of record for the HELM-615 capture window.

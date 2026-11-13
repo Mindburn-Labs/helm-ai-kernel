@@ -422,7 +422,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -438,7 +438,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		forged := hex.EncodeToString(ed25519.Sign(priv, []byte(payload+"-tampered")))
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged, keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -449,7 +449,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, ""))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -460,7 +460,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam, AllowLegacyV4Receipts: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -473,7 +473,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		doc["signature_profile"] = "hybrid"
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -486,7 +486,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		doc["signature_algorithm"] = "ml-dsa-65"
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -697,7 +697,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -715,7 +715,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		doc["type"] = "mcp_governed_effect_execution"
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -731,7 +731,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		forged := hex.EncodeToString(ed25519.Sign(priv, []byte("exec-001:dec-001:"+signedEffectID+":APPLIED:sha256:out::1:sha256:args-tampered")))
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, forged, keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -742,7 +742,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), ""))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -753,7 +753,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam, AllowLegacyV4Receipts: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -766,7 +766,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		doc["signature_profile"] = "hybrid"
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -907,7 +907,7 @@ func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"),
 			receipt("mcp_policy_decision/proof.read", "mcp_governed_effect_execution"))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -919,7 +919,7 @@ func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"),
 			receipt("mcp_governed_effect_execution/proof.local_write", "mcp_policy_decision"))
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -932,7 +932,7 @@ func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
 		delete(doc, "type")
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
 		sealVerifierFixture(t, dir, "test-session-001")
-		report, err := VerifyBundle(dir)
+		report, err := verifyLegacyDevLocalBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}

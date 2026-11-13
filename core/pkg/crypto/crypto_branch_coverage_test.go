@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,7 +254,12 @@ func TestVerifierKeyringAndHasherErrorBranches(t *testing.T) {
 	if verified := emptyKeyring.Verify([]byte("payload"), []byte("sig")); verified {
 		t.Fatal("empty keyring raw verify should fail")
 	}
-	if _, err := emptyKeyring.VerifyReceipt(&contracts.Receipt{Signature: intent.Signature}); err == nil || !strings.Contains(err.Error(), "no key verified") {
+	if _, err := emptyKeyring.VerifyReceipt(&contracts.Receipt{Signature: intent.Signature, SignatureVersion: contracts.ReceiptSignatureV5}); err == nil ||
+		!strings.Contains(err.Error(), "no key verified") {
 		t.Fatalf("empty keyring receipt error = %v", err)
+	}
+	// An unversioned receipt is not tried against any key: it was not checked.
+	if _, err := emptyKeyring.VerifyReceipt(&contracts.Receipt{Signature: intent.Signature}); !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("empty keyring legacy receipt error = %v, want ErrLegacyReceiptRefused", err)
 	}
 }

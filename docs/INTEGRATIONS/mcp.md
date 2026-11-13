@@ -113,8 +113,13 @@ Verify the emitted EvidencePack offline:
 helm-ai-kernel verify \
   --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> \
   --profile dev-local \
+  --allow-self-attested \
   --json
 ```
+
+The proof pack is sealed by a key carried inside the pack, so `verify` refuses
+it without `--allow-self-attested`. With the flag the result proves internal
+consistency, not who produced the pack.
 
 ## Current Boundary
 

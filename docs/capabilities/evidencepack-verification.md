@@ -44,7 +44,11 @@ that ran: `bundle_format`, `bundle_seal`, `manifest_hashes`,
 `receipt_signatures` and `receipt_chain`. Each check and the outcome is
 `VERIFIED`, `FAILED` or `UNVERIFIABLE`. A seal or receipt signed by any other
 key, including one the bundle carries about itself, is `UNVERIFIABLE` when
-intact and never `VERIFIED`. The route evaluates no policy. The route and the
+intact and never `VERIFIED`. A receipt with no `signature_version` is not
+checked and is `UNVERIFIABLE` too. Every receipt file is read by the parser
+`receipt_verify` uses: a file that writes a member twice, or spells a receipt
+member in another letter case, fails `bundle_format` and no receipt check
+runs. The route evaluates no policy. The route and the
 CLI derive their outcome with one rule: any failed check fails the result, an
 unverifiable or missing required check leaves it `UNVERIFIABLE`, and a result
 in which no check ran is never a pass.

@@ -37,7 +37,7 @@ Typed request/response bodies use Jackson (`jackson-databind`), honoring the
 generated `@JsonProperty` wire names and restoring typed getters on decode.
 Gson remains for the deprecated dynamic `evaluateDecision(Object)` method and
 other untyped `JsonElement` pass-through methods. `HelmClient.health()` returns
-the raw plain-text `/healthz` body.
+the raw `/healthz` body as a string.
 
 Models generated from schemas with `additionalProperties: true` are plain
 beans rather than `HashMap<String, Object>` subclasses, so serializers retain
@@ -50,36 +50,33 @@ their declared fields. Undeclared properties round-trip through
 
 ```java
 import labs.mindburn.helm.HelmClient;
-import labs.mindburn.helm.TypesGen.ChatCompletionRequest;
-import labs.mindburn.helm.TypesGen.ChatCompletionRequestMessagesInner;
-
-import java.util.List;
+import labs.mindburn.helm.TypesGen.EvaluateRequest;
+import labs.mindburn.helm.TypesGen.EvaluateResponse;
 
 class Example {
   public static void main(String[] args) {
-    HelmClient client = new HelmClient("http://127.0.0.1:7714");
-    ChatCompletionRequest req = new ChatCompletionRequest()
-        .model("gpt-6-sol")
-        .messages(List.of(new ChatCompletionRequestMessagesInner()
-            .role(ChatCompletionRequestMessagesInner.RoleEnum.USER)
-            .content("hello")));
-    System.out.println(client.chatCompletions(req));
+    HelmClient client = new HelmClient(
+        "http://127.0.0.1:7714",
+        System.getenv("HELM_ADMIN_API_KEY"),
+        "tenant-a",
+        "operator-a");
+    EvaluateRequest req = new EvaluateRequest()
+        .tool("read-ticket")
+        .effectLevel("ticket:123")
+        .sessionId("example-session");
+    EvaluateResponse decision = client.evaluateDecisionV5(req);
+    System.out.println(decision.getVerdict()); // ALLOW, DENY or ESCALATE
   }
 }
 ```
 
-For a protected tenant-scoped route, pass the API key and explicit server-bound
-tenant and principal IDs. Existing one- and two-argument constructors remain
-available for public routes.
+`/api/v1/evaluate` is a protected tenant-scoped route: pass the API key and the
+tenant and principal the server is configured for. The one- and two-argument
+constructors remain available for public routes.
 
-```java
-HelmClient client = new HelmClient(
-    "http://127.0.0.1:7714",
-    System.getenv("HELM_ADMIN_API_KEY"),
-    "tenant-id",
-    "principal-id"
-);
-```
+`chatCompletions` posts to `/v1/chat/completions`. `helm-ai-kernel serve`
+answers that route with 403 before any upstream is called, because its Guardian
+allows no egress destination (`controls.yaml` CTL-047).
 
 ## Execution Boundary Methods
 

@@ -112,6 +112,9 @@ func TestGovernanceFirewall_RejectsReservedSecurityContextArguments(t *testing.T
 		guardian.ContextSourceChannel,
 		guardian.ContextTrustLevel,
 		guardian.ContextDestination,
+		guardian.ContextEffectClass,
+		guardian.ContextEffectClassSource,
+		guardian.ContextEffectClassDeclared,
 	} {
 		t.Run(key, func(t *testing.T) {
 			err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
@@ -125,6 +128,33 @@ func TestGovernanceFirewall_RejectsReservedSecurityContextArguments(t *testing.T
 			assert.Contains(t, err.Error(), "reserved security context argument")
 		})
 	}
+}
+
+// Tool arguments become top-level members of the policy input, which is where
+// the reserved names carry authority. The same name nested inside an argument
+// is content: a tool may use it there.
+func TestGovernanceFirewall_AllowsReservedNamesNestedInsideAnArgument(t *testing.T) {
+	var captured map[string]interface{}
+	eval := &capturingEvaluator{
+		verdict: guardian.VerdictAllow,
+		capture: func(req guardian.DecisionRequest) { captured = req.Context },
+	}
+	fw := NewGovernanceFirewall(eval, nil)
+	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+		ToolName:  "file_read",
+		SessionID: "sess-1",
+		Arguments: map[string]interface{}{
+			"filter": map[string]interface{}{
+				guardian.ContextEffectClassSource:   "tool_catalog",
+				guardian.ContextEffectClassDeclared: "E0",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, captured, "the request did not reach the evaluator")
+	assert.NotContains(t, captured, guardian.ContextEffectClassSource)
+	assert.NotContains(t, captured, guardian.ContextEffectClassDeclared)
+	assert.Contains(t, captured, "filter")
 }
 
 func TestOAuthScopeContext_ForwardedToGuardian(t *testing.T) {

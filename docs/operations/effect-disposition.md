@@ -13,11 +13,15 @@ that is already `STARTED` or `UNCERTAIN`. Every command is bound to one active
 tenant/workspace FENCE, one exact reservation head, and one position in an
 append-only disposition chain. The Kernel returns a separately signed receipt.
 
-This is source-owned contract, persistence, internal workload-authenticated
-Kernel transport, and real-PostgreSQL evidence. It is internal and
-pre-production. There is no deployed cross-plane path, connector disposition
-adapter, or controlled-live cancellation, compensation, or reconciliation
-proof.
+This is source-owned contract, persistence, and internal
+workload-authenticated Kernel transport with route tests. It is internal and
+pre-production. A disposition binds to a reservation that is `STARTED` or
+`UNCERTAIN`, and no shipped binary appends reservation events any more: the
+reservation write path and the PostgreSQL proof that covered this boundary were
+deleted (helm-tracker#266, `controls.yaml` CTL-015), so a deployment has no
+reservation for a disposition to bind to. There is no deployed cross-plane
+path, connector disposition adapter, or controlled-live cancellation,
+compensation, or reconciliation proof.
 
 ## No execution authority
 
@@ -189,29 +193,28 @@ KMS/HSM latency and explicit failure telemetry before deployment.
 
 The source-owned `reference_packs/effect-disposition-v1` pack contains canonical
 command, envelope, signing payload, receipt, receipt signing payload, and
-negative mutations. Go and independent Python implementations verify hashes,
+negative mutations. An independent Python implementation verifies hashes,
 signature domains, pinned identities and lifetimes, exact cross-artifact
-bindings, chain semantics, and the `NONE` authority invariant.
+bindings, chain semantics, and the `NONE` authority invariant. The Go tests
+validate the pack files against the schemas and check the contract types.
 
 Run:
 
 ```bash
 make verify-effect-disposition-vectors
 make verify-effect-close-vectors
-HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
 go -C core test ./cmd/helm-ai-kernel -run 'Test(EffectDisposition|ApprovalConsumption|RuntimeRoute)' -count=1
 make docs-coverage
 make docs-truth
 ```
 
-The PostgreSQL proof covers no-FENCE rejection, chained dispositions, exact and
+The PostgreSQL proof and its `make` target were deleted with the reservation
+write path. That proof covered no-FENCE rejection, chained dispositions, exact and
 conflicting replay, recovery, listing, concurrent single-winner insertion,
 stale-FENCE rejection, expiry, forced-RLS isolation, append-only rejection, and
 mandatory current-FENCE non-`HOLD` disposition binding at close. Direct
-wrong-scope insert and delete attempts are rejected. These are local and CI
-proofs, including rejection of a structurally valid but cryptographically
-forged row at both successor append and close. They are not deployed or
-controlled-live evidence.
+wrong-scope insert and delete attempts were rejected, as was a structurally
+valid but cryptographically forged row at both successor append and close.
 
 ## Remaining production gates
 

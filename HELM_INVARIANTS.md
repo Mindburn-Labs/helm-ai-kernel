@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-87 controls: 48 enforced (1 of them by CI gates), 25 observed-only, 14 unmanaged (13 of them retired invariants).
+89 controls: 51 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -123,7 +123,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-023 | Untenanted stores serve only the configured tenant | enforced | — |
 | CTL-024 | Policy reconciliation fails closed | enforced | — |
 | CTL-025 | MCP authorize-call quarantine firewall | enforced | — |
-| CTL-026 | Non-loopback listeners require auth | observed-only | Reachable and tested, but deleting the check makes the listener start and block, so the refusal tests hang rather than fail. A removal proof needs a test that asserts the refusal without serving; none exists yet. |
+| CTL-026 | Non-loopback listeners require auth | enforced | — |
 | CTL-027 | Offline update-bundle verification | enforced | — |
 | CTL-028 | External host receipt-chain verification | enforced | — |
 | CTL-029 | Operator TUI typed ceremony | enforced | — |
@@ -160,6 +160,8 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
 | CTL-061 | TON Acton runs local, fork and testnet only, and never tenant code beside a key | enforced | — |
 | CTL-062 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
+| CTL-063 | The evaluated action and its effect class come from the request tuple and the catalog | enforced | — |
+| CTL-064 | Receipt verifiers match member names exactly and do not check unversioned receipts | enforced | — |
 
 ---
 

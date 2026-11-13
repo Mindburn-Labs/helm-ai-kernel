@@ -1,5 +1,7 @@
 package contracts
 
+import "sync"
+
 // Canonical threat-surface effect type IDs.
 // These are the stable identifiers for effects that require specific
 // enforcement behavior, risk classification, and approval semantics.
@@ -362,6 +364,46 @@ func EffectRiskClass(effectTypeID string) string {
 	default:
 		return "E3" // Fail-closed: unknown effect types default to high risk
 	}
+}
+
+// ValidEffectClass reports whether value is one of the effect classes E0..E4.
+// It is the one definition of the closed set: policy rules, the tool catalog
+// and the transport boundary all decide with it.
+func ValidEffectClass(value string) bool {
+	switch value {
+	case "E0", "E1", "E2", "E3", "E4":
+		return true
+	default:
+		return false
+	}
+}
+
+var (
+	cataloguedEffectClassesOnce sync.Once
+	cataloguedEffectClasses     map[string]string
+)
+
+// CataloguedEffectClass returns the class the kernel assigns an effect type id
+// it knows: one in the default catalog, or a reserved preview id. An id the
+// kernel has no record of reports false; EffectRiskClass answers E3 for those
+// and cannot tell the two apart. The index is built once, so the per-request
+// callers do not rebuild the catalog.
+func CataloguedEffectClass(typeID string) (string, bool) {
+	cataloguedEffectClassesOnce.Do(func() {
+		catalog := DefaultEffectCatalog()
+		cataloguedEffectClasses = make(map[string]string, len(catalog.EffectTypes))
+		for i := range catalog.EffectTypes {
+			id := catalog.EffectTypes[i].TypeID
+			cataloguedEffectClasses[id] = EffectRiskClass(id)
+		}
+	})
+	if class, ok := cataloguedEffectClasses[typeID]; ok {
+		return class, true
+	}
+	if IsReservedPreviewEffect(typeID) {
+		return EffectRiskClass(typeID), true
+	}
+	return "", false
 }
 
 // IsReservedPreviewEffect reports whether typeID is a reserved preview

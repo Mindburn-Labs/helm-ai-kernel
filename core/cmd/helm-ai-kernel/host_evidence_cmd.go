@@ -1,8 +1,8 @@
 package main
 
-// quantum_posture: these commands verify and attach external host receipt
-// chains signed with classical Ed25519 or ECDSA-P256 keys; no post-quantum
-// assurance is claimed for this path.
+// quantum_posture: external host receipt chains use classical Ed25519 or
+// ECDSA-P256 signatures; pack inventory hashes use SHA-256. No post-quantum
+// signature assurance is claimed for this path.
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
 
@@ -436,6 +437,11 @@ func loadHELMReceipts(bundleRoot string) ([]contracts.Receipt, error) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
+		}
+		// encoding/json binds "Verdict" to verdict: a receipt that says DENY to
+		// every exact-name reader would correlate as allowed (helm-tracker#305).
+		if err := receiptverify.ValidateReceiptMemberNames(data); err != nil {
+			return fmt.Errorf("receipt %s is refused: %w", entry.Name(), err)
 		}
 		var receipt contracts.Receipt
 		if err := json.Unmarshal(data, &receipt); err == nil && receipt.ReceiptID != "" {

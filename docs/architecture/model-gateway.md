@@ -47,10 +47,13 @@ content holds a digest and a size, never a prompt.
    worker listener serves agent principals only.
 2. Resolve the route from the request's model, refuse provider-executed tools,
    clamp or inject the maximum output tokens.
-3. Price the worst case in `usd_micros`: every input byte counts as a token at
-   the input price, an upper bound for byte-level tokenizers, and the clamped
-   maximum output is generated in full at the output price, rounded up once to
-   whole micros. When the request may write a prompt cache (any decoded JSON key
+3. Price the quote in `usd_micros`: every input byte counts as a token at
+   the input price, and the clamped maximum output is generated in full at the
+   output price, rounded up once to whole micros. The byte count bounds input
+   tokens only for content carried in the request body. The gateway does not
+   refuse `previous_response_id`, `conversation`, a stored `prompt` or remote
+   media (`image_url`, `file_url`, `file_id`), so the provider can bill tokens
+   the quote does not count. When the request may write a prompt cache (any decoded JSON key
    of it is `cache_control`, so an escaped spelling cannot avoid this), the input
    rate is the dearest of the input and cache-write prices. The quote names a
    zero amount for every other unit the mandate chain sums.

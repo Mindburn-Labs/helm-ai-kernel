@@ -5,6 +5,7 @@ package crypto
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -220,16 +221,79 @@ func ReceiptSigningPayload(r *contracts.Receipt) ([]byte, error) {
 	return CanonicalizeReceiptV5(r)
 }
 
+// ReceiptVerifyOption is a caller's explicit choice about which receipts a
+// receipt verifier checks. The zero set of options checks declared versions
+// only.
+type ReceiptVerifyOption int
+
+// AllowLegacyReceiptPreimages checks a receipt with no signature_version
+// against the preimages that predate receipt.v5 instead of refusing it.
+//
+// It is never the default. The legacy V4 preimage (CanonicalizeReceipt) is
+// eight fields joined with ":" with no escaping and no domain separation, so
+// the JCS bytes of a signed receipt.v5 envelope can be read back as those
+// eight fields: the signature of a genuine receipt verifies for an unversioned
+// receipt its signer never issued, carrying any verdict (helm-tracker#305). A
+// caller passes this only for receipts it knows were issued before receipt.v5,
+// and says so where it does. That replay is refused under the option too
+// (ErrLegacyReceiptReplay); what the option leaves open is what a legacy
+// signature never covered: verdict, tool_name, timestamp.
+const AllowLegacyReceiptPreimages ReceiptVerifyOption = 1
+
+// ErrLegacyReceiptRefused is returned for a receipt with no signature_version
+// by a verifier that was not given AllowLegacyReceiptPreimages. The receipt
+// was not checked: this is not a statement about its signature.
+var ErrLegacyReceiptRefused = errors.New("receipt has no signature_version: it is a legacy receipt and was not checked; " +
+	"a legacy signature covers eight colon-joined fields with no escaping, not the verdict, " +
+	"and a receipt.v5 signature can be replayed as one")
+
+// ErrLegacyReceiptReplay is returned, under AllowLegacyReceiptPreimages, for a
+// receipt with no signature_version whose receipt_id begins with "{".
+//
+// The legacy preimage begins with receipt_id, unescaped. Every versioned
+// payload a receipt key signs (the receipt.v5 envelope, a versioned decision,
+// a permit) is the JCS text of a JSON object and begins with "{", so an
+// unversioned receipt built from those bytes and their signature cannot have
+// any other receipt_id, and no receipt id the kernel issued begins with "{".
+// The one character tells the replay of a versioned signature from a receipt
+// issued before receipt.v5, which the missing domain separation cannot.
+var ErrLegacyReceiptReplay = errors.New(`legacy receipt_id begins with "{": the legacy preimage would begin with a JSON object, ` +
+	"which is what a versioned payload (receipt.v5) signs, so this is the replay of another signature " +
+	"as a legacy receipt and not a receipt issued before receipt.v5")
+
+// legacyReceiptIsReplay reports whether an unversioned receipt's legacy
+// preimage would begin with a JSON object (see ErrLegacyReceiptReplay).
+func legacyReceiptIsReplay(r *contracts.Receipt) bool {
+	return strings.HasPrefix(r.ReceiptID, "{")
+}
+
+func allowsLegacyReceiptPreimages(opts []ReceiptVerifyOption) bool {
+	for _, opt := range opts {
+		if opt == AllowLegacyReceiptPreimages {
+			return true
+		}
+	}
+	return false
+}
+
 // ReceiptVerifyPayload reconstructs the signed payload according to the
-// receipt's declared preimage version. Empty = legacy V4 (receipts signed
-// before HELM-303 stay verifiable under the preimage they were signed over);
+// receipt's declared preimage version. A receipt with no version is refused
+// with ErrLegacyReceiptRefused unless the caller passes
+// AllowLegacyReceiptPreimages, which selects the legacy V4 preimage, and with
+// ErrLegacyReceiptReplay when that preimage would begin with a JSON object;
 // unknown versions are rejected rather than guessed.
-func ReceiptVerifyPayload(r *contracts.Receipt) ([]byte, error) {
+func ReceiptVerifyPayload(r *contracts.Receipt, opts ...ReceiptVerifyOption) ([]byte, error) {
 	if r == nil {
 		return nil, fmt.Errorf("receipt is nil")
 	}
 	switch r.SignatureVersion {
 	case "":
+		if !allowsLegacyReceiptPreimages(opts) {
+			return nil, ErrLegacyReceiptRefused
+		}
+		if legacyReceiptIsReplay(r) {
+			return nil, ErrLegacyReceiptReplay
+		}
 		return []byte(CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)), nil
 	case contracts.ReceiptSignatureV5:
 		return CanonicalizeReceiptV5(r)

@@ -215,8 +215,7 @@ trust_roots:
 ### 6.3 What `bundle build` actually does
 
 `bundle build` is implemented, but it does **not** operate on the format in §4
-and does not produce a signature file. Its own usage line calls the output "a
-signed bundle"; that string is wrong. The command compiles one standalone policy
+and does not produce a signature file. The command compiles one standalone policy
 source through the `policybundles` registry and prints the compiled bundle's
 identity as JSON. No signature, and no file, is written — the result goes to
 stdout.

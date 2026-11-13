@@ -88,7 +88,269 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Security
+
+- The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
+  build images and the workflows. Go 1.26.10 carries GO-2026-6859 (an HTTP/1
+  server crash in `net/http`), which `govulncheck` reports as reachable. Every
+  module now declares `go 1.26.11`, so consumers need Go 1.26.11 or newer.
+
+- Guardian selects the policy rule, and names an execution intent's allowed
+  tool, from the evaluated request. Only `EXECUTE_TOOL` has a tool Guardian
+  binds: its `tool_name` is the request resource. For every other action the
+  top-level `tool_name` in request context is removed before any gate or
+  policy reads it, so the top-level `tool_name` the PDP sees is never the
+  caller's, and a `CALL_TOOL` request, which has no typed tool field, is
+  evaluated as `CALL_TOOL`. `POST /api/v1/evaluate` and the governed OpenAI
+  proxy previously evaluated the rule named by a caller's `tool_name` and
+  signed an ALLOW for a different tool. A managed-policy pattern is still
+  matched against the whole request, caller args included: a pattern that
+  names `tool_name`, `effect_class`, `effect_class_source` or
+  `effect_class_declared` also matches a member of that name the caller
+  nested in `args` or in another context member. The `effect_class`,
+  `action` and `resource` selectors read the bound values, and for deny and
+  escalate rules also the kept declaration.
+- On `POST /api/v1/evaluate`, the organization-runtime evaluate route and
+  ext-authz, the request's effect class is recorded as a declaration and can
+  no longer talk a catalogued effect under a policy ceiling. When the kernel's
+  effect type catalog knows the evaluated action, the bound `effect_class` is
+  never below the catalog's class: `INFRA_DESTROY` declared as `E0`, or named
+  as the tool of an `EXECUTE_TOOL` request, is evaluated as `E4`, and the
+  activation ceiling is checked against that class. The resource of any other
+  action does not change its class, so `effect_level` remains a policy
+  resource even when it is spelled like a catalogued effect id, and a caller
+  cannot pick the class of an action the catalog does not know by naming an
+  effect beside it.
+- The signed effect carries `effect_class_source`: `effect_catalog` when the
+  bound class is the catalog's class for the evaluated action, `tool_catalog`
+  on MCP, `kernel_route` on the governed proxy, and `caller_declared` when the
+  bound class is the one the caller declared. When the kernel bound a
+  class other than the declared one, the caller's own value is kept as
+  `effect_class_declared`. Managed policy matches every rule against the
+  request as bound without `effect_class_source` and `effect_class_declared`,
+  and deny and escalate rules also against the request as declared, where
+  `effect_class` holds the declaration. It never matches an allow rule
+  against the request as declared, and no pattern against the top-level
+  provenance members, so neither an allow rule's `effect_class` selector nor
+  its pattern reads the declaration.
+- A receipt with no `signature_version` (a legacy receipt, signed before
+  `receipt.v5`) is no longer checked by default. `receipt_verify` exits 2 for a
+  file that holds one; pass `--allow-legacy-v4` to check it. Go callers of
+  `core/pkg/receiptverify` set `Options.AllowLegacyV4`. The JavaScript and
+  WebAssembly verifier has no opt-in and returns `UNVERIFIABLE`.
+- Under the opt-in, a legacy receipt whose `receipt_id` begins with `{` fails:
+  it is the signature of a versioned payload read back as a legacy receipt.
+  `core/pkg/crypto` returns `ErrLegacyReceiptReplay` for it.
+- `POST /api/v1/evidence/verify` reports a receipt with no `signature_version`
+  as not checked: its `receipt_signatures` check is `UNVERIFIABLE`, where it
+  used to be `VERIFIED` when the legacy signature matched. This holds when the
+  runtime trust anchor is a `KeyRing` too.
+- `POST /api/v1/evidence/verify` reads every receipt file with the parser
+  `receipt_verify` uses. A bundle that holds a receipt file with a member
+  written twice, or with a receipt member spelled in another letter case, is
+  refused: `bundle_format` is `FAILED` and no receipt check runs. So is a
+  receipt file that breaks the `receipt.v5` member contract, such as a
+  `lamport_clock` that is not an unsigned integer: it used to fail
+  `receipt_signatures` and now fails `bundle_format`.
+- In `core/pkg/crypto`, `ReceiptVerifyPayload`, `VerifyReceiptProfile`,
+  `VerifyReceiptRequiredProfile` and `VerifyReceiptSignature` return
+  `ErrLegacyReceiptRefused` for a receipt with no `signature_version` unless
+  given `AllowLegacyReceiptPreimages`; no other option value checks one. Every
+  `VerifyReceipt` method, `KeyRing.VerifyReceipt` included, takes no option and
+  returns `ErrLegacyReceiptRefused` for such a receipt when it carries a
+  signature.
+- `receipt_verify`, the JavaScript verifier and `helm-ai-kernel verify receipt`
+  refuse a file in which a receipt, bundle, permit or binding member is
+  spelled in another letter case. Write member names exactly as the schema
+  spells them. Keys of `metadata`, `public_key_set`, `subject` and other
+  free-form values are compared exactly, so `a` and `A` there are two keys.
+- `receipt_verify` and the JavaScript verifier refuse a bundle (an object with
+  a `receipts` array) that carries a receipt member such as `verdict`,
+  `status` or `tool_name` at its top level. `key_id`, `public_key_hex`,
+  `permits` and `gateway_bindings` are the bundle's own members and stay; so
+  does any name that is not a receipt member. The `--format json` report of
+  `helm-ai-kernel receipts list` is refused for its top-level `status`: pass
+  its `receipts` array instead.
+- A document nested deeper than 64 levels is refused by `receipt_verify`, as
+  the JavaScript verifier already did, and by every other path that reads
+  receipts with `core/pkg/receiptverify`: `helm-ai-kernel verify receipt`
+  exits 1 (`parse receipt: JSON exceeds the 64-level nesting limit`) where it
+  exited 0; `POST /api/v1/evidence/verify` fails `bundle_format`;
+  `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a request
+  body nested that deep; and `helm-ai-kernel verify` fails
+  `embedded_signature_trust` for such a file in `receipts/` or
+  `07_ATTESTATIONS/`, with the reason `N file(s) refused unread: JSON exceeds
+  the 64-level nesting limit`, which does not count the file as a signature,
+  and fails `chain_integrity` and `lamport_monotonicity` for such a receipt
+  file in a pack whose receipts are chained.
+- The `integrity` check of `receipt_verify` is now `not_applicable` where it
+  was `pass`. It never compared anything; `closure` is the check that compares
+  the hashes of a chain. Exit codes and the `valid` member are unchanged.
+- `receipt_verify --json`: the new `legacy_receipts` counts the receipts
+  checked under the legacy preimage. It appears only when that count is above
+  zero, so only under `--allow-legacy-v4`. It is a member of
+  `receiptverify.Result`, which the JavaScript verifier returns as
+  `verification`; that verifier has no opt-in and never emits it.
+  `preimage_version` is `mixed` for a chain checked under more than one
+  preimage, and the new `preimage_versions` lists each with its receipt count.
+  The new `key_id_note` says that `key_id` is the receipt's unsigned claim. No
+  member was renamed or removed.
+- `helm-ai-kernel verify receipt --json` adds `signed_members`,
+  `unsigned_members` and `integrity_scope`. `integrity_valid` and
+  `signer_trusted` keep their names and meaning: both are about the 13 signed
+  members only.
+- `helm-ai-kernel verify` no longer checks a dev-local MCP proof receipt that
+  has no `signature_version`; `embedded_signature_trust` fails for a pack that
+  holds one, and its reason says the receipt was `not checked: no
+  signature_version` and names the flag. Pass `--allow-legacy-v4-receipts` for
+  a pack known to predate `receipt.v5`
+  (`verifier.VerifyOptions.AllowLegacyV4Receipts`).
+- `helm-ai-kernel verify` refuses a chained receipt file that spells a member
+  of a receipt, or of a struct a receipt holds, in another letter case
+  (`"PREV_HASH"` for `prev_hash`, `"LOG_ID"` inside `transparency`), or that
+  writes any member twice at any depth: inside `metadata` or a
+  `witness_signatures` entry too, and two names that decode to one string,
+  such as two lone surrogates, which Go decodes to U+FFFD. `chain_integrity`
+  and `lamport_monotonicity` fail with `receipt <file> is refused: ...`; such
+  a file passed them before, read as the last value written. A receipt file
+  that is not valid JSON, or that has a trailing value, failed them before and
+  still does, but the reason now reads `receipt <file> is refused: ...` (for
+  example `invalid receipt JSON at $: ...` or `receipt has a trailing JSON
+  value ...`) where it read `receipt <file> is not valid JSON: ...`. Nesting
+  deeper than 64 levels is the bullet above. Go callers that decode a receipt
+  document into `contracts.Receipt` themselves can apply the same rules with
+  `receiptverify.ValidateReceiptMemberNames`. The nesting-limit refusal is now
+  the exported `receiptverify.ErrJSONTooDeep`.
+- In the chain checks of `helm-ai-kernel verify`, a `receipt.v5` receipt links
+  only to a predecessor whose `contracts.ReceiptChainHash`, or the SHA-256 of
+  whose file, is its `prev_hash`. A `hash` member a receipt declares about
+  itself links only a successor whose `signature_version` is not `receipt.v5`.
+  A pack in which a `receipt.v5` receipt names its predecessor only by that predecessor's
+  declared `hash` now fails `chain_integrity` and `lamport_monotonicity`: the
+  receipt is unreachable from genesis.
+- `helm-ai-kernel evidence correlate-host` applies the same member-name rules
+  to each receipt file of the pack before it decodes it, and exits 2 with
+  `receipt <file> is refused: ...` for a file they refuse, one nested deeper
+  than 64 levels included. A receipt file that is not valid JSON, which it
+  skipped, now stops it the same way.
+- `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a receipt
+  with a member written twice or spelled in another letter case, and for a
+  body with no `receipt` or with `"receipt": null`, where both answered 200
+  (`/api/demo/verify` with `valid: false`). They read the request body by
+  exact member name: a member other than `receipt`, `expected_receipt_hash`
+  and, for `/api/demo/tamper`, `mutation` is refused with 400, a letter-case
+  variant such as `"Receipt"` included, and so are a member written twice and
+  a trailing value after the body (`request body has a trailing JSON value
+  ...`). The OpenAPI request schemas of both routes declare
+  `unevaluatedProperties: false`; `oasdiff breaking` reports no breaking
+  change, and the generated SDK models are unchanged. `verified_fields` now
+  lists the 13 members a `receipt.v5` signature covers, and is empty when the
+  signature was not verified.
+
+### Added
+
+- `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
+  unless every in-scope path was read in full.
+
+- Package `core/pkg/verifier/packfs` reads one EvidencePack directory through
+  an `os.Root`: it refuses names and symbolic links that leave the pack,
+  absolute symbolic links and files that are not regular, reads whole files
+  up to 64 MiB (`MaxFileBytes`), and checks the letter case of a name a pack
+  states (`CheckCase`).
+- `core/pkg/tape`: `LoadTape` reads a tape from a file system (`LstatFS`)
+  into a `Tape`, and `Tape.Replay` replays it; `verify` and `replay` both use
+  them. `ParseManifest` decodes `tape_manifest.json` and `EntryFileNames`
+  lists entry files in number order.
+- `helm-ai-kernel verify --require-check <names>` fails the pack when a named
+  check did not run, for example `--require-check chain_integrity` for a pack
+  that must carry a receipt chain. Repeat the flag or separate names with
+  commas; every named check is required.
+- `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
+  `check_counts` and a `status` on every check. `evidence inspect --json`
+  carries `outcome` and `check_counts` too.
+
+### Changed
+
+- CLI and served text now state what the code does. `helm-ai-kernel proxy`
+  prints `Signing: none` when started without `--sign`; `bundle` help describes
+  `bundle build` as compiling Rego or Cedar and printing the bundle identity,
+  with no signature and no CEL; the `helm.evaluate` skill on the A2A agent card
+  no longer offers envelope signature verification; and the packed MCP bundle
+  manifest and `mcp-bundle.json` list only the governance features a shipped
+  command performs.
+
 ### Upgrade notes
+
+- The request context gained members that managed policy patterns never
+  read at the top level. `effect_class_source`, and `effect_class_declared`
+  when the kernel bound a class other than the declared one, sort after
+  `effect_class` in the canonical request, with nothing between them but a
+  member whose name begins with `effect_class`. Every pattern is matched
+  against the request without those two members, the text it was written
+  for, so a pattern such as `"effect_class":"E1","principal_id":"..."` matches
+  as it did. In that reading `effect_class` is the class the kernel bound,
+  which for a catalogued effect is the catalog's class and not the declared
+  one; deny and escalate rules are also matched against it with
+  `effect_class` holding the kept declaration. A pattern that names
+  `effect_class_source` or `effect_class_declared` matches only a member of
+  that name the caller nested, so it neither admits nor refuses on the source
+  or the declaration the kernel bound. Where the PDP's ALLOW is not
+  authoritative (no PDP, or the CEL/PRG runtime policy), a PRG expression can
+  refuse caller-declared classes by reading `effect_class_source` from the
+  effect's params; under ManagedPolicyPDP an ALLOW replaces local PRG
+  evaluation, so no rule can refuse a caller-declared class until a typed
+  `effect_class_source` selector lands (helm-tracker#322). A pattern is matched against the whole request, so it also
+  matches a member named `effect_class` or `tool_name` that the caller nested
+  in `args` or in another context member. The `effect_class`, `action` and
+  `resource` selectors read the bound values, and for deny and escalate rules
+  also the kept declaration.
+- A class-keyed allow rule now admits a catalogued action sent with a label in
+  place of its class: on ext-authz or the evaluate route, `SEND_EMAIL` with
+  the effect class `ticket.read` is evaluated as the catalog's `E2`, so a rule
+  that allows `E2` admits it, where before the label selected no class rule.
+- A CEL or PRG expression that restricted on a caller's label for a catalogued
+  effect must read `effect_class_declared`: `effect_class` now holds the
+  catalog's class there.
+- A policy that matched a top-level `tool_name` in request context for an
+  action other than `EXECUTE_TOOL` no longer sees it. Guardian removes that
+  member, because only `EXECUTE_TOOL` has a tool the kernel binds. A
+  `tool_name` nested in `args` or in another context member is left as the
+  caller sent it.
+- MCP refuses a tool call with a top-level argument named `effect_class_source`
+  or `effect_class_declared`, as it already did for `effect_class`: tool
+  arguments become top-level members of the policy input, where those names
+  carry authority. A tool that needs such a parameter must nest it inside
+  another argument or rename it. The evaluate routes and the governed proxy
+  strip the same top-level context members and leave nested ones alone.
+- Effect digests of decisions on the evaluate routes, ext-authz, the governed
+  proxy and MCP change. The effect's params gain `effect_class_source`, and
+  `effect_class_declared` where the kernel bound a class other than the
+  declared one. On the evaluate routes and ext-authz `effect_class` holds the
+  bound class, which for a catalogued action can differ from the declared
+  value. A top-level `tool_name` the caller put in context is no longer in the
+  params of any action but `EXECUTE_TOOL`, whose `tool_name` is the request
+  resource as before.
+- The signed ext-authz response still echoes the request's `effect_class` and
+  `risk_class` as submitted. It does not carry the class the kernel bound or
+  its source, so when the kernel evaluated a higher class the response alone
+  does not say so. The evaluated class is in the decision's effect.
+- The format of the organization-runtime decision attestation is unchanged,
+  and its `effect_class` is still the submitted value, which the control plane
+  verifies against what it sent, also when the kernel checked the activation
+  ceiling against a higher class and refused. Its other values can change,
+  because the activation record's binding check now reads the class the kernel
+  bound. A catalogued action declared below its catalog class is refused with
+  `ACTIVATION_CEILING_EXCEEDED` where its record's ceiling is below the
+  catalog's class. A catalogued action sent with a label in place of its class
+  (`SEND_CHAT_MESSAGE` with `ops.label`) used to fail the binding check
+  (`ACTIVATION_BINDING_MISMATCH`, a presented identity); it is now checked
+  against the catalog's class, so over an E0 record it is refused with
+  `ACTIVATION_CEILING_EXCEEDED`, and the attestation reports a verified
+  identity with the record's ref and hash. The decision record's input context
+  carries the class the ceiling was checked against with its source and
+  declaration, on a refusal as on a pass. The record signed for a refusal of
+  the activation gate carries no effect digest, so its signature does not
+  cover that context.
 
 - `helm-ai-kernel verify` no longer counts a check as passed when the pack
   gave it nothing to read. The summary is now, for example,
@@ -216,25 +478,6 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `conform:<name> is not read: ...`; `99_EXT` linked out of the pack is no
   longer listed, so the names of the files outside are not printed.
 
-### Added
-
-- Package `core/pkg/verifier/packfs` reads one EvidencePack directory through
-  an `os.Root`: it refuses names and symbolic links that leave the pack,
-  absolute symbolic links and files that are not regular, reads whole files
-  up to 64 MiB (`MaxFileBytes`), and checks the letter case of a name a pack
-  states (`CheckCase`).
-- `core/pkg/tape`: `LoadTape` reads a tape from a file system (`LstatFS`)
-  into a `Tape`, and `Tape.Replay` replays it; `verify` and `replay` both use
-  them. `ParseManifest` decodes `tape_manifest.json` and `EntryFileNames`
-  lists entry files in number order.
-- `helm-ai-kernel verify --require-check <names>` fails the pack when a named
-  check did not run, for example `--require-check chain_integrity` for a pack
-  that must carry a receipt chain. Repeat the flag or separate names with
-  commas; every named check is required.
-- `verify --json` reports `outcome` (`VERIFIED`, `FAILED` or `UNVERIFIABLE`),
-  `check_counts` and a `status` on every check. `evidence inspect --json`
-  carries `outcome` and `check_counts` too.
-
 ### Removed
 
 - `tape.ReadManifest(dir)` in `core/pkg/tape`. Read the file and call
@@ -243,6 +486,99 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ### Fixed
 
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
+  proxy has no caller credential and spends the upstream provider key for any
+  caller that reaches it; `proxy` and `mcp serve` already refused an
+  unauthenticated non-loopback bind. `controls.yaml` CTL-026 now covers all
+  three listeners and is `enforced`, with removal proofs for the bind check and
+  the proxy bearer check.
+- `helm-ai-kernel evidence envelope verify` reports `verified` only when it
+  loaded the manifest and its payload from the local registry and every check
+  ran and passed. Before, any `--manifest-hash` and `--native-root` printed
+  `verified: true` for an unknown manifest id, the supplied values were never
+  compared with a recorded manifest, and a missing payload was rebuilt from the
+  manifest and passed against itself. A check with nothing to compare is now
+  `SKIPPED`, which is not a pass: the result is `verified: false` and the exit
+  code 1. Clients reading `checks` must accept `SKIPPED` beside `PASS` and
+  `FAIL`. The text output lists every check with its status.
+- `helm-ai-kernel shadow scan` no longer grades a tree it could not read. A
+  `--path` that is missing or unreadable, or a scan that read no file and met
+  unreadable paths, is an error with exit code 2; it was grade A with exit code
+  0. Unreadable entries below a readable root are counted in the new
+  `paths_unreadable` report field, shown in the text report and named in the
+  grade reason. `setup`, `onboard` and `autoconfigure` reuse this scan, so they
+  no longer record a grade for a workspace that could not be read.
+- Lifecycle events that carry `args_hash` are published. The publisher's
+  substring screen rejected that allowlisted field, so every
+  dispatch-completed event built from a receipt was dropped. The exact
+  allowlist now decides, and a test holds every allowlisted name to the
+  denied-term list.
+- Documentation no longer states behaviour the shipped binaries do not have.
+  The execution security model, kernel scope, proxy guides, use-case pages and
+  operations notes now say that the standalone proxy signs receipts only with
+  `--sign`, that a named delegation session is always denied, that `conform`
+  runs gate G0 only, that no command re-executes a run, that only CEL expressions
+  in a serve policy pack decide an action, and that the effect reservation and
+  close write paths were removed. SDK README examples compile against their
+  SDKs and use the authenticated typed evaluation route. Documented commands
+  that did not run are corrected, including the EvidencePack export, the MCP
+  proof verification, `bundle build` and the provider starter smoke scripts.
+- A signed receipt could be edited, with no key, so that `jq` and JavaScript
+  read one verdict from it while `receipt_verify` verified another: Go's JSON
+  decoder matches member names without regard to letter case, and the
+  verifier's duplicate-member check did not. Member names are now matched
+  exactly.
+- The signature of a `receipt.v5` receipt could be replayed as a legacy
+  receipt with a different verdict, and `receipt_verify`, the JavaScript
+  verifier, `POST /api/v1/evidence/verify` and the dev-local MCP branch of
+  `helm-ai-kernel verify` accepted it. The legacy preimage is eight fields
+  joined with `:` with no escaping, so the signed bytes of a `receipt.v5`
+  receipt can be read as those eight fields. Legacy receipts are now refused
+  unless the caller opts in, an opted-in result says that a legacy signature
+  does not cover `verdict`, `tool_name` or `timestamp`, and the replay is
+  refused under the opt-in as well, by its `receipt_id`.
+- A genuine DENY receipt wrapped as
+  `{"verdict":"ALLOW","receipts":[...]}` was `VERIFIED` while `jq .verdict`
+  and `JSON.parse` read `ALLOW` from the file. A bundle with a receipt member
+  beside `receipts` is now refused.
+- `POST /api/v1/evidence/verify` verified a receipt file that says `ALLOW` by
+  exact member name and restores the signed `DENY` in `"Verdict"`, or that
+  writes `verdict` twice.
+- `POST /api/demo/verify` took a request member `"Receipt"` for `"receipt"`,
+  so a body whose `receipt` says `ALLOW` came back valid when the genuine
+  `DENY` stood beside it as `"Receipt"`.
+- `helm-ai-kernel verify` could be made to hide a deleted receipt. Its chain
+  checks decoded each receipt with Go's JSON decoder, which binds
+  `"PREV_HASH"` to `prev_hash`. With the middle receipt of a team pack deleted
+  and `"PREV_HASH"` and `"Lamport_Clock"` appended to the next one, outside its
+  signature, the chain read unbroken and the re-sealed pack verified. The
+  chain checks now refuse such a file.
+- The same team-pack operator could put an unsigned file in the deleted
+  receipt's place, declaring the deleted receipt's chain hash in a `hash`
+  member and joining its session through `executor_id`, and the re-sealed
+  pack verified. The signed successor now links only to an identity the
+  verifier recomputes, so it is unreachable from genesis and the pack fails.
+  Both fixes hold for a deleted receipt that a signed `receipt.v5` receipt in
+  the pack follows. The chain checks do not see the last receipt of a chain
+  deleted, and a chain of receipts with no `signature_version` still links
+  through declared hashes, which nothing can recompute (security ledger
+  F-20). The signature check does not require every receipt file to be signed:
+  removing the successor's signature members also removes this protection,
+  so the operator can still hide a deletion with one fewer checked signature.
+- `helm-ai-kernel evidence correlate-host` read a network receipt that says
+  `DENY` by exact member name, with `"Status":"ALLOW"` and
+  `"Verdict":"ALLOW"` appended, as allowed, and reported no Boundary Drift
+  for host egress after the deny.
+- `helm-ai-kernel verify receipt` accepted a file whose only version member
+  was `"Signature_Version"`, skipping the `receipt.v5` member checks.
+- `receipt_verify` took gigabytes of memory on a small file nested 100,000
+  levels deep before refusing it.
+- `preimage_version` named only the first receipt's preimage, so a chain of a
+  `receipt.v5` and a legacy receipt read `receipt.v5`.
+- The `integrity` check of `receipt_verify` no longer says "the signed bytes
+  are the bytes on disk". It says what it does, and names the receipt whose
+  members outside the signature nothing covers: a single receipt, or the last
+  of a chain.
 - `helm-ai-kernel verify` reported checks that never ran as passed: a pack
   with no hash manifest, no connector evidence, no EU AI Act profile, no
   receipt chain, no replay gate and no signed receipts printed

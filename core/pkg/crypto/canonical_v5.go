@@ -88,9 +88,13 @@ const (
 // VerifyReceiptSignature verifies the payload declared by r.SignatureVersion.
 //
 // A declared receipt.v5 must verify under the active narrow signing envelope;
-// it must never be silently retried as a legacy payload. Empty versions retain
-// compatibility for the pre-HELM-303 JCS helper and then V4 history.
-func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, ReceiptPreimageVersion, error) {
+// it must never be silently retried as a legacy payload. A receipt with no
+// version is refused with ErrLegacyReceiptRefused unless the caller passes
+// AllowLegacyReceiptPreimages; it is then tried against the pre-HELM-303 JCS
+// helper and the V4 preimage, and the returned version says which verified.
+// Under the option a receipt_id beginning with "{" is refused with
+// ErrLegacyReceiptReplay before either is tried.
+func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt, opts ...ReceiptVerifyOption) (bool, ReceiptPreimageVersion, error) {
 	if r == nil {
 		return false, "", fmt.Errorf("receipt is nil")
 	}
@@ -113,6 +117,12 @@ func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, Recei
 		}
 		return false, "", nil
 	case "":
+		if !allowsLegacyReceiptPreimages(opts) {
+			return false, "", ErrLegacyReceiptRefused
+		}
+		if legacyReceiptIsReplay(r) {
+			return false, "", ErrLegacyReceiptReplay
+		}
 		payload, err := ReceiptPreimageV5(r)
 		if err != nil {
 			return false, "", err

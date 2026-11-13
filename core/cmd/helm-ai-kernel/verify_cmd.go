@@ -76,6 +76,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ledgerURL         string
 		profile           string
 		allowSelfAttested bool
+		allowLegacyV4     bool
 		configPath        string
 		storageReceipt    string
 		externalHostKey   string
@@ -96,6 +97,10 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&allowSelfAttested, "allow-self-attested", false,
 		"Accept a dev-local seal whose verification key is carried inside the pack. "+
 			"Such a seal proves internal consistency only, never provenance — anyone can sign their own pack.")
+	cmd.BoolVar(&allowLegacyV4, "allow-legacy-v4-receipts", false,
+		"Check a dev-local MCP proof receipt that has no signature_version as a legacy V4 receipt instead of leaving it unverified. "+
+			"A legacy signature covers eight colon-joined fields, not the verdict, and a receipt.v5 signature can be replayed as one: "+
+			"use it only for a pack known to predate receipt.v5.")
 	cmd.StringVar(&configPath, "config", "", "Evidence trust config path, for example helm/helm.yaml (never read implicitly from the working directory)")
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
 	envKeys := packVerifyKeysFromEnv()
@@ -180,6 +185,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ExternalHostKeyHex:              externalHostKey,
 		ManagedAgentReceiptPublicKeyHex: managedAgentKey,
 		AllowSelfAttested:               allowSelfAttested,
+		AllowLegacyV4Receipts:           allowLegacyV4,
 		RequireChecks:                   requiredChecks,
 	}, trustedPublicKey)
 	if err != nil {

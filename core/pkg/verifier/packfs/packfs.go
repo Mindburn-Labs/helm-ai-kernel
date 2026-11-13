@@ -131,6 +131,11 @@ func checkName(op, name string) error {
 			return &fs.PathError{Op: op, Path: name, Err: fmt.Errorf("%w: %q contains a \"..\" segment", ErrOutside, name)}
 		}
 	}
+	// Match os.Root.FS: a backslash is a name character, never an fs.FS
+	// separator. Windows cannot represent that character in a component.
+	if filepath.Separator == '\\' && strings.ContainsRune(name, '\\') {
+		return &fs.PathError{Op: op, Path: name, Err: fs.ErrInvalid}
+	}
 	return nil
 }
 

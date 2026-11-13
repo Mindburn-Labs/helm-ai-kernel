@@ -145,6 +145,52 @@ func TestOpenedDirectoryKeepsItsHandle(t *testing.T) {
 	}
 }
 
+func TestDirectoryNamesUseSlashSeparators(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "a", "b"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(dir, "a", "b", "nested.txt"), "nested")
+	p := open(t, dir)
+	methods := map[string]func(string) ([]fs.DirEntry, error){
+		"ReadDir": p.ReadDir,
+		"Open": func(name string) ([]fs.DirEntry, error) {
+			file, err := p.Open(name)
+			if err != nil {
+				return nil, err
+			}
+			defer file.Close()
+			return file.(fs.ReadDirFile).ReadDir(-1)
+		},
+	}
+	for method, list := range methods {
+		t.Run(method+" slash path", func(t *testing.T) {
+			entries, err := list("a/b")
+			if err != nil || len(entries) != 1 || entries[0].Name() != "nested.txt" {
+				t.Fatalf("slash path lists %v, %v; want nested.txt", entries, err)
+			}
+		})
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Mkdir(filepath.Join(dir, `a\b`), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(dir, `a\b`, "literal.txt"), "literal")
+	}
+	for method, list := range methods {
+		t.Run(method+" backslash name", func(t *testing.T) {
+			entries, err := list(`a\b`)
+			if runtime.GOOS == "windows" {
+				if !errors.Is(err, fs.ErrInvalid) {
+					t.Fatalf("backslash name lists %v, %v; want ErrInvalid", entries, err)
+				}
+			} else if err != nil || len(entries) != 1 || entries[0].Name() != "literal.txt" {
+				t.Fatalf("backslash name lists %v, %v; want literal.txt, not the nested directory", entries, err)
+			}
+		})
+	}
+}
+
 func TestCleanName(t *testing.T) {
 	for name, want := range map[string]string{
 		"in.txt":          "in.txt",

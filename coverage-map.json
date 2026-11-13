@@ -1323,6 +1323,7 @@
       "tests": {
         "allowed": [
           "core/pkg/verifier/packfs.TestOpenedDirectoryKeepsItsHandle",
+          "core/pkg/verifier/packfs.TestDirectoryNamesUseSlashSeparators",
           "core/pkg/verifier.TestVerifyBundle_Valid"
         ],
         "forbidden": [
@@ -1336,6 +1337,7 @@
           "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory",
           "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks",
           "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused",
+          "core/pkg/verifier/packfs.TestDirectoryNamesUseSlashSeparators",
           "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails",
           "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash",
           "core/pkg/verifier.TestVerifyBundle_DeeplyNestedJSONLeavesTheCallerAReport",

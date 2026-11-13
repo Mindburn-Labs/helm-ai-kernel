@@ -212,6 +212,8 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     `Open` wait for a writer; replacing it with another directory is refused.
     A returned directory handle remains bound to that object if its name is
     later replaced. This does not snapshot the contents of the directory.
+    Filesystem API names use slash separators: Windows rejects backslashes,
+    while Unix can use a backslash as a literal character in a name.
     A path named by `00_INDEX.json` or by
     `manifest.json` `file_hashes` must also be spelled as the pack directory
     lists it, letter case included, so a pack fails the same way on a file

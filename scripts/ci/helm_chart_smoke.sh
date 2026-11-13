@@ -82,6 +82,19 @@ assert_not_contains() {
     fi
 }
 
+# Helm versions report JSON-schema locations either as dotted keys or JSON
+# pointers. Both must identify the exact field in the failed render.
+assert_schema_path() {
+    file="$1"
+    path="$2"
+    pointer="/${path//./\/}"
+    if ! grep -qF -- "$path" "$file" && ! grep -qF -- "$pointer" "$file"; then
+        echo "::error::schema refusal did not identify $path"
+        cat "$file"
+        exit 1
+    fi
+}
+
 PRODUCTION_NETWORK_POLICY_VALUES="scripts/ci/helm_production_network_policy_values.yaml"
 
 production_helm_runner() {
@@ -189,7 +202,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::chart render with an unpinned authority init image unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$runtime_init_fail_log" "runtimeInit.image"
+assert_schema_path "$runtime_init_fail_log" "runtimeInit.image"
 
 synthetic_telemetry_rendered="$RENDER_DIR/rendered-synthetic-telemetry.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -333,7 +346,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::emergency-stop render without command authority unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$emergency_stop_missing_authority_log" "helm.emergencyStop.commandPublicKeys"
+assert_schema_path "$emergency_stop_missing_authority_log" "helm.emergencyStop.commandPublicKeys"
 
 openclaw_rendered="$RENDER_DIR/rendered-openclaw.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -371,7 +384,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::OpenClaw render with a provider outside the OpenRouter egress boundary unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$openclaw_provider_fail_log" "launchpadApps.openclaw.model"
+assert_schema_path "$openclaw_provider_fail_log" "launchpadApps.openclaw.model"
 
 hermes_job_rendered="$RENDER_DIR/rendered-hermes-job.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -419,7 +432,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::Hermes render with invalid mode unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
+assert_schema_path "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
 
 fail_log="$RENDER_DIR/production-missing-key.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -457,7 +470,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::render with a malformed Kernel image digest unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$image_digest_invalid_log" "image.digest"
+assert_schema_path "$image_digest_invalid_log" "image.digest"
 
 network_policy_disabled_log="$RENDER_DIR/production-network-policy-disabled.log"
 if helm_runner template "$RELEASE" "$CHART" \
@@ -503,7 +516,7 @@ if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     echo "::error::production render without runtime tenant unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$tenant_fail_log" "helm.auth.tenantID"
+assert_schema_path "$tenant_fail_log" "helm.auth.tenantID"
 
 principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -516,7 +529,7 @@ if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     echo "::error::production render without runtime principal unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$principal_fail_log" "helm.auth.principalID"
+assert_schema_path "$principal_fail_log" "helm.auth.principalID"
 
 postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -1230,7 +1243,11 @@ expect_gateway_render_failure() {
         echo "::error::gateway render ${name} unexpectedly succeeded"
         exit 1
     fi
-    assert_contains "$log" "$message"
+    if [[ "$message" =~ ^[[:alnum:]_]+(\.[[:alnum:]_]+)+$ ]]; then
+        assert_schema_path "$log" "$message"
+    else
+        assert_contains "$log" "$message"
+    fi
 }
 for required in \
     "gateway.tls.existingSecret|requires gateway.tls.existingSecret" \

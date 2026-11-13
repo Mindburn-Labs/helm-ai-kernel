@@ -337,12 +337,22 @@ func TestPackContainmentDoesNotDependOnHowThePackPathIsWritten(t *testing.T) {
 func TestFileHashes_NamesMustMatchTheFileExactly(t *testing.T) {
 	dir := t.TempDir()
 	writeRaw(t, dir, "01_SCORE.json", []byte(`{"pass":true}`))
-	if _, err := os.Stat(filepath.Join(dir, "01_score.JSON")); err != nil {
-		t.Skip("this file system tells letter cases apart, so the other spelling names no file")
-	}
-	writeJSON(t, filepath.Join(dir, "manifest.json"), map[string]any{"file_hashes": map[string]string{"01_score.JSON": sha256Hex([]byte(`{"pass":true}`))}})
-	results := checkFileHashes(dir)
-	if len(results) != 1 || results[0].normalized().Status != CheckFailed {
-		t.Fatalf("results = %+v, want one FAILED: the manifest names 01_score.JSON and the pack holds 01_SCORE.json", results)
+	// Both filesystem kinds must produce the same result. On a case-sensitive
+	// filesystem the wrong spelling is absent; on a case-insensitive one the
+	// verifier must reject the alias even though the OS can resolve it.
+	for _, tc := range []struct {
+		name string
+		want CheckStatus
+	}{
+		{"01_SCORE.json", CheckVerified},
+		{"01_score.JSON", CheckFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			writeJSON(t, filepath.Join(dir, "manifest.json"), map[string]any{"file_hashes": map[string]string{tc.name: sha256Hex([]byte(`{"pass":true}`))}})
+			results := checkFileHashes(dir)
+			if len(results) != 1 || results[0].normalized().Status != tc.want {
+				t.Fatalf("results = %+v, want one %s: manifest names %s and pack holds 01_SCORE.json", results, tc.want, tc.name)
+			}
+		})
 	}
 }

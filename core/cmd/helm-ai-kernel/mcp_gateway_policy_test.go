@@ -1,3 +1,4 @@
+// quantum_posture: policy integration tests use classical Ed25519 signatures; no post-quantum claim.
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -81,8 +83,8 @@ func newMountedPolicyReconciler(t *testing.T, source policyreconcile.PolicySourc
 
 // TestMountedPackRuntimeActionsReconcileIntoAllowRules covers HELM-362: a
 // mounted reference pack's runtime_actions must compile into ALLOW rules
-// through the reconcile path, and editing only the pack (policy file mtime
-// unchanged) must trigger a re-reconcile instead of a no_change.
+// through the reconcile path. A changed pack at the same epoch is refused;
+// advancing only the pack mtime must reload its rules without touching the policy.
 func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
 	dir := t.TempDir()
 	policyPath, refPath := writeMountedServePolicyFixture(t, dir, `{
@@ -92,6 +94,13 @@ func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
     {"action": "file_read", "expression": "true"}
   ]
 }`)
+
+	initialTime := time.Unix(1000, 0)
+	for _, path := range []string{policyPath, refPath} {
+		if err := os.Chtimes(path, initialTime, initialTime); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	source := policyreconcile.NewMountedFileSource(policyPath, policyreconcile.DefaultScope)
 	store := policyreconcile.NewAtomicSnapshotStore()
@@ -112,8 +121,10 @@ func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
 		t.Fatalf("pack runtime_actions did not compile into graph rules: %+v", snapshot.Graph.Rules)
 	}
 
-	// Edit only the mounted pack; the policy file (and its mtime/epoch) is
-	// untouched, so change detection must come from the pack digest.
+	initialEpoch, initialHash := snapshot.PolicyEpoch, snapshot.PolicyHash
+
+	// Keep the policy unchanged. Pin the pack mtime after the edit to model
+	// writes within one filesystem timestamp tick deterministically.
 	if err := os.WriteFile(refPath, []byte(`{
   "pack_id": "runtime-pack",
   "version": 2,
@@ -122,6 +133,27 @@ func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
     {"action": "file_write", "expression": "true"}
   ]
 }`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(refPath, initialTime, initialTime); err != nil {
+		t.Fatal(err)
+	}
+	status, err = reconciler.Reconcile(context.Background(), policyreconcile.DefaultScope)
+	if !errors.Is(err, policyreconcile.ErrPolicyEpochEquivocation) {
+		t.Fatalf("same-epoch pack change: status=%+v err=%v", status, err)
+	}
+	unchanged, ok := store.Get(policyreconcile.DefaultScope)
+	if !ok || unchanged.Graph == nil || unchanged.PolicyEpoch != initialEpoch || unchanged.PolicyHash != initialHash {
+		t.Fatalf("same-epoch pack change replaced the installed snapshot: %+v", unchanged)
+	}
+	if _, ok := unchanged.Graph.Rules["file_write"]; ok {
+		t.Fatal("same-epoch pack change installed the new rule")
+	}
+
+	// Publish a newer pack epoch explicitly; do not rely on write timing or
+	// sleeps, since the mounted source uses max(policy mtime, pack mtime).
+	updatedTime := initialTime.Add(2 * time.Second)
+	if err := os.Chtimes(refPath, updatedTime, updatedTime); err != nil {
 		t.Fatal(err)
 	}
 	status, err = reconciler.Reconcile(context.Background(), policyreconcile.DefaultScope)
@@ -134,6 +166,16 @@ func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
 	snapshot, ok = store.Get(policyreconcile.DefaultScope)
 	if !ok || snapshot.Graph == nil {
 		t.Fatalf("snapshot missing after pack edit: %+v", status)
+	}
+	if snapshot.PolicyEpoch <= initialEpoch {
+		t.Fatalf("pack edit did not advance the epoch: initial=%d got=%d", initialEpoch, snapshot.PolicyEpoch)
+	}
+	policyInfo, err := os.Stat(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !policyInfo.ModTime().Equal(initialTime) {
+		t.Fatalf("pack edit changed the policy file mtime: %v", policyInfo.ModTime())
 	}
 	if _, ok := snapshot.Graph.Rules["file_write"]; !ok {
 		t.Fatalf("edited pack runtime_actions did not compile into graph rules: %+v", snapshot.Graph.Rules)

@@ -51,7 +51,10 @@ helm-ai-kernel verify receipt \
   --trusted-public-key-file <expected-ed25519.pub>
 ```
 
-A public key embedded in the receipt is not enough.
+A public key embedded in the receipt is not enough. Integrity is the
+signature over the receipt's 13 signed members: the report names them as
+`signed_members` and the file's other members as `unsigned_members`, which no
+signature covers.
 `workstation verify-decision` is the hook `wpd_` path. Do not use
 `--allow-self-attested` as this path. Hop fixtures are labeled DENY / no
 permit.

@@ -12,7 +12,7 @@ import (
 // belongs to the open file, so a second open in the same process conflicts as
 // well.
 func lockFile(path string) (func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockReceiptsDir supplies a fixed lock filename under the operator-owned receipts directory, never a request path.
 	if err != nil {
 		return nil, err
 	}

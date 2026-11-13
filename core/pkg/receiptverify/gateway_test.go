@@ -61,10 +61,16 @@ func TestFrozenGatewayChainStillVerifies(t *testing.T) {
 	if !res.Valid || res.PreimageVersion != contracts.ReceiptSignatureV5 || res.BindingsChecked != 4 || res.GatewayReceipts != 4 {
 		t.Fatalf("the frozen gateway chain no longer verifies: %+v", res)
 	}
-	for _, name := range []CheckName{CheckIdentity, CheckIntegrity, CheckPolicy, CheckExecution, CheckClosure, CheckBinding} {
+	for _, name := range []CheckName{CheckIdentity, CheckPolicy, CheckExecution, CheckClosure, CheckBinding} {
 		if c := checkNamed(t, res, name); c.Status != StatusPass {
 			t.Errorf("%s = %s: %s", name, c.Status, c.Detail)
 		}
+	}
+	// The integrity check compares the chain hashes it recomputes with nothing,
+	// so it is never a pass (helm-tracker#305); the closure check above is the
+	// one that compares them, and it passes.
+	if c := checkNamed(t, res, CheckIntegrity); c.Status != StatusNotApplicable {
+		t.Errorf("%s = %s: %s", CheckIntegrity, c.Status, c.Detail)
 	}
 	for i, r := range b.Receipts {
 		if !strings.HasPrefix(r.SessionID, "helm-gateway:") || r.LamportClock != uint64(i+1) {
@@ -312,7 +318,11 @@ func TestABindingNeedsAReceiptV5Signature(t *testing.T) {
 	r.SignatureVersion, r.SignatureProfile, r.SignatureAlgorithm, r.PublicKeySet, r.KeyID = "", "", "", nil, "legacy-key"
 	r.Signature = hex.EncodeToString(ed25519.Sign(key, canonicalizeV4(&r)))
 	trust := TrustRoot{Keys: map[string]string{"legacy-key": hex.EncodeToString(key.Public().(ed25519.PublicKey))}}
-	res := VerifyBundle(Bundle{Receipts: []*contracts.Receipt{&r}, GatewayBindings: map[string][]byte{r.ReceiptID: binding}}, trust)
+	planted := Bundle{Receipts: []*contracts.Receipt{&r}, GatewayBindings: map[string][]byte{r.ReceiptID: binding}}
+	// A legacy receipt is not checked at all without the opt-in; with it, the
+	// binding check is what refuses the binding.
+	requireLegacyRefusal(t, VerifyBundle(planted, trust))
+	res := VerifyBundleWith(planted, trust, Options{AllowLegacyV4: true})
 	if checkNamed(t, res, CheckIdentity).Status != StatusPass || res.PreimageVersion != "v4-fields" {
 		t.Fatalf("the planted v4 receipt does not verify as v4; the case proves nothing: %+v", res)
 	}

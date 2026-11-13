@@ -156,7 +156,7 @@ func signingSeed(dir, secret string, create bool) (string, string, error) {
 		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			return "", "", fmt.Errorf("spendproxy: the signing seed %s is readable by others (mode %v): chmod 600 it", path, info.Mode().Perm())
 		}
-		raw, readErr := os.ReadFile(path)
+		raw, readErr := os.ReadFile(path) //nolint:gosec // G304: fixed seed filename in the operator-owned receipts directory; no request input.
 		if readErr != nil {
 			return "", "", fmt.Errorf("spendproxy: read the signing seed: %w", readErr)
 		}
@@ -177,7 +177,7 @@ func signingSeed(dir, secret string, create bool) (string, string, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", "", fmt.Errorf("spendproxy: create receipts dir: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: fixed seed filename in the operator-owned directory; exclusive creation cannot overwrite an existing path.
 	if err != nil {
 		return "", "", fmt.Errorf("spendproxy: create the signing seed: %w", err)
 	}

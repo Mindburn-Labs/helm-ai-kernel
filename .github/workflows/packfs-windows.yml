@@ -1,0 +1,41 @@
+name: Pack filesystem Windows
+
+on:
+  pull_request:
+    paths:
+      - "core/pkg/verifier/packfs/**"
+      - "core/go.mod"
+      - "core/go.sum"
+      - ".github/workflows/packfs-windows.yml"
+  push:
+    branches: [main]
+    paths:
+      - "core/pkg/verifier/packfs/**"
+      - "core/go.mod"
+      - "core/go.sum"
+      - ".github/workflows/packfs-windows.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packfs-windows-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  packfs-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      GOWORK: "off"
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: Test rooted filesystem behavior on Windows
+        working-directory: core
+        run: go test -count=1 -timeout=5m ./pkg/verifier/packfs

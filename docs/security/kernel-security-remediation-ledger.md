@@ -168,7 +168,7 @@ you cannot verify a chain whose hash function is unspecified.
 | ID | Sev | Finding | Status |
 |---|---|---|---|
 | F-19 | T1 | **No canonical chain-hash derivation.** Three producers link receipts three different ways: `store.buildNextCausalReceipt` uses `contracts.ReceiptChainHash` (JCS over the receipt); `mcp-proof` uses `"sha256:" + sha256` of the pretty-printed receipt file as written (`cmd/helm-ai-kernel/mcp_proof_cmd.go:396-402`); `demo`/`financedemo` chain on a `hash` field the receipt declares about itself (`cmd/helm-ai-kernel/demo_cmd.go:285-288`). A third-party verifier cannot check a chain without knowing which convention a pack used. | mitigated |
-| F-20 | T1 | **Self-declared receipt hashes have no specified preimage.** For the demo/financedemo shape, `hash` is asserted by the producer and cannot be recomputed by any verifier. For those receipts the walk proves the chain is well-formed, not that each node's contents are bound to its identity. | remaining |
+| F-20 | T1 | **Self-declared receipt hashes have no specified preimage.** For the demo/financedemo shape, `hash` is asserted by the producer and cannot be recomputed by any verifier. For those receipts the walk proves the chain is well-formed, not that each node's contents are bound to its identity. Since helm-tracker#305 a `receipt.v5` successor no longer links to a declared `hash`; a successor whose `signature_version` is not `receipt.v5` still does. | remaining |
 | F-21 | T1 | **Launchpad and conform packs emit no chain at all.** Receipts carry `lamport_clock` values implying an order but no `prev_hash` linking them (`core/pkg/launchpad/receipts`). These packs assert no chain of custody, which is materially weaker than the product's claim. | remaining |
 
 **Mitigation shipped for F-19:** each receipt is given a candidate identity set —
@@ -412,6 +412,83 @@ This is deliberately **not** a claim that the whole receipt is signed: fields
 outside the durable V5 envelope, including post-sign transparency anchoring,
 remain separately verified or recorded claims. It is source/test evidence only;
 it does not establish deployment or production-runtime proof.
+
+### helm-tracker#305: unversioned receipts are refused unless the caller opts in
+
+The entry above left unversioned history on its legacy verification path, and
+that path was the default. The legacy preimage is eight fields joined with `:`
+with no escaping and no domain separation, so the JCS bytes of a signed
+`receipt.v5` envelope can be read back as those eight fields: the signature of
+a genuine `receipt.v5` DENY verified for an unversioned receipt saying ALLOW,
+through `receipt_verify`, the JavaScript verifier and the receipt signature
+check of `POST /api/v1/evidence/verify`. No key was needed.
+
+Every receipt verifier now refuses a receipt with no `signature_version` unless
+its caller opts in: `receiptverify.Options.AllowLegacyV4` (`receipt_verify
+--allow-legacy-v4`), `crypto.AllowLegacyReceiptPreimages`, and
+`verifier.VerifyOptions.AllowLegacyV4Receipts` (`helm-ai-kernel verify
+--allow-legacy-v4-receipts`) for the dev-local MCP branch of the EvidencePack
+verifier. No shipped caller opts in except those two flags.
+`KeyRing.VerifyReceipt` returns the same refusal, so the evidence route
+reports the receipt as not checked under a rotated runtime key as well. An
+opted-in result counts the legacy receipts and says that their signature does
+not cover `verdict`, `tool_name` or `timestamp`. The replay is refused under
+every opt-in too: the legacy preimage begins with `receipt_id`, and the
+replayed bytes are JSON text, so the replay's `receipt_id` begins with `{`.
+
+In the same change, `receiptverify` matches member names exactly. Go's JSON
+decoder binds `"Verdict"` to the `verdict` field and the duplicate-member scan
+compared names exactly, so a signed DENY receipt could carry `"verdict":"ALLOW"`
+for `jq` and JavaScript and `"Verdict":"DENY"` for the verifier. The rule
+applies where a Go struct is decoded; keys of maps and free-form values are
+compared exactly. A bundle that carries a receipt member beside `receipts` is
+refused, because `{"verdict":"ALLOW","receipts":[<a DENY receipt>]}` verified
+while its reader read ALLOW. `POST /api/v1/evidence/verify`,
+`helm-ai-kernel verify receipt` and `POST /api/demo/verify` read a receipt
+with the same parser (`receiptverify.ParseReceipt`), and the demo routes read
+their request body by exact member name, so a `"Receipt"` beside `"receipt"`
+is refused. The chain checks of `helm-ai-kernel verify` decode each receipt
+file into a Go struct only after `receiptverify.ValidateReceiptMemberNames`
+has refused a receipt member in another letter case: before, a team pack with
+a receipt deleted verified once `"PREV_HASH"` and `"Lamport_Clock"`, outside
+the next receipt's signature, papered over the gap. The same pack also
+verified with an unsigned file in the deleted receipt's place that declared
+the deleted receipt's chain hash in `hash` (F-20 used as a route to hide a
+deletion). A `receipt.v5` successor now links only to an identity the
+verifier recomputes from its predecessor (`contracts.ReceiptChainHash` or the
+SHA-256 of its file), never to a declared `hash`. What holds is narrower than
+"a team pack cannot hide a deleted receipt": a deleted receipt that a signed
+`receipt.v5` receipt in the pack follows can no longer be hidden. The chain
+checks do not see the last receipt of a chain deleted, and receipts with no
+`signature_version` still link through declared hashes, so F-20 stays open
+for them. The signature check does not require every receipt file to be signed:
+an operator can strip the successor's signature members and hide a deletion
+with one fewer checked signature. `helm-ai-kernel evidence correlate-host`, which decoded pack
+receipts with Go's JSON decoder and read `"Verdict":"ALLOW"` beside a signed
+`"verdict":"DENY"`, applies `ValidateReceiptMemberNames` first as well. A
+receipt file the signature check refuses for nesting deeper than 64 levels
+fails that check instead of being skipped; its reason counts the file as
+refused unread, not as a signature. The `integrity` check,
+which compares nothing, reports `not_applicable` and no longer says the signed
+bytes are the bytes on disk.
+
+Regressions: `TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt`,
+`TestCaseVariantMembersCannotShadowSignedFields` and
+`TestIntegrityCheckSaysOnlyWhatItChecked` in `core/pkg/receiptverify`,
+`TestReceiptV5SignatureDoesNotReplayAsLegacy` in `core/pkg/crypto`, and
+`TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt` in
+`core/cmd/helm-ai-kernel`. Also `TestBundleTopLevelHoldsNoReceiptMember`,
+`TestOptedInReplayIsRefusedByItsReceiptID` and
+`TestLetterCaseRuleFollowsTheDecodedType` in `core/pkg/receiptverify`,
+`TestKeyRingReportsALegacyReceiptAsNotChecked` in `core/pkg/crypto`,
+`TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault`,
+`TestTeamPackCannotHideADeletedReceipt`,
+`TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn` and
+`TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust` in `core/pkg/verifier`,
+and `TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes`,
+`TestDemoRequestMembersAreMatchedExactly` and
+`TestCorrelateHostReadsAReceiptFileAsItsReaderDoes` in
+`core/cmd/helm-ai-kernel`.
 
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 

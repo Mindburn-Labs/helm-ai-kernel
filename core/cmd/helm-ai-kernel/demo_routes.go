@@ -1,10 +1,17 @@
+// quantum_posture: the public demo signs and verifies receipts with the
+// runtime's configured receipt signer and adds no signature scheme; its
+// receipt checks claim no post-quantum protection of their own.
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +20,7 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 )
 
 const demoPolicyID = "agent_tool_call_boundary"
@@ -42,15 +50,79 @@ type demoRunRequest struct {
 	Args     map[string]any `json:"args,omitempty"`
 }
 
-type demoVerifyRequest struct {
-	Receipt             contracts.Receipt `json:"receipt"`
-	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
+// demoReceiptRequest is the body of POST /api/demo/verify and
+// POST /api/demo/tamper, as readDemoReceiptRequest reads it. The receipt is
+// kept as the bytes the caller sent, for readDemoReceipt: decoding it here
+// would let encoding/json fold member names before the receipt parser sees
+// them.
+type demoReceiptRequest struct {
+	Receipt             json.RawMessage
+	ExpectedReceiptHash string
+	Mutation            string
 }
 
-type demoTamperRequest struct {
-	Receipt             contracts.Receipt `json:"receipt"`
-	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
-	Mutation            string            `json:"mutation"`
+// demoVerifyMembers and demoTamperMembers are the request members of POST
+// /api/demo/verify and POST /api/demo/tamper. The request schemas of
+// api/openapi/helm.openapi.yaml declare these and no other.
+var (
+	demoVerifyMembers = []string{"receipt", "expected_receipt_hash"}
+	demoTamperMembers = []string{"receipt", "expected_receipt_hash", "mutation"}
+)
+
+// readDemoReceiptRequest reads a demo request body by exact member name.
+//
+// encoding/json binds an object member to a struct field whatever its letter
+// case, so a body whose "receipt" says ALLOW and whose "Receipt" is the
+// genuine DENY was verified as the DENY while the page that shows the request
+// reads ALLOW (helm-tracker#305). The body must be one JSON object, nested at
+// most MaxJSONDepth levels, with no member written twice. The members named in
+// members are taken by exact name: receipt as raw bytes, the others as
+// strings. Any other member, a letter-case variant of one of them included, is
+// refused.
+func readDemoReceiptRequest(w http.ResponseWriter, r *http.Request, members ...string) (demoReceiptRequest, error) {
+	var req demoReceiptRequest
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16_384))
+	if err != nil {
+		return req, err
+	}
+	if err := receiptverify.ValidateRequestBodyStructure(body); err != nil {
+		return req, err
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(body, &object); err != nil || object == nil {
+		return req, errors.New("the body must be a JSON object")
+	}
+	names := make([]string, 0, len(object))
+	for name := range object {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !slices.Contains(members, name) {
+			return req, fmt.Errorf("member %q is not one this route takes (%s); member names are matched exactly", name, strings.Join(members, ", "))
+		}
+	}
+	req.Receipt = object["receipt"]
+	for name, target := range map[string]*string{"expected_receipt_hash": &req.ExpectedReceiptHash, "mutation": &req.Mutation} {
+		if value, present := object[name]; present {
+			if err := json.Unmarshal(value, target); err != nil {
+				return req, fmt.Errorf("member %q must be a string", name)
+			}
+		}
+	}
+	return req, nil
+}
+
+// readDemoReceipt reads the receipt of a demo request with the parser
+// receipt_verify uses. A receipt that writes a member twice, or spells one in
+// another letter case, reads differently to the page that displays it than to
+// this verifier, and is refused instead of verified. The signature profile is
+// the runtime signer's to check: it may be hybrid.
+func readDemoReceipt(raw json.RawMessage) (*contracts.Receipt, error) {
+	if len(raw) == 0 {
+		return nil, errors.New("receipt is required")
+	}
+	return receiptverify.ParseReceipt(raw, receiptverify.AnySignatureProfile)
 }
 
 var demoActions = map[string]demoAction{
@@ -172,16 +244,21 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req demoVerifyRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16_384)).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
+		req, err := readDemoReceiptRequest(w, r, demoVerifyMembers...)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return
 		}
 		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {
 			api.WriteBadRequest(w, "expected_receipt_hash is required")
 			return
 		}
-		result := verifyDemoReceipt(svc, &req.Receipt, req.ExpectedReceiptHash)
+		receipt, err := readDemoReceipt(req.Receipt)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid receipt: "+err.Error())
+			return
+		}
+		result := verifyDemoReceipt(svc, receipt, req.ExpectedReceiptHash)
 		writeJSON(w, result)
 	})
 
@@ -190,17 +267,22 @@ func registerDemoRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req demoTamperRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16_384)).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
+		req, err := readDemoReceiptRequest(w, r, demoTamperMembers...)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid JSON body: "+err.Error())
 			return
 		}
 		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {
 			api.WriteBadRequest(w, "expected_receipt_hash is required")
 			return
 		}
-		originalHash, _ := contracts.ReceiptChainHash(&req.Receipt)
-		tampered := req.Receipt
+		receipt, err := readDemoReceipt(req.Receipt)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid receipt: "+err.Error())
+			return
+		}
+		originalHash, _ := contracts.ReceiptChainHash(receipt)
+		tampered := *receipt
 		switch strings.TrimSpace(req.Mutation) {
 		case "", "flip_verdict", "flip_status":
 			if tampered.Status == string(contracts.VerdictDeny) {
@@ -351,6 +433,15 @@ func publicReasonCode(decision *contracts.DecisionRecord) string {
 	return "UNSPECIFIED"
 }
 
+// verifyDemoReceipt checks a demo receipt against the runtime signer and the
+// hash the demo run returned.
+//
+// verified_fields names the members the signature was verified over: the
+// receipt.v5 signed members when the signature is valid, and nothing
+// otherwise. hash_matches covers the whole receipt, but only against a hash
+// the caller supplied. A receipt with no signature_version is not checked
+// (helmcrypto.ErrLegacyReceiptRefused), and the reason says that instead of
+// reporting a signature that failed.
 func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceiptHash string) map[string]any {
 	expectedReceiptHash = strings.TrimSpace(expectedReceiptHash)
 	receiptHash, hashErr := contracts.ReceiptChainHash(receipt)
@@ -361,6 +452,7 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 			"signature_valid":       false,
 			"hash_matches":          hashMatches,
 			"reason":                "receipt signer unavailable",
+			"verified_fields":       []string{},
 			"receipt_hash":          receiptHash,
 			"expected_receipt_hash": expectedReceiptHash,
 		}
@@ -374,6 +466,7 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 			"signature_valid":       false,
 			"hash_matches":          hashMatches,
 			"reason":                "receipt signer cannot verify receipts",
+			"verified_fields":       []string{},
 			"receipt_hash":          receiptHash,
 			"expected_receipt_hash": expectedReceiptHash,
 		}
@@ -382,6 +475,8 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 	reason := "signature and receipt hash verified"
 	if hashErr != nil {
 		reason = "receipt hash failed: " + hashErr.Error()
+	} else if errors.Is(verifyErr, helmcrypto.ErrLegacyReceiptRefused) {
+		reason = "receipt not checked: " + verifyErr.Error()
 	} else if verifyErr != nil {
 		reason = "signature verification failed: " + verifyErr.Error()
 	} else if !signatureValid {
@@ -390,12 +485,16 @@ func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceip
 		reason = "receipt hash mismatch"
 	}
 	valid := signatureValid && hashMatches && hashErr == nil && verifyErr == nil
+	verifiedFields := []string{}
+	if signatureValid && verifyErr == nil && receipt.SignatureVersion == contracts.ReceiptSignatureV5 {
+		verifiedFields = receiptverify.ReceiptV5SignedMembers()
+	}
 	return map[string]any{
 		"valid":                 valid,
 		"signature_valid":       signatureValid,
 		"hash_matches":          hashMatches,
 		"reason":                reason,
-		"verified_fields":       []string{"receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash", "lamport_clock", "args_hash", "signature"},
+		"verified_fields":       verifiedFields,
 		"receipt_hash":          receiptHash,
 		"expected_receipt_hash": expectedReceiptHash,
 	}

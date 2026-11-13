@@ -121,6 +121,56 @@ evaluate file. Exit 0 only when integrity and the caller-supplied
 helm-ai-kernel#859, not `--allow-self-attested`, and not
 `workstation verify-decision`. Hop fixtures are DENY / no permit.
 
+## EvidencePack Verification And Tape Replay
+
+```bash
+helm-ai-kernel verify <pack> --config <trust-config.yaml>
+helm-ai-kernel verify <pack> --config <trust-config.yaml> --require-check chain_integrity
+helm-ai-kernel verify <pack> --config <trust-config.yaml> --json
+helm-ai-kernel replay --evidence <pack-dir>
+```
+
+`verify` reports every check as `VERIFIED`, `FAILED`, `UNVERIFIABLE` or
+`NOT_RUN`, and prints the passed, failed and not-run counts separately. A
+check the pack gives no input to is `NOT_RUN` and is never counted as passed.
+Exit 0 means `VERIFIED`: no check failed and every required check ran and
+held; checks that did not run are listed with the reason. Exit 1 means
+`FAILED` or `UNVERIFIABLE`; exit 2 means no verdict. `--require-check` names
+checks that must have run and fails the pack when one did not. Repeat the flag
+or separate names with commas; every named check is required, and a name that
+is not a check exits 2. Evidence that is present is validated whether or not
+anything requires it. See
+[Receipts](../VERIFICATION.md#what-the-result-covers) for each check and what
+requires it.
+
+`evidence inspect <pack>` reaches the same verdict through the same code and
+exits the same way, in text and `--json` mode. Text output of these commands
+shows control characters, line breaks and characters that print as blank
+space from the pack as visible escapes, and a backslash as `\\`; `--json`
+keeps the raw values. Every check except `roots` and `evidence_pack_seal`,
+including `--require-eidas` and `--require-tee`, reads the pack through an
+`os.Root` on its directory: a path or symbolic link that leaves the pack, an
+absolute symbolic link and a file that is not a regular file fail the check
+that wanted them. The layout check reads and lists through the same
+`os.Root`. The seal code those two use reads by path under its own rules,
+described in [Receipts](../VERIFICATION.md#what-the-result-covers) with the
+reads that skip what they cannot read.
+
+`replay` serves an EvidencePack's recorded tape (`08_TAPES`) back through the
+tape replayer and reports `COMPLETE`, `DIVERGED` or `NOT_RUN`. Exit 0 only
+for `COMPLETE`: the entry files are in the order of the number in their name
+and in sequence order, every entry was served and matches its recorded hash,
+every entry has a type the recorder writes, every manifest row carries `seq`,
+`type`, `key`, `sha256` and `size_bytes`, and every field the tape manifest
+carries for an entry equals that entry. It replays recorded inputs; it does
+not re-execute the run, and it does not check the pack seal, so run `verify`
+on the pack as well; `verify` replays the tape with the same code. A symbolic
+link in place of the tape directory or a tape file, a tape file that does
+not parse, or entry files past 256 MiB in all (sized before any is read),
+exits 2; with `--json` the result is still printed, with `replay_status`
+`NOT_RUN` and the reason in `error`. A tape with no entries is `NOT_RUN` and
+exits 1; `verify` fails it in a pack that declares gate `G2`.
+
 ## Doctor
 
 ```bash

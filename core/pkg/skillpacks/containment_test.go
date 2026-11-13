@@ -27,9 +27,11 @@ mcp_auto_enable_default = "quarantine"
 [evidence]
 `
 
-// firstPartyTestManifest passes the first-party keyring check. That check
-// compares strings, so a cloned repository can present the same manifest:
-// install and revoke containment must hold even when the scan says ALLOW.
+// firstPartyTestManifest declares what a first-party manifest declares. That
+// earns nothing by itself: these tests reach the write path through
+// installPinned, which pins the pack's files the way the binary pins the
+// registry packs. Install and revoke containment must hold even for a pack the
+// scan allows.
 func firstPartyTestManifest(id, version string) Manifest {
 	name := id[strings.Index(id, "/")+1:]
 	return Manifest{
@@ -92,7 +94,7 @@ func TestInstallIgnoresPlantedTempSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Install(pack, InstallRequest{Agent: "codex"})
+	result, err := installPinned(t, pack, InstallRequest{Agent: "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +139,7 @@ func TestInstallRefusesSymlinkedManagedDirectories(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := Install(pack, InstallRequest{Agent: tc.agent, RepoRoot: clone}); !errors.Is(err, ErrProjectionPathUnsafe) {
+			if _, err := installPinned(t, pack, InstallRequest{Agent: tc.agent, RepoRoot: clone}); !errors.Is(err, ErrProjectionPathUnsafe) {
 				t.Fatalf("install through %s error = %v, want ErrProjectionPathUnsafe", tc.link, err)
 			}
 			entries, err := os.ReadDir(outside)
@@ -148,7 +150,7 @@ func TestInstallRefusesSymlinkedManagedDirectories(t *testing.T) {
 	}
 }
 
-// 21-09: the PoC manifest is experimental with signature_ref "sig". No key
+// 21-09: the PoC manifest is experimental with signature_ref "sig". Nothing
 // checks that reference, so the pack is unsigned and must not install.
 func TestInstallBlocksUnsignedPack(t *testing.T) {
 	manifest := Manifest{
@@ -178,8 +180,9 @@ func TestInstallBlocksUnsignedPack(t *testing.T) {
 }
 
 // 21-09: a github: pack is extracted into a temp directory with no repository
-// above it. The policy check must escalate instead of being skipped.
-func TestScanEscalatesRemotePackWithoutPolicyRoot(t *testing.T) {
+// above it. It is judged by its own bytes like any other pack: copying the
+// first-party strings is a status claim nothing backs, so the scan denies it.
+func TestScanDeniesRemotePackThatCopiesFirstPartyStrings(t *testing.T) {
 	archive := testGitHubTarball(t, map[string]string{
 		"repo-root/skills/example/skillpack.json": mustJSON(t, firstPartyTestManifest("acme/remote", "1.0.0")),
 		"repo-root/skills/example/SKILL.md":       "remote skill",
@@ -189,9 +192,6 @@ func TestScanEscalatesRemotePackWithoutPolicyRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	if _, err := findRepoRoot(root); err == nil {
-		t.Skip("the temp directory has a HELM repository above it")
-	}
 	pack, err := LoadDir(root)
 	if err != nil {
 		t.Fatal(err)
@@ -201,8 +201,9 @@ func TestScanEscalatesRemotePackWithoutPolicyRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Verdict != VerdictEscalate || result.ReasonCode != "ERR_SKILL_POLICY_INVALID" {
-		t.Fatalf("remote pack scan = %+v, want policy ESCALATE", result)
+	if result.Verdict != VerdictDeny || result.ReasonCode != "ERR_SKILL_VERIFIED_CLAIM_UNPROVEN" ||
+		result.PublisherVerification.State != PublisherUnsigned {
+		t.Fatalf("remote pack scan = %+v, want DENY for an unproven verified claim", result)
 	}
 }
 

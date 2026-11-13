@@ -327,8 +327,6 @@ G304 core/pkg/policy/reconcile/persistent_store.go 9ef7bf203908
 G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322
 G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
 G304 core/pkg/skillpacks/github.go 60c09d522cae
-G304 core/pkg/skillpacks/loader.go 8f256b8ef0f4
-G304 core/pkg/skillpacks/loader.go aa9837404799
 G304 core/pkg/skillpacks/plugin.go 1776bdcd5325
 G304 core/pkg/skillpacks/plugin.go 6d3ab38598d3
 G304 core/pkg/spendproxy/config.go 84f8ae84aaaf

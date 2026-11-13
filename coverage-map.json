@@ -6153,6 +6153,7 @@
         "allowed": [
           "core/pkg/skillpacks.TestGenuineFirstPartyPackIsAllowedOnItsOwnBytes",
           "core/pkg/skillpacks.TestFirstPartyRegistryPacksAreDiscoverableAndAllowed",
+          "core/pkg/skillpacks.TestProjectionLifecycleAcceptsShippedFirstPartyBytes",
           "core/cmd/helm-ai-kernel.TestSkillsVerifyReportsTheFirstPartyBasis",
           "core/cmd/helm-ai-kernel.TestSkillsInstallRepoScopeAndRevoke"
         ],
@@ -6181,6 +6182,7 @@
           "core/pkg/skillpacks.TestPinnedPackStillAnswersToTheScan",
           "core/pkg/skillpacks.TestFirstPartyManifestMatchesTheRegistry",
           "core/pkg/skillpacks.TestKernelSkillPolicyStatesTheCompiledRules",
+          "core/pkg/skillpacks.TestProjectionLifecycleRejectsVerifiedStatusThePackOnlyDeclares",
           "core/pkg/skillpacks.TestLoadDirNeverReadsInputsOutsideThePack",
           "core/pkg/skillpacks.TestLoadDirReportsAnUnreadableManifest",
           "core/pkg/skillpacks.TestLoadDirRefusesNamedPipesBeforeScanning",

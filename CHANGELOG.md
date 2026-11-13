@@ -505,6 +505,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `MarketplacePlugin.ScannedAt` is `RecordedAt` (`recorded_at`).
   `ProjectionLifecycle` rejects a manifest that declares `status: verified`
   unless its two files are a pack the binary pins.
+  The shipped pack explicitly records its `SKILL.md` content hash so those
+  exact pinned files also satisfy the lifecycle's artifact identity checks.
 
 ### Fixed
 

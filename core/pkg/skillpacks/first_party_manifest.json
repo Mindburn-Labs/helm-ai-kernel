@@ -8,7 +8,7 @@
     {
       "id": "helm/repo-auditor",
       "version": "0.2.0",
-      "content_digest": "sha256:be42b9ce0ed42689bf44bf8f17fb3c53121e6ce36ee9bab9ab027fd3e7dc8a06",
+      "content_digest": "sha256:569c8fe5d6b6c27f8f46961aa493375b2da12aa98a0354d8e0c512ac841d3b57",
       "files": [
         {
           "path": "SKILL.md",
@@ -17,8 +17,8 @@
         },
         {
           "path": "skillpack.json",
-          "sha256": "sha256:72606a807e09a6bca06d1de318e4f73c717526d67d5699b22d06922ced7d927c",
-          "size": 786
+          "sha256": "sha256:8bb127053717de1676f1ac59e4f49ee50136b24a77ac5d194dd0116c89bc3481",
+          "size": 879
         }
       ]
     }

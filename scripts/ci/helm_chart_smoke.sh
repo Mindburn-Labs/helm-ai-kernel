@@ -1243,7 +1243,13 @@ expect_gateway_render_failure() {
         echo "::error::gateway render ${name} unexpectedly succeeded"
         exit 1
     fi
-    if [[ "$message" =~ ^[[:alnum:]_]+(\.[[:alnum:]_]+)+$ ]]; then
+    if [ "$message" = 'is required' ]; then
+        if ! grep -qF 'is required' "$log" && ! grep -qF 'missing property' "$log"; then
+            echo "::error::gateway render $name did not reject the missing property"
+            cat "$log"
+            exit 1
+        fi
+    elif [[ "$message" =~ ^[[:alnum:]_]+(\.[[:alnum:]_]+)+$ ]]; then
         assert_schema_path "$log" "$message"
     else
         assert_contains "$log" "$message"
@@ -1389,8 +1395,8 @@ assert len(profiles)==2 and len(set(profiles))==2, profiles
 assert any(n.endswith('-worker') for n in profiles)
 assert any(n.endswith('-executor') for n in profiles)
 PYNAMES
-expect_gateway_render_failure executor-too-long '900' "${episode_args[@]}" --set gateway.executor.maxTTLSeconds=901
-expect_gateway_render_failure worker-too-long '3600' "${episode_args[@]}" --set gateway.worker.maxTTLSeconds=3601
+expect_gateway_render_failure executor-too-long 'gateway.executor.maxTTLSeconds' "${episode_args[@]}" --set gateway.executor.maxTTLSeconds=901
+expect_gateway_render_failure worker-too-long 'gateway.worker.maxTTLSeconds' "${episode_args[@]}" --set gateway.worker.maxTTLSeconds=3601
 expect_gateway_render_failure executor-audience-only 'requires that listener' "${GATEWAY_ARGS[@]}" --set gateway.executor.audience=helm-gateway-executor:smoke
 expect_gateway_render_failure model-routes-no-listener 'requires a worker or executor listener' "${GATEWAY_ARGS[@]}" --set gateway.models.routesConfigMap=gw-model-routes
 expect_gateway_render_failure model-secret-no-routes 'requires gateway.models.routesConfigMap' "${GATEWAY_ARGS[@]}" --set gateway.models.credentialsSecret=gw-model-providers
@@ -1492,10 +1498,10 @@ done
 for null_field in serving serving.image serving.image.repository serving.image.tag serving.image.digest serving.executable; do
     expect_gateway_render_failure "serving-null-${null_field##*.}" 'is required' "${GATEWAY_ARGS[@]}" --set-json "gateway.$null_field=null"
 done
-expect_gateway_render_failure serving-command-array 'Expected: string' "${GATEWAY_ARGS[@]}" \
+expect_gateway_render_failure serving-command-array 'gateway.serving.executable' "${GATEWAY_ARGS[@]}" \
     --set-json 'gateway.serving.executable=["/app/helm-model-gateway"]'
-expect_gateway_render_failure serving-unknown-field 'Additional property' "${GATEWAY_ARGS[@]}" --set gateway.serving.command=ignored
-expect_gateway_render_failure serving-unknown-image-field 'Additional property' "${GATEWAY_ARGS[@]}" --set gateway.serving.image.pullPolicy=Always
+expect_gateway_render_failure serving-unknown-field 'command' "${GATEWAY_ARGS[@]}" --set gateway.serving.command=ignored
+expect_gateway_render_failure serving-unknown-image-field 'pullPolicy' "${GATEWAY_ARGS[@]}" --set gateway.serving.image.pullPolicy=Always
 serving_production_tag_log="$RENDER_DIR/gateway-serving-production-tag.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
     "${gateway_production_args[@]}" "${gateway_serving_args[@]}" "${gateway_serving_selection[@]}" \

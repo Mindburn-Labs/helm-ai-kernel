@@ -169,7 +169,7 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		// goes backwards. One that does not verify refuses the approval.
 		state := &ApprovalState{ApproverID: caller.PrincipalID, ApproverActorID: caller.ActorID, Approved: true, proof: in.StepUp}
 		if in.OwnerAssertion != nil {
-			verified, err := verifyOwnerAssertion(ctx, tx, caller, a, *in.OwnerAssertion)
+			verified, err := s.verifyOwnerAssertion(ctx, tx, caller, a, *in.OwnerAssertion)
 			if err != nil {
 				return err
 			}
@@ -181,7 +181,7 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		// the one it recomputes, so a class raised since the escalation needs
 		// it too (and takes the proof from the approval state there).
 		if needsStepUp(a.risk, a.effectType) {
-			if err := s.satisfyStepUp(ctx, tx, caller.TenantID, a.effectType, state); err != nil {
+			if err := s.satisfyStepUp(ctx, tx, caller.TenantID, state); err != nil {
 				return err
 			}
 		}
@@ -215,17 +215,17 @@ var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
 	"approving a high-risk, irreversible or authority-widening effect needs a valid step-up proof")
 
 var errOwnerAssertionRequired = refuse(CodePermissionDenied, contracts.ReasonOwnerAssertionRequired,
-	"approving an authority widening needs the approver's own passkey assertion (owner_assertion), "+
+	"approving a high-risk, irreversible or authority-widening effect needs the approver's own passkey assertion (owner_assertion), "+
 		"verified by the gateway; a step-up proof the Control Plane's issuer signs is not accepted for it")
 
 // satisfyStepUp settles the step-up of an approval whose effect needs one
 // (§10.1, helm-tracker#334): the approver's verified owner assertion satisfies
 // it, and a step-up proof the request also carries is then not used.
-// Otherwise the proof is used up, except for a helm.authority.* widening when
+// Otherwise the proof is used up, except when
 // Config.OwnerAssertionRequired is on: the Control Plane's issuer signs the
 // proof, so it is not the owner's act, and only the assertion is accepted
 // (OWNER_ASSERTION_REQUIRED).
-func (s *Service) satisfyStepUp(ctx context.Context, tx *sql.Tx, tenantID, effectType string, state *ApprovalState) error {
+func (s *Service) satisfyStepUp(ctx context.Context, tx *sql.Tx, tenantID string, state *ApprovalState) error {
 	if state.StepUpVerified {
 		return nil
 	}
@@ -233,7 +233,7 @@ func (s *Service) satisfyStepUp(ctx context.Context, tx *sql.Tx, tenantID, effec
 		state.StepUpVerified = true
 		return nil
 	}
-	if ownerAssertionOnly(s.cfg.OwnerAssertionRequired, effectType) {
+	if s.cfg.OwnerAssertionRequired {
 		return errOwnerAssertionRequired
 	}
 	if err := spendStepUp(ctx, tx, tenantID, state.proof); err != nil {
@@ -241,13 +241,6 @@ func (s *Service) satisfyStepUp(ctx context.Context, tx *sql.Tx, tenantID, effec
 	}
 	state.StepUpVerified, state.proofUsed = true, true
 	return nil
-}
-
-// ownerAssertionOnly reports whether only the owner's own assertion satisfies
-// the step-up of effectType: every authority widening (provision plans, a
-// lift, a reassignment grant) once the gateway requires owner assertions.
-func ownerAssertionOnly(required bool, effectType string) bool {
-	return required && effectargs.WidensAuthority(effectType)
 }
 
 // verifiedAssertion is an owner assertion the approval verified, with the
@@ -264,7 +257,7 @@ type verifiedAssertion struct {
 // digest, VerifyAssertion, then the assertion recorded once in
 // authority_token_replay and its counter stored. Any failure is
 // OWNER_ASSERTION_REQUIRED, and the transaction rolls back with nothing used.
-func verifyOwnerAssertion(ctx context.Context, tx *sql.Tx, caller Caller, a lockedAttempt, as OwnerAssertion) (*verifiedAssertion, error) {
+func (s *Service) verifyOwnerAssertion(ctx context.Context, tx *sql.Tx, caller Caller, a lockedAttempt, as OwnerAssertion) (*verifiedAssertion, error) {
 	refused := func(format string, args ...any) error {
 		return refuse(CodePermissionDenied, contracts.ReasonOwnerAssertionRequired, "the owner assertion is not accepted: "+format, args...)
 	}
@@ -282,7 +275,7 @@ func verifyOwnerAssertion(ctx context.Context, tx *sql.Tx, caller Caller, a lock
 		return nil, refused("the passkey is not the approver's")
 	}
 	challenge := OwnerChallengeV1(caller.TenantID, caller.PrincipalID, a.id, a.approvalDigest)
-	next, err := VerifyAssertion(cred.Credential, count, as, challenge)
+	next, err := VerifyAssertion(cred.Credential, count, as, challenge, s.cfg.OwnerOrigins...)
 	if err != nil {
 		return nil, refused("%v", err)
 	}

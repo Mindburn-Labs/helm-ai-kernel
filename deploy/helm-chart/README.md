@@ -172,7 +172,8 @@ does not configure its adapters or activate a native profile.
 | `gateway.serving.executable` | empty | Serving-only absolute executable path accepting the unchanged `serve` arguments; empty defaults to `/usr/local/bin/helm-gateway` with the shared image. |
 | `gateway.service.port` | `8443` | Service port of the Connect/gRPC API. |
 | `gateway.approvalWindow` | empty | `HELM_GATEWAY_APPROVAL_WINDOW` (Go duration); empty keeps 24h. |
-| `gateway.ownerAssertionRequired` | `false` | `true` sets `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED`: only the approver's own passkey assertion satisfies the step-up of an authority widening, a new tenant's genesis registers its passkey owner, and `EnsurePrincipals` takes no human on a tenant that exists. |
+| `gateway.ownerAssertionRequired` | `false` | `true` sets `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED`: only the approver's own passkey assertion satisfies every required step-up, including authority widening, high-risk and irreversible effects, a new tenant's genesis registers its passkey owner, and `EnsurePrincipals` takes no human on a tenant that exists. |
+| `gateway.ownerOrigins` | `[]` | Exact browser origins accepted for genesis and approval. Empty accepts only `https://<credential rp_id>`; configured entries replace this default. Local HTTP needs an explicit loopback origin. |
 | `gateway.permitTTL` | empty | `HELM_GATEWAY_PERMIT_TTL` (Go duration); empty keeps 10m. |
 | `gateway.dispatchTimeout` | empty | `HELM_GATEWAY_DISPATCH_TIMEOUT` (Go duration); empty keeps 2m. |
 | `gateway.tls.existingSecret` | empty | **Required.** `kubernetes.io/tls` Secret: `tls.crt`, `tls.key`, and `ca.crt` when `clientAuth` is set. Mounted whole at `/var/run/secrets/helm-gateway-tls`. |

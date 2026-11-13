@@ -56,6 +56,8 @@ type AdminServer struct {
 	// (helm-tracker#334): on, a new tenant's genesis registers its passkey
 	// owner, and a tenant that exists takes no human at all.
 	OwnerAssertionRequired bool
+	// OwnerOrigins is the gateway operator's exact browser origin allowlist.
+	OwnerOrigins []string
 }
 
 // Handler returns the mount path and the HTTP handler of the service, with the
@@ -100,7 +102,7 @@ func (s *AdminServer) EnsurePrincipals(ctx context.Context, req *connect.Request
 		case err != nil && !errors.Is(err, authorityrows.ErrNotFound):
 			return err
 		}
-		genesis, err := ownerGenesis(id.TenantID, created, s.OwnerAssertionRequired, principals, assertion)
+		genesis, err := ownerGenesis(id.TenantID, created, s.OwnerAssertionRequired, principals, assertion, s.OwnerOrigins...)
 		if err != nil {
 			return err
 		}

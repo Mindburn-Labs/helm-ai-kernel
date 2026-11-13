@@ -132,8 +132,13 @@ type Route struct {
 }
 
 // Price is a tariff in PriceUnit. Input and Output are required (an unpriced
-// route is refused, ADR-0003); the cache prices default to Input, which claims
-// no discount and no surcharge.
+// route is refused, ADR-0003). CacheRead defaults to Input, which claims no
+// discount. On an anthropic or openai-compatible route the cache-write prices
+// default to Anthropic's published premium, 1.25 times Input for a 5-minute
+// write (rounded up) and 2 times for a 1-hour write, because the provider, or
+// an upstream that passes Anthropic's tariff through, bills a write above the
+// input price; on an openai route they default to Input, as OpenAI bills no
+// write (helm-tracker#313 r2, finding 6).
 type Price struct {
 	Unit         string `json:"unit"`
 	Input        *int64 `json:"input"`
@@ -349,6 +354,9 @@ func (r *Route) validate(p *Provider) error {
 	if err := r.Price.validate(); err != nil {
 		return err
 	}
+	if p.Kind == KindAnthropic || p.Kind == KindOpenAICompatible {
+		r.Price.defaultCacheWrites()
+	}
 	if r.DefaultMaxOutputTokens < 1 || r.MaxOutputTokens < r.DefaultMaxOutputTokens || r.MaxOutputTokens > maxOutputTokensCeiling {
 		return fmt.Errorf("default_max_output_tokens and max_output_tokens must satisfy 1 <= default <= max <= %d", maxOutputTokensCeiling)
 	}
@@ -382,6 +390,21 @@ func (pr *Price) validate() error {
 		}
 	}
 	return nil
+}
+
+// defaultCacheWrites sets the cache-write prices a route names none of to
+// Anthropic's published premium on the input price: 1.25 times for a
+// 5-minute write, rounded up, and 2 times for a 1-hour write.
+func (pr *Price) defaultCacheWrites() {
+	input := *pr.Input
+	if pr.CacheWrite5m == nil {
+		v := (input*5 + 3) / 4
+		pr.CacheWrite5m = &v
+	}
+	if pr.CacheWrite1h == nil {
+		v := input * 2
+		pr.CacheWrite1h = &v
+	}
 }
 
 // APIs are the model APIs the gateway passes through natively.

@@ -59,7 +59,7 @@ type genesisEnrolment struct {
 // owner. On a tenant that exists nothing is enrolled: a passkey there is
 // accepted only as already enrolled (humanAfterGenesis), and a genesis
 // assertion without one is refused.
-func ownerGenesis(tenantID string, created, required bool, principals []requestedPrincipal, assertion *admission.OwnerAssertion) (*genesisEnrolment, error) {
+func ownerGenesis(tenantID string, created, required bool, principals []requestedPrincipal, assertion *admission.OwnerAssertion, origins ...string) (*genesisEnrolment, error) {
 	var humans, keyed []requestedPrincipal
 	for _, p := range principals {
 		if p.spec.Kind == authorityrows.PrincipalHuman {
@@ -95,7 +95,7 @@ func ownerGenesis(tenantID string, created, required bool, principals []requeste
 			"the owner's passkey needs a genesis_assertion signed by it")
 	}
 	owner, cred := keyed[0].spec.ID, keyed[0].credentials[0]
-	counter, err := admission.VerifyAssertion(cred, 0, *assertion, admission.GenesisChallengeV1(tenantID, owner, cred.ID))
+	counter, err := admission.VerifyAssertion(cred, 0, *assertion, admission.GenesisChallengeV1(tenantID, owner, cred.ID), origins...)
 	if err != nil {
 		return nil, refuseAdmin(connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired, "the genesis assertion does not verify: %v", err)
 	}

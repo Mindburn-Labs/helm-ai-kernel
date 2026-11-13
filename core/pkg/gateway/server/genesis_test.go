@@ -47,6 +47,15 @@ func TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey(t *testing.T) {
 	service := requested("svc:helm-org", authorityrows.PrincipalService)
 	good := []requestedPrincipal{service, requested("usr_owner", authorityrows.PrincipalHuman, owner)}
 	challenge := admission.GenesisChallengeV1("tenant-a", "usr_owner", owner.ID)
+	configuredOrigin := "https://console.helm.example"
+	signed := owner.AssertWith(t, challenge, func(p *passkey.Parts) { p.ClientData["origin"] = configuredOrigin })
+	assertion := &admission.OwnerAssertion{CredentialID: signed.CredentialID, AuthenticatorData: signed.AuthenticatorData,
+		ClientDataJSON: signed.ClientDataJSON, Signature: signed.Signature}
+	_, err := ownerGenesis("tenant-a", true, true, good, assertion)
+	wantAdminRefusal(t, "an unconfigured browser origin", err, connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)
+	if g, err := ownerGenesis("tenant-a", true, true, good, assertion, configuredOrigin); err != nil || g == nil {
+		t.Fatalf("configured browser origin: %v", err)
+	}
 
 	for _, required := range []bool{false, true} {
 		g, err := ownerGenesis("tenant-a", true, required, good, genesisAssertion(t, owner, challenge))
@@ -60,7 +69,7 @@ func TestOwnerGenesisEnrolsExactlyTheOwnersSelfSignedPasskey(t *testing.T) {
 	if g, err := ownerGenesis("tenant-a", true, false, legacy, nil); g != nil || err != nil {
 		t.Fatalf("legacy genesis = %+v, %v", g, err)
 	}
-	_, err := ownerGenesis("tenant-a", true, true, legacy, nil)
+	_, err = ownerGenesis("tenant-a", true, true, legacy, nil)
 	wantAdminRefusal(t, "a genesis without a passkey owner, required", err, connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)
 	_, err = ownerGenesis("tenant-a", true, true, []requestedPrincipal{service}, nil)
 	wantAdminRefusal(t, "a genesis without an owner, required", err, connect.CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)

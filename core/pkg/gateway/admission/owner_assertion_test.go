@@ -10,6 +10,7 @@ package admission
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -192,20 +193,14 @@ func TestSignedPayloadDigestIgnoresTheSignature(t *testing.T) {
 	}
 }
 
-// Only the owner's assertion satisfies the step-up of an authority widening
-// once the gateway requires it; anything else keeps the step-up proof.
-func TestOwnerAssertionOnlyCoversAuthorityWideningsWhenRequired(t *testing.T) {
-	for _, effect := range []string{effectargs.AuthorityProvision, effectargs.AuthorityLift, effectargs.AuthorityWorkReassignmentGrant} {
-		if !ownerAssertionOnly(true, effect) {
-			t.Errorf("%s accepts a step-up proof with owner assertions required", effect)
-		}
-		if ownerAssertionOnly(false, effect) {
-			t.Errorf("%s refuses a step-up proof with owner assertions not required", effect)
-		}
+// Every effect needing step-up requires the owner's own act when enabled.
+func TestOwnerAssertionRequiredCoversEveryStepUp(t *testing.T) {
+	s := &Service{cfg: Config{OwnerAssertionRequired: true}}
+	if err := s.satisfyStepUp(context.Background(), nil, "tenant-a", &ApprovalState{}); err != errOwnerAssertionRequired {
+		t.Fatalf("step-up without owner assertion: %v", err)
 	}
-	for _, effect := range []string{effectargs.AuthorityNarrow, effectargs.GitHubPullRequestMerge, "ops.release.publish"} {
-		if ownerAssertionOnly(true, effect) {
-			t.Errorf("%s needs an owner assertion: only widenings do", effect)
-		}
+	state := &ApprovalState{OwnerAssertionVerified: true}
+	if err := s.satisfyStepUp(context.Background(), nil, "tenant-a", state); err != nil || !state.StepUpVerified || state.proofUsed {
+		t.Fatalf("verified owner assertion: %+v, %v", state, err)
 	}
 }

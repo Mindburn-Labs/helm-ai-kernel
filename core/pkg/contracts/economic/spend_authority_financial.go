@@ -36,80 +36,6 @@ type ProviderTermsProfile struct {
 	ContentHash                        string              `json:"content_hash"`
 }
 
-// NewProviderTermsProfile creates a provider terms profile with safe defaults.
-func NewProviderTermsProfile(id, providerID string, mode ProviderAccountMode, termsVersion, legalReviewRef string) *ProviderTermsProfile {
-	p := &ProviderTermsProfile{
-		ID:                                id,
-		ProviderID:                        providerID,
-		AccountMode:                       mode,
-		TermsVersion:                      termsVersion,
-		LegalReviewRef:                    legalReviewRef,
-		RequiresContractForManagedBilling: mode == ProviderAccountManagedOrgAccount,
-		EffectiveAt:                       time.Now().UTC(),
-	}
-	p.ContentHash = p.computeHash()
-	return p
-}
-
-// Validate rejects unsafe provider-credit or resale claims unless legal changes the contract.
-func (p *ProviderTermsProfile) Validate() error {
-	if p == nil {
-		return errors.New("provider_terms_profile: profile is nil")
-	}
-	if p.ID == "" {
-		return errors.New("provider_terms_profile: id is required")
-	}
-	if p.ProviderID == "" {
-		return errors.New("provider_terms_profile: provider_id is required")
-	}
-	if p.AccountMode == "" {
-		return errors.New("provider_terms_profile: account_mode is required")
-	}
-	if p.TermsVersion == "" {
-		return errors.New("provider_terms_profile: terms_version is required")
-	}
-	if p.LegalReviewRef == "" {
-		return errors.New("provider_terms_profile: legal_review_ref is required")
-	}
-	if p.DataRetentionDays < 0 {
-		return errors.New("provider_terms_profile: data_retention_days cannot be negative")
-	}
-	if p.AllowsUsageResale {
-		return errors.New("provider_terms_profile: usage resale is forbidden without explicit legal override")
-	}
-	if p.AllowsProviderCreditTransfer {
-		return errors.New("provider_terms_profile: provider credit transfer is forbidden without explicit legal override")
-	}
-	if p.AllowsProviderCreditCashRedemption {
-		return errors.New("provider_terms_profile: provider credit cash redemption is forbidden without explicit legal override")
-	}
-	if p.RequiresContractForManagedBilling && p.ContractRef == "" {
-		return errors.New("provider_terms_profile: contract_ref is required for managed billing")
-	}
-	if p.ExpiresAt != nil && p.ExpiresAt.Before(p.EffectiveAt) {
-		return errors.New("provider_terms_profile: expires_at must be after effective_at")
-	}
-	return nil
-}
-
-func (p *ProviderTermsProfile) computeHash() string {
-	return hashSpendAuthorityCanonical(struct {
-		ID                                 string              `json:"id"`
-		TenantID                           string              `json:"tenant_id,omitempty"`
-		ProviderID                         string              `json:"provider_id"`
-		AccountMode                        ProviderAccountMode `json:"account_mode"`
-		TermsVersion                       string              `json:"terms_version"`
-		ContractRef                        string              `json:"contract_ref,omitempty"`
-		LegalReviewRef                     string              `json:"legal_review_ref"`
-		Jurisdiction                       string              `json:"jurisdiction,omitempty"`
-		DataRetentionDays                  int                 `json:"data_retention_days,omitempty"`
-		AllowsUsageResale                  bool                `json:"allows_usage_resale"`
-		AllowsProviderCreditTransfer       bool                `json:"allows_provider_credit_transfer"`
-		AllowsProviderCreditCashRedemption bool                `json:"allows_provider_credit_cash_redemption"`
-		RequiresContractForManagedBilling  bool                `json:"requires_contract_for_managed_billing"`
-	}{p.ID, p.TenantID, p.ProviderID, p.AccountMode, p.TermsVersion, p.ContractRef, p.LegalReviewRef, p.Jurisdiction, p.DataRetentionDays, p.AllowsUsageResale, p.AllowsProviderCreditTransfer, p.AllowsProviderCreditCashRedemption, p.RequiresContractForManagedBilling})
-}
-
 // ProviderPriceSnapshot captures quoted provider pricing at a point in time.
 type ProviderPriceSnapshot struct {
 	SchemaVersion          string    `json:"schema_version,omitempty"`
@@ -130,23 +56,6 @@ type ProviderPriceSnapshot struct {
 	EffectiveAt            time.Time `json:"effective_at"`
 	ExpiresAt              time.Time `json:"expires_at"`
 	ContentHash            string    `json:"content_hash"`
-}
-
-// NewProviderPriceSnapshot creates a price snapshot for a provider/model pair.
-func NewProviderPriceSnapshot(id, providerID, modelID, currency, termsProfileID, sourceHash string, effectiveAt, expiresAt time.Time) *ProviderPriceSnapshot {
-	s := &ProviderPriceSnapshot{
-		ID:                     id,
-		ProviderID:             providerID,
-		ModelID:                modelID,
-		Currency:               currency,
-		ProviderTermsProfileID: termsProfileID,
-		SourceHash:             sourceHash,
-		CapturedAt:             time.Now().UTC(),
-		EffectiveAt:            effectiveAt,
-		ExpiresAt:              expiresAt,
-	}
-	s.ContentHash = s.computeHash()
-	return s
 }
 
 // Validate ensures a quote cannot use stale or source-less pricing.
@@ -308,88 +217,6 @@ type BalanceAccount struct {
 	ContentHash      string               `json:"content_hash"`
 }
 
-// NewBalanceAccount creates an active usage balance account.
-func NewBalanceAccount(id, tenantID, currency string, balanceCents int64, evidencePackRef string) *BalanceAccount {
-	a := &BalanceAccount{
-		ID:              id,
-		TenantID:        tenantID,
-		Type:            BalanceAccountUsageBalance,
-		Status:          BalanceAccountActive,
-		Currency:        currency,
-		BalanceCents:    balanceCents,
-		EvidencePackRef: evidencePackRef,
-		UpdatedAt:       time.Now().UTC(),
-	}
-	a.ContentHash = a.computeHash()
-	return a
-}
-
-// AvailableCents returns funds available for new holds/debits.
-func (a *BalanceAccount) AvailableCents() int64 {
-	if a == nil || a.Status != BalanceAccountActive {
-		return 0
-	}
-	available := a.BalanceCents - a.HoldCents
-	if available < 0 {
-		return 0
-	}
-	return available
-}
-
-// Validate ensures the balance account can support spend decisions.
-func (a *BalanceAccount) Validate() error {
-	if a == nil {
-		return errors.New("balance_account: account is nil")
-	}
-	if a.ID == "" {
-		return errors.New("balance_account: id is required")
-	}
-	if a.TenantID == "" {
-		return errors.New("balance_account: tenant_id is required")
-	}
-	if a.Type == "" {
-		return errors.New("balance_account: type is required")
-	}
-	if a.Status == "" {
-		return errors.New("balance_account: status is required")
-	}
-	if a.Currency == "" {
-		return errors.New("balance_account: currency is required")
-	}
-	if a.BalanceCents < 0 {
-		return errors.New("balance_account: balance_cents cannot be negative")
-	}
-	if a.HoldCents < 0 {
-		return errors.New("balance_account: hold_cents cannot be negative")
-	}
-	if a.HoldCents > a.BalanceCents {
-		return errors.New("balance_account: hold_cents cannot exceed balance_cents")
-	}
-	if a.CreditLimitCents > 0 && a.CreditLineID == "" {
-		return errors.New("balance_account: credit_line_id is required when credit_limit_cents is positive")
-	}
-	if a.EvidencePackRef == "" {
-		return errors.New("balance_account: evidence_pack_ref is required")
-	}
-	return nil
-}
-
-func (a *BalanceAccount) computeHash() string {
-	return hashSpendAuthorityCanonical(struct {
-		ID               string               `json:"id"`
-		TenantID         string               `json:"tenant_id"`
-		WorkspaceID      string               `json:"workspace_id,omitempty"`
-		Type             BalanceAccountType   `json:"type"`
-		Status           BalanceAccountStatus `json:"status"`
-		Currency         string               `json:"currency"`
-		BalanceCents     int64                `json:"balance_cents"`
-		HoldCents        int64                `json:"hold_cents"`
-		CreditLimitCents int64                `json:"credit_limit_cents,omitempty"`
-		CreditLineID     string               `json:"credit_line_id,omitempty"`
-		EvidencePackRef  string               `json:"evidence_pack_ref"`
-	}{a.ID, a.TenantID, a.WorkspaceID, a.Type, a.Status, a.Currency, a.BalanceCents, a.HoldCents, a.CreditLimitCents, a.CreditLineID, a.EvidencePackRef})
-}
-
 // UsageLedgerEntryType classifies a balance ledger mutation.
 type UsageLedgerEntryType string
 
@@ -416,78 +243,6 @@ type UsageLedgerEntry struct {
 	SourceContentHash   string               `json:"source_content_hash"`
 	CreatedAt           time.Time            `json:"created_at"`
 	ContentHash         string               `json:"content_hash"`
-}
-
-// NewUsageLedgerEntry creates a balance ledger entry with deterministic hash.
-func NewUsageLedgerEntry(id, tenantID, balanceAccountID string, entryType UsageLedgerEntryType, direction SettlementDirection, amountCents int64, currency string, reasonCode SpendReasonCode, sourceContentHash string) *UsageLedgerEntry {
-	entry := &UsageLedgerEntry{
-		ID:                id,
-		TenantID:          tenantID,
-		BalanceAccountID:  balanceAccountID,
-		Type:              entryType,
-		Direction:         direction,
-		AmountCents:       amountCents,
-		Currency:          currency,
-		ReasonCode:        reasonCode,
-		SourceContentHash: sourceContentHash,
-		CreatedAt:         time.Now().UTC(),
-	}
-	entry.ContentHash = entry.computeHash()
-	return entry
-}
-
-// Validate ensures the ledger entry is auditable and typed.
-func (entry *UsageLedgerEntry) Validate() error {
-	if entry == nil {
-		return errors.New("usage_ledger_entry: entry is nil")
-	}
-	if entry.ID == "" {
-		return errors.New("usage_ledger_entry: id is required")
-	}
-	if entry.TenantID == "" {
-		return errors.New("usage_ledger_entry: tenant_id is required")
-	}
-	if entry.BalanceAccountID == "" {
-		return errors.New("usage_ledger_entry: balance_account_id is required")
-	}
-	if entry.Type == "" {
-		return errors.New("usage_ledger_entry: type is required")
-	}
-	if entry.Direction != SettlementDebit && entry.Direction != SettlementCredit {
-		return errors.New("usage_ledger_entry: direction must be DEBIT or CREDIT")
-	}
-	if entry.AmountCents <= 0 {
-		return errors.New("usage_ledger_entry: amount_cents must be positive")
-	}
-	if entry.Currency == "" {
-		return errors.New("usage_ledger_entry: currency is required")
-	}
-	if entry.ReasonCode == "" {
-		return errors.New("usage_ledger_entry: reason_code is required")
-	}
-	if entry.SourceContentHash == "" {
-		return errors.New("usage_ledger_entry: source_content_hash is required")
-	}
-	if entry.Type == UsageLedgerDebit && entry.UsageReceiptID == "" {
-		return errors.New("usage_ledger_entry: usage_receipt_id is required for DEBIT entries")
-	}
-	return nil
-}
-
-func (entry *UsageLedgerEntry) computeHash() string {
-	return hashSpendAuthorityCanonical(struct {
-		ID                  string               `json:"id"`
-		TenantID            string               `json:"tenant_id"`
-		BalanceAccountID    string               `json:"balance_account_id"`
-		UsageReceiptID      string               `json:"usage_receipt_id,omitempty"`
-		SettlementReceiptID string               `json:"settlement_receipt_id,omitempty"`
-		Type                UsageLedgerEntryType `json:"type"`
-		Direction           SettlementDirection  `json:"direction"`
-		AmountCents         int64                `json:"amount_cents"`
-		Currency            string               `json:"currency"`
-		ReasonCode          SpendReasonCode      `json:"reason_code"`
-		SourceContentHash   string               `json:"source_content_hash"`
-	}{entry.ID, entry.TenantID, entry.BalanceAccountID, entry.UsageReceiptID, entry.SettlementReceiptID, entry.Type, entry.Direction, entry.AmountCents, entry.Currency, entry.ReasonCode, entry.SourceContentHash})
 }
 
 // CapacityCommitmentStatus tracks a provider usage commitment.

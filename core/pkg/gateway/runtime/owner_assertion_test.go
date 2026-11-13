@@ -17,3 +17,15 @@ func TestOwnerAssertionRequiredIsOffUnlessSetAndRefusesAGuess(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnerOriginsAreExplicitAndMalformedConfigurationRefusesStartup(t *testing.T) {
+	cfg, err := admissionConfigFromEnv(env(map[string]string{envOwnerOrigins: "https://console.helm.example, http://localhost:5173"}))
+	if err != nil || len(cfg.OwnerOrigins) != 2 || cfg.OwnerOrigins[0] != "https://console.helm.example" || cfg.OwnerOrigins[1] != "http://localhost:5173" {
+		t.Fatalf("origins = %v, %v", cfg.OwnerOrigins, err)
+	}
+	for _, raw := range []string{"https://*.helm.example", "http://console.helm.example", "https://console.helm.example,", "https://console.helm.example/"} {
+		if _, err := admissionConfigFromEnv(env(map[string]string{envOwnerOrigins: raw})); err == nil {
+			t.Errorf("gateway accepted invalid origins %q", raw)
+		}
+	}
+}

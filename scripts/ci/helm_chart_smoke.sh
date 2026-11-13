@@ -995,6 +995,16 @@ assert_contains "$gateway_rendered" "name: HELM_GATEWAY_ACTIVITY_SOURCES_FILE"
 assert_contains "$gateway_rendered" 'value: "45s"'
 assert_contains "$gateway_rendered" "path: activity-webhook-secret"
 assert_contains "$gateway_rendered" 'value: "90s"'
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_OWNER_ORIGINS"
+gateway_owner_rendered="$RENDER_DIR/rendered-gateway-owner.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.ownerAssertionRequired=true \
+    --set-string 'gateway.ownerOrigins[0]=https://console.helm.example' \
+    --set-string 'gateway.ownerOrigins[1]=http://localhost:5173' >"$gateway_owner_rendered"
+assert_contains "$gateway_owner_rendered" "name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+assert_contains "$gateway_owner_rendered" "name: HELM_GATEWAY_OWNER_ORIGINS"
+assert_contains "$gateway_owner_rendered" 'value: "https://console.helm.example,http://localhost:5173"'
 assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"example/repo\"]'
 # Secret file modes (s3a review L2): the GitHub App Secret, the TLS key and
 # the bootstrap password are mounted 0400 (defaultMode 256). The Pod's

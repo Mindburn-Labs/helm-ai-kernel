@@ -247,11 +247,10 @@ func PublicRuntimeRouteSpecs() []RuntimeRouteSpec {
 // listener; ListenerRouteSpecs() declares these, and each mounts its routes on
 // a newListenerRouteMux that refuses a pattern not declared for it.
 const (
-	listenerHealth     = "health"      // server: HELM_HEALTH_PORT
-	listenerMetrics    = "metrics"     // server: HELM_METRICS_PORT when it differs from the health port
-	listenerMCP        = "mcp serve"   // mcp serve --transport http
-	listenerProxy      = "proxy"       // proxy
-	listenerSpendProxy = "spend-proxy" // spend-proxy
+	listenerHealth  = "health"    // server: HELM_HEALTH_PORT
+	listenerMetrics = "metrics"   // server: HELM_METRICS_PORT when it differs from the health port
+	listenerMCP     = "mcp serve" // mcp serve --transport http
+	listenerProxy   = "proxy"     // proxy
 )
 
 const (
@@ -260,9 +259,7 @@ const (
 	RouteAuthMetricsToken RouteAuth = "metrics_token"
 	// RouteAuthListenerCredential is the subcommand's own credential: mcp serve
 	// --auth static-header|oauth, or the proxy's HELM_PROXY_TOKEN. Without one,
-	// requireListenerAuth refuses a non-loopback bind. The spend-proxy has no
-	// credential, so its routes are RouteAuthPublic and requireListenerAuth
-	// refuses every non-loopback --addr.
+	// requireListenerAuth refuses a non-loopback bind.
 	RouteAuthListenerCredential RouteAuth = "listener_credential"
 )
 
@@ -278,11 +275,10 @@ type ListenerRouteSpec struct {
 
 func ListenerRouteSpecs() []ListenerRouteSpec {
 	const (
-		liveness      = "liveness only; no data"
-		processWide   = "process-wide metrics across every tenant"
-		localMCP      = "the local MCP catalog, policy and data directory; no tenant"
-		proxyTenant   = "the proxy's single --tenant-id"
-		spendEnvelope = "the spend-proxy's configured envelopes; no caller credential, so --addr binds loopback only (127.0.0.1 by default)"
+		liveness    = "liveness only; no data"
+		processWide = "process-wide metrics across every tenant"
+		localMCP    = "the local MCP catalog, policy and data directory; no tenant"
+		proxyTenant = "the proxy's single --tenant-id"
 	)
 	return []ListenerRouteSpec{
 		{Listener: listenerHealth, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: liveness},
@@ -304,11 +300,5 @@ func ListenerRouteSpecs() []ListenerRouteSpec {
 		{Listener: listenerProxy, MuxPattern: "/helm/receipts", Auth: RouteAuthListenerCredential, Scope: "the receipt log of " + proxyTenant},
 		{Listener: listenerProxy, MuxPattern: "/helm/proofgraph", Auth: RouteAuthListenerCredential, Scope: "the ProofGraph of " + proxyTenant},
 		{Listener: listenerProxy, MuxPattern: "/", Auth: RouteAuthListenerCredential, Scope: "every other path, forwarded to --upstream under governance as " + proxyTenant},
-
-		{Listener: listenerSpendProxy, MuxPattern: "/v1/chat/completions", Auth: RouteAuthPublic, Scope: spendEnvelope},
-		{Listener: listenerSpendProxy, MuxPattern: "/v1/responses", Auth: RouteAuthPublic, Scope: spendEnvelope},
-		{Listener: listenerSpendProxy, MuxPattern: "/v1/embeddings", Auth: RouteAuthPublic, Scope: spendEnvelope},
-		{Listener: listenerSpendProxy, MuxPattern: "/v1/models", Auth: RouteAuthPublic, Scope: spendEnvelope},
-		{Listener: listenerSpendProxy, MuxPattern: "/helm/spend/health", Auth: RouteAuthPublic, Scope: "liveness, balance and receipt-log path"},
 	}
 }

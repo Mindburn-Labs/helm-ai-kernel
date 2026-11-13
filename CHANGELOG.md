@@ -88,6 +88,40 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Live model spending uses `helm-gateway serve` and the existing transactional
+  Postgres authority ledger. `helm-ai-kernel spend-proxy`, including `up`,
+  live flags and `reconcile`, now exits 2 with migration guidance. Local logs,
+  opening balances and envelope configs cannot create or restore live authority.
+  Follow [the migration instructions](examples/spend-proxy/README.md). The old
+  embeddings endpoint has no replacement on this listener.
+- The retired `inferencegateway` package, `api.GovernedGateway`, spend-proxy
+  server/dispatch/reconciliation APIs and their live-only economic constructors
+  are removed. Historical receipt schemas and offline export/verification stay
+  available. Go callers of the removed runtime must migrate to helm-gateway.
+- `spend-proxy export`, `savings-export` and `savings-verify` remain offline.
+  Receipt signatures require independently pinned issuer keys. Record types and
+  tenant/intent identities must match their signed payloads; a settlement must
+  reference a matching signed usage receipt within its intent. A release record
+  must bind the versioned action and reason in its signed quote metadata.
+  Exporting pending or failed records never settles, releases or retries them.
+- Model gateway requests are read against a closed list of supported members,
+  nested content and provider options. Unsupported stored state, remote or
+  uploaded media, PDFs, audio, hidden provider tools, predicted outputs, routing
+  overrides, unpriced service tiers and betas are refused before admission.
+  Clients must use the supported forms in
+  [the model gateway contract](docs/architecture/model-gateway.md).
+- Quotes count input bytes and conservative image/tool floors, fit the output
+  limit within the durable budget, and include prompt-cache write prices.
+  Missing cache-write prices on Anthropic and compatible routes default to
+  1.25 times input for five-minute writes (rounded up) and twice input for
+  one-hour writes. Set explicit route prices when different rates apply.
+- Responses are forwarded with `store: false`. OpenAI and Anthropic routes
+  normalize an absent or `auto` service tier to `default` or `standard_only`;
+  compatible routes refuse `auto`. The request digest binds the forwarded body.
+  Anthropic headers are forwarded only on the Messages API.
+
 ### Security
 
 - helm-gateway holds an authority plan to its stage (helm-tracker#334). A
@@ -108,8 +142,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `ApproveRequest.owner_assertion` is verified by the gateway against the
   approver's passkey over `pending_approval.owner_challenge`, and the approval
   row keeps it. `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` (default off; chart
-  value `gateway.ownerAssertionRequired`) makes it the only proof of a
-  `helm.authority.*` widening, requires a passkey owner at genesis and refuses
+  value `gateway.ownerAssertionRequired`) makes it the only proof of any required
+  step-up, including authority widening, high-risk and irreversible effects, requires a passkey owner at genesis and refuses
   humans on existing tenants. Gateway schema version 17 adds
   `authority_principal_credentials`. Control CTL-068; `OWNER_ASSERTION_REQUIRED`
   joins the reason-code registry with the two stage codes. The receipt
@@ -148,7 +182,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   7. Approval UI: use `pending_approval.owner_challenge`, read with the
      approver's own token, as the WebAuthn challenge, and forward the
      assertion as `owner_assertion`.
-  8. Flip `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` once 6 and 7 are live.
+  8. Set `HELM_GATEWAY_OWNER_ORIGINS` to the exact served Console origins.
+     Flip `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` once 6 and 7 are live.
 - Pack directory listings and directory `Open` calls acquire a directory-only
   handle and verify its identity. Replacing a checked child directory with a
   named pipe can no longer block either call; replacing it with a different
@@ -569,6 +604,14 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Fixed
 
+- Retired live `helm-ai-kernel spend-proxy`, local-file reconciliation and
+  the legacy `core/pkg/inferencegateway` / `api.GovernedGateway` execution
+  surfaces. Model calls use `helm-gateway` and its transactional Postgres
+  admission, budget, idempotency and recovery state. Legacy config flags and
+  embeddings require migration; historical receipt files do not create grants.
+- Preserved offline spend exports and savings-pack verification. Export checks
+  that record identities match signed payloads and binds a settlement to its
+  signed usage receipt before reporting an intent's signatures verified.
 - Skill Pack verification no longer trusts what a pack says about itself. The
   check compared the manifest's publisher, a `signature_ref` that follows from
   the pack name and version, and the `SKILL.md` hash, so any pack that copied
@@ -604,6 +647,123 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `ALLOW`, and `plugin.json` records the scan verdict and publisher state.
   `skills marketplace add` records an entry as `recorded`; it runs no scan and
   used to say `scanned`.
+- The model gateway's hold bounds what a request can make the provider bill,
+  under the assumptions `docs/architecture/model-gateway.md` lists ("The bound
+  and what it rests on": one token per byte, the image and tool floors, an
+  honoured output maximum, the route's price at its tier) (helm-tracker#313,
+  audit H6). The quote counted request bytes and the output maximum, while a
+  request could make the provider bill a stored conversation, a stored
+  prompt, stored reasoning named by its id, remote media, a routing fallback,
+  a compaction pass or an account's priority tier. Requests are now read
+  against a closed list per API, nested configuration included
+  (`core/pkg/gateway/modelbound`); refusals carry the new error codes
+  `unsupported_member`, `unsupported_content`, `invalid_content` and
+  `unsupported_beta` and name what they refuse. Inline images and
+  provider-supplied tool definitions are held at a token floor; a Responses
+  request is sent with `store: false` unless it names it, and a vendor route
+  gets the standard service tier when the request names none or `auto`.
+- A spend envelope's `max_amount_cents` is consumed (audit H7). The spend
+  proxy and the governed gateway route reserve a quote's ceiling against the
+  envelope's window (the UTC day for the spend proxy's envelopes) and the
+  balance in one step, so concurrent requests cannot both take the last cents;
+  settlement moves the reservation to used, and a release returns it. The
+  budget-verdict receipt (`OK_WITHIN_ENVELOPE`) is issued only when that
+  reservation succeeds; a refused reservation's logged quote carries the DENY
+  verdict. A restart re-applies settled spend to its envelope.
+- A spend-proxy dispatch that may have reached the provider is never released
+  (audit H8): it is debited at its hold, its usage receipt carries metadata
+  `settled_at_hold`, the response is 502 with error type `helm_dispatch_failed`
+  and `helm.settled_at_hold: true` (or the provider's answer, when it answered
+  without readable usage), and its idempotency key cannot dispatch again. Only
+  a failure before the upstream connection opened releases the hold, journalled
+  as the new receipt-log kind `dispatch_released`. A client that disconnects no
+  longer cancels the provider call.
+- The spend proxy holds, on start, a dispatch journalled before its provider
+  call that never settled (audit M18); the journal line now carries the note
+  `dispatch: journalled before the provider call`, and the start banner and
+  `ReplaySummary` report `pending` dispatches and cents. It refuses `n` other
+  than 1 and the routing members `models`, `provider`, `plugins` and `route`.
+  An answer is priced by the model it names: the quoted model, or its id with
+  a dated suffix (`-YYYY-MM-DD`, `-YYYYMMDD`), at its usage; an answer that
+  names no model, or the quoted id with another suffix (an alias answered by
+  a versioned id), at its usage too, recording `model_mismatch` `no_model` or
+  `version_suffix`; another model at the dearer of the two prices, or at least
+  the hold when the price book does not have it, recording `response_model`
+  and `model_mismatch: true` on the usage receipt.
+- `spend-proxy export` verifies what it reports (audit M18): with the new
+  `--public-key` flag it checks the detached signature of every receipt line of
+  each intent and the budget-verdict seal against that key, and lists them in
+  the new JSON member `signatures_checked`; `signature_verified` is true only
+  then. A line that is unsigned, signed by another key or whose signature does
+  not verify fails the export (exit 1); a malformed key exits 2. The start
+  banner prints the public key and `/helm/spend/health` serves it as
+  `signing_public_key`.
+- The principal sealed into a spend receipt is the envelope's configured
+  `principal_id`, never a request header (audit M17), and a header can no
+  longer pick among principals: `spend-proxy` gains caller credentials (config
+  `callers`, each a token stored as its SHA-256 and bound to an agent, its
+  envelopes and its workspaces), and without them it serves exactly one
+  principal. A workspace header reaches a signed quote only when a credential
+  covers it. The engine refuses a request that names another principal (403
+  `ERR_SPEND_ENVELOPE_NOT_FOUND`), and `spend-proxy` refuses a
+  `request_defaults.principal_id` that is not its default envelope's. The
+  listener stays loopback only (CTL-026).
+- The spend proxy's hold bounds the bill as the model gateway's does
+  (helm-tracker#313 r1): it reads every request against the same closed list
+  and quotes one input token per byte of the request it forwards, plus the
+  image and tool floors; it quoted a quarter token per byte and forwarded
+  stored conversations, remote images and hosted tools. A provider that bills
+  above the hold anyway is debited what it billed, but its usage receipt says
+  `ESCALATE` / `ERR_SPEND_PER_REQUEST_LIMIT` (metadata `overage_cents`,
+  `quote_ceiling_cents`, `envelope_closed`) instead of `OK_WITHIN_ENVELOPE`,
+  an `ALERT` names the closed envelope, and the envelope refuses further
+  dispatch (403 `ERR_SPEND_ENVELOPE_INACTIVE`) in the period of the
+  reservation and the period the settlement falls in, also when the
+  settlement fails, and across restarts (r2).
+- `spend-proxy export --public-key` could report a forged usage line as
+  verified: a line's signed payload was the first receipt it carried, while
+  the pack took the one its kind named. A line's payload is now strictly the
+  one its kind names, and the log is refused when a line carries none, more
+  than one or another kind's (helm-tracker#313 r1).
+- A released reservation can no longer be settled, and a settlement no
+  reservation backs is decided against its envelope; `RemainingCents` and
+  envelope validation no longer wrap at the int64 limit (helm-tracker#313 r1).
+- A settlement line whose usage line never reached the receipt log no longer
+  erases its debit on restart: the dispatch is held at its hold, pending
+  reconciliation. The new `spend-proxy reconcile` settles a pending dispatch at
+  the provider cost an operator found (`--settle-cents`) or releases it
+  (`--release`), with a `--reason`, as signed receipt lines the next start
+  replays; without `--intent` it lists the pending dispatches
+  (helm-tracker#313 r1).
+- A request is debited no more than its hold when the provider bills within
+  its quote (helm-tracker#313 r2): the platform fee is inside the hold, and an
+  overage is judged against the provider's part of it, so the receipt and the
+  `ALERT` blame the provider only when its bill went above that part.
+- Closing an envelope after an overage closes the window of the reservation
+  and the window the settlement falls in, records them on the usage receipt,
+  and a restart closes the same windows; an overage whose settlement fails is
+  recorded on its signed `settle_failed` line and closes the envelope across a
+  restart (r2).
+- `spend-proxy reconcile` no longer releases or understates a dispatch the
+  log records the provider billed, works without `--sign` against a proxy that
+  ran without it, and refuses to run beside a live proxy (r2).
+- An overage whose usage or settlement line never reached the receipt log no
+  longer reopens the envelope on restart, and its dispatch is held at the
+  cost the log records instead of its smaller hold; a reconciled settlement
+  of such a dispatch is debited once (helm-tracker#313 r3). `spend-proxy
+  reconcile` clears a dispatch journalled under an earlier key, such as one a
+  proxy run without `--sign` signed before this version, where it refused
+  with no way out.
+- A cache write could bill above the hold: the model gateway prices writes on
+  `anthropic` and `openai-compatible` routes at Anthropic's premium unless the
+  route names its own, and the spend proxy refuses `cache_control` (r2).
+- A stock OpenAI client is served in callers mode, an idempotency key is
+  scoped to its caller, `/helm/spend/health` needs the caller token, and the
+  bearer scheme is matched in any case (r2).
+- Unknown members of parts, items and blocks, and Responses `instructions`
+  given as a list, are refused instead of forwarded; `anthropic-beta` no
+  longer reaches an upstream on the OpenAI APIs; a start verifies the
+  signatures of the lines that debit or free a hold (r2).
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any

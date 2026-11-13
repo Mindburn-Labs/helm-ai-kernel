@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
@@ -109,13 +110,21 @@ func CheckAssertionShape(a OwnerAssertion) error {
 //   - clientDataJSON: one JSON object with no duplicate key, whose "type" is
 //     "webauthn.get", whose "challenge" is the unpadded base64url of challenge,
 //     and whose "crossOrigin" is absent or false;
+//   - the signed origin exactly matches the operator allowlist, or
+//     https://<credential rp_id> when no origins are configured;
 //   - the signature over authenticatorData || SHA-256(clientDataJSON) by the
 //     credential's key: ASN.1 DER ECDSA P-256 with SHA-256 for ES256, Ed25519
 //     for EdDSA;
 //   - the counter never goes backwards: when either it or the stored one is
 //     not zero, it is greater than the stored one (WebAuthn §6.1.1).
-func VerifyAssertion(cred effectargs.Credential, signCount uint32, a OwnerAssertion, challenge []byte) (uint32, error) {
+func VerifyAssertion(cred effectargs.Credential, signCount uint32, a OwnerAssertion, challenge []byte, origins ...string) (uint32, error) {
 	if err := CheckAssertionShape(a); err != nil {
+		return 0, err
+	}
+	if len(origins) == 0 {
+		origins = []string{"https://" + cred.RPID}
+	}
+	if err := CheckOwnerOrigins(origins); err != nil {
 		return 0, err
 	}
 	if !bytes.Equal(a.CredentialID, cred.ID) {
@@ -130,7 +139,7 @@ func VerifyAssertion(cred effectargs.Credential, signCount uint32, a OwnerAssert
 		return 0, errors.New("the authenticator did not verify a present user (UP and UV must both be set)")
 	}
 	counter := binary.BigEndian.Uint32(auth[33:37])
-	if err := checkClientData(a.ClientDataJSON, challenge); err != nil {
+	if err := checkClientData(a.ClientDataJSON, challenge, origins); err != nil {
 		return 0, err
 	}
 	digest := sha256.Sum256(a.ClientDataJSON)
@@ -169,7 +178,7 @@ func VerifyAssertion(cred effectargs.Credential, signCount uint32, a OwnerAssert
 
 // checkClientData reads clientDataJSON by exact key: encoding/json folds case,
 // so a "Type" or "CHALLENGE" member must not stand in for the real one.
-func checkClientData(raw, challenge []byte) error {
+func checkClientData(raw, challenge []byte, origins []string) error {
 	if err := effectargs.CheckNoDuplicateKeys(raw); err != nil {
 		return errors.New("clientDataJSON is not one JSON object without duplicate keys")
 	}
@@ -187,6 +196,9 @@ func checkClientData(raw, challenge []byte) error {
 	}
 	if typ, ok := text("type"); !ok || typ != "webauthn.get" {
 		return errors.New(`clientDataJSON's type is not "webauthn.get"`)
+	}
+	if origin, ok := text("origin"); !ok || !slices.Contains(origins, origin) {
+		return errors.New("clientDataJSON's origin is not an expected owner origin")
 	}
 	encoded, ok := text("challenge")
 	if !ok {

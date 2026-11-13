@@ -124,6 +124,7 @@ const (
 	// EnsurePrincipals takes no human on a tenant that exists. Off by default
 	// until the Control Plane migrates.
 	envOwnerAssertionRequired = "HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+	envOwnerOrigins           = "HELM_GATEWAY_OWNER_ORIGINS"
 )
 
 // Configure installs gateway-owned adapters in this same server and lifecycle.
@@ -317,7 +318,7 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		Auth:      &server.Authenticator{Validator: identity.Validator(false), Actor: identity.Actor, RequireCNF: identity.RequireCNF},
 	}
 	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Admission: svc, Catalog: catalog,
-		OwnerAssertionRequired: admissionConfig.OwnerAssertionRequired}
+		OwnerAssertionRequired: admissionConfig.OwnerAssertionRequired, OwnerOrigins: admissionConfig.OwnerOrigins}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(admin.Handler())
@@ -633,6 +634,14 @@ func admissionConfigFromEnv(getenv func(string) string) (admission.Config, error
 		return c, err
 	}
 	c.OwnerAssertionRequired = required
+	if raw := strings.TrimSpace(getenv(envOwnerOrigins)); raw != "" {
+		for _, origin := range strings.Split(raw, ",") {
+			c.OwnerOrigins = append(c.OwnerOrigins, strings.TrimSpace(origin))
+		}
+		if err := admission.CheckOwnerOrigins(c.OwnerOrigins); err != nil {
+			return c, fmt.Errorf("%s: %w", envOwnerOrigins, err)
+		}
+	}
 	return c, effectsFromEnv(getenv, &c)
 }
 

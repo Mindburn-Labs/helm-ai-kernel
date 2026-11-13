@@ -45,16 +45,10 @@ G104 core/cmd/helm-ai-kernel/proxy_cmd.go 3c8e7b5702f8
 G104 core/cmd/helm-ai-kernel/proxy_cmd.go 930e744e4129
 G104 core/cmd/helm-ai-kernel/verify_cmd.go 281c4b9a7fff
 G104 core/cmd/helm-ai-kernel/verify_cmd.go 281c4b9a7fff
-G104 core/pkg/api/server.go f1802794e419
 G104 core/pkg/connectors/github/client.go 930e744e4129
 G104 core/pkg/connectors/linear/client.go 930e744e4129
 G104 core/pkg/launchpad/cmd/connect.go 930e744e4129
 G104 core/pkg/metrics/governance.go e6cfe1127a26
-G104 core/pkg/spendproxy/server.go ee260a174c83
-G104 core/pkg/spendproxy/server.go ee260a174c83
-G104 core/pkg/spendproxy/server.go ee260a174c83
-G104 core/pkg/spendproxy/server.go ee260a174c83
-G104 core/pkg/spendproxy/server.go ee260a174c83
 G110 core/cmd/helm-ai-kernel/local_console.go 7a24097c7292
 G110 core/cmd/helm-ai-kernel/local_console.go ca7276b5d2ee
 G110 core/cmd/helm-ai-kernel/verify_cmd.go 4ddf8fc2ae34
@@ -329,10 +323,8 @@ G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
 G304 core/pkg/skillpacks/github.go 60c09d522cae
 G304 core/pkg/skillpacks/plugin.go 1776bdcd5325
 G304 core/pkg/skillpacks/plugin.go 6d3ab38598d3
-G304 core/pkg/spendproxy/config.go 84f8ae84aaaf
 G304 core/pkg/spendproxy/issuer.go 84f8ae84aaaf
 G304 core/pkg/spendproxy/savings.go dbfffc239169
-G304 core/pkg/spendproxy/store.go 3717c7c84648
 G304 core/pkg/spendproxy/store.go 378b1b60131a
 G304 core/pkg/workstation/capture.go 68009620eaa5
 G304 core/pkg/workstation/capture.go dbfffc239169

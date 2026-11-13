@@ -142,6 +142,10 @@ spec:
             - name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
               value: "true"
             {{- end }}
+            {{- if $g.ownerOrigins }}
+            - name: HELM_GATEWAY_OWNER_ORIGINS
+              value: {{ join "," $g.ownerOrigins | quote }}
+            {{- end }}
             {{- if $g.permitTTL }}
             - name: HELM_GATEWAY_PERMIT_TTL
               value: {{ $g.permitTTL | quote }}

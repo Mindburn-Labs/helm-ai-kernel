@@ -180,12 +180,15 @@ type Config struct {
 	ReceiptSigner ReceiptSigner
 	// OwnerAssertionRequired is HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
 	// (helm-tracker#334). On, only the approver's own verified passkey
-	// assertion satisfies the step-up of a helm.authority.* widening (a
-	// provision plan, a lift, a reassignment grant): a step-up proof, which the
+	// assertion satisfies every required step-up, including authority widening,
+	// high-risk and irreversible effects: a step-up proof, which the
 	// Control Plane's issuer signs, is not accepted for it. Off, the default
 	// until the Control Plane migrates, either satisfies it. An assertion that
 	// is present is verified either way.
 	OwnerAssertionRequired bool
+	// OwnerOrigins is the operator's exact WebAuthn origin allowlist. Empty
+	// accepts only https://<credential rp_id>. Never populated from a request.
+	OwnerOrigins []string
 }
 
 // Service runs admission over one database. It holds no tenant data: the
@@ -216,6 +219,10 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	if err := CheckReceiptSigner(cfg.ReceiptSigner); err != nil {
 		return nil, fmt.Errorf("admission receipt signer: %w", err)
 	}
+	if err := CheckOwnerOrigins(cfg.OwnerOrigins); err != nil {
+		return nil, err
+	}
+	cfg.OwnerOrigins = append([]string(nil), cfg.OwnerOrigins...)
 	if cfg.PermitTTL <= 0 {
 		cfg.PermitTTL = 10 * time.Minute
 	}
@@ -595,7 +602,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	// one whose proof decide already used up passes, and otherwise it uses up
 	// the proof the approval carries or is refused (STEP_UP_REQUIRED).
 	if approval != nil && approval.Approved && !approval.StepUpVerified && needsStepUp(string(auth.riskClass), in.EffectType) {
-		if err := s.satisfyStepUp(ctx, tx, caller.TenantID, in.EffectType, approval); err != nil {
+		if err := s.satisfyStepUp(ctx, tx, caller.TenantID, approval); err != nil {
 			return err
 		}
 	}

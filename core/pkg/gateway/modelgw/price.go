@@ -26,14 +26,21 @@ func (u Usage) valid() bool {
 	return u.InputTokens >= 0 && u.CacheReadTokens >= 0 && u.CacheWrite5mTokens >= 0 && u.CacheWrite1hTokens >= 0 && u.OutputTokens >= 0
 }
 
-// Quote prices an assumed input-token bound and the whole maximum output in
+// Quote prices an input-token bound and the whole maximum output in
 // usd_micros. Input uses the dearer of the input and cache-read prices; a
 // cache-writing request also includes both cache-write prices in that maximum.
-// The sum is rounded up once, to whole micros. This arithmetic bound does not
-// establish that request bytes bound provider tokens (for example, for remote
-// media or retained history), or that a provider enforces its output cap.
-func (r *Route) Quote(inputBytes, maxOutputTokens int64, mayWriteCache bool) (int64, error) {
-	if inputBytes < 0 || maxOutputTokens < 0 {
+// The sum is rounded up once, to whole micros.
+//
+// The handler passes call.inputBound: one token per request byte, which bounds
+// the text a request carries, plus the floors of the inline images and hidden
+// tool definitions bytes do not bound (bound.go). Everything else the provider
+// could bill as input (a stored conversation, a stored prompt, remote or
+// uploaded media, an unknown member) is refused before a quote exists, so the
+// quote is an upper bound of the call's bill at the route's price, provided
+// the provider honours the output maximum and the route's price is the
+// provider's highest for a request of the gateway's maximum size.
+func (r *Route) Quote(inputTokens, maxOutputTokens int64, mayWriteCache bool) (int64, error) {
+	if inputTokens < 0 || maxOutputTokens < 0 {
 		return 0, errors.New("a call cannot have a negative size")
 	}
 	rates := r.rates()
@@ -41,7 +48,7 @@ func (r *Route) Quote(inputBytes, maxOutputTokens int64, mayWriteCache bool) (in
 	if mayWriteCache {
 		in = max(in, rates.cacheWrite5m, rates.cacheWrite1h)
 	}
-	a, err := mulChecked(inputBytes, in)
+	a, err := mulChecked(inputTokens, in)
 	if err != nil {
 		return 0, err
 	}

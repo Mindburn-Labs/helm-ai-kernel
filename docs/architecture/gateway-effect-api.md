@@ -1239,7 +1239,7 @@ for every token, and the binding below, so a compromised issuer can mint a
 proof, as it can mint a decide token. With
 `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` on, a proof no longer satisfies the
 step-up of a `helm.authority.*` widening (a provision plan, a lift, a
-reassignment grant): only a verified owner assertion does
+reassignment grant), and of every high-risk or irreversible effect: only a verified owner assertion does
 (`OWNER_ASSERTION_REQUIRED`). A verified owner assertion satisfies step-up
 wherever a proof does, and a proof sent beside it is then not used.
 

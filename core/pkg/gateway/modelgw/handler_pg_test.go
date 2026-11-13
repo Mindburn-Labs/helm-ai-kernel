@@ -18,6 +18,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelbound"
 )
 
 // The provider streams the stubs write. Each is what the provider's own API
@@ -147,7 +148,7 @@ func TestPostgresAnthropicStreamPassesThroughAndSettles(t *testing.T) {
 		got.Header.Get("Anthropic-Beta") != "claude-code-20250219" {
 		t.Fatalf("the provider saw %s?%s %v", got.Path, got.Query, got.Header)
 	}
-	wantBody := `{"model":"claude-sonnet-5-5","stream":true,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"get","input_schema":{"type":"object"}}],"max_tokens":8192}`
+	wantBody := `{"model":"claude-sonnet-5-5","stream":true,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"get","input_schema":{"type":"object"}}],"max_tokens":8192,"service_tier":"standard_only"}`
 	if string(got.Body) != wantBody {
 		t.Fatalf("the provider's body:\n%s\nwant\n%s", got.Body, wantBody)
 	}
@@ -171,7 +172,9 @@ func TestPostgresAnthropicStreamPassesThroughAndSettles(t *testing.T) {
 		t.Fatalf("attempt = %+v", a)
 	}
 	sonnet, _ := e.cfg.Resolve("anthropic-messages", "claude-sonnet-5-5")
-	held, err := sonnet.Quote(int64(len(wantBody)), 8192, false) // the input bytes and the injected maximum
+	// The input bytes, the floor of the tool-use system prompt Anthropic adds
+	// to a request with tools (helm-tracker#313), and the injected maximum.
+	held, err := sonnet.Quote(int64(len(wantBody))+modelbound.AnthropicToolSystemTokens, 8192, false)
 	must(t, err)
 	mc := a.ModelCall
 	if mc == nil || mc.State != admission.SettlementConfirmed || mc.HeldMicros != held || *mc.ConfirmedMicros != anthropicStreamCost ||
@@ -226,7 +229,7 @@ func TestPostgresChatStreamStripsTheUsageChunkTheGatewayAskedFor(t *testing.T) {
 	// A client that asked for the usage chunk gets it, and the request is untouched.
 	e2 := newEnv(t, 1_000_000)
 	e2.openai.on(sseHandler(chatStreamChunks, chatUsageChunk, chatDone))
-	asked := `{"model":"gpt-6-sol","stream":true,"stream_options":{"include_usage":true},"max_completion_tokens":100,"messages":[]}`
+	asked := `{"model":"gpt-6-sol","stream":true,"stream_options":{"include_usage":true},"max_completion_tokens":100,"messages":[],"service_tier":"default"}`
 	r = post(t, e2.worker.URL, "/v1/chat/completions", bearerHeader(tokenAgent), asked)
 	if r.Status != 200 || string(r.Body) != chatStreamChunks+chatUsageChunk+chatDone {
 		t.Fatalf("a client that asked must get the usage chunk:\n%s", r)

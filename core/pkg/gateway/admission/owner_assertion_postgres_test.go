@@ -106,8 +106,8 @@ func TestPostgresOwnerAssertionApprovesAWideningAndIsKept(t *testing.T) {
 
 // Known good and bad, flag on: only the approver's assertion satisfies the
 // step-up of an authority widening; the Control Plane's step-up proof alone is
-// OWNER_ASSERTION_REQUIRED and uses nothing up. A high-risk effect that is not
-// an authority change still takes the proof.
+// OWNER_ASSERTION_REQUIRED and uses nothing up. High-risk and irreversible
+// effects require the same owner assertion.
 func TestPostgresOwnerAssertionRequiredRefusesTheIssuersProofForWidenings(t *testing.T) {
 	f := newPlanFixture(t)
 	ctx := context.Background()
@@ -137,12 +137,20 @@ func TestPostgresOwnerAssertionRequiredRefusesTheIssuersProofForWidenings(t *tes
 		t.Fatal("the step-up proof was used up beside the owner's assertion")
 	}
 
-	// A merge is high risk but no authority change: the proof still serves.
 	requester := f.stepUpRequester()
-	merge := f.escalatedEffect(requester, "merge-required", highType)
-	admitted, _, err := svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), withProof(approval(merge, "merge"), stepUpProof()))
-	must(t, err)
-	wantState(t, "a high-risk effect with a step-up proof", admitted, "ADMITTED", "")
+	for _, effect := range []string{highType, irreversibleType} {
+		a := f.escalatedEffect(requester, "owner-required-"+effect, effect)
+		decide, proof := decideToken("helm.gateway.decide"), stepUpProof()
+		_, _, err := svc.Approve(ctx, approverB, decide, withProof(approval(a, "issuer only"), proof))
+		wantRefusal(t, effect, err, CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)
+		f.wantStillEscalated(effect, a)
+		if f.replayRows(decide.ID, proof.Token.ID) != 0 {
+			t.Fatal("a refused high-risk approval consumed a token")
+		}
+		admitted, _, err := svc.Approve(ctx, approverB, decide, withOwner(t, approval(a, "owner"), approverB, a, k))
+		must(t, err)
+		wantState(t, effect+" with the owner's assertion", admitted, "ADMITTED", "")
+	}
 }
 
 // Known bad: every assertion that is not the approver's act over this attempt
@@ -173,6 +181,8 @@ func TestPostgresOwnerAssertionRefusalsSpendNothing(t *testing.T) {
 		"another human's passkey":         assertionOf(c.Assert(t, OwnerChallengeV1(tenantA, "human-c", a.ID, a.ApprovalDigest))),
 		"an unenrolled passkey":           assertionOf(passkey.New(t, passkey.EdDSA, testRPID).Assert(t, challenge)),
 		"another relying party":           assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) { p.RPID = "evil.example" })),
+		"another browser origin":          assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) { p.ClientData["origin"] = "https://other.helm.example" })),
+		"no browser origin":               assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) { delete(p.ClientData, "origin") })),
 		"no user verification":            assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) { p.Flags = 0x01 })),
 		"a registration ceremony": assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) {
 			p.ClientData["type"] = "webauthn.create"
@@ -196,7 +206,13 @@ func TestPostgresOwnerAssertionRefusalsSpendNothing(t *testing.T) {
 	_, _, err = f.svc.Approve(ctx, approverB, decide, withOwner(t, approval(a, "behind"), approverB, a, k))
 	wantRefusal(t, "a counter behind the stored one", err, CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)
 	k.Counter = 200
-	approved, _, err := f.svc.Approve(ctx, approverB, decide, withOwner(t, approval(a, "valid"), approverB, a, k))
+	f.svc.cfg.OwnerOrigins = []string{"https://console.helm.example"}
+	_, _, err = f.svc.Approve(ctx, approverB, decide, withOwner(t, approval(a, "unconfigured origin"), approverB, a, k))
+	wantRefusal(t, "an origin outside the operator allowlist", err, CodePermissionDenied, contracts.ReasonOwnerAssertionRequired)
+	valid := assertionOf(k.AssertWith(t, challenge, func(p *passkey.Parts) { p.ClientData["origin"] = "https://console.helm.example" }))
+	in := approval(a, "valid")
+	in.OwnerAssertion = &valid
+	approved, _, err := f.svc.Approve(ctx, approverB, decide, in)
 	must(t, err)
 	wantState(t, "the valid approval", approved, "ADMITTED", "")
 }
@@ -220,7 +236,7 @@ func TestPostgresOwnerAssertionIsAcceptedOnce(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = verifyOwnerAssertion(ctx, tx, approverB, locked, assertion)
+			_, err = f.svc.verifyOwnerAssertion(ctx, tx, approverB, locked, assertion)
 			return err
 		})
 	}

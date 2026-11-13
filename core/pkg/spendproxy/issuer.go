@@ -1,7 +1,5 @@
-// quantum_posture: the spend proxy signs BudgetVerdict receipts with a
-// classical Ed25519 key and hashes canonical payloads with SHA-256; the
-// trusted-key registry file stores public keys only. No post-quantum
-// primitives are used in this file.
+// quantum_posture: offline savings manifests use classical Ed25519 signatures
+// and SHA-256 hashes. Historical registries contain public keys only.
 
 package spendproxy
 
@@ -12,22 +10,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
-// Issuer is the in-process BudgetVerdict signer. The engine creates verdict
-// receipts unsigned; the proxy seals them with this key before they are
-// persisted, and the matching public key is registered in the trusted-key
-// registry so receipts stay verifiable after the process exits.
+// Issuer signs offline savings manifests. It grants no spending authority.
 type Issuer struct {
 	keyID string
 	priv  ed25519.PrivateKey
@@ -38,9 +29,8 @@ type Issuer struct {
 // base64-encoded 32-byte seed (or 64-byte private key) is used directly; any
 // other non-empty string is treated as a passphrase and hashed to a seed
 // (deterministic but low-entropy — derivedFromPassphrase reports it so callers
-// can warn). An empty secret generates a fresh key: past receipts remain
-// verifiable through the registry's stored public key, but a restarted proxy
-// signs under a new key id.
+// can warn). An empty secret generates a fresh key that lives in memory only.
+// The offline CLI requires an explicit key when producing a signed manifest.
 func NewIssuer(secret string) (issuer *Issuer, derivedFromPassphrase bool, err error) {
 	var priv ed25519.PrivateKey
 	trimmed := strings.TrimSpace(secret)
@@ -60,9 +50,8 @@ func NewIssuer(secret string) (issuer *Issuer, derivedFromPassphrase bool, err e
 		priv = ed25519.NewKeyFromSeed(seed)
 	}
 	pub := priv.Public().(ed25519.PublicKey)
-	sum := sha256.Sum256(pub)
 	return &Issuer{
-		keyID: "spend-proxy-" + hex.EncodeToString(sum[:6]),
+		keyID: IssuerKeyID(pub),
 		priv:  priv,
 		pub:   pub,
 	}, derivedFromPassphrase, nil
@@ -95,34 +84,6 @@ func (i *Issuer) KeyID() string { return i.keyID }
 // PublicKey returns the verifying key.
 func (i *Issuer) PublicKey() ed25519.PublicKey { return i.pub }
 
-// Sign seals a BudgetVerdict receipt with the issuer key. Only ALLOW receipts
-// exist (the engine issues no receipt on DENY/ESCALATE), and a receipt that is
-// already sealed by this issuer is left untouched.
-func (i *Issuer) Sign(r *economic.BudgetVerdictReceipt) error {
-	if r == nil {
-		return errors.New("spendproxy: nil budget verdict receipt")
-	}
-	if r.Signature != "" && r.SignatureKeyID == i.keyID {
-		return nil
-	}
-	return r.Seal(i.keyID, i.priv)
-}
-
-// SignDetached signs the RFC 8785 (JCS) canonicalization of an arbitrary
-// receipt payload with the issuer key, returning the key id and the base64
-// signature. Detached signatures cover EVERY field of the payload — including
-// post-dispatch fields (token counts, timestamps, substitution flags) that the
-// receipt types' sealed content-hash preimages deliberately omit — so a pack
-// carrying them cannot have those fields rewritten without the signing key.
-func (i *Issuer) SignDetached(payload any) (keyID, signature string, err error) {
-	canonical, err := canonicalize.JCS(payload)
-	if err != nil {
-		return "", "", fmt.Errorf("spendproxy: canonicalize payload for detached signature: %w", err)
-	}
-	sig := ed25519.Sign(i.priv, canonical)
-	return i.keyID, base64.StdEncoding.EncodeToString(sig), nil
-}
-
 // SignRaw signs arbitrary bytes with the issuer key (used for the savings
 // pack manifest-hash signature), returning the key id and raw signature.
 func (i *Issuer) SignRaw(payload []byte) (keyID string, signature []byte, err error) {
@@ -149,17 +110,13 @@ type trustedKeyFile struct {
 // so receipts signed by past process runs stay verifiable.
 type TrustedKeys struct {
 	mu   sync.Mutex
-	path string
 	keys map[string]RegisteredKey
 }
 
-// OpenTrustedKeys loads (or initializes) the registry file inside dir.
+// OpenTrustedKeys reads a historical registry without creating or changing it.
 func OpenTrustedKeys(dir string) (*TrustedKeys, error) {
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return nil, fmt.Errorf("spendproxy: create receipts dir: %w", err)
-	}
 	path := filepath.Join(dir, TrustedKeyFileName)
-	t := &TrustedKeys{path: path, keys: make(map[string]RegisteredKey)}
+	t := &TrustedKeys{keys: make(map[string]RegisteredKey)}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -177,48 +134,6 @@ func OpenTrustedKeys(dir string) (*TrustedKeys, error) {
 	return t, nil
 }
 
-// Register adds a public key under a key id and persists the registry.
-// Re-registering the identical key is a no-op; registering a DIFFERENT key
-// under an existing id fails closed (a key id must never be re-bound).
-func (t *TrustedKeys) Register(keyID string, pub ed25519.PublicKey) error {
-	if keyID == "" {
-		return errors.New("spendproxy: trusted key id is required")
-	}
-	if len(pub) != ed25519.PublicKeySize {
-		return fmt.Errorf("spendproxy: trusted key must be %d bytes", ed25519.PublicKeySize)
-	}
-	encoded := "ed25519:" + hex.EncodeToString(pub)
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if existing, ok := t.keys[keyID]; ok {
-		if existing.PublicKey != encoded {
-			return fmt.Errorf("spendproxy: trusted key id %q is already bound to a different key", keyID)
-		}
-		return nil
-	}
-	t.keys[keyID] = RegisteredKey{
-		Algorithm:    "ed25519",
-		PublicKey:    encoded,
-		RegisteredAt: time.Now().UTC(),
-	}
-	return t.persistLocked()
-}
-
-func (t *TrustedKeys) persistLocked() error {
-	data, err := json.MarshalIndent(trustedKeyFile{Version: "spend-proxy-trusted-keys.v1", Keys: t.keys}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("spendproxy: marshal trusted keys: %w", err)
-	}
-	tmp := t.path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
-		return fmt.Errorf("spendproxy: write trusted keys: %w", err)
-	}
-	if err := os.Rename(tmp, t.path); err != nil {
-		return fmt.Errorf("spendproxy: replace trusted keys: %w", err)
-	}
-	return nil
-}
-
 // PublicKeyFor resolves a registered public key by id.
 func (t *TrustedKeys) PublicKeyFor(keyID string) (ed25519.PublicKey, bool) {
 	t.mu.Lock()
@@ -233,17 +148,4 @@ func (t *TrustedKeys) PublicKeyFor(keyID string) (ed25519.PublicKey, bool) {
 		return nil, false
 	}
 	return ed25519.PublicKey(decoded), true
-}
-
-// Verify checks a receipt's Ed25519 signature against the registered key for
-// its SignatureKeyID. Unknown key ids fail closed.
-func (t *TrustedKeys) Verify(r *economic.BudgetVerdictReceipt) error {
-	if r == nil {
-		return errors.New("spendproxy: nil budget verdict receipt")
-	}
-	pub, ok := t.PublicKeyFor(r.SignatureKeyID)
-	if !ok {
-		return fmt.Errorf("spendproxy: signature key %q is not in the trusted-key registry", r.SignatureKeyID)
-	}
-	return r.VerifySignature(pub)
 }

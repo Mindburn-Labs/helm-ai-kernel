@@ -195,7 +195,7 @@ The owner's passkey is the root of authority (helm-tracker#334):
   the approval's transaction against the approver's own enrolled passkey:
   clientDataJSON `type` `webauthn.get` (read by exact key, no duplicate key, not
   in a cross-origin frame), `challenge` the unpadded base64url of the owner
-  challenge, rpIdHash `SHA-256(rp_id)`, the user-present and user-verified
+  challenge, the exact configured browser origin, rpIdHash `SHA-256(rp_id)`, the user-present and user-verified
   flags, the signature over `authenticatorData || SHA-256(clientDataJSON)`, a
   signature counter that never goes backwards, and the signed payload accepted
   once. A present assertion that does not verify is `permission_denied`
@@ -220,10 +220,19 @@ sends owner assertions:
 | | off (default) | on |
 |---|---|---|
 | Step-up of a `helm.authority.*` widening (provision plan, lift, reassignment grant) | a verified owner assertion or a step-up proof | a verified owner assertion only (`OWNER_ASSERTION_REQUIRED`) |
-| Step-up of a high or irreversible effect that is not an authority change | either | either |
+| Step-up of a high or irreversible effect that is not an authority change | either | a verified owner assertion only (`OWNER_ASSERTION_REQUIRED`) |
 | An owner assertion that is present | verified | verified |
 | A new tenant's genesis | with a passkey owner, or legacy humans without passkeys | a passkey owner (`OWNER_ASSERTION_REQUIRED`) |
 | A human on a tenant that exists | refused unless registered and presented as it is | refused, except the owner's repeated genesis request |
+
+`HELM_GATEWAY_OWNER_ORIGINS` (chart `gateway.ownerOrigins`) configures the exact
+browser origins accepted for genesis and approval. When unset, only
+`https://<credential rp_id>` is accepted. A configured list replaces that default;
+subdomains and ports are never inferred. Set every served Console origin
+explicitly, for example `https://console.example.org`. Development HTTP requires
+an explicit loopback origin such as `http://localhost:5173`. Wildcards, URL paths,
+credentials, queries and fragments are rejected at startup. The same allowlist
+applies to genesis and subsequent approvals.
 
 The receipt binding is unchanged: binding v1 names the approver principal and
 any step-up proof's issuer and jti, and names no step-up proof when an owner

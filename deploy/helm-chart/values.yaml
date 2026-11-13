@@ -419,6 +419,12 @@ gateway:
   approvalWindow: ""
   permitTTL: ""
   dispatchTimeout: ""
+  # HELM_GATEWAY_OWNER_ASSERTION_REQUIRED (helm-tracker#334). true: only the
+  # approver's own passkey assertion, verified by the gateway, satisfies the
+  # step-up of a helm.authority.* widening; a new tenant's genesis registers its
+  # passkey owner; EnsurePrincipals takes no human on a tenant that exists.
+  # false keeps the Control Plane's step-up proof accepted until it migrates.
+  ownerAssertionRequired: false
   # Signed decision receipts (helm-tracker#276). helm-gateway serve refuses
   # to start without its receipt signing key: a 32-byte Ed25519 seed, hex or
   # standard base64, mounted into the gateway Pod only (R8). Set one source:

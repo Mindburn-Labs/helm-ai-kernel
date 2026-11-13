@@ -1125,6 +1125,11 @@
           "default": "",
           "description": "HELM_GATEWAY_APPROVAL_WINDOW, a Go duration. Empty keeps the binary default (24h)."
         },
+        "ownerAssertionRequired": {
+          "type": "boolean",
+          "default": false,
+          "description": "true sets HELM_GATEWAY_OWNER_ASSERTION_REQUIRED: only the approver's own passkey assertion satisfies the step-up of an authority widening, a new tenant's genesis registers its passkey owner, and EnsurePrincipals takes no human on a tenant that exists."
+        },
         "permitTTL": {
           "type": "string",
           "default": "",

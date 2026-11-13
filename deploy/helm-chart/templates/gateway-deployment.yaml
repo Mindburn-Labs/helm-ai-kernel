@@ -138,6 +138,10 @@ spec:
             - name: HELM_GATEWAY_APPROVAL_WINDOW
               value: {{ $g.approvalWindow | quote }}
             {{- end }}
+            {{- if $g.ownerAssertionRequired }}
+            - name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+              value: "true"
+            {{- end }}
             {{- if $g.permitTTL }}
             - name: HELM_GATEWAY_PERMIT_TTL
               value: {{ $g.permitTTL | quote }}

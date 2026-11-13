@@ -62,6 +62,13 @@ type adminWire struct {
 // a client.
 func newAdminWire(t *testing.T) *adminWire {
 	t.Helper()
+	return newAdminWireWith(t, false)
+}
+
+// newAdminWireWith is newAdminWire with HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+// on or off for both services, as serve sets it.
+func newAdminWireWith(t *testing.T, ownerAssertionRequired bool) *adminWire {
+	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
 		t.Skip("set HELM_TEST_POSTGRES_URL to run the authority administration wire proofs")
@@ -111,11 +118,12 @@ func newAdminWire(t *testing.T) *adminWire {
 	must(t, err)
 	// Admission holds the GitHub declarations as serve does: a plan's stage is
 	// judged from them (github.repository.get is a read).
-	svc, err := admission.New(db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter, github.New()}})
+	svc, err := admission.New(db, admission.Config{ReceiptSigner: testReceiptSigner, Adapters: []adapters.Adapter{adapter, github.New()},
+		OwnerAssertionRequired: ownerAssertionRequired})
 	must(t, err)
 	iss := newIssuer(t)
 	auth := &Authenticator{Validator: iss.validator(), Actor: testActor}
-	api := &AdminServer{Rows: adapter.Store(), Auth: auth, Catalog: catalog}
+	api := &AdminServer{Rows: adapter.Store(), Auth: auth, Catalog: catalog, OwnerAssertionRequired: ownerAssertionRequired}
 	effects := &Server{Admission: svc, Auth: auth}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
@@ -218,15 +226,23 @@ func TestPostgresEnsurePrincipalsOnTheWire(t *testing.T) {
 	if _, err := w.stored("tenant-a", "svc:new"); !errors.Is(err, authorityrows.ErrNotFound) {
 		t.Errorf("a refused request still created svc:new: %v", err)
 	}
-	_, err = w.ensure("tenant-a", humanSpec("usr_second", adminOwner))
-	wantRPCError(t, "a second principal with a subject that names another", err, connect.CodeAlreadyExists, contracts.ReasonIdentityIsolationViolation)
+	// A tenant that exists gets no new human here: later humans come through
+	// an approved provision plan (helm-tracker#334).
+	_, err = w.ensure("tenant-a", humanSpec("usr_second", "usr_second"))
+	wantRPCError(t, "a new human on a tenant that exists", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	if _, err := w.stored("tenant-a", "usr_second"); !errors.Is(err, authorityrows.ErrNotFound) {
+		t.Errorf("a refused request still created usr_second: %v", err)
+	}
 	_, err = w.ensure("tenant-a", humanSpec(adminOwner, "another-subject"))
 	wantRPCError(t, "a principal presented with another subject", err, connect.CodeAlreadyExists, contracts.ReasonIdentityIsolationViolation)
 	_, err = w.ensure("tenant-a", principal(adminProvision, gatewayv1.PrincipalKind_PRINCIPAL_KIND_SERVICE, "helm-control-plane", "svc-2"))
 	wantRPCError(t, "a subject attached twice", err, connect.CodeAlreadyExists, contracts.ReasonIdentityIsolationViolation)
-	_, err = w.ensure("tenant-a", principal("usr_nosubject", gatewayv1.PrincipalKind_PRINCIPAL_KIND_HUMAN, "", ""))
+	// The store's own checks of a human, at a genesis, where humans are made.
+	_, err = w.ensure("tenant-c", humanSpec("usr_one", "same-subject"), humanSpec("usr_two", "same-subject"))
+	wantRPCError(t, "a second principal with a subject that names another", err, connect.CodeAlreadyExists, contracts.ReasonIdentityIsolationViolation)
+	_, err = w.ensure("tenant-c", principal("usr_nosubject", gatewayv1.PrincipalKind_PRINCIPAL_KIND_HUMAN, "", ""))
 	wantRPCError(t, "a human without a subject", err, connect.CodeInvalidArgument, contracts.ReasonSchemaViolation)
-	_, err = w.ensure("tenant-a", principal("usr_badsystem", gatewayv1.PrincipalKind_PRINCIPAL_KIND_HUMAN, "Not A System", "x"))
+	_, err = w.ensure("tenant-c", principal("usr_badsystem", gatewayv1.PrincipalKind_PRINCIPAL_KIND_HUMAN, "Not A System", "x"))
 	wantRPCError(t, "a subject whose system is not a system name", err, connect.CodeInvalidArgument, contracts.ReasonSchemaViolation)
 
 	// A disabled principal is never re-enabled, nor re-registered.

@@ -40,10 +40,14 @@ type Attempt struct {
 	OutcomeBasis         string
 	ApprovalDigest       []byte
 	ApprovalExpiresAt    *time.Time
-	Approval             *Approval
-	Permit               *Permit
-	Exposures            []Exposure
-	LatestObservation    *Observation
+	// OwnerChallenge is OwnerChallengeV1 of a pending approval for the
+	// principal that read the attempt: the WebAuthn challenge its passkey
+	// signs to approve. Nil when no approval is pending.
+	OwnerChallenge    []byte
+	Approval          *Approval
+	Permit            *Permit
+	Exposures         []Exposure
+	LatestObservation *Observation
 	// ModelCall is the money side of a claimed model.inference attempt.
 	ModelCall *ModelCall
 	// Episode is the worker run the attempt was proposed in, recorded from the
@@ -69,6 +73,9 @@ type Approval struct {
 	ApprovalDigest []byte
 	DecidedAt      time.Time
 	Reason         string
+	// OwnerCredentialID names the passkey of the owner assertion the approval
+	// verified; nil when it carried none.
+	OwnerCredentialID []byte
 }
 
 // Permit is an attempt's single-use permit.
@@ -219,12 +226,16 @@ func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID
 	if err := json.Unmarshal(quote, &a.Quote); err != nil {
 		return Attempt{}, err
 	}
+	if a.State == "ESCALATED" && len(a.ApprovalDigest) > 0 {
+		a.OwnerChallenge = OwnerChallengeV1(caller.TenantID, caller.PrincipalID, a.ID, a.ApprovalDigest)
+	}
 
 	var approval Approval
-	err = tx.QueryRowContext(ctx, `SELECT approver_principal_id, approver_actor_id, decision, approval_digest, decided_at, reason
+	err = tx.QueryRowContext(ctx, `SELECT approver_principal_id, approver_actor_id, decision, approval_digest, decided_at, reason,
+			owner_credential_id
 		FROM authority_approvals WHERE tenant_id = $1 AND attempt_id = $2`, caller.TenantID, attemptID).
 		Scan(&approval.ApproverPrincipalID, &approval.ApproverActorID, &approval.Decision, &approval.ApprovalDigest,
-			&approval.DecidedAt, &approval.Reason)
+			&approval.DecidedAt, &approval.Reason, &approval.OwnerCredentialID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:

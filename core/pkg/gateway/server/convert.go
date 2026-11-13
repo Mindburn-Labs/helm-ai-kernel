@@ -52,6 +52,7 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		out.PendingApproval = &gatewayv1.PendingApproval{
 			ApprovalDigest: a.ApprovalDigest,
 			ExpiresAt:      timestamppb.New(*a.ApprovalExpiresAt),
+			OwnerChallenge: a.OwnerChallenge,
 		}
 	}
 	if ap := a.Approval; ap != nil {
@@ -62,6 +63,7 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		out.Approval = &gatewayv1.Approval{
 			ApproverPrincipalId: ap.ApproverPrincipalID, Decision: decision, ApprovalDigest: ap.ApprovalDigest,
 			DecidedAt: timestamppb.New(ap.DecidedAt), Reason: ap.Reason, ApproverActorId: ap.ApproverActorID,
+			OwnerCredentialId: ap.OwnerCredentialID,
 		}
 	}
 	if p := a.Permit; p != nil {

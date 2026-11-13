@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
 	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
@@ -51,6 +53,13 @@ type DecideInput struct {
 	// or it did not verify. Approve uses it up when the effect needs
 	// step-up, and ignores it otherwise. Reject ignores it.
 	StepUp *StepUp
+	// OwnerAssertion is the approver's own WebAuthn assertion, as received
+	// (helm-tracker#334); nil when there is none. Approve verifies one that is
+	// present in its transaction, whatever the effect, against the passkey the
+	// approver enrolled, and refuses the approval when it does not verify. A
+	// verified assertion satisfies step-up, and the approval record keeps it.
+	// Reject ignores it.
+	OwnerAssertion *OwnerAssertion
 }
 
 // The scopes that reach Cancel, and the scope of a step-up proof.
@@ -58,6 +67,13 @@ const (
 	scopePropose = "helm.gateway.propose"
 	scopeStop    = "helm.gateway.stop"
 	scopeStepUp  = "helm.gateway.stepup"
+)
+
+// An owner assertion is recorded once in authority_token_replay under this
+// issuer and scope, keyed by the digest of what its credential signed.
+const (
+	ownerAssertionIssuer = "helm.gateway.owner-assertion"
+	scopeOwnerAssertion  = "helm.gateway.owner-assertion"
 )
 
 // stepUpMethodWebAuthn is the one method a proof attests: the issuer verified
@@ -142,33 +158,43 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 			return refuse(CodeFailedPrecondition, contracts.ReasonApprovalTimeout, "the escalation expired")
 		}
 		if !approve {
-			if err := insertApproval(ctx, tx, caller, a.id, "REJECTED", in, nil); err != nil {
+			if err := insertApproval(ctx, tx, caller, a.id, "REJECTED", in, nil, nil); err != nil {
 				return err
 			}
 			return transition(ctx, tx, caller.TenantID, a.id, "ESCALATED", "REJECTED", contracts.ReasonApprovalRejected)
 		}
-		// An effect that needs step-up on the risk stored at escalation is
-		// approved only with a proof, used up here, after the decide token.
-		// The risk is judged again in readmit, on the one it recomputes, so a
-		// class raised since the escalation needs it too (and takes the proof
-		// from the approval state there).
+		// An owner assertion that is present is verified now, whatever the
+		// effect: against the approver's enrolled passkey, over the challenge
+		// of this approver, attempt and digest, once, with a counter that never
+		// goes backwards. One that does not verify refuses the approval.
 		state := &ApprovalState{ApproverID: caller.PrincipalID, ApproverActorID: caller.ActorID, Approved: true, proof: in.StepUp}
-		if needsStepUp(a.risk, a.effectType) {
-			if err := spendStepUp(ctx, tx, caller.TenantID, in.StepUp); err != nil {
+		if in.OwnerAssertion != nil {
+			verified, err := verifyOwnerAssertion(ctx, tx, caller, a, *in.OwnerAssertion)
+			if err != nil {
 				return err
 			}
-			state.StepUpVerified = true
+			state.OwnerAssertionVerified, state.owner = true, verified
+		}
+		// An effect that needs step-up on the risk stored at escalation is
+		// approved only with the owner's verified assertion or a proof, used up
+		// here, after the decide token. The risk is judged again in readmit, on
+		// the one it recomputes, so a class raised since the escalation needs
+		// it too (and takes the proof from the approval state there).
+		if needsStepUp(a.risk, a.effectType) {
+			if err := s.satisfyStepUp(ctx, tx, caller.TenantID, a.effectType, state); err != nil {
+				return err
+			}
 		}
 		if err := s.readmit(ctx, tx, a, state); err != nil {
 			return err
 		}
-		// The record keeps the proof it used up, once readmit has settled
-		// whether the effect needed one.
+		// The record keeps the proof it used up and the assertion it
+		// verified, once readmit has settled whether the effect needed one.
 		var used *StepUp
-		if state.StepUpVerified {
+		if state.proofUsed {
 			used = in.StepUp
 		}
-		return insertApproval(ctx, tx, caller, a.id, "APPROVED", in, used)
+		return insertApproval(ctx, tx, caller, a.id, "APPROVED", in, used, state.owner)
 	})
 	if err != nil {
 		return Attempt{}, false, err
@@ -187,6 +213,94 @@ func needsStepUp(risk, effectType string) bool {
 
 var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
 	"approving a high-risk, irreversible or authority-widening effect needs a valid step-up proof")
+
+var errOwnerAssertionRequired = refuse(CodePermissionDenied, contracts.ReasonOwnerAssertionRequired,
+	"approving an authority widening needs the approver's own passkey assertion (owner_assertion), "+
+		"verified by the gateway; a step-up proof the Control Plane's issuer signs is not accepted for it")
+
+// satisfyStepUp settles the step-up of an approval whose effect needs one
+// (§10.1, helm-tracker#334): the approver's verified owner assertion satisfies
+// it, and a step-up proof the request also carries is then not used.
+// Otherwise the proof is used up, except for a helm.authority.* widening when
+// Config.OwnerAssertionRequired is on: the Control Plane's issuer signs the
+// proof, so it is not the owner's act, and only the assertion is accepted
+// (OWNER_ASSERTION_REQUIRED).
+func (s *Service) satisfyStepUp(ctx context.Context, tx *sql.Tx, tenantID, effectType string, state *ApprovalState) error {
+	if state.StepUpVerified {
+		return nil
+	}
+	if state.OwnerAssertionVerified {
+		state.StepUpVerified = true
+		return nil
+	}
+	if ownerAssertionOnly(s.cfg.OwnerAssertionRequired, effectType) {
+		return errOwnerAssertionRequired
+	}
+	if err := spendStepUp(ctx, tx, tenantID, state.proof); err != nil {
+		return err
+	}
+	state.StepUpVerified, state.proofUsed = true, true
+	return nil
+}
+
+// ownerAssertionOnly reports whether only the owner's own assertion satisfies
+// the step-up of effectType: every authority widening (provision plans, a
+// lift, a reassignment grant) once the gateway requires owner assertions.
+func ownerAssertionOnly(required bool, effectType string) bool {
+	return required && effectargs.WidensAuthority(effectType)
+}
+
+// verifiedAssertion is an owner assertion the approval verified, with the
+// challenge it signed and the counter it carried, for the approval record.
+type verifiedAssertion struct {
+	assertion OwnerAssertion
+	challenge []byte
+	signCount uint32
+}
+
+// verifyOwnerAssertion verifies the approver's assertion in the approval's
+// transaction: the approver's own enrolled passkey (the row locked FOR UPDATE),
+// the challenge OwnerChallengeV1 of this tenant, approver, attempt and
+// digest, VerifyAssertion, then the assertion recorded once in
+// authority_token_replay and its counter stored. Any failure is
+// OWNER_ASSERTION_REQUIRED, and the transaction rolls back with nothing used.
+func verifyOwnerAssertion(ctx context.Context, tx *sql.Tx, caller Caller, a lockedAttempt, as OwnerAssertion) (*verifiedAssertion, error) {
+	refused := func(format string, args ...any) error {
+		return refuse(CodePermissionDenied, contracts.ReasonOwnerAssertionRequired, "the owner assertion is not accepted: "+format, args...)
+	}
+	if err := CheckAssertionShape(as); err != nil {
+		return nil, refused("%v", err)
+	}
+	cred, count, err := provision.LoadCredential(ctx, tx, caller.TenantID, as.CredentialID, true)
+	if errors.Is(err, provision.ErrNoCredential) {
+		return nil, refused("the tenant has no passkey with this credential id")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if cred.PrincipalID != caller.PrincipalID {
+		return nil, refused("the passkey is not the approver's")
+	}
+	challenge := OwnerChallengeV1(caller.TenantID, caller.PrincipalID, a.id, a.approvalDigest)
+	next, err := VerifyAssertion(cred.Credential, count, as, challenge)
+	if err != nil {
+		return nil, refused("%v", err)
+	}
+	once := Token{Issuer: ownerAssertionIssuer, ID: hex.EncodeToString(signedPayloadDigest(as)), Scope: scopeOwnerAssertion, ExpiresAt: a.approvalExpiresAt}
+	if err := consumeToken(ctx, tx, caller.TenantID, once); err != nil {
+		var refusal *Error
+		if errors.As(err, &refusal) {
+			return nil, refused("this assertion was already presented")
+		}
+		return nil, err
+	}
+	if next != count {
+		if err := provision.SetSignCount(ctx, tx, caller.TenantID, as.CredentialID, next); err != nil {
+			return nil, err
+		}
+	}
+	return &verifiedAssertion{assertion: as, challenge: challenge, signCount: next}, nil
+}
 
 // usable reports whether p is a proof of this contract: a helm.gateway.stepup
 // token of method webauthn, with the compact token to keep. The server checks
@@ -219,17 +333,26 @@ func spendStepUp(ctx context.Context, tx *sql.Tx, tenantID string, proof *StepUp
 // insertApproval records an approval or a rejection. A step-up proof the
 // approval used up is kept with it, exactly as received: the compact token,
 // and its issuer, jti and method, which name the authority_token_replay row
-// that spent it (§10.1).
-func insertApproval(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, decision string, in DecideInput, proof *StepUp) error {
+// that spent it (§10.1). An owner assertion it verified is kept exactly as
+// received too, with the challenge it signed and the counter it carried, so a
+// later receipt binding can carry it and a verifier can check it again.
+func insertApproval(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, decision string, in DecideInput, proof *StepUp, owner *verifiedAssertion) error {
 	var issuer, jti, method, raw any // NULL: the effect needed no step-up
 	if proof != nil {
 		issuer, jti, method, raw = proof.Token.Issuer, proof.Token.ID, proof.Method, proof.Raw
 	}
+	var credential, challenge, authData, clientData, signature, count any // NULL: no owner assertion
+	if owner != nil {
+		credential, challenge, authData = owner.assertion.CredentialID, owner.challenge, owner.assertion.AuthenticatorData
+		clientData, signature, count = owner.assertion.ClientDataJSON, owner.assertion.Signature, int64(owner.signCount)
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO authority_approvals
 			(tenant_id, attempt_id, approver_principal_id, approver_actor_id, decision, approval_digest, reason,
-			 step_up_issuer, step_up_jti, step_up_method, step_up_proof)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		caller.TenantID, attemptID, caller.PrincipalID, caller.ActorID, decision, in.ApprovalDigest, in.Reason, issuer, jti, method, raw)
+			 step_up_issuer, step_up_jti, step_up_method, step_up_proof,
+			 owner_credential_id, owner_challenge, owner_authenticator_data, owner_client_data_json, owner_signature, owner_sign_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		caller.TenantID, attemptID, caller.PrincipalID, caller.ActorID, decision, in.ApprovalDigest, in.Reason, issuer, jti, method, raw,
+		credential, challenge, authData, clientData, signature, count)
 	return err
 }
 

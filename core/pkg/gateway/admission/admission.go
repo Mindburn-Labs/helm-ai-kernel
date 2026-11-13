@@ -178,6 +178,14 @@ type Config struct {
 	// required: New refuses a nil signer and one that does not produce
 	// classical Ed25519 receipt.v5 signatures (CheckReceiptSigner).
 	ReceiptSigner ReceiptSigner
+	// OwnerAssertionRequired is HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+	// (helm-tracker#334). On, only the approver's own verified passkey
+	// assertion satisfies the step-up of a helm.authority.* widening (a
+	// provision plan, a lift, a reassignment grant): a step-up proof, which the
+	// Control Plane's issuer signs, is not accepted for it. Off, the default
+	// until the Control Plane migrates, either satisfies it. An assertion that
+	// is present is verified either way.
+	OwnerAssertionRequired bool
 }
 
 // Service runs admission over one database. It holds no tenant data: the
@@ -587,10 +595,9 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	// one whose proof decide already used up passes, and otherwise it uses up
 	// the proof the approval carries or is refused (STEP_UP_REQUIRED).
 	if approval != nil && approval.Approved && !approval.StepUpVerified && needsStepUp(string(auth.riskClass), in.EffectType) {
-		if err := spendStepUp(ctx, tx, caller.TenantID, approval.proof); err != nil {
+		if err := s.satisfyStepUp(ctx, tx, caller.TenantID, in.EffectType, approval); err != nil {
 			return err
 		}
-		approval.StepUpVerified = true
 	}
 
 	// 4. Stops, read in a statement after the locks were granted.
@@ -712,7 +719,7 @@ func (s *Service) recordDecision(ctx context.Context, tx *sql.Tx, w decisionWrit
 		d.ApproverPrincipalID, d.ApproverActorID = a.ApproverID, a.ApproverActorID
 		// The step-up proof this approval used up, named as its
 		// authority_token_replay row names it.
-		if a.StepUpVerified && a.proof != nil {
+		if a.proofUsed && a.proof != nil {
 			d.StepUpIssuer, d.StepUpJTI = a.proof.Token.Issuer, a.proof.Token.ID
 		}
 	}

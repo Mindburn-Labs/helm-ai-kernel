@@ -187,6 +187,51 @@
         },
         "external_subject": {
           "$ref": "#/$defs/externalSubject"
+        },
+        "credentials": {
+          "description": "Passkeys the plan enrolls for a human (helm-tracker#334). After the owner's genesis passkey, a passkey is enrolled only by an approved provision plan; the gateway then verifies the human's approvals with it. Only a human carries them; a credential id is listed once in the plan, and one the tenant already has must be the same passkey of the same human.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/credential"
+          }
+        }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credential_id",
+        "alg",
+        "public_key_spki",
+        "rp_id"
+      ],
+      "properties": {
+        "credential_id": {
+          "description": "The WebAuthn credential id, unpadded base64url of 1 to 1023 bytes.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "alg": {
+          "description": "The COSE algorithm: -7 (ES256, ECDSA on P-256 with SHA-256) or -8 (EdDSA, Ed25519).",
+          "enum": [
+            -7,
+            -8
+          ]
+        },
+        "public_key_spki": {
+          "description": "The public key as DER SubjectPublicKeyInfo, unpadded base64url: a P-256 key for -7, an Ed25519 key for -8.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "rp_id": {
+          "description": "The WebAuthn relying party id the credential is scoped to: a lower-case DNS name of at most 253 bytes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
         }
       }
     },

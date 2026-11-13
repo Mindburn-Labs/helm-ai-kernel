@@ -52,6 +52,10 @@ type AdminServer struct {
 	Admission *admission.Service
 	// Catalog is what ListEffectTypes returns, from BuildCatalog.
 	Catalog []*gatewayv1.EffectTypeDeclaration
+	// OwnerAssertionRequired is HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+	// (helm-tracker#334): on, a new tenant's genesis registers its passkey
+	// owner, and a tenant that exists takes no human at all.
+	OwnerAssertionRequired bool
 }
 
 // Handler returns the mount path and the HTTP handler of the service, with the
@@ -67,16 +71,19 @@ var errHumanRegistrar = errors.New("a principal the tenant registers as a human 
 
 // EnsurePrincipals makes the token's tenant and the listed principals exist in
 // one transaction (token scope helm.gateway.provision). It changes nothing
-// that exists, and is idempotent by its nature.
+// that exists, and is idempotent by its nature. Humans come from the tenant's
+// owner (genesis.go): the owner's passkey is enrolled at the tenant's genesis,
+// and a tenant that exists gets no new human here.
 func (s *AdminServer) EnsurePrincipals(ctx context.Context, req *connect.Request[gatewayv1.EnsurePrincipalsRequest]) (*connect.Response[gatewayv1.EnsurePrincipalsResponse], error) {
 	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeProvision)
 	if err != nil {
 		return nil, err
 	}
-	specs, err := principalSpecs(req.Msg.GetPrincipals())
+	principals, err := principalSpecs(req.Msg.GetPrincipals())
 	if err != nil {
 		return nil, err
 	}
+	assertion := ownerAssertion(req.Msg.GetGenesisAssertion())
 	var stored []authorityrows.Principal
 	var created bool
 	err = s.Rows.InTenant(ctx, id.TenantID, func(tx *authorityrows.Tx) error {
@@ -93,13 +100,29 @@ func (s *AdminServer) EnsurePrincipals(ctx context.Context, req *connect.Request
 		case err != nil && !errors.Is(err, authorityrows.ErrNotFound):
 			return err
 		}
+		genesis, err := ownerGenesis(id.TenantID, created, s.OwnerAssertionRequired, principals, assertion)
+		if err != nil {
+			return err
+		}
 		stored = stored[:0]
-		for _, spec := range specs {
-			p, err := tx.UpsertPrincipal(ctx, spec)
+		for _, p := range principals {
+			if p.spec.Kind == authorityrows.PrincipalHuman && !created {
+				h, err := presented(ctx, tx, p)
+				if err != nil {
+					return err
+				}
+				if err := humanAfterGenesis(created, s.OwnerAssertionRequired, h); err != nil {
+					return err
+				}
+			}
+			stored1, err := tx.UpsertPrincipal(ctx, p.spec)
 			if err != nil {
 				return err
 			}
-			stored = append(stored, p)
+			stored = append(stored, stored1)
+		}
+		if genesis != nil {
+			return provision.EnrollGenesisCredential(ctx, tx.SQL(), id.TenantID, genesis.principalID, genesis.credential, genesis.proof)
 		}
 		return nil
 	})
@@ -111,6 +134,34 @@ func (s *AdminServer) EnsurePrincipals(ctx context.Context, req *connect.Request
 		resp.Principals = append(resp.Principals, principalProto(p))
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// presented reads what the tenant's rows say of a human a request presents to
+// a tenant that exists.
+func presented(ctx context.Context, tx *authorityrows.Tx, p requestedPrincipal) (presentedHuman, error) {
+	var h presentedHuman
+	switch _, err := tx.Principal(ctx, p.spec.ID); {
+	case errors.Is(err, authorityrows.ErrNotFound):
+		return h, nil
+	case err != nil:
+		return h, err
+	}
+	h.registered, h.passkeys, h.enrolled = true, len(p.credentials) > 0, true
+	for _, c := range p.credentials {
+		stored, _, err := provision.LoadCredential(ctx, tx.SQL(), tx.TenantID(), c.ID, false)
+		if errors.Is(err, provision.ErrNoCredential) {
+			h.enrolled = false
+			continue
+		}
+		if err != nil {
+			return h, err
+		}
+		if stored.PrincipalID != p.spec.ID || !stored.Same(c) {
+			h.enrolled = false
+		}
+		h.genesis = h.genesis || stored.Genesis
+	}
+	return h, nil
 }
 
 // GetProvisioning returns what the latest plan applied for an organization
@@ -177,15 +228,15 @@ func BuildCatalog(all []adapters.Adapter) ([]*gatewayv1.EffectTypeDeclaration, e
 // principalSpecs validates an EnsurePrincipals request before anything is
 // written: 1 to 64 principals, each named once, each of a kind. The store
 // validates the rest (ids, external subjects).
-func principalSpecs(in []*gatewayv1.PrincipalSpec) ([]authorityrows.PrincipalSpec, error) {
+func principalSpecs(in []*gatewayv1.PrincipalSpec) ([]requestedPrincipal, error) {
 	bad := func(format string, args ...any) error {
 		return rpcError(connect.CodeInvalidArgument, contracts.ReasonSchemaViolation, false, fmt.Errorf(format, args...))
 	}
 	if len(in) == 0 || len(in) > maxPrincipalsPerRequest {
 		return nil, bad("principals must list 1 to %d principals, not %d", maxPrincipalsPerRequest, len(in))
 	}
-	seen := map[string]bool{}
-	out := make([]authorityrows.PrincipalSpec, 0, len(in))
+	seen, credentialIDs := map[string]bool{}, map[string]bool{}
+	out := make([]requestedPrincipal, 0, len(in))
 	for i, p := range in {
 		if p == nil || !authorityrows.ValidPrincipalID(p.GetPrincipalId()) {
 			return nil, bad("principals[%d].principal_id is not a principal id", i)
@@ -202,7 +253,11 @@ func principalSpecs(in []*gatewayv1.PrincipalSpec) ([]authorityrows.PrincipalSpe
 		if ext := p.GetExternalSubject(); ext != nil {
 			spec.External = &authorityrows.ExternalSubject{System: ext.GetSystem(), ID: ext.GetId()}
 		}
-		out = append(out, spec)
+		credentials, err := requestCredentials(p, kind, credentialIDs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, requestedPrincipal{spec: spec, credentials: credentials})
 	}
 	return out, nil
 }
@@ -262,6 +317,10 @@ func adminError(ctx context.Context, rpc string, err error) error {
 		return rpcError(connect.CodeFailedPrecondition, "", false, err)
 	case errors.Is(err, errHumanRegistrar):
 		return rpcError(connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege, false, errHumanRegistrar)
+	case errors.As(err, new(*adminRefusal)):
+		var r *adminRefusal
+		errors.As(err, &r)
+		return rpcError(r.code, r.reason, false, r.err)
 	case errors.Is(err, authorityrows.ErrInvalid):
 		return rpcError(connect.CodeInvalidArgument, contracts.ReasonSchemaViolation, false, err)
 	case errors.Is(err, authorityrows.ErrIdentityConflict):

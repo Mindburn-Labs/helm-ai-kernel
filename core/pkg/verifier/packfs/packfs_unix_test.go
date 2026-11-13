@@ -43,3 +43,30 @@ func TestANamedPipeIsRefusedWithoutBlocking(t *testing.T) {
 		}
 	}
 }
+
+// A named pipe where a directory is expected is refused without being
+// opened, so a listing cannot wait for a writer (#308 r4 B1).
+func TestANamedPipeIsNeverListedAsADirectory(t *testing.T) {
+	dir, _ := pack(t)
+	fifo := filepath.Join(dir, "99_EXT")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("mkfifo: %v", err)
+	}
+	p := open(t, dir)
+	done := make(chan error, 1)
+	go func() {
+		_, err := p.ReadDir("99_EXT")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrNotRegular) || !strings.Contains(err.Error(), "not a directory") {
+			t.Fatalf("ReadDir(99_EXT) = %v, want ErrNotRegular saying it is not a directory", err)
+		}
+	case <-time.After(5 * time.Second):
+		if fd, err := syscall.Open(fifo, syscall.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+			_ = syscall.Close(fd)
+		}
+		t.Fatal("ReadDir blocked on a named pipe in place of a directory")
+	}
+}

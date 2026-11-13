@@ -34,6 +34,22 @@ func TestEUAIActProfile_ProfilesPastTheCapFailByName(t *testing.T) {
 		}
 	})
 
+	// #308 r4 B2: the cap holds in the line-delimited path too.
+	t.Run("a line-delimited file past the cap", func(t *testing.T) {
+		dir := t.TempDir()
+		line := `{"eu_ai_act_profile":` + validEUAIActProfile + `}` + "\n"
+		writeRaw(t, dir, "12_REPORTS/profiles.json", []byte(strings.Repeat(line, maxProfiles)+`{"eu_ai_act_profile":{}}`+"\n"))
+		result := checkEUAIActEvidenceProfile(dir).normalized()
+		if result.Status != CheckFailed {
+			t.Fatalf("status = %s (%.300s%.300s), want FAILED past %d profiles", result.Status, result.Detail, result.Reason, maxProfiles)
+		}
+		for _, want := range []string{"12_REPORTS/profiles.json", fmt.Sprint(maxProfiles)} {
+			if !strings.Contains(result.Reason, want) {
+				t.Errorf("reason %q does not contain %q", result.Reason, want)
+			}
+		}
+	})
+
 	t.Run("the cap itself is validated", func(t *testing.T) {
 		dir := t.TempDir()
 		writeRaw(t, dir, "12_REPORTS/a.json", profiles(maxProfiles, validEUAIActProfile))
@@ -94,7 +110,7 @@ func TestEUAIActProfile_TheMemberNameMatchesInAnyLetterCase(t *testing.T) {
 	}{
 		"upper case, invalid":          {`{"EU_AI_ACT_PROFILE":{}}`, CheckFailed},
 		"mixed case, valid":            {`{"Eu_Ai_Act_Profile":` + validEUAIActProfile + `}`, CheckVerified},
-		"escaped upper case":           {`{"EU_AI_ACT_PROFILE":{}}`, CheckFailed},
+		"escaped upper case":           {`{"\u0045U_AI_ACT_PROFILE":{}}`, CheckFailed},
 		"upper case in a damaged file": {`{"a": tru, "EU_AI_ACT_PROFILE":` + validEUAIActProfile + `}`, CheckFailed},
 		"upper case as plain text":     {`{EU_AI_ACT_PROFILE: {}}`, CheckFailed},
 	} {

@@ -160,6 +160,15 @@ func (p *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	if err := checkName("readdir", name); err != nil {
 		return nil, err
 	}
+	// A name that is not a directory is never opened: opening a named pipe
+	// for a listing would wait for a writer that never comes (#308 r4 B1).
+	info, err := p.Stat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fmt.Errorf("%w: it is not a directory, which is never listed", ErrNotRegular)}
+	}
 	entries, err := fs.ReadDir(p.fsys, name)
 	return entries, p.wrap("readdir", name, err)
 }

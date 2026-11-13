@@ -236,6 +236,12 @@ removal_proofs:
     tests:
       - "core/pkg/boundary/approvalceremony.TestServiceRejectsUnverifiedConsumerBeforePersistence"
   - control: CTL-009
+    file: core/pkg/verifier/packfs/packfs.go
+    find: "\tif !info.IsDir() {\n\t\treturn nil, &fs.PathError{Op: \"readdir\""
+    replace: "\tif false && !info.IsDir() {\n\t\treturn nil, &fs.PathError{Op: \"readdir\""
+    tests:
+      - "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+  - control: CTL-009
     file: core/pkg/verifier/verifier.go
     find: "\t\t\tif actualHash != expectedHash {\n"
     replace: "\t\t\tif false && actualHash != expectedHash {\n"

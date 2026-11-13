@@ -78,6 +78,8 @@ func TestVerifyFlagChecksDoNotBlockOnANamedPipe(t *testing.T) {
 	}{
 		{"02_PROOFGRAPH/anchors/a.json", func(dir string) []verifier.CheckResult { return checkEIDASAnchorMetadata(dir, time.Hour) }},
 		{"receipts/r.json", func(dir string) []verifier.CheckResult { return checkTEEAttestations(dir, "any") }},
+		// The anchors directory itself replaced by a named pipe (#308 r4 B1).
+		{"02_PROOFGRAPH/anchors", func(dir string) []verifier.CheckResult { return checkEIDASAnchorMetadata(dir, time.Hour) }},
 	} {
 		t.Run(tc.rel, func(t *testing.T) {
 			dir := t.TempDir()
@@ -109,6 +111,42 @@ func TestVerifyFlagChecksDoNotBlockOnANamedPipe(t *testing.T) {
 					_ = syscall.Close(fd)
 				}
 				t.Fatalf("the check blocked on the named pipe %s", tc.rel)
+			}
+		})
+	}
+}
+
+// A named pipe in place of a directory the layout, index and replay checks
+// list (99_EXT, 04_EXPORTS, 05_DIFFS) made `verify` wait forever (#308 r4 B1).
+func TestVerifyCLIDoesNotBlockOnANamedPipeDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("HELM_DATA_DIR", dataDir)
+	for _, rel := range []string{"99_EXT", "04_EXPORTS", "05_DIFFS"} {
+		t.Run(rel, func(t *testing.T) {
+			packDir := writeCLIPack(t, dataDir, cliPack{})
+			fifo := filepath.Join(packDir, filepath.FromSlash(rel))
+			if err := os.RemoveAll(fifo); err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+				t.Skipf("mkfifo: %v", err)
+			}
+			done := make(chan int, 1)
+			var stdout, stderr bytes.Buffer
+			go func() { done <- runVerifyCmd([]string{"--allow-self-attested", packDir}, &stdout, &stderr) }()
+			select {
+			case code := <-done:
+				if code != 1 {
+					t.Fatalf("exit=%d, want 1 for a pack with a named pipe for %s\n%s%s", code, rel, stdout.String(), stderr.String())
+				}
+			case <-time.After(10 * time.Second):
+				for i := 0; i < 6; i++ {
+					if fd, err := syscall.Open(fifo, syscall.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+						_ = syscall.Close(fd)
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+				t.Fatalf("verify blocked on a named pipe in place of %s", rel)
 			}
 		})
 	}

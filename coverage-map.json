@@ -1391,6 +1391,12 @@
       },
       "removal_proofs": [
         {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+          ]
+        },
+        {
           "file": "core/pkg/verifier/verifier.go",
           "tests": [
             "core/pkg/verifier.TestVerifyBundle_HashMismatch"

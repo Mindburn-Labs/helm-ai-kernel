@@ -66,6 +66,85 @@ func TestOpenRefusesWhatIsNotADirectory(t *testing.T) {
 	}
 }
 
+// statReplacingRoot performs the real stat and changes the named object
+// before handing its metadata back. Opens still use the real os.Root.
+type statReplacingRoot struct {
+	rootHandle
+	name     string
+	replace  func() error
+	replaced bool
+}
+
+func (r *statReplacingRoot) Stat(name string) (fs.FileInfo, error) {
+	info, err := r.rootHandle.Stat(name)
+	if err == nil && name == r.name && !r.replaced {
+		if err := r.replace(); err != nil {
+			return nil, err
+		}
+		r.replaced = true
+	}
+	return info, err
+}
+
+func directoryOperations() map[string]func(*FS, string) error {
+	return map[string]func(*FS, string) error{
+		"ReadDir": func(p *FS, name string) error {
+			_, err := p.ReadDir(name)
+			return err
+		},
+		"Open": func(p *FS, name string) error {
+			file, err := p.Open(name)
+			if err == nil {
+				_ = file.Close()
+			}
+			return err
+		},
+	}
+}
+
+func TestDirectoryReplacementIsRefused(t *testing.T) {
+	for method, run := range directoryOperations() {
+		t.Run(method, func(t *testing.T) {
+			dir, _ := pack(t)
+			p := open(t, dir)
+			root := &statReplacingRoot{rootHandle: p.root, name: "sub", replace: func() error {
+				if err := os.Rename(filepath.Join(dir, "sub"), filepath.Join(dir, "original")); err != nil {
+					return err
+				}
+				return os.Mkdir(filepath.Join(dir, "sub"), 0o700)
+			}}
+			p.root = root
+			if err := run(p, "sub"); !errors.Is(err, ErrNotRegular) || !strings.Contains(err.Error(), "directory changed") {
+				t.Fatalf("%s after directory replacement = %v, want refusal of the changed directory", method, err)
+			}
+			if !root.replaced {
+				t.Fatal("the directory was not replaced after Stat")
+			}
+		})
+	}
+}
+
+func TestOpenedDirectoryKeepsItsHandle(t *testing.T) {
+	dir, _ := pack(t)
+	p := open(t, dir)
+	file, err := p.Open("sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := os.Rename(filepath.Join(dir, "sub"), filepath.Join(dir, "original")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(dir, "sub", "replacement.txt"), "replacement")
+	entries, err := file.(fs.ReadDirFile).ReadDir(-1)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "nested.txt" {
+		t.Fatalf("opened directory lists %v, %v; want the original nested.txt", entries, err)
+	}
+}
+
 func TestCleanName(t *testing.T) {
 	for name, want := range map[string]string{
 		"in.txt":          "in.txt",

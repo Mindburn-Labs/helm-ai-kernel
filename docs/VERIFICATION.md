@@ -206,7 +206,13 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     named pipe, a device or a socket. The check that wanted the file fails
     and names it, and nothing is read from outside the pack whether the pack
     path you pass is relative or absolute. A symbolic link that stays inside
-    the pack is followed. A path named by `00_INDEX.json` or by
+    the pack is followed. Directory opens acquire a directory handle and
+    check that it is the object described by the preliminary stat. Replacing
+    a child directory with a named pipe cannot make `ReadDir` or directory
+    `Open` wait for a writer; replacing it with another directory is refused.
+    A returned directory handle remains bound to that object if its name is
+    later replaced. This does not snapshot the contents of the directory.
+    A path named by `00_INDEX.json` or by
     `manifest.json` `file_hashes` must also be spelled as the pack directory
     lists it, letter case included, so a pack fails the same way on a file
     system that ignores case. A file read whole is read up to 64 MiB; one

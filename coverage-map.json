@@ -1290,7 +1290,7 @@
       "id": "CTL-009",
       "title": "Evidence bundle verification",
       "owner": "Mindburn Labs core team (conformance)",
-      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a recorded tape is replayed by the code `helm-ai-kernel replay` runs. Every check `verify` and `evidence inspect` run, except roots and evidence_pack_seal, reads the bundle only through an os.Root opened on its directory, and only from regular files: a path or symbolic link that leaves the bundle, an absolute symbolic link, a named pipe, a device or a socket is refused and never read, and the check that wanted the file fails (embedded_signature_trust skips it, and a directory walk passes over a link whose name it does not read). The layout check tests, lists and reads through the same os.Root. A file read whole is read up to 64 MiB; the EU AI Act scan reads at most 256 MiB and validates at most 1024 profiles per bundle, and a tape replay reads at most 256 MiB of entry files; the file a limit stops at fails the check by name.",
+      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a recorded tape is replayed by the code `helm-ai-kernel replay` runs. Every check `verify` and `evidence inspect` run, except roots and evidence_pack_seal, reads the bundle only through an os.Root opened on its directory, and only from regular files: a path or symbolic link that leaves the bundle, an absolute symbolic link, a named pipe, a device or a socket is refused and never read, and the check that wanted the file fails (embedded_signature_trust skips it, and a directory walk passes over a link whose name it does not read). The layout check tests, lists and reads through the same os.Root. Directory opens require a directory handle and verify that it is the object checked before opening: a child directory swapped to a named pipe cannot block a listing or Open, and a different directory is refused. A file read whole is read up to 64 MiB; the EU AI Act scan reads at most 256 MiB and validates at most 1024 profiles per bundle, and a tape replay reads at most 256 MiB of entry files; the file a limit stops at fails the check by name.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1322,6 +1322,7 @@
       ],
       "tests": {
         "allowed": [
+          "core/pkg/verifier/packfs.TestOpenedDirectoryKeepsItsHandle",
           "core/pkg/verifier.TestVerifyBundle_Valid"
         ],
         "forbidden": [
@@ -1333,6 +1334,8 @@
           "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack",
           "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles",
           "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory",
+          "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks",
+          "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused",
           "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails",
           "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash",
           "core/pkg/verifier.TestVerifyBundle_DeeplyNestedJSONLeavesTheCallerAReport",
@@ -1359,6 +1362,8 @@
           "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack",
           "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles",
           "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory",
+          "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks",
+          "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused",
           "core/pkg/verifier.TestVerifyBundle_NamedPipesInSealedPathsDoNotBlock",
           "core/pkg/verifier.TestEUAIActProfile_AFileOverTheReadLimitIsNamed",
           "core/pkg/verifier.TestEUAIActProfile_FilesPastThePackBudgetAreNamed",
@@ -1396,6 +1401,18 @@
           "file": "core/pkg/verifier/packfs/packfs.go",
           "tests": [
             "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
           ]
         },
         {

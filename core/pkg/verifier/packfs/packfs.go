@@ -13,6 +13,8 @@
 // directory where a file is read is refused before it is opened, and the
 // opened file is checked again, so a read can neither block on a pipe nor
 // touch a device. Whole-file reads stop at MaxFileBytes.
+// Directory opens require a directory handle and validate its identity, so
+// replacing a checked child directory with a pipe cannot block a listing.
 package packfs
 
 import (
@@ -23,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
@@ -47,14 +50,22 @@ var (
 // fs.ReadFileFS and fs.ReadDirFS with the rules in the package documentation,
 // and Lstat. It is safe for concurrent use.
 type FS struct {
-	root *os.Root
-	fsys fs.FS
+	root rootHandle
 	// escape is the error os.Root returns for a name that leaves the root.
 	// os does not export it, so it is taken from the root at Open.
 	escape error
 
 	mu       sync.Mutex
 	listings map[string]*listing
+}
+
+// rootHandle is the set of operations used on the opened pack root. Tests
+// wrap Stat to schedule a filesystem change before the subsequent open.
+type rootHandle interface {
+	Stat(string) (fs.FileInfo, error)
+	Lstat(string) (fs.FileInfo, error)
+	OpenFile(string, int, fs.FileMode) (*os.File, error)
+	Close() error
 }
 
 // listing is what one directory lists: its names, and each name under its
@@ -70,7 +81,7 @@ func Open(dir string) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &FS{root: root, fsys: root.FS()}
+	p := &FS{root: root}
 	var pathErr *fs.PathError
 	if _, err := root.Lstat(".."); errors.As(err, &pathErr) {
 		p.escape = pathErr.Err
@@ -169,7 +180,15 @@ func (p *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	if !info.IsDir() {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fmt.Errorf("%w: it is not a directory, which is never listed", ErrNotRegular)}
 	}
-	entries, err := fs.ReadDir(p.fsys, name)
+	file, err := p.openDirectory(name, info)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	entries, err := file.ReadDir(-1)
+	slices.SortFunc(entries, func(a, b fs.DirEntry) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
 	return entries, p.wrap("readdir", name, err)
 }
 
@@ -181,12 +200,32 @@ func (p *FS) Open(name string) (fs.File, error) {
 		return nil, err
 	}
 	if info.IsDir() {
-		file, err := p.fsys.Open(name)
-		return file, p.wrap("open", name, err)
+		return p.openDirectory(name, info)
 	}
 	file, _, err := p.OpenRegular(name)
 	if err != nil {
 		return nil, err
+	}
+	return file, nil
+}
+
+// openDirectory acquires a directory-only handle inside the pack root.
+// The trailing separator preserves directory semantics, including Windows;
+// Unix sets O_DIRECTORY and O_NONBLOCK explicitly. The opened object must still
+// be the directory described by the preliminary stat.
+func (p *FS) openDirectory(name string, before fs.FileInfo) (*os.File, error) {
+	file, err := p.root.OpenFile(osName(name)+string(filepath.Separator), os.O_RDONLY|openDirectoryFlags, 0)
+	if err != nil {
+		return nil, p.wrap("open", name, err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if !info.IsDir() || !os.SameFile(before, info) {
+		_ = file.Close()
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: the directory changed while it was opened", ErrNotRegular)}
 	}
 	return file, nil
 }

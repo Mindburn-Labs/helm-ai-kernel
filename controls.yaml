@@ -242,6 +242,18 @@ removal_proofs:
     tests:
       - "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
   - control: CTL-009
+    file: core/pkg/verifier/packfs/packfs.go
+    find: "func (p *FS) openDirectory(name string, before fs.FileInfo) (*os.File, error) {\n"
+    replace: "func (p *FS) openDirectory(name string, before fs.FileInfo) (*os.File, error) {\n\tif true { return p.root.OpenFile(osName(name), os.O_RDONLY, 0) }\n"
+    tests:
+      - "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks"
+  - control: CTL-009
+    file: core/pkg/verifier/packfs/packfs.go
+    find: "\tif !info.IsDir() || !os.SameFile(before, info) {\n"
+    replace: "\tif !info.IsDir() {\n"
+    tests:
+      - "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
+  - control: CTL-009
     file: core/pkg/verifier/verifier.go
     find: "\t\t\tif actualHash != expectedHash {\n"
     replace: "\t\t\tif false && actualHash != expectedHash {\n"
@@ -2919,7 +2931,10 @@ controls:
       a socket is refused and never read, and the check that wanted the file
       fails (embedded_signature_trust skips it, and a directory walk passes
       over a link whose name it does not read). The layout check tests, lists
-      and reads through the same os.Root. A file read whole is read up to 64
+      and reads through the same os.Root. Directory opens require a directory
+      handle and verify that it is the object checked before opening: a child
+      directory swapped to a named pipe cannot block a listing or Open, and
+      a different directory is refused. A file read whole is read up to 64
       MiB; the EU AI Act scan reads at most 256 MiB and validates at most 1024
       profiles per bundle, and a tape replay reads at most 256 MiB of entry
       files; the file a limit stops at fails the check by name.
@@ -2946,6 +2961,7 @@ controls:
       - "`helm-ai-kernel replay` is outside this control: it replays the tape with the code replay_determinism runs and does not check the bundle seal."
     tests:
       allowed:
+        - "core/pkg/verifier/packfs.TestOpenedDirectoryKeepsItsHandle"
         - "core/pkg/verifier.TestVerifyBundle_Valid"
       forbidden:
         - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
@@ -2956,6 +2972,8 @@ controls:
         - "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack"
         - "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles"
         - "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+        - "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks"
+        - "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
         - "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails"
         - "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash"
         - "core/pkg/verifier.TestVerifyBundle_DeeplyNestedJSONLeavesTheCallerAReport"
@@ -2981,6 +2999,8 @@ controls:
         - "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack"
         - "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles"
         - "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+        - "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks"
+        - "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
         - "core/pkg/verifier.TestVerifyBundle_NamedPipesInSealedPathsDoNotBlock"
         - "core/pkg/verifier.TestEUAIActProfile_AFileOverTheReadLimitIsNamed"
         - "core/pkg/verifier.TestEUAIActProfile_FilesPastThePackBudgetAreNamed"

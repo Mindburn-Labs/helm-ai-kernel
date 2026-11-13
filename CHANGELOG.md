@@ -90,6 +90,11 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Security
 
+- Pack directory listings and directory `Open` calls acquire a directory-only
+  handle and verify its identity. Replacing a checked child directory with a
+  named pipe can no longer block either call; replacing it with a different
+  directory is refused. The regular-file and pack-root rules are unchanged.
+
 - The Go toolchain is 1.26.11 in `mise.toml`, `go.work`, every `go.mod`, the
   build images and the workflows. Go 1.26.10 carries GO-2026-6859 (an HTTP/1
   server crash in `net/http`), which `govulncheck` reports as reachable. Every

@@ -776,6 +776,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Fixed
 
+- Spend-proxy recovery binds releases to the active signed dispatch attempt
+  and remembers consumed attempts. Replaying an old release or journal cannot
+  clear or replace a newer retry's hold; conflicting unreleased attempts
+  refuse startup, while a legitimate release permits a fresh retry.
 - Spend-proxy releases bind their versioned action, tenant and target intent
   through the existing signed RouteQuote payload. Startup and export refuse
   relabeled journals and redirected releases. Failed settlements retain the

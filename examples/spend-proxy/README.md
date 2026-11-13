@@ -201,7 +201,12 @@ is added), as usage and settlement lines whose usage receipt carries
 and `release_action: dispatch_released/v1`. The outer tenant and intent must
 match that signed quote. A journal relabeled as a release, a redirected
 release, or an unversioned/unknown release action is refused by startup and
-export; a payload signature alone does not authorize those actions. Both are
+export; a payload signature alone does not authorize those actions. Recovery
+also matches a release to its active quote's signed attempt fields. An old
+release or journal cannot clear or replace a newer retry's hold; duplicate
+journals and releases of a consumed attempt are ignored, while conflicting unreleased
+attempts refuse startup. A release of the current attempt still permits a
+new dispatch using that idempotency key. Both reconciliation actions are
 signed by the key of the seed (`--sign` or `HELM_SPEND_PROXY_SIGNING_SEED`, or
 without either the seed the proxy generated in the receipts directory), and
 the next start replays them. That key should be the one that signed the

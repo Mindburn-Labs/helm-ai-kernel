@@ -540,6 +540,24 @@ func isDispatchJournal(rec *ReceiptRecord) bool {
 	return rec.Note == NoteDispatchJournal || rec.Note == ""
 }
 
+// dispatchAttempt identifies the signed quote carried by a journal and its
+// release. Intent and quote IDs alone identify the reusable idempotency key,
+// not an attempt. ContentHash binds the quote's terms and receipt; the signed
+// timestamps are compared too because the content hash omits them. Release
+// metadata and the detached signature may change without creating an attempt.
+type dispatchAttempt struct {
+	tenant, intent, quote, contentHash, receiptHash string
+	createdAt, expiresAt                            time.Time
+}
+
+func attemptOf(q *economic.RouteQuote) dispatchAttempt {
+	return dispatchAttempt{
+		tenant: q.TenantID, intent: q.SpendIntentID, quote: q.ID,
+		contentHash: q.ContentHash, receiptHash: q.ReceiptHash,
+		createdAt: q.CreatedAt.UTC(), expiresAt: q.ExpiresAt.UTC(),
+	}
+}
+
 // RestorePendingDispatches holds again, in engine, every dispatch the log
 // journalled before its provider call that has no committed settlement and no
 // release: the provider may have billed it, so its quote ceiling stays
@@ -553,9 +571,11 @@ func isDispatchJournal(rec *ReceiptRecord) bool {
 // otherwise be forgotten.
 func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway.Engine, envelopes map[string]*economic.AgentSpendEnvelope) ([]PendingDispatch, error) {
 	// Read the log in order: a journal line opens a dispatch, and a release
-	// closes the journal before it (a retry may journal the key again). The
-	// engine leaves a key it holds a committed settlement for as it is.
+	// closes only its matching signed attempt (a retry may journal the key
+	// again). Consumed attempts cannot be reopened or release a later attempt.
+	// The engine leaves a key with a committed settlement as it is.
 	open := make(map[string]*ReceiptRecord)
+	released := make(map[dispatchAttempt]bool)
 	var order []string
 	listed := make(map[string]bool)
 	billed := make(map[string]bool)
@@ -563,8 +583,30 @@ func RestorePendingDispatches(records []*ReceiptRecord, engine *inferencegateway
 		switch {
 		case rec.SpendIntentID == "":
 		case rec.Kind == RecordDispatchReleased:
+			if err := rec.checkPayload(); err != nil {
+				return nil, fmt.Errorf("spendproxy: release of %s: %w", rec.SpendIntentID, err)
+			}
+			attempt := attemptOf(rec.RouteQuote)
+			if released[attempt] {
+				continue
+			}
+			journal := open[rec.SpendIntentID]
+			if journal == nil || attemptOf(journal.RouteQuote) != attempt {
+				return nil, fmt.Errorf("spendproxy: release of %s does not match its active dispatch attempt; refusing to start", rec.SpendIntentID)
+			}
 			delete(open, rec.SpendIntentID)
+			released[attempt] = true
 		case isDispatchJournal(rec):
+			attempt := attemptOf(rec.RouteQuote)
+			if released[attempt] {
+				continue
+			}
+			if journal := open[rec.SpendIntentID]; journal != nil {
+				if attemptOf(journal.RouteQuote) != attempt {
+					return nil, fmt.Errorf("spendproxy: intent %s has another unreleased dispatch attempt; refusing to start", rec.SpendIntentID)
+				}
+				continue // a duplicate journal does not replace the active one
+			}
 			if !listed[rec.SpendIntentID] {
 				listed[rec.SpendIntentID] = true
 				order = append(order, rec.SpendIntentID)

@@ -420,6 +420,30 @@ removal_proofs:
       - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
   - control: CTL-016
     file: core/pkg/spendproxy/store.go
+    find: "\t\t\tif journal == nil || attemptOf(journal.RouteQuote) != attempt {\n"
+    replace: "\t\t\tif journal == nil {\n"
+    tests:
+      - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\t\treleased[attempt] = true\n"
+    replace: ""
+    tests:
+      - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\tcase isDispatchJournal(rec):\n\t\t\tattempt := attemptOf(rec.RouteQuote)\n\t\t\tif released[attempt] {\n"
+    replace: "\t\tcase isDispatchJournal(rec):\n\t\t\tattempt := attemptOf(rec.RouteQuote)\n\t\t\tif false {\n"
+    tests:
+      - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
+    find: "\t\t\t\tif attemptOf(journal.RouteQuote) != attempt {\n"
+    replace: "\t\t\t\tif false && attemptOf(journal.RouteQuote) != attempt {\n"
+    tests:
+      - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
+  - control: CTL-016
+    file: core/pkg/spendproxy/store.go
     find: "\t\tif q.Metadata[MetadataReleaseAction] != releaseActionV1 || strings.TrimSpace(q.Metadata[MetadataReleaseReason]) == \"\" {\n"
     replace: "\t\tif false {\n"
     tests:
@@ -3985,7 +4009,11 @@ controls:
       release_action dispatch_released/v1 and its reason, with the outer
       tenant and intent matching the signed quote; a journal cannot be
       relabeled as a release, nor can a release target another intent.
-      Export checks those bindings too. An answer is priced by the model it names. The principal
+      Export checks those bindings too. Recovery matches a release to the
+      active quote's signed attempt fields, remembers consumed attempts and
+      refuses overlapping unreleased attempts. Replaying an old release or
+      journal cannot clear or replace a newer retry's hold.
+      An answer is priced by the model it names. The principal
       in a spend receipt is the envelope's, and with caller credentials
       configured each request's agent, envelope and workspace are its
       credential's, and /v1/models and /helm/spend/health need it; without
@@ -4145,6 +4173,9 @@ controls:
         - "core/pkg/spendproxy.TestReconcileReadsALegacySettleFailedNote"
         - "core/pkg/spendproxy.TestCallerIDsWithColonsDoNotShareKeys"
         - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+        - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
+        - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
+        - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
         - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
         - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
         - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"
@@ -4244,6 +4275,9 @@ controls:
         - "core/pkg/spendproxy.TestALegacyJournalDoesNotCloseAnEnvelopeOnRestart"
         - "core/pkg/spendproxy.TestASettlementLineClosesOnlyItsOwnEnvelope"
         - "core/pkg/spendproxy.TestAReleaseCannotBorrowAnotherSignedRecord"
+        - "core/pkg/spendproxy.TestAReleasedAttemptCannotReleaseItsRetry"
+        - "core/pkg/spendproxy.TestReleaseMustMatchTheActiveSignedAttempt"
+        - "core/pkg/spendproxy.TestRecoveryRefusesOverlappingDispatchAttempts"
         - "core/pkg/spendproxy.TestFailedSettlementRestoresTheRecordedLiability"
         - "core/pkg/spendproxy.TestReconciliationKeepsAnUnfundedRecoveryHold"
         - "core/pkg/inferencegateway.TestSettlementExcludesItsOwnHoldBeforeCheckingFunds"

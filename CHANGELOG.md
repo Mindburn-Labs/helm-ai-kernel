@@ -165,10 +165,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and one that selects
   credential files (`glob: .env`, `**/*.pem`) is a secret read. Upgrade note:
   a glob selects a credential file inside a directory (`.docker/config.json`,
-  `.ssh/config`, `.kube/config`, `.config/gcloud/`) when it names that
-  directory or its `**` can stand for it, so `Grep` or `Glob` with
-  `**/*.json`, `**/config` or `.docker/*` is a denied secret read under the
-  built-in profile; `*.json`, `*.db` and `*config` are not. A public key
+  `.ssh/config`, `.kube/config`, `.aws/credentials`, `.config/gcloud/`) when
+  it names that directory or its `**` can stand for it, so `Grep` or `Glob`
+  with `**/*.json`, `**/config`, `*/credentials` or `.docker/*.json` is a
+  denied secret read under the built-in profile; `*.json`, `*.db`, `*config`
+  and `credentials` are not. A glob whose last segment matches ordinary file
+  names (`*`, `*.*`) selects files in general and is a secret read only when
+  its text names a credential path, so `.ssh/*` is one and `.docker/*`,
+  `.kube/*` and `.aws/*` are not, although ripgrep selects the credential
+  file in that directory with each of them. A public key
   and an example env file (`.env.example`, `.env.sample`, `.env.template`)
   are not credentials: reading one passes, through `Read` and through a shell
   alike. A search glob for every public key (`Grep` `glob: *.pub`, `Glob`
@@ -209,13 +214,21 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   below the home directory. A shell word with a bracket class
   (`cat ~/.helm-ai-kernel/k[]e]ys/*`) or a segment longer than 1024 bytes is
   denied when the directory it starts in is at, inside or above the data
-  directory. A shell word's brace groups are expanded as bash expands them,
-  up to 256 words per command, and each word is matched, so
-  `cat ~/{.helm-ai-kernel,x}/keys/*` is denied; past the budget a word is
-  denied when its first brace group starts at, inside or above the data
-  directory, or the word starts with one. In a repository of more than
-  65,536 entries a filter outside the grammar (`!node_modules/**`,
-  `*.[jt]s`) is denied because the walk cannot finish. So a search from `/`, an
+  directory. A shell word with a brace group is matched on its text before
+  the first group: it is denied with `TRUST_MATERIAL_ACCESS_DENIED` under
+  every profile when that text is at the data directory, at or inside the key
+  directory, or has begun to spell the name of one of them
+  (`cat ~/.helm-ai-kernel/{keys,x}/*`, `cat ~/.helm-{ai-kernel,x}/keys/*`).
+  The groups are not expanded, so a group that spells the data directory's
+  name from above it (`cat ~/{.helm-ai-kernel,zz}/keys/*`) or climbs to it
+  with `..` (`cat ~/proj/{..,x}/.helm-ai-kernel/k*/*`) is not a
+  trust-material denial: the built-in profile denies it as an opaque shell
+  operation (`OPERATE_PERMISSIONS_EMPTY`) and a profile that grants
+  `shell.operate` runs it. CTL-035 states this as a bypass assumption; the
+  structural fix is to keep the signing seed out of the agent's reach
+  (helm-tracker#333). In a repository of more than 65,536 entries a filter
+  outside the grammar (`!node_modules/**`, `*.[jt]s`) is denied because the
+  walk cannot finish. So a search from `/`, an
   escaped spelling of a key file name (`*.see\d`, `*.see[d\]`) and a filter
   that starts with `/`, which ripgrep anchors at its working directory, are
   denied.
@@ -227,7 +240,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   glob was allowed, used to be expanded glob by glob, and close to 4 MiB of
   them held the hook past the client's timeout. The hook also stops
   classifying a call after 10 seconds, denies it the same way and stops the
-  classification.
+  classification. A call whose classifier panics is denied the same way, with
+  a signed receipt, instead of ending the hook without a decision.
 - Hermes `search_files` `pattern` is read as a glob only when `target` is
   `files`; for a content search it is a regular expression and is not
   decided as a glob, so a regular expression with many `{m,n}` quantifiers is

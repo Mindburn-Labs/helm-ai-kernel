@@ -359,17 +359,28 @@ deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/proj,{{HOME}}",
 deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/proj {{HOME}}","target":"content","pattern":".","file_glob":"{**/.h*,**/.h*/k*/*}"}
 deny	TRUST_MATERIAL_ACCESS_DENIED	search_files	{"path":"{{HOME}}/repo,{{HOME}}","target":"files","pattern":"*"}
 
-# A shell word's braces are expanded, up to 256 words in one call, and each
-# word is matched; past that, a word whose braces start at, inside or above
-# the data directory is refused.
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{.helm-ai-kernel,zz}/keys/*
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat $HOME/{.helm-ai-kernel,zz}/keys/*
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{".helm-ai-kernel",zz}/k*/*.s*
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cp -r ~/{.helm-ai-kernel,zz} /tmp/r5-out
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	tar czf /tmp/r5.tgz ~/{.helm-ai-kernel,zz}
-deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}{o,p}{q,r}/x
+# A shell word with a brace group is matched on its text before the group:
+# it is refused under every profile when that text is inside the data
+# directory or has begun to spell its name. Brace expansion is otherwise an
+# opaque shell operation, refused under the built-in profile and passed under
+# one that grants shell.operate, so a group that spells the data directory's
+# name from above it, or climbs to it with "..", is a stated bypass (CTL-035).
+# Every such call is decided, with a receipt, whatever its groups hold.
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cat ~/.helm-{ai-kernel,zz}/k*/*.s*
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	cp -r ~/.helm-ai-kernel/{keys,zz} /tmp/r5-out
+deny@builtin	OPERATE_PERMISSIONS_EMPTY	Bash	cat ~/{.helm-ai-kernel,zz}/keys/*
+deny@builtin	OPERATE_PERMISSIONS_EMPTY	Bash	cat ~/proj/{..,x}/.helm-ai-kernel/k*/*
+deny@builtin	OPERATE_PERMISSIONS_EMPTY	Bash	cat ~/proj/x{1..300}{/../..,}/.helm-ai-kernel/k*/*
 allow	-	Bash	cp ~/.bashrc{,.bak}
 allow	-	Bash	mkdir -p src/{api,web}/{lib,test}
+allow	-	Bash	touch ~/proj/f{1..300}{.go,}
+allow	-	Bash	echo {1..256}; cp ~/.bashrc{,.bak}
+allow	-	Bash	echo {1..300}{,}
+allow	-	Bash	echo {1..256}; ls f{a,}
+allow	-	Bash	for i in {1..300}; do echo $i; done
+allow	-	Bash	echo {1..1000}
+allow	-	Bash	printf '%s ' {a..z}{a..z}
+allow	-	Bash	touch ~/f{1..300}.txt
 
 # A credential file inside a directory is selected only by a glob that names
 # the directory or whose "**" can stand for it: *.json, *.db and *config do

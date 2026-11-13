@@ -175,10 +175,19 @@ var (
 // classifyBeforeDeadline classifies a call, or refuses it as reaching trust
 // material when classifying takes longer than the deadline: what the hook
 // could not finish reading must not pass under any profile. At the deadline
-// the guard is stopped, which ends the classifier's work on the call.
+// the guard is stopped, which ends the classifier's work on the call. A
+// classifier that panics is refused the same way, so the hook still decides
+// the call and signs a receipt for it.
 func classifyBeforeDeadline(payload preToolPayload, guard *shellscan.PathGuard) []hookClassification {
-	done := make(chan []hookClassification, 1)
-	go func() { done <- hookClassify(payload, guard) }()
+	done, classify := make(chan []hookClassification, 1), hookClassify
+	go func() {
+		defer func() {
+			if failure := recover(); failure != nil {
+				done <- trustMaterialClassification(strings.TrimSpace(payload.ToolName), "classification panic", fmt.Sprintf("a call the hook could not classify (the classifier panicked: %v), taken as reaching HELM signing or trust material", failure), nil)
+			}
+		}()
+		done <- classify(payload, guard)
+	}()
 	timer := time.NewTimer(hookClassificationDeadline)
 	defer timer.Stop()
 	select {

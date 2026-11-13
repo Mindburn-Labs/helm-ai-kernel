@@ -128,10 +128,16 @@ key directory holds as a search tool may anchor it:
   `\bTODO\b`) it is taken as a regular expression, refused only when the
   search starts at, inside or above the data directory.
 - A shell word is expanded as the shell does: a wildcard does not match a
-  leading dot unless `dotglob` or `globdots` is set, and brace groups are
-  expanded as bash expands them, up to 256 words in one command, each word
-  matched on its own, so `cat ~/{.helm-ai-kernel,x}/keys/*` is refused and
-  `cp ~/.bashrc{,.bak}` is not.
+  leading dot unless `dotglob` or `globdots` is set. Brace groups are not
+  expanded: a word with one is matched on its text before the first group,
+  and is refused when that text is at the data directory, at or inside the
+  key directory, or has begun to spell the name of one of them
+  (`cat ~/.helm-ai-kernel/{keys,x}/*`, `cat ~/.helm-{ai-kernel,x}/keys/*`).
+  A group that spells the data directory's name from above it
+  (`cat ~/{.helm-ai-kernel,zz}/keys/*`) or climbs to it with `..`
+  (`cat ~/proj/{..,x}/.helm-ai-kernel/k*/*`) is not refused as trust
+  material. Brace expansion is an opaque shell operation, which the built-in
+  profile refuses and a profile that grants `shell.operate` runs.
 
 A glob with anything else is not read: a bracket class, a backslash, a leading
 `/` (which ripgrep anchors where it runs, not at `/`), `!`, white space, a
@@ -143,12 +149,9 @@ search root (up to 65,536 entries, at most four roots per call) finds a file
 with a key file name or cannot finish. In a repository larger than the walk,
 a filter outside the grammar (`!node_modules/**`, `*.[jt]s`) is therefore
 refused; write it in the grammar (`*.js` and `*.ts`). A shell word with a
-bracket class, a segment longer than 1024 bytes, or braces past the 256-word
-budget is refused when the directory it starts in is at, inside or above the
-data directory (for braces: the directory its first brace group starts in,
-one level up for every `..` after it, and `/` when the word starts with a
-brace group), so `cat ~/.helm-ai-kernel/k[]e]ys/*` is refused and `cat
-src/[ab]*.go` is not.
+bracket class or a segment longer than 1024 bytes is refused when the
+directory it starts in is at, inside or above the data directory, so
+`cat ~/.helm-ai-kernel/k[]e]ys/*` is refused and `cat src/[ab]*.go` is not.
 
 The globs of one call share one expansion budget: 256 alternatives and 64 KiB
 of expansion together, with each glob outside the grammar counting as one
@@ -156,7 +159,8 @@ alternative. A call past it is refused with `TRUST_MATERIAL_ACCESS_DENIED`
 under every profile and a reason that says its globs are too large to expand.
 The hook also stops classifying a call after 10 seconds and refuses it the
 same way, well before the 30 second timeout setup installs; the classifier
-then ends its work on the call.
+then ends its work on the call. A call whose classifier panics is refused the
+same way, with a signed receipt.
 
 A program passed to an interpreter, or to Hermes
 `execute_code`, is refused when its text names the path, and so is a script
@@ -259,10 +263,15 @@ search glob in the grammar above is decided on what it can name; one outside
 it (`.en[v]`, `.en\v`) is a secret read when a walk of the search root finds
 a credential file or cannot finish, and the reason says so. A credential
 file inside a directory (`.docker/config.json`, `.ssh/config`, `.kube/config`,
-`.config/gcloud/`) is selected only by a glob that names the directory or
-whose `**` can stand for it: `**/*.json`, `**/config` and `.docker/*` are
-secret reads, while `*.json`, `*.db` and `*config` are not, although ripgrep
-matches them at any depth. `Grep`'s
+`.aws/credentials`, `.config/gcloud/`) is selected only by a glob that names
+the directory or whose `**` can stand for it: `**/*.json`, `**/config`,
+`*/credentials` and `.docker/*.json` are secret reads, while `*.json`, `*.db`,
+`*config` and `credentials` are not, although ripgrep matches them at any
+depth. A glob whose last segment matches ordinary file names (`*`, `*.*`)
+selects files in general and is a secret read only when its text names a
+credential path: `.ssh/*` is one, and `.docker/*`, `.kube/*` and `.aws/*` are
+not, although ripgrep selects the credential file in that directory with
+each of them. `Grep`'s
 `pattern`, and Hermes `search_files` `pattern` unless `target` is `files`, is
 a regular expression for a content search and is not read as a glob. Through
 a shell, a credential path is read with a backslash taken as quoting the next

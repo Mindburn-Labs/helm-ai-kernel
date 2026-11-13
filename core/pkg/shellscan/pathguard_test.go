@@ -221,18 +221,11 @@ func TestClassifyReportsProtectedPaths(t *testing.T) {
 		"bash -c 'python3 dump.py'",
 		"shopt -s dotglob; cat ~/*/keys/*",
 		"cat " + f.policy,
-		// Braces are expanded and each word they make is matched; past the
-		// budget, a word whose braces start at, inside or above protected
-		// material is refused.
-		"cat ~/{.signer,zz}/keys/*",
-		"cat $HOME/{.signer,zz}/keys/signer.seed",
-		`cat ~/{".signer",zz}/keys/*`,
-		"cp -r ~/{.signer,zz} /tmp/out",
-		"tar czf /tmp/k.tgz ~/{.signer,zz}",
-		"cat ~/{.signer,{a,b}}/k*/*",
-		"cat ~/proj{/../.sig,/x}ner/k*/*",
-		"cat ~/" + strings.Repeat("{a,b}", 9) + "/x",
-		"cat ~/x/{1..300}/../../.sig{ner,x}/ke{ys,x}/y",
+		// A word with a brace group is matched on its text before the group:
+		// refused when that text is inside protected material or has begun
+		// to spell its name.
+		"cat ~/.signer/{keys,zz}/*",
+		"cp -r ~/.sig{ner,x} /tmp/out",
 		// A bracket class is outside the grammar: it is refused where it
 		// starts at, inside or above protected material.
 		"cat ~/.signer/k[]e]ys/*",
@@ -264,9 +257,17 @@ func TestClassifyReportsProtectedPaths(t *testing.T) {
 		"cp ~/.bashrc{,.bak}",
 		"mkdir -p src/{api,web}/{lib,test}",
 		"echo {a,b}",
-		"cat ~/.signer/{receipts,logs}/*",
 		"touch src/f{1..1000}.go",
 		"F=~/{.signer,zz}/keys; echo done",
+		// Brace groups with an empty alternative, and words of many groups.
+		"touch ~/proj/f{1..300}{.go,}",
+		"echo {1..300}{,}",
+		"echo {1..256}; cp ~/.bashrc{,.bak}",
+		"echo {1..256}; ls f{a,}",
+		"for i in {1..300}; do echo $i; done",
+		"echo {1..1000}",
+		`printf '%s\n' {a..z}{a..z}`,
+		"touch ~/f{1..300}.txt",
 	}
 	for _, command := range miss {
 		if res := ClassifyAt(command, work, WithPathGuard(f.guard)); res.ProtectedPath != "" {
@@ -507,12 +508,17 @@ func TestSearchCallSecretReadDecidesByReach(t *testing.T) {
 		{empty, "*/config", true},
 		{empty, "**/gcloud/*.db", true},
 		{empty, ".ssh/*", true},
+		{empty, "*/credentials", true},
 
 		{empty, "*.json", false},
 		{empty, "*.db", false},
 		{empty, "*config", false},
 		{empty, "config.json", false},
+		{empty, "credentials", false},
 		{empty, "gcloud/*.db", false},
+		// A last segment that selects files in general is not aimed at one,
+		// whatever directory the glob names.
+		{empty, ".docker/*", false},
 		{empty, ".env.example", false},
 		{empty, "*.pub", false},
 		{empty, "**/*.go", false},
@@ -704,6 +710,8 @@ func TestClassifyDecidesALongShellWordInBoundedTime(t *testing.T) {
 		{"a long segment elsewhere", "cat /tmp/*" + strings.Repeat("a", 1<<20), false},
 		{"a long segment inside the data directory", "cat ~/.signer/*" + strings.Repeat("a", 1<<20), true},
 		{"many double stars", "cat /tmp/" + strings.Repeat("**/", 1<<19) + "x", false},
+		{"a long word after a brace sequence", "cat /tmp/{1..256}" + strings.Repeat("a", 1<<20), false},
+		{"a long word after many brace groups", "cat /tmp/" + strings.Repeat("{a,b}", 8) + strings.Repeat("a", 1<<20), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			start := time.Now()

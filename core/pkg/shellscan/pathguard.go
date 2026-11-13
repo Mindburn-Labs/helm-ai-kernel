@@ -1001,26 +1001,6 @@ func (s *SearchCall) reachable(root string) *searchReach {
 	return found
 }
 
-// braceGate reports whether a shell word whose braces were not all expanded
-// can reach protected material: whether the directory its first brace group
-// starts naming in is at, inside or above it. That directory is the one the
-// known text before the group (pattern, up to dynamicAt when that is not
-// negative) is in, one level up for every ".." in rest, the text from the
-// group on, and "/" when nothing is known before the group, since its
-// alternatives may be absolute paths.
-func (g *PathGuard) braceGate(pattern string, dynamicAt int, rest, cwd string) (string, bool) {
-	if dynamicAt >= 0 {
-		pattern = pattern[:dynamicAt]
-	}
-	start := ""
-	if pattern != "" {
-		if absolute, ok := g.absolute(pattern, cwd); ok {
-			start = climb(path.Dir(unescapeLit(absolute)+"x"), rest)
-		}
-	}
-	return g.searchGate(start)
-}
-
 // reachesInto reports whether a known prefix, followed by text computed at
 // run time, can only be completed inside protected ground: the prefix is at
 // or below a protected directory, or has begun to spell one's name.

@@ -80,6 +80,22 @@ func TestHookStopsTheClassifierAtItsDeadline(t *testing.T) {
 	}
 }
 
+// A classifier that panics does not take the hook down without a decision:
+// the call is refused as reaching trust material, with a signed receipt.
+func TestHookRefusesACallWhoseClassifierPanics(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	originalClassify := hookClassify
+	hookClassify = func(payload preToolPayload, guard *shellscan.PathGuard) []hookClassification {
+		var parts []string
+		return []hookClassification{{Target: parts[len(parts)-1]}}
+	}
+	t.Cleanup(func() { hookClassify = originalClassify })
+	denied, stdout, receipts := env.runAt(t, "/repo", "Bash", map[string]any{"command": "echo ok"})
+	if !denied || len(receipts) != 1 || !hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED") || !strings.Contains(stdout, "panicked") {
+		t.Fatalf("denied=%v receipts=[%s] stdout=%s, want one signed denial that says the classifier panicked", denied, describeReceipts(receipts), stdout)
+	}
+}
+
 // enforce creates each receipt file new: a receipt already on disk is never
 // replaced, whatever its name.
 func TestEnforceReceiptWriteNeverReplacesAFile(t *testing.T) {

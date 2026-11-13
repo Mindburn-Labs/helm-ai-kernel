@@ -1808,6 +1808,24 @@ removal_proofs:
     replace: "\tif false {\n"
     tests:
       - "core/pkg/skillpacks.TestScanWithoutTrustMaterialSaysThePublisherWasNotChecked"
+  - control: CTL-065
+    file: core/pkg/skillpacks/loader.go
+    find: 'root.ReadFileLimit("SKILL.md", maxPackFileBytes)'
+    replace: 'root.ReadFileLimit("SKILL.md", maxPackFileBytes+1)'
+    tests:
+      - "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning"
+  - control: CTL-065
+    file: core/pkg/skillpacks/loader.go
+    find: 'root.ReadFileLimit("skillpack.json", maxPackFileBytes)'
+    replace: 'root.ReadFileLimit("skillpack.json", maxPackFileBytes+1)'
+    tests:
+      - "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning"
+  - control: CTL-065
+    file: core/cmd/helm-ai-kernel/skills_cmd.go
+    find: 'writeText(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)'
+    replace: 'fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)'
+    tests:
+      - "core/cmd/helm-ai-kernel.TestSkillsPublisherTextCannotForgeAVerdict"
 
 controls:
 
@@ -5730,7 +5748,10 @@ controls:
       binary; results and receipts name them by the SHA-256 of
       policies/skills/first-party.safe.toml, and no policy file is read at
       scan time. No signature is checked: first party means the pack is the
-      one in the source tree the binary was built from.
+      one in the source tree the binary was built from. The initial SKILL.md
+      and manifest reads, as well as the scan's file reads, are contained in
+      the opened pack root and limited to 1 MiB per file. Loading and walking
+      use the verifier's nonblocking regular-file and directory reader.
     status: enforced
     entry_points:
       - "core/pkg/skillpacks.Scan"
@@ -5766,6 +5787,8 @@ controls:
         - "core/pkg/skillpacks.TestModifiedFirstPartyPackIsNotVerified"
         - "core/pkg/skillpacks.TestFirstPartyCheckBindsTheLoadedPackToTheHashedFiles"
         - "core/pkg/skillpacks.TestScanWithoutTrustMaterialSaysThePublisherWasNotChecked"
+        - "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning"
+        - "core/cmd/helm-ai-kernel.TestSkillsPublisherTextCannotForgeAVerdict"
         - "core/cmd/helm-ai-kernel.TestSkillsVerifyDoesNotAllowCopiedFirstPartyStrings"
       bypass:
         - "core/pkg/skillpacks.TestPolicyFileBesideThePackDoesNotJudgeIt"
@@ -5774,4 +5797,7 @@ controls:
         - "core/pkg/skillpacks.TestPinnedPackStillAnswersToTheScan"
         - "core/pkg/skillpacks.TestFirstPartyManifestMatchesTheRegistry"
         - "core/pkg/skillpacks.TestKernelSkillPolicyStatesTheCompiledRules"
+        - "core/pkg/skillpacks.TestLoadDirNeverReadsInputsOutsideThePack"
+        - "core/pkg/skillpacks.TestLoadDirReportsAnUnreadableManifest"
+        - "core/pkg/skillpacks.TestLoadDirRefusesNamedPipesBeforeScanning"
         - "core/cmd/helm-ai-kernel.TestSkillsSearchInspectAndListReportComputedPublisherState"

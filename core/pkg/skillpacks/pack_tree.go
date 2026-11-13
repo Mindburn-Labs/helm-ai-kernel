@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/profile/updatebundle"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 const (
@@ -45,11 +43,12 @@ type packTree struct {
 
 var errPackWalkStopped = errors.New("skillpacks: pack walk stopped at a hazard")
 
-// readPackTree reads every file under dir through an os.Root, so no path,
-// symlink or swapped directory can take a read outside the pack. An error is
+// readPackTree uses the verifier's rooted reader, including its nonblocking
+// file and directory opens, so a swapped entry cannot block a scan or take a
+// read outside the pack. An error is
 // an I/O failure; anything the scan must refuse is reported as tree.hazard.
 func readPackTree(dir string) (packTree, error) {
-	root, err := os.OpenRoot(dir)
+	root, err := packfs.Open(dir)
 	if err != nil {
 		return packTree{}, fmt.Errorf("open pack directory: %w", err)
 	}
@@ -61,21 +60,18 @@ func readPackTree(dir string) (packTree, error) {
 		tree.hazard = &Finding{Code: code, Severity: severity, Message: message, Path: path}
 		return errPackWalkStopped
 	}
-	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, err error) error {
+	err = fs.WalkDir(root, ".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if path == "." {
 			return nil
 		}
-		rel := filepath.FromSlash(path)
 		switch {
 		case entry.Type()&fs.ModeSymlink != 0:
-			target, err := root.Readlink(rel)
-			if err != nil {
-				return err
-			}
-			if symlinkLeavesPack(dir, rel, target) {
+			// Stat resolves the link inside the opened root without reading
+			// its target. Even an internal link leaves the digest incomplete.
+			if _, err := root.Stat(path); errors.Is(err, packfs.ErrOutside) {
 				return refuse("ERR_SKILL_PATH_ESCAPE", "HIGH", "symlink escapes skill root", path)
 			}
 			if tree.unhashed == "" {
@@ -90,11 +86,11 @@ func readPackTree(dir string) (packTree, error) {
 		if len(tree.files) == maxPackFiles {
 			return refuse("ERR_SKILL_OPAQUE_BINARY", "MEDIUM", fmt.Sprintf("pack holds more than %d files; it was not inspected", maxPackFiles), path)
 		}
-		data, err := readManagedFileAt(root, rel, maxPackFileBytes)
+		data, err := root.ReadFileLimit(path, maxPackFileBytes)
 		switch {
-		case errors.Is(err, ErrProjectionFileTooLarge):
+		case errors.Is(err, packfs.ErrTooLarge):
 			return refuse("ERR_SKILL_OPAQUE_BINARY", "MEDIUM", fmt.Sprintf("file exceeds %d bytes; it was not inspected", maxPackFileBytes), path)
-		case errors.Is(err, ErrProjectionPathUnsafe):
+		case errors.Is(err, packfs.ErrNotRegular), errors.Is(err, packfs.ErrOutside):
 			// The entry was a regular file when it was listed and is not one
 			// now: something is rewriting the pack under the scan.
 			return refuse("ERR_SKILL_PATH_ESCAPE", "HIGH", "file changed into a link or special file while the pack was read", path)
@@ -118,18 +114,6 @@ func readPackTree(dir string) (packTree, error) {
 	// in byte order ("a.txt" sorts before "a/b").
 	sort.Slice(tree.files, func(i, j int) bool { return tree.files[i].path < tree.files[j].path })
 	return tree, nil
-}
-
-// symlinkLeavesPack reports whether a link's target, read lexically, lies
-// outside the pack directory.
-func symlinkLeavesPack(dir, rel, target string) bool {
-	resolved := target
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(dir, filepath.Dir(rel), target)
-	}
-	resolved = filepath.Clean(resolved)
-	packRoot := filepath.Clean(dir)
-	return resolved != packRoot && !strings.HasPrefix(resolved, packRoot+string(filepath.Separator))
 }
 
 func (t packTree) file(path string) ([]byte, bool) {

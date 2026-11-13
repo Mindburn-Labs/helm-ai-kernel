@@ -136,6 +136,55 @@ func TestSkillsVerifyDoesNotAllowCopiedFirstPartyStrings(t *testing.T) {
 	}
 }
 
+func TestSkillsPublisherTextCannotForgeAVerdict(t *testing.T) {
+	_, dir := forgedFirstPartyPack(t)
+	path := filepath.Join(dir, "skillpack.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest skillpacks.Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Version = forgedLine
+	manifest.Description = forgedLine
+	data, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"inspect", "verify", "scan", "install"} {
+		t.Run(command, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runSkillsCmd([]string{command, dir}, &stdout, &stderr)
+			if command != "inspect" && code != 1 {
+				t.Fatalf("unsigned pack: exit=%d, want 1; %s %s", code, &stdout, &stderr)
+			}
+			text := stdout.String()
+			assertNoForgedOutput(t, text)
+			if !strings.Contains(text, "publisher: unsigned") || len(linesStartingWith(text, "VERIFIED")) != 0 {
+				t.Fatalf("publisher output lost its real state or printed a forged verdict: %q", text)
+			}
+		})
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runSkillsCmd([]string{"inspect", dir, "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("JSON inspect exit=%d: %s", code, &stderr)
+	}
+	var result struct {
+		Manifest skillpacks.Manifest `json:"manifest"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.Version != forgedLine || result.Manifest.Description != forgedLine {
+		t.Fatal("JSON output must preserve the pack's actual values")
+	}
+}
+
 func TestSkillsInstallBlocksCopiedFirstPartyStrings(t *testing.T) {
 	repo, packDir := forgedFirstPartyPack(t)
 	var stdout, stderr bytes.Buffer

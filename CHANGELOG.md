@@ -528,12 +528,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - The pack digest covers every file in the pack, read once without following a
   link out of it. A file over 1 MiB, more than 1024 files or more than 16 MiB in
   one pack is denied; files over 1 MiB used to skip the binary check.
+  The initial `SKILL.md` and manifest reads also enforce the file limit and
+  containment before scanning. Loading and scanning reuse the verifier's
+  nonblocking file and directory reader, so named pipes cannot stall them.
 - `skills verify` flags instructions that run commands or fetch from outside
   the pack, such as a download piped into a shell, using the kernel's threat
   scanner. Such a pack needs review even when it is first party.
 - `skills search`, `skills inspect` and the install record shown by
   `skills list` carry the computed publisher state. They used to show only the
-  `verified` status a manifest declares.
+  `verified` status a manifest declares. Pack-controlled values in formatted
+  text output are escaped so a version, description or publisher reason cannot
+  insert a forged verdict or terminal control sequence; JSON preserves the values.
 - A `skills export` receipt carries the scan's verdict instead of a constant
   `ALLOW`, and `plugin.json` records the scan verdict and publisher state.
   `skills marketplace add` records an entry as `recorded`; it runs no scan and

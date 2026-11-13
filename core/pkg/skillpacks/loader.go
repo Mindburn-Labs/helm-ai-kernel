@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 func Load(ref string) (SkillPack, error) {
@@ -34,15 +36,18 @@ func Load(ref string) (SkillPack, error) {
 }
 
 func LoadDir(dir string) (SkillPack, error) {
-	manifestPath := filepath.Join(dir, "skillpack.json")
-	skillPath := filepath.Join(dir, "SKILL.md")
-	data, err := os.ReadFile(skillPath)
+	root, err := packfs.Open(dir)
+	if err != nil {
+		return SkillPack{}, fmt.Errorf("open pack directory: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	data, err := root.ReadFileLimit("SKILL.md", maxPackFileBytes)
 	if err != nil {
 		return SkillPack{}, fmt.Errorf("read SKILL.md: %w", err)
 	}
-	var manifestBytes []byte
-	if raw, err := os.ReadFile(manifestPath); err == nil {
-		manifestBytes = raw
+	manifestBytes, err := root.ReadFileLimit("skillpack.json", maxPackFileBytes)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return SkillPack{}, fmt.Errorf("read skillpack.json: %w", err)
 	}
 	manifest, err := decodeManifest(dir, manifestBytes, data)
 	if err != nil {

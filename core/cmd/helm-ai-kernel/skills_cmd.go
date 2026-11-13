@@ -45,7 +45,7 @@ func runSkillsCmd(args []string, stdout, stderr io.Writer) int {
 	case "plugin":
 		return runSkillsPlugin(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown skills command: %s\n", args[0])
+		writeText(stderr, "unknown skills command: %s\n", args[0])
 		return 2
 	}
 }
@@ -63,7 +63,7 @@ func runSkillsSearch(args []string, stdout, stderr io.Writer) int {
 	}
 	skills, err := skillpacks.ListCatalog(query)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills search error: %v\n", err)
+		writeText(stderr, "skills search error: %v\n", err)
 		return 1
 	}
 	if *jsonOut {
@@ -72,7 +72,7 @@ func runSkillsSearch(args []string, stdout, stderr io.Writer) int {
 	// The second column is the publisher state computed for the pack. The
 	// status a manifest declares is the pack's own claim and is not listed.
 	for _, skill := range skills {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", skill.Manifest.ID, skill.PublisherVerification.State, skill.Manifest.ScopeDefault, skill.Manifest.Risk)
+		writeText(stdout, "%s\t%s\t%s\t%s\n", skill.Manifest.ID, skill.PublisherVerification.State, skill.Manifest.ScopeDefault, skill.Manifest.Risk)
 	}
 	return 0
 }
@@ -94,7 +94,7 @@ func runSkillsInspect(args []string, stdout, stderr io.Writer) int {
 	}
 	pack, err := skillpacks.Load(ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills inspect error: %v\n", err)
+		writeText(stderr, "skills inspect error: %v\n", err)
 		return 1
 	}
 	publisher := skillpacks.CheckPublisher(pack)
@@ -107,7 +107,7 @@ func runSkillsInspect(args []string, stdout, stderr io.Writer) int {
 	if *jsonOut {
 		return writeSkillsJSON(stdout, payload)
 	}
-	fmt.Fprintf(stdout, "%s %s\n%s\npublisher: %s (%s)\nThis skill does not grant tool permissions.\n",
+	writeText(stdout, "%s %s\n%s\npublisher: %s (%s)\nThis skill does not grant tool permissions.\n",
 		pack.Manifest.ID, pack.Manifest.Version, pack.Manifest.Description, publisher.State, publisher.Reason)
 	return 0
 }
@@ -127,12 +127,12 @@ func runSkillsScan(command string, args []string, stdout, stderr io.Writer) int 
 		ref = fs.Arg(0)
 	}
 	if ref == "" {
-		fmt.Fprintf(stderr, "Usage: helm-ai-kernel skills %s <path_or_ref> --json\n", command)
+		writeText(stderr, "Usage: helm-ai-kernel skills %s <path_or_ref> --json\n", command)
 		return 2
 	}
 	result, err := skillpacks.ScanPath(ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills %s error: %v\n", command, err)
+		writeText(stderr, "skills %s error: %v\n", command, err)
 		return 1
 	}
 	if *jsonOut {
@@ -140,9 +140,9 @@ func runSkillsScan(command string, args []string, stdout, stderr io.Writer) int 
 			return code
 		}
 	} else {
-		fmt.Fprintf(stdout, "%s %s %s\n", result.SkillID, result.Verdict, result.ReasonCode)
-		fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)
-		fmt.Fprintf(stdout, "policy: %s %s %s\n", result.Policy.Source, result.Policy.Ref, result.Policy.Hash)
+		writeText(stdout, "%s %s %s\n", result.SkillID, result.Verdict, result.ReasonCode)
+		writeText(stdout, "publisher: %s (%s)\n", result.PublisherVerification.State, result.PublisherVerification.Reason)
+		writeText(stdout, "policy: %s %s %s\n", result.Policy.Source, result.Policy.Ref, result.Policy.Hash)
 	}
 	if result.Verdict != skillpacks.VerdictAllow {
 		return 1
@@ -170,12 +170,12 @@ func runSkillsInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	pack, err := skillpacks.Load(ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills install error: %v\n", err)
+		writeText(stderr, "skills install error: %v\n", err)
 		return 1
 	}
 	result, err := skillpacks.Install(pack, skillpacks.InstallRequest{Agent: *agent, Scope: *scope, RepoRoot: *repoRoot})
 	if err != nil {
-		fmt.Fprintf(stderr, "skills install error: %v\n", err)
+		writeText(stderr, "skills install error: %v\n", err)
 		return 1
 	}
 	if *jsonOut {
@@ -188,8 +188,8 @@ func runSkillsInstall(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintf(stdout, "Skill %s %s (%s %s)\n", result.SkillID, result.Status, result.Verdict, result.ReasonCode)
-	fmt.Fprintf(stdout, "publisher: %s (%s)\n", result.Scan.PublisherVerification.State, result.Scan.PublisherVerification.Reason)
+	writeText(stdout, "Skill %s %s (%s %s)\n", result.SkillID, result.Status, result.Verdict, result.ReasonCode)
+	writeText(stdout, "publisher: %s (%s)\n", result.Scan.PublisherVerification.State, result.Scan.PublisherVerification.Reason)
 	if result.Verdict != skillpacks.VerdictAllow {
 		return 1
 	}
@@ -215,21 +215,21 @@ func runSkillsExport(args []string, stdout, stderr io.Writer) int {
 	}
 	pack, err := skillpacks.Load(ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills export error: %v\n", err)
+		writeText(stderr, "skills export error: %v\n", err)
 		return 1
 	}
 	result, err := skillpacks.Export(pack, *format, *output)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills export error: %v\n", err)
+		writeText(stderr, "skills export error: %v\n", err)
 		return 1
 	}
 	if *jsonOut {
 		return writeSkillsJSON(stdout, result)
 	}
-	fmt.Fprintf(stdout, "Exported %s to %s\n", ref, *output)
+	writeText(stdout, "Exported %s to %s\n", ref, *output)
 	// Export refuses only a DENY, so say what the scan found about the pack.
 	if scan, ok := result["scan"].(skillpacks.ScanResult); ok {
-		fmt.Fprintf(stdout, "scan: %s %s\npublisher: %s (%s)\n", scan.Verdict, scan.ReasonCode, scan.PublisherVerification.State, scan.PublisherVerification.Reason)
+		writeText(stdout, "scan: %s %s\npublisher: %s (%s)\n", scan.Verdict, scan.ReasonCode, scan.PublisherVerification.State, scan.PublisherVerification.Reason)
 	}
 	return 0
 }
@@ -245,7 +245,7 @@ func runSkillsList(args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := skillpacks.ListInstalled(*repoRoot)
 	if err != nil {
-		fmt.Fprintf(stderr, "skills list error: %v\n", err)
+		writeText(stderr, "skills list error: %v\n", err)
 		return 1
 	}
 	if *jsonOut {
@@ -275,7 +275,7 @@ func runSkillStatusMutation(action string, args []string, stdout, stderr io.Writ
 		ref = fs.Arg(0)
 	}
 	if ref == "" {
-		fmt.Fprintf(stderr, "Usage: helm-ai-kernel skills %s <skill_ref>\n", action)
+		writeText(stderr, "Usage: helm-ai-kernel skills %s <skill_ref>\n", action)
 		return 2
 	}
 	var (
@@ -288,13 +288,13 @@ func runSkillStatusMutation(action string, args []string, stdout, stderr io.Writ
 		receipt, err = skillpacks.Revoke(*repoRoot, ref)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "skills %s error: %v\n", action, err)
+		writeText(stderr, "skills %s error: %v\n", action, err)
 		return 1
 	}
 	if *jsonOut {
 		return writeSkillsJSON(stdout, receipt)
 	}
-	fmt.Fprintf(stdout, "%s %s %s\n", action, ref, receipt.ID)
+	writeText(stdout, "%s %s %s\n", action, ref, receipt.ID)
 	return 0
 }
 
@@ -305,7 +305,7 @@ func runSkillsReceipt(args []string, stdout, stderr io.Writer) int {
 	}
 	data, err := os.ReadFile(args[0])
 	if err != nil {
-		fmt.Fprintf(stderr, "skills receipt error: %v\n", err)
+		writeText(stderr, "skills receipt error: %v\n", err)
 		return 1
 	}
 	fmt.Fprintln(stdout, string(data))
@@ -329,7 +329,7 @@ func runSkillsMarketplace(args []string, stdout, stderr io.Writer) int {
 		}
 		path, err := skillpacks.MarketplaceInit(*repoRoot)
 		if err != nil {
-			fmt.Fprintf(stderr, "skills marketplace init error: %v\n", err)
+			writeText(stderr, "skills marketplace init error: %v\n", err)
 			return 1
 		}
 		if *jsonOut {
@@ -351,16 +351,16 @@ func runSkillsMarketplace(args []string, stdout, stderr io.Writer) int {
 		}
 		entry, err := skillpacks.MarketplaceAdd(*repoRoot, fs.Arg(0))
 		if err != nil {
-			fmt.Fprintf(stderr, "skills marketplace add error: %v\n", err)
+			writeText(stderr, "skills marketplace add error: %v\n", err)
 			return 1
 		}
 		if *jsonOut {
 			return writeSkillsJSON(stdout, entry)
 		}
-		fmt.Fprintf(stdout, "%s\t%s\n", entry.ID, entry.Path)
+		writeText(stdout, "%s\t%s\n", entry.ID, entry.Path)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "unknown skills marketplace command: %s\n", args[0])
+		writeText(stderr, "unknown skills marketplace command: %s\n", args[0])
 		return 2
 	}
 }
@@ -373,17 +373,17 @@ func runSkillsPlugin(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "inspect", "scan":
 		if len(args) < 2 {
-			fmt.Fprintf(stderr, "Usage: helm-ai-kernel skills plugin %s <plugin_path>\n", args[0])
+			writeText(stderr, "Usage: helm-ai-kernel skills plugin %s <plugin_path>\n", args[0])
 			return 2
 		}
 		data, err := os.ReadFile(filepath.Join(args[1], ".codex-plugin", "plugin.json"))
 		if err != nil {
-			fmt.Fprintf(stderr, "skills plugin %s error: %v\n", args[0], err)
+			writeText(stderr, "skills plugin %s error: %v\n", args[0], err)
 			return 1
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(data, &payload); err != nil {
-			fmt.Fprintf(stderr, "skills plugin %s error: %v\n", args[0], err)
+			writeText(stderr, "skills plugin %s error: %v\n", args[0], err)
 			return 1
 		}
 		payload["helm_mcp_status"] = "pending_quarantined"
@@ -391,7 +391,7 @@ func runSkillsPlugin(args []string, stdout, stderr io.Writer) int {
 	case "export":
 		return runSkillsExport(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown skills plugin command: %s\n", args[0])
+		writeText(stderr, "unknown skills plugin command: %s\n", args[0])
 		return 2
 	}
 }

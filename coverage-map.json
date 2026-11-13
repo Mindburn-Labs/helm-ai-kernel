@@ -6117,7 +6117,7 @@
       "id": "CTL-065",
       "title": "A Skill Pack is first party only by a digest compiled into the binary",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-ai-kernel skills verify, scan and install decide who published a Skill Pack from the pack's files and from first_party_manifest.json, which is compiled into the binary (helm-tracker#311). A pack is first party only when the artifact set hash over every file in its directory (the path, SHA-256 and size of each, read once through an os.Root) equals the digest the binary pins for the pack's id and version, and the manifest and SKILL.md that were loaded are the bytes that were hashed. No manifest field (publisher, status, signature_ref, publisher_key_ref, content_hash, policy_ref) and no file beside the pack counts toward it. A pinned id and version with other files is DENY. A pack outside the manifest is unsigned: DENY when it declares status verified, ESCALATE otherwise. skills verify and skills scan exit 0 only for ALLOW, and install writes nothing unless the scan is ALLOW and the publisher state is first_party. The verdict is reached under rules compiled into the binary; results and receipts name them by the SHA-256 of policies/skills/first-party.safe.toml, and no policy file is read at scan time. No signature is checked: first party means the pack is the one in the source tree the binary was built from.",
+      "claim": "helm-ai-kernel skills verify, scan and install decide who published a Skill Pack from the pack's files and from first_party_manifest.json, which is compiled into the binary (helm-tracker#311). A pack is first party only when the artifact set hash over every file in its directory (the path, SHA-256 and size of each, read once through an os.Root) equals the digest the binary pins for the pack's id and version, and the manifest and SKILL.md that were loaded are the bytes that were hashed. No manifest field (publisher, status, signature_ref, publisher_key_ref, content_hash, policy_ref) and no file beside the pack counts toward it. A pinned id and version with other files is DENY. A pack outside the manifest is unsigned: DENY when it declares status verified, ESCALATE otherwise. skills verify and skills scan exit 0 only for ALLOW, and install writes nothing unless the scan is ALLOW and the publisher state is first_party. The verdict is reached under rules compiled into the binary; results and receipts name them by the SHA-256 of policies/skills/first-party.safe.toml, and no policy file is read at scan time. No signature is checked: first party means the pack is the one in the source tree the binary was built from. The initial SKILL.md and manifest reads, as well as the scan's file reads, are contained in the opened pack root and limited to 1 MiB per file. Loading and walking use the verifier's nonblocking regular-file and directory reader.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -6170,6 +6170,8 @@
           "core/pkg/skillpacks.TestModifiedFirstPartyPackIsNotVerified",
           "core/pkg/skillpacks.TestFirstPartyCheckBindsTheLoadedPackToTheHashedFiles",
           "core/pkg/skillpacks.TestScanWithoutTrustMaterialSaysThePublisherWasNotChecked",
+          "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning",
+          "core/cmd/helm-ai-kernel.TestSkillsPublisherTextCannotForgeAVerdict",
           "core/cmd/helm-ai-kernel.TestSkillsVerifyDoesNotAllowCopiedFirstPartyStrings"
         ],
         "bypass": [
@@ -6179,6 +6181,9 @@
           "core/pkg/skillpacks.TestPinnedPackStillAnswersToTheScan",
           "core/pkg/skillpacks.TestFirstPartyManifestMatchesTheRegistry",
           "core/pkg/skillpacks.TestKernelSkillPolicyStatesTheCompiledRules",
+          "core/pkg/skillpacks.TestLoadDirNeverReadsInputsOutsideThePack",
+          "core/pkg/skillpacks.TestLoadDirReportsAnUnreadableManifest",
+          "core/pkg/skillpacks.TestLoadDirRefusesNamedPipesBeforeScanning",
           "core/cmd/helm-ai-kernel.TestSkillsSearchInspectAndListReportComputedPublisherState"
         ]
       },
@@ -6207,6 +6212,24 @@
           "file": "core/pkg/skillpacks/projection.go",
           "tests": [
             "core/pkg/skillpacks.TestScanWithoutTrustMaterialSaysThePublisherWasNotChecked"
+          ]
+        },
+        {
+          "file": "core/pkg/skillpacks/loader.go",
+          "tests": [
+            "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning"
+          ]
+        },
+        {
+          "file": "core/pkg/skillpacks/loader.go",
+          "tests": [
+            "core/pkg/skillpacks.TestLoadDirBoundsBothInputsBeforeScanning"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/skills_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestSkillsPublisherTextCannotForgeAVerdict"
           ]
         }
       ]

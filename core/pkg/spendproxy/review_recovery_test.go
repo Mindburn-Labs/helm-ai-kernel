@@ -1,3 +1,7 @@
+// quantum_posture: these recovery tests use classical Ed25519 signatures to
+// exercise signed receipt replay and release binding; no post-quantum
+// primitive is implemented or claimed by these tests.
+
 package spendproxy
 
 import (

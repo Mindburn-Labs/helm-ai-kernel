@@ -62,23 +62,40 @@ func TestVerifyJSONWorkLimitsAndReuse(t *testing.T) {
 	}
 }
 
-func TestAdapterLimitsDoNotChangeCLIParser(t *testing.T) {
+// TestNativeParserSharesOnlyTheNestingLimit: the native parser applies the
+// adapter's nesting limit, because its own walk recurses once per level, and
+// none of the adapter's other budgets: a chain file may be wide, and a member
+// may be long.
+func TestNativeParserSharesOnlyTheNestingLimit(t *testing.T) {
 	doc, root := workFixture(t)
-	padded := withPadding(doc, strings.Repeat("[", 100)+"0"+strings.Repeat("]", 100))
-	if got := VerifyJSON(padded, root); got.Verdict != VerdictFailed {
-		t.Fatal("adapter should enforce its depth budget")
-	}
-	bundle, err := ParseBundle(padded)
-	if err != nil {
-		t.Fatal("legacy CLI parser changed:", err)
-	}
 	var trust struct {
 		Keys map[string]string `json:"keys"`
 	}
 	if err := json.Unmarshal(root, &trust); err != nil {
 		t.Fatal(err)
 	}
-	if got := VerifyBundle(bundle, TrustRoot{Keys: trust.Keys}); !got.Valid {
-		t.Fatalf("legacy receipt semantics changed: %+v", got)
+	deep := withPadding(doc, strings.Repeat("[", 100)+"0"+strings.Repeat("]", 100))
+	if got := VerifyJSON(deep, root); got.Verdict != VerdictFailed {
+		t.Fatal("adapter should enforce its depth budget")
+	}
+	if _, err := ParseBundle(deep); err == nil || !strings.Contains(err.Error(), "nesting limit") {
+		t.Fatalf("the native parser walked a document nested past the limit: %v", err)
+	}
+	for name, padding := range map[string]string{
+		"wide":        `[` + strings.Repeat("0,", MaxJSONTokens) + `0]`,
+		"long key":    `{"` + strings.Repeat("k", MaxJSONKeyBytes+1) + `":0}`,
+		"long string": `"` + strings.Repeat("x", MaxJSONTokenBytes+1) + `"`,
+	} {
+		padded := withPadding(doc, padding)
+		if got := VerifyJSON(padded, root); got.Verdict != VerdictFailed {
+			t.Fatalf("%s: adapter should enforce its work budget", name)
+		}
+		bundle, err := ParseBundle(padded)
+		if err != nil {
+			t.Fatalf("%s: the native parser took on an adapter budget: %v", name, err)
+		}
+		if got := VerifyBundle(bundle, TrustRoot{Keys: trust.Keys}); !got.Valid {
+			t.Fatalf("%s: receipt semantics changed: %+v", name, got)
+		}
 	}
 }

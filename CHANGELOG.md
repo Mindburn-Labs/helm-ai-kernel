@@ -223,6 +223,119 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   against the request as declared, and no pattern against the top-level
   provenance members, so neither an allow rule's `effect_class` selector nor
   its pattern reads the declaration.
+- A receipt with no `signature_version` (a legacy receipt, signed before
+  `receipt.v5`) is no longer checked by default. `receipt_verify` exits 2 for a
+  file that holds one; pass `--allow-legacy-v4` to check it. Go callers of
+  `core/pkg/receiptverify` set `Options.AllowLegacyV4`. The JavaScript and
+  WebAssembly verifier has no opt-in and returns `UNVERIFIABLE`.
+- Under the opt-in, a legacy receipt whose `receipt_id` begins with `{` fails:
+  it is the signature of a versioned payload read back as a legacy receipt.
+  `core/pkg/crypto` returns `ErrLegacyReceiptReplay` for it.
+- `POST /api/v1/evidence/verify` reports a receipt with no `signature_version`
+  as not checked: its `receipt_signatures` check is `UNVERIFIABLE`, where it
+  used to be `VERIFIED` when the legacy signature matched. This holds when the
+  runtime trust anchor is a `KeyRing` too.
+- `POST /api/v1/evidence/verify` reads every receipt file with the parser
+  `receipt_verify` uses. A bundle that holds a receipt file with a member
+  written twice, or with a receipt member spelled in another letter case, is
+  refused: `bundle_format` is `FAILED` and no receipt check runs. So is a
+  receipt file that breaks the `receipt.v5` member contract, such as a
+  `lamport_clock` that is not an unsigned integer: it used to fail
+  `receipt_signatures` and now fails `bundle_format`.
+- In `core/pkg/crypto`, `ReceiptVerifyPayload`, `VerifyReceiptProfile`,
+  `VerifyReceiptRequiredProfile` and `VerifyReceiptSignature` return
+  `ErrLegacyReceiptRefused` for a receipt with no `signature_version` unless
+  given `AllowLegacyReceiptPreimages`; no other option value checks one. Every
+  `VerifyReceipt` method, `KeyRing.VerifyReceipt` included, takes no option and
+  returns `ErrLegacyReceiptRefused` for such a receipt when it carries a
+  signature.
+- `receipt_verify`, the JavaScript verifier and `helm-ai-kernel verify receipt`
+  refuse a file in which a receipt, bundle, permit or binding member is
+  spelled in another letter case. Write member names exactly as the schema
+  spells them. Keys of `metadata`, `public_key_set`, `subject` and other
+  free-form values are compared exactly, so `a` and `A` there are two keys.
+- `receipt_verify` and the JavaScript verifier refuse a bundle (an object with
+  a `receipts` array) that carries a receipt member such as `verdict`,
+  `status` or `tool_name` at its top level. `key_id`, `public_key_hex`,
+  `permits` and `gateway_bindings` are the bundle's own members and stay; so
+  does any name that is not a receipt member. The `--format json` report of
+  `helm-ai-kernel receipts list` is refused for its top-level `status`: pass
+  its `receipts` array instead.
+- A document nested deeper than 64 levels is refused by `receipt_verify`, as
+  the JavaScript verifier already did, and by every other path that reads
+  receipts with `core/pkg/receiptverify`: `helm-ai-kernel verify receipt`
+  exits 1 (`parse receipt: JSON exceeds the 64-level nesting limit`) where it
+  exited 0; `POST /api/v1/evidence/verify` fails `bundle_format`;
+  `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a request
+  body nested that deep; and `helm-ai-kernel verify` fails
+  `embedded_signature_trust` for such a file in `receipts/` or
+  `07_ATTESTATIONS/`, with the reason `N file(s) refused unread: JSON exceeds
+  the 64-level nesting limit`, which does not count the file as a signature,
+  and fails `chain_integrity` and `lamport_monotonicity` for such a receipt
+  file in a pack whose receipts are chained.
+- The `integrity` check of `receipt_verify` is now `not_applicable` where it
+  was `pass`. It never compared anything; `closure` is the check that compares
+  the hashes of a chain. Exit codes and the `valid` member are unchanged.
+- `receipt_verify --json`: the new `legacy_receipts` counts the receipts
+  checked under the legacy preimage. It appears only when that count is above
+  zero, so only under `--allow-legacy-v4`. It is a member of
+  `receiptverify.Result`, which the JavaScript verifier returns as
+  `verification`; that verifier has no opt-in and never emits it.
+  `preimage_version` is `mixed` for a chain checked under more than one
+  preimage, and the new `preimage_versions` lists each with its receipt count.
+  The new `key_id_note` says that `key_id` is the receipt's unsigned claim. No
+  member was renamed or removed.
+- `helm-ai-kernel verify receipt --json` adds `signed_members`,
+  `unsigned_members` and `integrity_scope`. `integrity_valid` and
+  `signer_trusted` keep their names and meaning: both are about the 13 signed
+  members only.
+- `helm-ai-kernel verify` no longer checks a dev-local MCP proof receipt that
+  has no `signature_version`; `embedded_signature_trust` fails for a pack that
+  holds one, and its reason says the receipt was `not checked: no
+  signature_version` and names the flag. Pass `--allow-legacy-v4-receipts` for
+  a pack known to predate `receipt.v5`
+  (`verifier.VerifyOptions.AllowLegacyV4Receipts`).
+- `helm-ai-kernel verify` refuses a chained receipt file that spells a member
+  of a receipt, or of a struct a receipt holds, in another letter case
+  (`"PREV_HASH"` for `prev_hash`, `"LOG_ID"` inside `transparency`), or that
+  writes any member twice at any depth: inside `metadata` or a
+  `witness_signatures` entry too, and two names that decode to one string,
+  such as two lone surrogates, which Go decodes to U+FFFD. `chain_integrity`
+  and `lamport_monotonicity` fail with `receipt <file> is refused: ...`; such
+  a file passed them before, read as the last value written. A receipt file
+  that is not valid JSON, or that has a trailing value, failed them before and
+  still does, but the reason now reads `receipt <file> is refused: ...` (for
+  example `invalid receipt JSON at $: ...` or `receipt has a trailing JSON
+  value ...`) where it read `receipt <file> is not valid JSON: ...`. Nesting
+  deeper than 64 levels is the bullet above. Go callers that decode a receipt
+  document into `contracts.Receipt` themselves can apply the same rules with
+  `receiptverify.ValidateReceiptMemberNames`. The nesting-limit refusal is now
+  the exported `receiptverify.ErrJSONTooDeep`.
+- In the chain checks of `helm-ai-kernel verify`, a `receipt.v5` receipt links
+  only to a predecessor whose `contracts.ReceiptChainHash`, or the SHA-256 of
+  whose file, is its `prev_hash`. A `hash` member a receipt declares about
+  itself links only a successor whose `signature_version` is not `receipt.v5`.
+  A pack in which a `receipt.v5` receipt names its predecessor only by that predecessor's
+  declared `hash` now fails `chain_integrity` and `lamport_monotonicity`: the
+  receipt is unreachable from genesis.
+- `helm-ai-kernel evidence correlate-host` applies the same member-name rules
+  to each receipt file of the pack before it decodes it, and exits 2 with
+  `receipt <file> is refused: ...` for a file they refuse, one nested deeper
+  than 64 levels included. A receipt file that is not valid JSON, which it
+  skipped, now stops it the same way.
+- `POST /api/demo/verify` and `POST /api/demo/tamper` answer 400 for a receipt
+  with a member written twice or spelled in another letter case, and for a
+  body with no `receipt` or with `"receipt": null`, where both answered 200
+  (`/api/demo/verify` with `valid: false`). They read the request body by
+  exact member name: a member other than `receipt`, `expected_receipt_hash`
+  and, for `/api/demo/tamper`, `mutation` is refused with 400, a letter-case
+  variant such as `"Receipt"` included, and so are a member written twice and
+  a trailing value after the body (`request body has a trailing JSON value
+  ...`). The OpenAPI request schemas of both routes declare
+  `unevaluatedProperties: false`; `oasdiff breaking` reports no breaking
+  change, and the generated SDK models are unchanged. `verified_fields` now
+  lists the 13 members a `receipt.v5` signature covers, and is empty when the
+  signature was not verified.
 
 ### Fixed
 
@@ -264,6 +377,62 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   SDKs and use the authenticated typed evaluation route. Documented commands
   that did not run are corrected, including the EvidencePack export, the MCP
   proof verification, `bundle build` and the provider starter smoke scripts.
+- A signed receipt could be edited, with no key, so that `jq` and JavaScript
+  read one verdict from it while `receipt_verify` verified another: Go's JSON
+  decoder matches member names without regard to letter case, and the
+  verifier's duplicate-member check did not. Member names are now matched
+  exactly.
+- The signature of a `receipt.v5` receipt could be replayed as a legacy
+  receipt with a different verdict, and `receipt_verify`, the JavaScript
+  verifier, `POST /api/v1/evidence/verify` and the dev-local MCP branch of
+  `helm-ai-kernel verify` accepted it. The legacy preimage is eight fields
+  joined with `:` with no escaping, so the signed bytes of a `receipt.v5`
+  receipt can be read as those eight fields. Legacy receipts are now refused
+  unless the caller opts in, an opted-in result says that a legacy signature
+  does not cover `verdict`, `tool_name` or `timestamp`, and the replay is
+  refused under the opt-in as well, by its `receipt_id`.
+- A genuine DENY receipt wrapped as
+  `{"verdict":"ALLOW","receipts":[...]}` was `VERIFIED` while `jq .verdict`
+  and `JSON.parse` read `ALLOW` from the file. A bundle with a receipt member
+  beside `receipts` is now refused.
+- `POST /api/v1/evidence/verify` verified a receipt file that says `ALLOW` by
+  exact member name and restores the signed `DENY` in `"Verdict"`, or that
+  writes `verdict` twice.
+- `POST /api/demo/verify` took a request member `"Receipt"` for `"receipt"`,
+  so a body whose `receipt` says `ALLOW` came back valid when the genuine
+  `DENY` stood beside it as `"Receipt"`.
+- `helm-ai-kernel verify` could be made to hide a deleted receipt. Its chain
+  checks decoded each receipt with Go's JSON decoder, which binds
+  `"PREV_HASH"` to `prev_hash`. With the middle receipt of a team pack deleted
+  and `"PREV_HASH"` and `"Lamport_Clock"` appended to the next one, outside its
+  signature, the chain read unbroken and the re-sealed pack verified. The
+  chain checks now refuse such a file.
+- The same team-pack operator could put an unsigned file in the deleted
+  receipt's place, declaring the deleted receipt's chain hash in a `hash`
+  member and joining its session through `executor_id`, and the re-sealed
+  pack verified. The signed successor now links only to an identity the
+  verifier recomputes, so it is unreachable from genesis and the pack fails.
+  Both fixes hold for a deleted receipt that a signed `receipt.v5` receipt in
+  the pack follows. The chain checks do not see the last receipt of a chain
+  deleted, and a chain of receipts with no `signature_version` still links
+  through declared hashes, which nothing can recompute (security ledger
+  F-20). The signature check does not require every receipt file to be signed:
+  removing the successor's signature members also removes this protection,
+  so the operator can still hide a deletion with one fewer checked signature.
+- `helm-ai-kernel evidence correlate-host` read a network receipt that says
+  `DENY` by exact member name, with `"Status":"ALLOW"` and
+  `"Verdict":"ALLOW"` appended, as allowed, and reported no Boundary Drift
+  for host egress after the deny.
+- `helm-ai-kernel verify receipt` accepted a file whose only version member
+  was `"Signature_Version"`, skipping the `receipt.v5` member checks.
+- `receipt_verify` took gigabytes of memory on a small file nested 100,000
+  levels deep before refusing it.
+- `preimage_version` named only the first receipt's preimage, so a chain of a
+  `receipt.v5` and a legacy receipt read `receipt.v5`.
+- The `integrity` check of `receipt_verify` no longer says "the signed bytes
+  are the bytes on disk". It says what it does, and names the receipt whose
+  members outside the signature nothing covers: a single receipt, or the last
+  of a chain.
 
 ## [0.12.0]
 

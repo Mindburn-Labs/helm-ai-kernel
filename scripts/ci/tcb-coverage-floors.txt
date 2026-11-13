@@ -19,7 +19,7 @@ crypto 82.0
 guardian
 proofgraph 81.4
 runtime/sandbox 75.6
-verifier 83.6
+verifier
 receiptverify
 evidencepack 78.8
 pdp

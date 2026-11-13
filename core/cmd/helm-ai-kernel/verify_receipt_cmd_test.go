@@ -222,3 +222,176 @@ func TestVerifyReceiptCLIJSONReportsAdmissible(t *testing.T) {
 		t.Fatalf("json receipt_id = %v, want %s", report["receipt_id"], stored.ReceiptID)
 	}
 }
+
+// TestVerifyReceiptCLIRefusesCaseVariantShadowMembers is helm-tracker#305
+// defect A on this command. The signed DENY receipt is edited, with no key, so
+// that its exactly-named verdict says ALLOW while "Verdict", further down,
+// restores the signed value for a decoder that folds letter case. `jq
+// .verdict` reads ALLOW from that file; the command must not call it
+// admissible.
+func TestVerifyReceiptCLIRefusesCaseVariantShadowMembers(t *testing.T) {
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	raw, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shadowed := strings.Replace(string(raw), `"verdict": "DENY"`, `"verdict": "ALLOW"`, 1)
+	if shadowed == string(raw) {
+		t.Fatal("receipt fixture did not contain signed DENY verdict")
+	}
+	shadowed = strings.TrimRight(shadowed, " \n")
+	shadowed = shadowed[:len(shadowed)-1] + `,"Verdict":"DENY"}`
+	var exact map[string]any
+	if err := json.Unmarshal([]byte(shadowed), &exact); err != nil {
+		t.Fatal(err)
+	}
+	if exact["verdict"] != "ALLOW" {
+		t.Fatalf("the planted file does not read ALLOW by exact name; the case proves nothing: %v", exact["verdict"])
+	}
+	shadowedPath := filepath.Join(t.TempDir(), "shadowed-verdict.json")
+	if err := os.WriteFile(shadowedPath, []byte(shadowed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "verify", "receipt",
+		"--receipt", shadowedPath,
+		"--trusted-public-key-file", keyPath,
+	}, &stdout, &stderr)
+	if code == 0 || strings.Contains(stdout.String(), "ADMISSIBLE") {
+		t.Fatalf("a file that reads ALLOW by exact name was verified: exit %d stdout=%s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "letter case") {
+		t.Fatalf("the refusal must name the letter-case collision: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+}
+
+// TestVerifyReceiptCLISaysWhatTheSignatureCovers: a receipt.v5 signature
+// covers 13 members. The file's other members can be rewritten with no key and
+// the command still exits 0 with integrity_valid true, which read as "the
+// file is as it was signed". The report now names the members the signature
+// covers and the members of this file it does not, in both output forms.
+func TestVerifyReceiptCLISaysWhatTheSignatureCovers(t *testing.T) {
+	receiptPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	raw, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var members map[string]any
+	if err := json.Unmarshal(raw, &members); err != nil {
+		t.Fatal(err)
+	}
+	members["tool_name"], members["executor_id"], members["timestamp"] = "wire_transfer", "someone-else", "2031-01-01T00:00:00Z"
+	rewritten, err := json.Marshal(members)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewrittenPath := filepath.Join(t.TempDir(), "rewritten.json")
+	if err := os.WriteFile(rewrittenPath, rewritten, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "verify", "receipt", "--receipt", rewrittenPath, "--trusted-public-key-file", keyPath, "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("rewriting members outside the signed envelope is expected to leave the receipt admissible, which is the point: exit %d stderr=%s", code, stderr.String())
+	}
+	var report map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("json report: %v\n%s", err, stdout.String())
+	}
+	names := func(key string) map[string]bool {
+		list, _ := report[key].([]any)
+		out := map[string]bool{}
+		for _, item := range list {
+			name, _ := item.(string)
+			out[name] = true
+		}
+		return out
+	}
+	signed, unsigned := names("signed_members"), names("unsigned_members")
+	if len(signed) != 13 || !signed["verdict"] || !signed["receipt_id"] || !signed["session_id"] {
+		t.Fatalf("signed_members must name the 13 members the signature covers, got %v", report["signed_members"])
+	}
+	for _, name := range []string{"tool_name", "executor_id", "timestamp", "key_id", "public_key_set"} {
+		if !unsigned[name] || signed[name] {
+			t.Fatalf("unsigned_members must name %q, a member of this file no signature covers: signed %v, unsigned %v", name, report["signed_members"], report["unsigned_members"])
+		}
+	}
+	for name := range signed {
+		if unsigned[name] {
+			t.Fatalf("%q is listed as both signed and unsigned", name)
+		}
+	}
+	// The signature is what covers the signed members, not a claim beside
+	// them (mutant M34).
+	if unsigned["signature"] || signed["signature"] {
+		t.Fatalf("signature must be neither a signed nor an unsigned member: signed %v, unsigned %v", report["signed_members"], report["unsigned_members"])
+	}
+	scope, _ := report["integrity_scope"].(string)
+	if report["integrity_valid"] != true || !strings.Contains(scope, "signed_members") || !strings.Contains(scope, "unsigned_members") {
+		t.Fatalf("integrity_valid must come with what it covers: integrity_valid %v, integrity_scope %q", report["integrity_valid"], scope)
+	}
+	// Every receipt member the report echoes is one the signature covers.
+	for _, echoed := range []string{"receipt_id", "decision_id", "verdict", "reason_code", "signature_version"} {
+		if _, present := report[echoed]; !present || !signed[echoed] {
+			t.Fatalf("the report echoes %q, which is absent or outside signed_members", echoed)
+		}
+	}
+	if report["receipt_id"] != stored.ReceiptID {
+		t.Fatalf("receipt_id = %v, want %s", report["receipt_id"], stored.ReceiptID)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"helm-ai-kernel", "verify", "receipt", "--receipt", rewrittenPath, "--trusted-public-key-file", keyPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("text verify exit = %d stderr=%s", code, stderr.String())
+	}
+	text := stdout.String()
+	for _, want := range []string{"integrity: true", "13 signed members", "unsigned:", "tool_name", "no signature covers"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("the text report must say what the signature covers and what it does not (missing %q):\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "wire_transfer") {
+		t.Fatalf("the text report prints the value of an unsigned member as if it were established:\n%s", text)
+	}
+}
+
+// TestVerifyReceiptCLIRefusesAVersionMemberInAnotherLetterCase: a file whose
+// only version member is "Signature_Version" skipped the receipt.v5
+// signed-member checks, which look the member up by exact name, and was then
+// decoded as receipt.v5 by encoding/json, which does not. It exited 0.
+func TestVerifyReceiptCLIRefusesAVersionMemberInAnotherLetterCase(t *testing.T) {
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	raw, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(raw), `"signature_version"`) != 1 {
+		t.Fatal("receipt fixture does not carry signature_version once")
+	}
+	variant := strings.Replace(string(raw), `"signature_version"`, `"Signature_Version"`, 1)
+	var exact map[string]any
+	if err := json.Unmarshal([]byte(variant), &exact); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := exact["signature_version"]; present {
+		t.Fatal("the planted file still carries signature_version by exact name; the case proves nothing")
+	}
+	variantPath := filepath.Join(t.TempDir(), "variant-version.json")
+	if err := os.WriteFile(variantPath, []byte(variant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range [][]string{nil, {"--json"}} {
+		var stdout, stderr bytes.Buffer
+		args := append([]string{"helm-ai-kernel", "verify", "receipt", "--receipt", variantPath, "--trusted-public-key-file", keyPath}, format...)
+		code := Run(args, &stdout, &stderr)
+		if code == 0 || stdout.Len() != 0 {
+			t.Fatalf("a file with no signature_version by exact name was verified %v: exit %d stdout=%s", format, code, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "letter case") || !strings.Contains(stderr.String(), "signature_version") {
+			t.Fatalf("the refusal must name the letter case of signature_version: %s", stderr.String())
+		}
+	}
+}

@@ -216,6 +216,14 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 
 func writeCLISealedPack(t *testing.T, dataDir string, extensions ...string) string {
 	t.Helper()
+	receipt := []byte(`{"receipt_id":"rcpt-1","decision_id":"dec-1","decision_hash":"sha256:test","lamport_clock":1}`)
+	return writeCLISealedPackWithReceipt(t, dataDir, receipt, extensions...)
+}
+
+// writeCLISealedPackWithReceipt is writeCLISealedPack around the one receipt
+// document given, for a test that plants a receipt of its own.
+func writeCLISealedPackWithReceipt(t *testing.T, dataDir string, receipt []byte, extensions ...string) string {
+	t.Helper()
 	dir := t.TempDir()
 	score := []byte(`{"pass":true}`)
 	if err := os.WriteFile(filepath.Join(dir, "01_SCORE.json"), score, 0o600); err != nil {
@@ -230,7 +238,6 @@ func writeCLISealedPack(t *testing.T, dataDir string, extensions ...string) stri
 	if err := os.MkdirAll(receiptsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	receipt := []byte(`{"receipt_id":"rcpt-1","decision_id":"dec-1","decision_hash":"sha256:test","lamport_clock":1}`)
 	if err := os.WriteFile(filepath.Join(receiptsDir, "receipt-1.json"), receipt, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -273,4 +280,58 @@ func writeCLISealedPack(t *testing.T, dataDir string, extensions ...string) stri
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked: the pack verifier's
+// dev-local MCP branch checks a receipt with no signature_version against
+// eight colon-joined fields under a key the pack carries, which the signature
+// of a receipt.v5 receipt can be replayed into (helm-tracker#305). `verify`
+// leaves such a receipt unverified unless --allow-legacy-v4-receipts is given.
+func TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("HELM_DATA_DIR", dataDir)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const effectID = "mcp_governed_effect_execution/proof.local_write"
+	legacy, err := json.Marshal(map[string]any{
+		"receipt_id": "exec-001", "decision_id": "dec-001", "decision_hash": "sha256:test", "effect_id": effectID, "status": "APPLIED",
+		"output_hash": "sha256:out", "prev_hash": "", "lamport_clock": 1, "args_hash": "sha256:args",
+		"signature":         hex.EncodeToString(ed25519.Sign(priv, []byte("exec-001:dec-001:"+effectID+":APPLIED:sha256:out::1:sha256:args"))),
+		"signature_profile": "classical", "signature_algorithm": "ed25519",
+		"public_key_set": map[string]string{"ed25519": hex.EncodeToString(pub)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	packDir := writeCLISealedPackWithReceipt(t, dataDir, legacy)
+	embeddedTrust := func(args ...string) (int, bool, string) {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := runVerifyCmd(append(args, "--allow-self-attested", "--profile", "dev-local", "--json", packDir), &stdout, &stderr)
+		var report struct {
+			Checks []struct {
+				Name string `json:"name"`
+				Pass bool   `json:"pass"`
+			} `json:"checks"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+			t.Fatalf("verify --json: %v\nstdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" {
+				return code, check.Pass, stdout.String()
+			}
+		}
+		t.Fatalf("embedded_signature_trust check missing: %s", stdout.String())
+		return code, false, ""
+	}
+
+	if code, pass, out := embeddedTrust(); pass || code == 0 {
+		t.Fatalf("an unversioned MCP receipt was checked without the opt-in: exit %d\n%s", code, out)
+	}
+	if code, pass, out := embeddedTrust("--allow-legacy-v4-receipts"); !pass || code != 0 {
+		t.Fatalf("a genuine legacy dev-local MCP receipt must verify under --allow-legacy-v4-receipts: exit %d\n%s", code, out)
+	}
 }

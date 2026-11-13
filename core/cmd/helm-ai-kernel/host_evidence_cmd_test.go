@@ -35,6 +35,41 @@ func TestVerifyExternalReceiptCmdJSON(t *testing.T) {
 	}
 }
 
+// A host receipt check with nothing to read (no hardware root claim, no
+// declared chain hash) is not a failure and not a pass. The text output must
+// list it apart from the checks that failed and count it apart from the passes.
+func TestVerifyExternalReceiptCmdSeparatesNotRunFromFailed(t *testing.T) {
+	dir := t.TempDir()
+	chainPath, pubHex := writeCLIHostChain(t, dir, "workload-1", "203.0.113.10")
+
+	var stdout, stderr bytes.Buffer
+	if code := runVerifyExternalReceiptCmd([]string{"--chain", chainPath, "--public-key", pubHex}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	text := stdout.String()
+	if !strings.HasPrefix(text, "VERIFIED external host receipt chain") || !strings.Contains(text, " not run") || strings.Contains(text, "0 not run") {
+		t.Fatalf("verified output does not count the checks that did not run:\n%s", text)
+	}
+
+	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := runVerifyExternalReceiptCmd([]string{"--chain", chainPath, "--public-key", hex.EncodeToString(otherPub)}, &stdout, &stderr); code != 1 {
+		t.Fatalf("wrong key exit=%d, want 1; stdout=%s", code, stdout.String())
+	}
+	text = stdout.String()
+	if !strings.Contains(text, "  - external_host:signature:") {
+		t.Fatalf("failed output does not list the signature failure:\n%s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "  - ") && strings.Contains(line, "hardware root claim") {
+			t.Fatalf("a check that did not run is listed as a failure: %q", line)
+		}
+	}
+}
+
 func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	root := t.TempDir()
 	chainPath, pubHex := writeCLIHostChain(t, root, "workload-1", "203.0.113.10")
@@ -78,6 +113,62 @@ func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	}
 	if report.Results[0].Status != contracts.HostCorrelationCorrelated {
 		t.Fatalf("status=%s, want correlated", report.Results[0].Status)
+	}
+}
+
+// TestCorrelateHostReadsAReceiptFileAsItsReaderDoes is helm-tracker#305
+// round 3 finding NF6. evidence correlate-host decoded each receipt file of
+// the pack into contracts.Receipt with encoding/json, which binds "Verdict" to
+// verdict. A network receipt that says DENY to jq and to every exact-name
+// reader, with "Status" and "Verdict" of ALLOW appended, was correlated as
+// allowed host egress and reported no Boundary Drift. A receipt file the
+// member-name rules of receiptverify.ValidateReceiptMemberNames refuse now
+// stops the command.
+func TestCorrelateHostReadsAReceiptFileAsItsReaderDoes(t *testing.T) {
+	const deny = `{"receipt_id":"r-network","decision_id":"d-network","decision_hash":"sha256:test","type":"NETWORK_EGRESS_DENIED","effect_type":"WORKSTATION_NETWORK_EGRESS","status":"DENY","verdict":"DENY","lamport_clock":1,"timestamp":"2026-05-21T12:00:00Z","metadata":{"workload_id":"workload-1","destination_ip":"203.0.113.10","destination_port":"443","protocol":"tcp","max_egress_bytes":"1024"}}`
+	correlate := func(receipt string) (int, string, string) {
+		t.Helper()
+		root := t.TempDir()
+		chainPath, _ := writeCLIHostChain(t, root, "workload-1", "203.0.113.10")
+		packDir, err := lpreceipts.WriteEvidencePack(root, "launch-host-evidence", map[string][]byte{"receipts/network.json": []byte(receipt)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		outDir := filepath.Join(root, "attached-pack")
+		var stdout, stderr bytes.Buffer
+		if code := runEvidenceAttachHostChain([]string{"--bundle", packDir, "--chain", chainPath, "--out", outDir, "--source", "test"}, &stdout, &stderr); code != 0 {
+			t.Fatalf("attach exit=%d stderr=%s", code, stderr.String())
+		}
+		stdout.Reset()
+		stderr.Reset()
+		code := runEvidenceCorrelateHost([]string{"--bundle", outDir}, &stdout, &stderr)
+		return code, stdout.String(), stderr.String()
+	}
+
+	if code, stdout, stderr := correlate(deny); code != 1 || !strings.Contains(stdout, string(contracts.HostCorrelationPolicyDeniedHostEgress)) {
+		t.Fatalf("host egress after the genuine DENY must be Boundary Drift; the case proves nothing: exit=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	shadowed := strings.TrimSuffix(deny, "}") + `,"Status":"ALLOW","Verdict":"ALLOW"}`
+	var exact map[string]any
+	if err := json.Unmarshal([]byte(shadowed), &exact); err != nil || exact["verdict"] != "DENY" || exact["status"] != "DENY" {
+		t.Fatalf("the planted receipt does not read DENY by exact name; the case proves nothing (%v)", err)
+	}
+	code, stdout, stderr := correlate(shadowed)
+	if code != 2 || !strings.Contains(stderr, "network.json") || !strings.Contains(stderr, "letter case") {
+		t.Fatalf("a receipt file with a letter-case Verdict must stop correlate-host and be named: exit=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	for _, tc := range []struct {
+		name, receipt, reason string
+	}{
+		{"duplicate verdict", strings.TrimSuffix(deny, "}") + `,"verdict":"ALLOW"}`, "duplicate object member"},
+		{"invalid JSON", `{"receipt_id":`, "invalid receipt JSON"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := correlate(tc.receipt)
+			if code != 2 || !strings.Contains(stderr, "network.json") || !strings.Contains(stderr, tc.reason) {
+				t.Fatalf("a refused receipt must stop correlate-host and be named: exit=%d stdout=%s stderr=%s", code, stdout, stderr)
+			}
+		})
 	}
 }
 

@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-89 controls: 51 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
+92 controls: 54 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -162,6 +162,9 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-062 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
 | CTL-067 | An authority plan's stage is a ceiling on what it grants | enforced | — |
 | CTL-068 | Authority comes from the owner's passkey | enforced | — |
+| CTL-063 | The evaluated action and its effect class come from the request tuple and the catalog | enforced | — |
+| CTL-064 | Receipt verifiers match member names exactly and do not check unversioned receipts | enforced | — |
+| CTL-065 | A Skill Pack is first party only by a digest compiled into the binary | enforced | — |
 
 ---
 

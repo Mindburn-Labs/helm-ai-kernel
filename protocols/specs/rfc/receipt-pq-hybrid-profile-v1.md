@@ -9,6 +9,10 @@ authors:
 
 # RFC: HELM Receipt PQ-Hybrid Signature Profile v1 (Ed25519 + ML-DSA-65)
 
+<!-- quantum_posture: this draft specifies the hybrid Ed25519 + ML-DSA-65
+receipt envelope. It is a profile specification, not evidence that any
+deployment issues or requires hybrid receipts. -->
+
 ## Abstract
 
 This document specifies the post-quantum hybrid signature profile for HELM
@@ -59,6 +63,16 @@ Fields are joined with the `:` separator. Content addressing of receipt
 identifiers continues to use JCS (RFC 8785) + SHA-256 per Receipt Format
 v1 §4. The hybrid profile changes the signature envelope only; it MUST NOT
 alter the preimage, canonicalization, or content addressing.
+
+**Verifier note.** The string above is the legacy preimage of a receipt with
+no `signature_version`. It has no escaping and no domain separation, so the
+signed bytes of a `receipt.v5` envelope can be read back as its eight fields
+and a `receipt.v5` signature verifies for an unversioned receipt its signer
+never issued. HELM's Go verifiers therefore do not check an unversioned
+receipt unless the caller passes `crypto.AllowLegacyReceiptPreimages`; the
+golden vectors of this profile are unversioned and are verified under that
+option. A receipt that declares `signature_version: receipt.v5` is signed over
+the `receipt.v5` envelope under every profile, inside the envelope of §3.
 
 ## 3. Hybrid Envelope
 

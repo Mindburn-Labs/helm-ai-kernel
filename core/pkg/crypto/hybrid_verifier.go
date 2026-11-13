@@ -125,7 +125,10 @@ func (v *HybridVerifier) verifyEnvelope(message []byte, envelope string) (bool, 
 // It returns the detected profile alongside the verification result so
 // callers can enforce issuance-policy cutovers (e.g. "hybrid required after
 // date X") on top of cryptographic validity.
-func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (profile string, valid bool, err error) {
+//
+// A receipt with no signature_version is refused with ErrLegacyReceiptRefused
+// unless the caller passes AllowLegacyReceiptPreimages.
+func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt, opts ...ReceiptVerifyOption) (profile string, valid bool, err error) {
 	if r == nil {
 		return "", false, fmt.Errorf("nil receipt")
 	}
@@ -177,7 +180,7 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 	default:
 		return profile, false, fmt.Errorf("unsupported receipt signature algorithm %q", r.SignatureAlgorithm)
 	}
-	payload, perr := ReceiptVerifyPayload(r)
+	payload, perr := ReceiptVerifyPayload(r, opts...)
 	if perr != nil {
 		return profile, false, perr
 	}
@@ -215,7 +218,7 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 
 // VerifyReceiptRequiredProfile verifies a receipt and fails closed when the
 // verified receipt profile does not satisfy the caller's required profile.
-func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt, requiredProfile string) (profile string, valid bool, err error) {
+func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt, requiredProfile string, opts ...ReceiptVerifyOption) (profile string, valid bool, err error) {
 	required := strings.ToLower(strings.TrimSpace(requiredProfile))
 	switch required {
 	case "", ReceiptProfileClassical, ReceiptProfileHybrid, ReceiptProfilePQC:
@@ -223,7 +226,7 @@ func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Rec
 		return "", false, fmt.Errorf("unsupported required receipt profile %q", requiredProfile)
 	}
 
-	profile, valid, err = VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
+	profile, valid, err = VerifyReceiptProfile(edPubHex, mldsaPubHex, r, opts...)
 	if err != nil || !valid || required == "" || required == ReceiptProfileClassical {
 		return profile, valid, err
 	}

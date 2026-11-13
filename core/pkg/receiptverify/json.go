@@ -19,7 +19,8 @@ const (
 )
 
 // Verdict describes the existing verifier's result, including its explicit
-// refusal to verify without an independently supplied trust root.
+// refusal to verify without an independently supplied trust root or to check
+// a legacy receipt.
 type Verdict string
 
 const (
@@ -40,6 +41,12 @@ type DocumentResult struct {
 // root, encoded as {"keys":{"key-id":"Ed25519-public-key-hex"}}. Empty trust
 // input trusts nothing. Artifact-supplied keys never become trusted, and this
 // interface deliberately provides no self-attestation opt-in.
+//
+// It has no legacy opt-in either: a document holding a receipt with no
+// signature_version is UNVERIFIABLE, because it was not checked (see
+// LegacyV4Refusal). A document whose member names differ from the receipt,
+// bundle or permit members only in letter case, or whose bundle form carries a
+// receipt member beside "receipts", is FAILED at parsing.
 //
 // Parsing and all cryptographic/chain/permit checks use the same producer as
 // receipt_verify. No clock, configuration discovery, file or network is read.
@@ -66,13 +73,15 @@ func VerifyJSON(document, trustRootJSON []byte) DocumentResult {
 	if err != nil {
 		return fail(err)
 	}
-	out.Verification = VerifyBundle(bundle, TrustRoot{Keys: keys})
+	var why refusal
+	out.Verification, why = verifyBundle(bundle, TrustRoot{Keys: keys}, Options{})
 	if out.Verification.Valid {
 		out.Verdict = VerdictVerified
-	} else if len(out.Verification.Errors) == 1 &&
-		out.Verification.Errors[0] == ErrNoTrustedKey.Error() {
-		// Translate the producer's explicit refusal; do not manufacture a
-		// successful identity check by inspecting an artifact-carried key.
+	} else if why == refusedNoTrustedKey || why == refusedLegacyV4 {
+		// Translate the producer's explicit refusal: the receipts were not
+		// checked. Do not manufacture a successful identity check by
+		// inspecting an artifact-carried key, or a failed one for a legacy
+		// receipt no check ran on.
 		out.Verdict = VerdictUnverifiable
 	}
 	return out

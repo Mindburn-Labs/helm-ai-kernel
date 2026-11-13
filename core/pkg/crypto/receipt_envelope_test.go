@@ -3,6 +3,7 @@ package crypto
 // F-05/F-06 regressions for the v5 receipt envelope.
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -80,7 +81,12 @@ func TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch(t *testing.T) {
 	}
 	r.Signature = sig
 
-	ok, version, err := VerifyReceiptSignature(s.PublicKey(), r)
+	// An unversioned receipt is checked only when the caller opts in
+	// (helm-tracker#305); by default it is refused, not failed.
+	if ok, _, err := VerifyReceiptSignature(s.PublicKey(), r); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("a v4-signed receipt was checked without the opt-in (ok=%v err=%v)", ok, err)
+	}
+	ok, version, err := VerifyReceiptSignature(s.PublicKey(), r, AllowLegacyReceiptPreimages)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}

@@ -990,8 +990,19 @@ func validateProjectionArtifact(
 		!containsString(effect.CertificationRefs, manifest.ProvenanceRef) {
 		return projectionGeneration{}, nil, nil, fmt.Errorf("skillpacks: certification refs do not bind manifest signature/provenance")
 	}
-	// Signature trust here is the configured verifier's decision (verifyProjectionTrust).
-	scan, err := scanPack(SkillPack{Manifest: manifest, SkillMD: string(contentBytes)}, false)
+	pack := SkillPack{Manifest: manifest, SkillMD: string(contentBytes)}
+	if manifest.Status == StatusVerified {
+		// The verifier's decision carries manifest_status onward, so "verified"
+		// must not be the pack's own word. The V1 artifact is exactly these two
+		// files, which makes it comparable with the first-party manifest.
+		files := packTree{files: []packFile{{path: "SKILL.md", data: contentBytes}, {path: "skillpack.json", data: manifestBytes}}}
+		if publisher := checkPublisher(pack, &files, loadKernelFirstPartyTrust()); publisher.State != PublisherFirstParty {
+			return projectionGeneration{}, nil, nil, fmt.Errorf("%w: SkillPack declares status verified: %s", ErrProjectionTrustRejected, publisher.Reason)
+		}
+	}
+	// Trust in every other pack is the configured verifier's decision
+	// (verifyProjectionTrust), so this scan applies the prompt rules only.
+	scan, err := scanPack(pack, nil)
 	if err != nil || scan.Verdict != VerdictAllow {
 		if err != nil {
 			return projectionGeneration{}, nil, nil, err

@@ -2,9 +2,12 @@ package conform
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // EvidencePackSubdirs lists the §3.1 mandatory top-level directories. Every
@@ -60,31 +63,47 @@ func CreateEvidencePackDirs(root string) error {
 
 // ValidateEvidencePackStructure checks that the directory matches §3.1.
 // Supports declared extensions under 99_EXT/ if listed in declaredExtensions.
+//
+// It tests and lists the pack through an os.Root opened on root (package
+// packfs): a name whose symbolic link leaves the pack, or has an absolute
+// target, is reported as not read and is never listed or followed.
 func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []string {
 	var issues []string
 	if len(declaredExtensions) == 0 {
 		declaredExtensions = declaredEvidencePackExtensions(root)
 	}
-
-	// Check 00_INDEX.json exists
-	if _, err := os.Stat(filepath.Join(root, "00_INDEX.json")); err != nil {
-		issues = append(issues, "missing 00_INDEX.json")
+	pack, openErr := packfs.Open(root)
+	if openErr == nil {
+		defer func() { _ = pack.Close() }()
 	}
-
-	// Check 01_SCORE.json exists
-	if _, err := os.Stat(filepath.Join(root, "01_SCORE.json")); err != nil {
-		issues = append(issues, "missing 01_SCORE.json")
-	}
-
-	// Check all mandatory subdirs
-	for _, sub := range EvidencePackSubdirs {
-		if _, err := os.Stat(filepath.Join(root, sub)); err != nil {
-			issues = append(issues, fmt.Sprintf("missing %s/", sub))
+	// present reports a name that is missing, or that is a link out of the
+	// pack, which is not followed.
+	present := func(name, label string) {
+		err := openErr
+		if err == nil {
+			_, err = pack.Stat(name)
 		}
+		switch {
+		case err == nil:
+		case errors.Is(err, packfs.ErrOutside):
+			issues = append(issues, fmt.Sprintf("%s is not read: %v", name, err))
+		default:
+			issues = append(issues, "missing "+label)
+		}
+	}
+
+	present("00_INDEX.json", "00_INDEX.json")
+	present("01_SCORE.json", "01_SCORE.json")
+	for _, sub := range EvidencePackSubdirs {
+		present(sub, sub+"/")
 	}
 
 	// Build allowed set
 	allowed := map[string]bool{
+		// manifest.json is where the verifier's file_hashes check reads the
+		// hashes a pack declares. Rejecting it here failed every pack that
+		// gave that check input.
+		"manifest.json":        true,
 		"00_INDEX.json":        true,
 		"00_INDEX.json.sig":    true,
 		"01_SCORE.json":        true,
@@ -103,7 +122,11 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 	}
 
 	// Check no extra top-level entries
-	entries, err := os.ReadDir(root)
+	if openErr != nil {
+		issues = append(issues, fmt.Sprintf("cannot read directory: %v", openErr))
+		return issues
+	}
+	entries, err := pack.ReadDir(".")
 	if err != nil {
 		issues = append(issues, fmt.Sprintf("cannot read directory: %v", err))
 		return issues
@@ -117,14 +140,17 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 	}
 
 	// If 99_EXT/ exists, validate only declared extensions are present
-	extDir := filepath.Join(root, ExtensionDirPrefix)
-	if _, err := os.Stat(extDir); err == nil {
+	_, err = pack.Stat(ExtensionDirPrefix)
+	if errors.Is(err, packfs.ErrOutside) {
+		issues = append(issues, fmt.Sprintf("%s is not read: %v", ExtensionDirPrefix, err))
+	}
+	if err == nil {
 		declaredSet := make(map[string]bool)
 		for _, ext := range declaredExtensions {
 			declaredSet[ext] = true
 		}
 
-		extEntries, _ := os.ReadDir(extDir)
+		extEntries, _ := pack.ReadDir(ExtensionDirPrefix)
 		for _, e := range extEntries {
 			if !declaredSet[e.Name()] {
 				issues = append(issues, fmt.Sprintf("undeclared extension: %s/%s", ExtensionDirPrefix, e.Name()))
@@ -136,7 +162,7 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 }
 
 func declaredEvidencePackExtensions(root string) []string {
-	data, err := os.ReadFile(filepath.Join(root, "00_INDEX.json"))
+	data, err := readPackFile(root, "00_INDEX.json")
 	if err != nil {
 		return nil
 	}

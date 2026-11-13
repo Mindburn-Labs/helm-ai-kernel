@@ -15,7 +15,9 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
@@ -325,8 +327,12 @@ func validateTrustInitConfig(cfg evidencepkg.EvidencePackTrustConfig) error {
 }
 
 type evidenceInspectReport struct {
-	Bundle             string                 `json:"bundle"`
-	Verified           bool                   `json:"verified"`
+	Bundle   string `json:"bundle"`
+	Verified bool   `json:"verified"`
+	// Outcome and CheckCounts mirror `verify --json`: Verified alone does not
+	// say how many checks ran.
+	Outcome            receiptverify.Verdict  `json:"outcome"`
+	CheckCounts        verifier.CheckCounts   `json:"check_counts"`
 	Summary            string                 `json:"summary"`
 	IssueCount         int                    `json:"issue_count"`
 	MerkleRoot         string                 `json:"merkle_root,omitempty"`
@@ -337,8 +343,21 @@ type evidenceInspectReport struct {
 	EvidenceGraphNodes int                    `json:"evidence_graph_nodes,omitempty"`
 	FileHashes         map[string]string      `json:"file_hashes,omitempty"`
 	Checks             []verifier.CheckResult `json:"checks"`
+
+	// report is the verdict the fields above were copied from, kept for the
+	// text output, which prints it the way `verify` does.
+	report *verifier.VerifyReport
 }
 
+// runEvidenceInspect prints the verdict on a pack with what the launchpad
+// manifest and evidence graph say about it. The verdict is the one `verify`
+// reaches, from the same code (verifyPackDir).
+//
+// Exit codes, in text and JSON mode alike:
+//
+//	0 = VERIFIED
+//	1 = FAILED or UNVERIFIABLE
+//	2 = runtime or usage error; no verdict was reached
 func runEvidenceInspect(args []string, stdout, stderr io.Writer) int {
 	allowSelfAttested := false
 	rest := make([]string, 0, len(args))
@@ -351,7 +370,7 @@ func runEvidenceInspect(args []string, stdout, stderr io.Writer) int {
 	}
 	jsonOutput, positionals, err := parseEvidenceJSONArgs(rest)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
+		writeText(stderr, "Error: %s\n", err)
 		return 2
 	}
 	if len(positionals) != 1 {
@@ -360,25 +379,35 @@ func runEvidenceInspect(args []string, stdout, stderr io.Writer) int {
 	}
 	report, err := inspectEvidenceBundle(positionals[0], allowSelfAttested)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
+		writeText(stderr, "Error: %s\n", err)
 		return 2
 	}
+	// The exit code follows the outcome in both modes. JSON mode used to exit
+	// 0 on a FAILED pack, which a script reads as success.
+	exitCode := boolExit(report.Outcome == receiptverify.VerdictVerified)
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(report)
-		return 0
+		return exitCode
 	}
-	fmt.Fprintf(stdout, "EvidencePack %s\n", report.Bundle)
-	fmt.Fprintf(stdout, "  Verified: %t\n", report.Verified)
-	fmt.Fprintf(stdout, "  Summary:  %s\n", report.Summary)
+	// The merkle and graph roots are read from files in the pack, so every
+	// line goes through writeText.
+	writeText(stdout, "EvidencePack %s\n", report.Bundle)
+	writeText(stdout, "  Outcome:  %s\n", report.Outcome)
+	writeText(stdout, "  Verified: %t\n", report.Verified)
+	writeText(stdout, "  Summary:  %s\n", report.Summary)
 	if report.MerkleRoot != "" {
-		fmt.Fprintf(stdout, "  Merkle:   %s\n", report.MerkleRoot)
+		writeText(stdout, "  Merkle:   %s\n", report.MerkleRoot)
 	}
 	if report.EvidenceGraphRoot != "" {
-		fmt.Fprintf(stdout, "  Graph:    %s (%d nodes)\n", report.EvidenceGraphRoot, report.EvidenceGraphNodes)
+		writeText(stdout, "  Graph:    %s (%d nodes)\n", report.EvidenceGraphRoot, report.EvidenceGraphNodes)
 	}
-	return boolExit(report.Verified)
+	if report.report != nil {
+		printVerifyIssues(stdout, report.report)
+		printVerifyCheckCounts(stdout, report.report)
+	}
+	return exitCode
 }
 
 type evidenceDiffReport struct {
@@ -445,16 +474,31 @@ func parseEvidenceJSONArgs(args []string) (bool, []string, error) {
 func inspectEvidenceBundle(bundle string, allowSelfAttested bool) (evidenceInspectReport, error) {
 	var out evidenceInspectReport
 	err := withEvidenceBundleDir(bundle, func(dir string) error {
-		// The bundle is whatever path the caller named, so it gets the same
-		// trust-root check as `verify`. A self-attested dev-local seal passes
-		// only with the explicit opt-in (audit 02-08).
-		report, err := verifier.VerifyBundleWithOptions(dir, verifier.VerifyOptions{AllowSelfAttested: allowSelfAttested})
+		// The bundle is whatever path the caller named, so it gets the verdict
+		// `verify` gives it: the same checks, the same trusted keys from the
+		// environment, and a self-attested dev-local seal only with the
+		// explicit opt-in (audit 02-08).
+		keys := packVerifyKeysFromEnv()
+		opts := verifier.VerifyOptions{
+			AllowSelfAttested:               allowSelfAttested,
+			ExternalHostKeyHex:              keys.externalHost,
+			ManagedAgentReceiptPublicKeyHex: keys.managedAgentReceipt,
+		}
+		if dir != bundle {
+			// An archive was extracted: the storage receipt of a customer or
+			// high-assurance pack is about the archive, as it is in `verify`.
+			opts.StorageObjectPath = bundle
+		}
+		report, err := verifyPackDir(dir, opts, keys.conformanceReport)
 		if err != nil {
 			return err
 		}
 		out = evidenceInspectReport{
+			report:          report,
 			Bundle:          bundle,
 			Verified:        report.Verified,
+			Outcome:         report.Outcome,
+			CheckCounts:     report.CheckCounts,
 			Summary:         report.Summary,
 			IssueCount:      report.IssueCount,
 			MerkleRoot:      report.MerkleRoot,
@@ -535,9 +579,21 @@ func withEvidenceBundleDir(bundle string, fn func(string) error) error {
 	return fn(tempDir)
 }
 
+// readPackFile reads one file of the pack directory dir through an os.Root on
+// it (package packfs): a symbolic link that leaves the pack or has an absolute
+// target, a named pipe and a device are refused, never read.
+func readPackFile(dir, name string) ([]byte, error) {
+	pack, err := packfs.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = pack.Close() }()
+	return pack.ReadFile(name)
+}
+
 func readLaunchpadManifest(dir string) (lpreceipts.EvidencePackManifest, error) {
 	var manifest lpreceipts.EvidencePackManifest
-	data, err := os.ReadFile(filepath.Join(dir, "04_EXPORTS", "launchpad_manifest.json"))
+	data, err := readPackFile(dir, "04_EXPORTS/launchpad_manifest.json")
 	if err != nil {
 		return manifest, err
 	}
@@ -546,7 +602,7 @@ func readLaunchpadManifest(dir string) (lpreceipts.EvidencePackManifest, error) 
 
 func readEvidenceGraph(dir string) (lpreceipts.EvidenceGraph, error) {
 	var graph lpreceipts.EvidenceGraph
-	data, err := os.ReadFile(filepath.Join(dir, "04_EXPORTS", "launchpad_evidence_graph.json"))
+	data, err := readPackFile(dir, "04_EXPORTS/launchpad_evidence_graph.json")
 	if err != nil {
 		return graph, err
 	}
@@ -554,7 +610,7 @@ func readEvidenceGraph(dir string) (lpreceipts.EvidenceGraph, error) {
 }
 
 func readEvidenceIndex(dir string) (map[string]string, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "00_INDEX.json"))
+	data, err := readPackFile(dir, "00_INDEX.json")
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,10 @@
 // During replay, the replayer serves taped outputs and blocks external I/O.
 package tape
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // EntryType classifies what kind of nondeterministic input was captured.
 type EntryType string
@@ -50,6 +53,10 @@ type ManifestItem struct {
 	Key       string    `json:"key"`
 	SHA256    string    `json:"sha256"`
 	SizeBytes int64     `json:"size_bytes"`
+
+	// fields is the row as it was read from tape_manifest.json, including
+	// fields this struct does not declare. It is nil for a row built in memory.
+	fields map[string]json.RawMessage
 }
 
 // Ref is a reference to a tape entry, stored in receipt envelopes.

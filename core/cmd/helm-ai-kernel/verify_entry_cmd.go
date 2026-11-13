@@ -139,13 +139,13 @@ func emitEntryResult(stdout io.Writer, result entryVerifyResult, asJSON bool) in
 		out, _ := json.MarshalIndent(result, "", "  ")
 		_, _ = fmt.Fprintln(stdout, string(out))
 	} else if result.Verified {
-		_, _ = fmt.Fprintf(stdout, "VERIFIED · entry %s · pack %s\n", result.Entry, result.PackID)
-		_, _ = fmt.Fprintf(stdout, "manifest %s · policy %s\n", result.ManifestHash, result.PolicyHash)
+		writeText(stdout, "VERIFIED · entry %s · pack %s\n", result.Entry, result.PackID)
+		writeText(stdout, "manifest %s · policy %s\n", result.ManifestHash, result.PolicyHash)
 		if result.HasPresentation {
-			_, _ = fmt.Fprintf(stdout, "selective-disclosure present · public claims: %s\n", strings.Join(result.PublicClaims, ", "))
+			writeText(stdout, "selective-disclosure present · public claims: %s\n", strings.Join(result.PublicClaims, ", "))
 		}
 	} else {
-		_, _ = fmt.Fprintf(stdout, "FAILED · entry %s\n  - %s\n", result.Entry, result.Reason)
+		writeText(stdout, "FAILED · entry %s\n  - %s\n", result.Entry, result.Reason)
 	}
 	if !result.Verified {
 		return 1

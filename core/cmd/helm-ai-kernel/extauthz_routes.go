@@ -92,10 +92,13 @@ func authorizeExtAuthzRequest(ctx context.Context, svc *Services, req extauthz.A
 		"risk_context_hash":        req.RiskContextHash,
 		"extauthz_contract_status": "internal_non_production",
 	}
+	effectClass, effectClassSource, effectClassDeclared := resolveEffectClass(req.ActionURN, req.ToolURN, req.EffectClass)
 	if err := bindAuthenticatedGuardianContext(ctx, decisionContext, guardianTransportBinding{
-		EffectClass:   req.EffectClass,
-		SourceChannel: contracts.SourceChannelExternalAgent,
-		TrustLevel:    contracts.InputTrustInternalUnverified,
+		EffectClass:         effectClass,
+		EffectClassSource:   effectClassSource,
+		EffectClassDeclared: effectClassDeclared,
+		SourceChannel:       contracts.SourceChannelExternalAgent,
+		TrustLevel:          contracts.InputTrustInternalUnverified,
 	}); err != nil {
 		return extauthz.AuthorizationResponse{}, fmt.Errorf("bind ext-authz transport evidence: %w", err)
 	}

@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestValidationSignatureAndPolicyBranches(t *testing.T) {
+func TestManifestValidationBranches(t *testing.T) {
 	skill := []byte("safe skill")
 	valid := testManifest("test/good")
 	for _, tc := range []struct {
@@ -42,83 +42,6 @@ func TestValidationSignatureAndPolicyBranches(t *testing.T) {
 	}
 	if oneOf("missing", "a", "b") {
 		t.Fatal("oneOf accepted missing value")
-	}
-
-	pack := SkillPack{Manifest: valid, SkillMD: string(skill)}
-	pack.Manifest.SignatureRef = ""
-	if err := VerifyPublisherSignature(pack, nil); err == nil {
-		t.Fatal("expected non-verified missing signature error")
-	}
-	pack.Manifest.SignatureRef = "sig://test"
-	if err := VerifyPublisherSignature(pack, nil); err != nil {
-		t.Fatalf("experimental signature ref should pass: %v", err)
-	}
-
-	verified := SkillPack{Manifest: testManifest("helm/repo-auditor"), SkillMD: string(skill)}
-	verified.Manifest.Publisher = "Mindburn-Labs"
-	verified.Manifest.Status = StatusVerified
-	verified.Manifest.Version = "0.1.0"
-	verified.Manifest.SignatureRef = "helm-first-party://skills/repo-auditor/0.1.0"
-	verified.Manifest.PublisherKeyRef = "helm-first-party-keyring-v1"
-	verified.Manifest.ContentHash = HashBytes(skill)
-	if err := VerifyPublisherSignature(verified, nil); err != nil {
-		t.Fatalf("verified first-party signature rejected: %v", err)
-	}
-	untrusted := verified
-	untrusted.Manifest.Publisher = "Other"
-	if err := VerifyPublisherSignature(untrusted, nil); err == nil {
-		t.Fatal("expected untrusted verified publisher error")
-	}
-	keyMismatch := verified
-	keyMismatch.Manifest.PublisherKeyRef = "other-key"
-	if err := VerifyPublisherSignature(keyMismatch, nil); err == nil {
-		t.Fatal("expected publisher key mismatch")
-	}
-	badID := verified
-	badID.Manifest.ID = "bad"
-	if err := VerifyPublisherSignature(badID, nil); err == nil {
-		t.Fatal("expected verified invalid id error")
-	}
-	badSig := verified
-	badSig.Manifest.SignatureRef = "helm-first-party://skills/other/0.1.0"
-	if err := VerifyPublisherSignature(badSig, nil); err == nil {
-		t.Fatal("expected verified signature ref mismatch")
-	}
-	badHash := verified
-	badHash.Manifest.ContentHash = ""
-	if err := VerifyPublisherSignature(badHash, nil); err == nil {
-		t.Fatal("expected verified content hash error")
-	}
-
-	repo := t.TempDir()
-	policy := filepath.Join(repo, "policies", "skill.toml")
-	if err := os.MkdirAll(filepath.Dir(policy), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	goodPolicy := `[skill]
-permission_bypass_forbidden = true
-receipts_required = true
-global_install_default = "deny"
-mcp_auto_enable_default = "quarantine"
-[projection]
-[evidence]
-`
-	if err := os.WriteFile(policy, []byte(goodPolicy), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidatePolicyFile(repo, "policies/skill.toml"); err != nil {
-		t.Fatalf("valid policy rejected: %v", err)
-	}
-	for _, ref := range []string{"", filepath.Join(repo, "policies", "skill.toml"), "../escape.toml", "missing.toml"} {
-		if err := ValidatePolicyFile(repo, ref); err == nil {
-			t.Fatalf("expected policy ref %q to fail", ref)
-		}
-	}
-	if err := os.WriteFile(policy, []byte("[skill]\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidatePolicyFile(repo, "policies/skill.toml"); err == nil {
-		t.Fatal("expected incomplete policy file error")
 	}
 }
 
@@ -170,7 +93,7 @@ func TestLoaderCatalogAndScannerFileHazards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog) != 1 || catalog[0].ID != "test/catalog" {
+	if len(catalog) != 1 || catalog[0].Manifest.ID != "test/catalog" || catalog[0].PublisherVerification.State != PublisherUnsigned {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	if root, err := findRepoRoot(filepath.Join(repo, "registry", "skills", "test", "catalog")); err != nil || root != repo {
@@ -234,9 +157,12 @@ func TestLoaderCatalogAndScannerFileHazards(t *testing.T) {
 }
 
 func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
-	manifest := firstPartyTestManifest("test/project", "0.1.0")
-	manifest.ContentHash = HashBytes([]byte("safe skill"))
-	pack := SkillPack{Manifest: manifest, SkillMD: "safe skill"}
+	pack, err := LoadDir(writeTestSkill(t, firstPartyTestManifest("test/project", "0.1.0"), "safe skill"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Export refuses only a DENY, so an honest unsigned pack is enough for it.
+	exportPack := SkillPack{Manifest: testManifest("test/project"), SkillMD: "safe skill"}
 	repo := t.TempDir()
 	if _, err := ProjectionPaths(repo, "bad", "codex"); err == nil {
 		t.Fatal("expected invalid projection skill id")
@@ -252,14 +178,20 @@ func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
 	if deniedInstall.Status != "blocked" || deniedInstall.Verdict != VerdictDeny {
 		t.Fatalf("denied install = %+v", deniedInstall)
 	}
-	if _, err := Install(pack, InstallRequest{RepoRoot: repo, Agent: "unknown"}); err == nil {
+	// A pack that is not a directory has no files to hash, so the same
+	// manifest and SKILL.md held only in memory do not install.
+	inMemory := SkillPack{Manifest: pack.Manifest, SkillMD: pack.SkillMD}
+	if blocked, err := installPack(inMemory, InstallRequest{RepoRoot: repo}, trustFor(t, pack)); err != nil || blocked.Status != "blocked" {
+		t.Fatalf("in-memory pack install = %+v err=%v, want blocked", blocked, err)
+	}
+	if _, err := installPinned(t, pack, InstallRequest{RepoRoot: repo, Agent: "unknown"}); err == nil {
 		t.Fatal("expected unsupported install agent error")
 	}
-	first, err := Install(pack, InstallRequest{RepoRoot: repo, Agent: "codex"})
+	first, err := installPinned(t, pack, InstallRequest{RepoRoot: repo, Agent: "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := Install(pack, InstallRequest{RepoRoot: repo, Agent: "codex"})
+	second, err := installPinned(t, pack, InstallRequest{RepoRoot: repo, Agent: "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,8 +202,10 @@ func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store := installed.(installStore); len(store.Installs) != 1 {
-		t.Fatalf("install store = %+v", store)
+	store := installed.(installStore)
+	if len(store.Installs) != 1 || store.Installs[0].PublisherVerification == nil ||
+		store.Installs[0].PublisherVerification.State != PublisherFirstParty {
+		t.Fatalf("install store = %+v, want one record that says what the install scan verified", store)
 	}
 	if _, err := Disable(repo, "test/missing"); err == nil {
 		t.Fatal("expected disabling unmanaged skill to fail")
@@ -296,18 +230,27 @@ func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
 		t.Fatal("expected invalid install store error")
 	}
 
-	if _, err := Export(pack, "codex-skill", ""); err == nil {
+	if _, err := Export(exportPack, "codex-skill", ""); err == nil {
 		t.Fatal("expected empty export output error")
 	}
 	if _, err := Export(deniedPack, "codex-skill", t.TempDir()); err == nil {
 		t.Fatal("expected denied export error")
 	}
-	if _, err := Export(pack, "unknown", t.TempDir()); err == nil {
+	// Outside installPinned this pack only declares itself verified.
+	if _, err := Export(pack, "codex-skill", t.TempDir()); err == nil || !strings.Contains(err.Error(), "ERR_SKILL_VERIFIED_CLAIM_UNPROVEN") {
+		t.Fatalf("export of an unproven verified claim error = %v, want denial", err)
+	}
+	if _, err := Export(exportPack, "unknown", t.TempDir()); err == nil {
 		t.Fatal("expected unsupported export format")
 	}
 	out := t.TempDir()
-	if result, err := Export(pack, "codex-skill", out); err != nil || result["format"] != "codex-skill" {
+	result, err := Export(exportPack, "codex-skill", out)
+	if err != nil || result["format"] != "codex-skill" {
 		t.Fatalf("codex-skill export = %+v err=%v", result, err)
+	}
+	// The export receipt repeats the scan's verdict, never a constant ALLOW.
+	if receipt := result["receipt"].(Receipt); receipt.Verdict != VerdictEscalate || receipt.ReasonCode != "ERR_SKILL_SIGNATURE_UNVERIFIED" {
+		t.Fatalf("export receipt = %+v, want the scan's ESCALATE", receipt)
 	}
 	if _, err := os.Stat(filepath.Join(out, "skills", "test", "project", "SKILL.md")); err != nil {
 		t.Fatalf("codex skill projection missing: %v", err)
@@ -334,7 +277,8 @@ func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.ID != "plugin-one" || entry.Path == "" {
+	// Adding a plugin runs no scan, so the entry must not say it was scanned.
+	if entry.ID != "plugin-one" || entry.Path == "" || entry.Status != "recorded" || entry.RecordedAt == "" {
 		t.Fatalf("marketplace entry = %+v", entry)
 	}
 	if _, err := MarketplaceAdd(marketRepo, plugin); err != nil {

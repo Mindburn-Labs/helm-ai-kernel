@@ -36,7 +36,10 @@ func Export(pack SkillPack, format, output string) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("unsupported skill export format: %s", format)
 	}
-	receipt := NewReceipt("SKILL_PLUGIN_EXPORT_RECEIPT", pack.Manifest.ID, VerdictAllow, "", scan.SkillContentHash, pack.Manifest.PolicyRef, nil)
+	// The receipt carries the scan's own verdict. Export refuses only a DENY,
+	// so a constant ALLOW here would read as approval of a pack the scan had
+	// escalated.
+	receipt := NewReceipt("SKILL_PLUGIN_EXPORT_RECEIPT", pack.Manifest.ID, scan.Verdict, scan.ReasonCode, scan.SkillContentHash, scan.Policy.Hash, nil)
 	return map[string]any{"skill_id": pack.Manifest.ID, "format": format, "output": output, "scan": scan, "receipt": receipt}, nil
 }
 
@@ -51,8 +54,12 @@ func exportCodexPlugin(pack SkillPack, output string, scan ScanResult) error {
 		"description":              pack.Manifest.Description,
 		"version":                  pack.Manifest.Version,
 		"helm_skill_hash":          scan.SkillContentHash,
-		"helm_policy_hash":         hashCanonical(pack.Manifest.PolicyRef),
+		"helm_policy_hash":         scan.Policy.Hash,
 		"helm_export_receipt_kind": "SKILL_PLUGIN_EXPORT_RECEIPT",
+		// What the export scan established, for whoever reads the plugin. It
+		// travels inside the plugin, so it is a record and not proof.
+		"helm_scan_verdict":           scan.Verdict,
+		"helm_publisher_verification": scan.PublisherVerification.State,
 		"skills": []map[string]string{{
 			"id":   pack.Manifest.ID,
 			"path": "skills/" + filepath.ToSlash(filepath.Join(filepath.FromSlash(pack.Manifest.ID), "SKILL.md")),
@@ -122,8 +129,8 @@ func MarketplaceAdd(repoRoot, pluginPath string) (MarketplacePlugin, error) {
 		Path:       strings.TrimPrefix(absPlugin, absRoot+string(filepath.Separator)),
 		PolicyHash: hashCanonical(raw["helm_policy_hash"]),
 		SourceHash: HashBytes(data),
-		Status:     "scanned",
-		ScannedAt:  time.Now().UTC().Format(time.RFC3339),
+		Status:     "recorded",
+		RecordedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	path := filepath.Join(repoRoot, ".agents", "plugins", "marketplace.json")
 	marketplace := Marketplace{SchemaVersion: "helm.codex.marketplace.v1", Plugins: []MarketplacePlugin{}}

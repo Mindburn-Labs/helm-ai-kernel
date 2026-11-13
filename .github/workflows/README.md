@@ -46,6 +46,10 @@ surface for the `helm-ai-kernel` project.
   pair with run in the `verify-fixtures` gate.
 - `codeql.yml` is the single CodeQL code-scanning run (Go, JavaScript and
   TypeScript, Python, Java and Kotlin). It is not required.
+- `packfs-windows.yml` runs the rooted pack filesystem tests on a Windows
+  runner when that package, its Go module files or this workflow changes.
+  It checks native path semantics, including rejection of backslash path
+  separators. It is separate from the required `ci / gate` status.
 - `helm-integration.yml` runs the minikube Launchpad smoke when the chart or
   smoke driver changes. The positive lane spends OpenRouter tokens, so on a
   pull request it runs only with the `launchpad-live-test` label and is

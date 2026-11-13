@@ -42,6 +42,7 @@ var Tables = []string{
 	"authority_recovery_checkpoints",
 	"authority_receipt_chains",
 	"authority_receipts",
+	"authority_principal_credentials",
 }
 
 // migration is one version of the gateway schema.
@@ -109,6 +110,9 @@ var migrations = []migration{
 	}},
 	{16, "signed outcome receipts", func() (string, error) {
 		return withRowSecurity("", "schema/016_outcome_receipts.sql", nil)
+	}},
+	{17, "owner passkeys and verified owner assertions", func() (string, error) {
+		return withRowSecurity("", "schema/017_owner_credentials.sql", []string{"authority_principal_credentials"})
 	}},
 }
 

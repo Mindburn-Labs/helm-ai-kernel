@@ -70,7 +70,9 @@ func newFixture(t *testing.T) *fixture {
 // This binary records every decision and every outcome with a signed receipt
 // and an older one did not, so below migration 16 the receipt tables (and the
 // outcome states migration 16 lets them hold) are created outside the journal
-// for the current binary to stand in for the older one. Migrations 15 and 16
+// for the current binary to stand in for the older one; below migration 17,
+// with or without them, so are the owner passkey table and the approval's
+// owner assertion columns. Migrations 15 and 16
 // are idempotent over them; TestPostgresReceiptSchemaUpgradesFrom14 and
 // TestPostgresOutcomeReceiptSchemaUpgradesFrom15 prove the journaled upgrades
 // without them (newFixtureAtVersionWithoutReceipts).
@@ -127,6 +129,16 @@ func newFixtureAt(t *testing.T, version int, receiptTables bool) *fixture {
 		}
 		if receiptTables && version < 16 {
 			ddl, err := withRowSecurity("", "schema/016_outcome_receipts.sql", nil)
+			must(t, err)
+			_, err = owner.ExecContext(ctx, ddl)
+			must(t, err)
+		}
+		// This binary reads and records an approval's owner assertion
+		// (migration 17) in every schema it serves, so the receipt proofs'
+		// exact older schemas have it too; migration 17 is idempotent over
+		// what it creates here.
+		if version >= 2 && version < 17 {
+			ddl, err := withRowSecurity("", "schema/017_owner_credentials.sql", []string{"authority_principal_credentials"})
 			must(t, err)
 			_, err = owner.ExecContext(ctx, ddl)
 			must(t, err)

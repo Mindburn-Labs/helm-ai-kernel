@@ -271,6 +271,16 @@ export const ReasonCodes = {
   /** DENY: The permit expired before the dispatch claim; it is voided and the effect must be
   /** proposed again */
   PERMIT_EXPIRED: "PERMIT_EXPIRED",
+  /** DENY: An authority plan's mandates grant more than its stage allows: a draft plan grants no
+  /** write but an internal one, and an approval-required plan puts every write behind an approval */
+  STAGE_CEILING_EXCEEDED: "STAGE_CEILING_EXCEEDED",
+  /** DENY: A narrowing plan cannot raise an organization's stage; a higher stage is a provision
+  /** plan, which a distinct human approves */
+  STAGE_RAISE_REQUIRES_PROVISION: "STAGE_RAISE_REQUIRES_PROVISION",
+  /** DENY: Granting or widening authority needs the approver's own passkey assertion, verified by
+  /** the gateway against a credential enrolled at the tenant's genesis or by an approved plan; the
+  /** request carried none, or one that did not verify */
+  OWNER_ASSERTION_REQUIRED: "OWNER_ASSERTION_REQUIRED",
 } as const;
 
 export type RegisteredReasonCode = (typeof ReasonCodes)[keyof typeof ReasonCodes];

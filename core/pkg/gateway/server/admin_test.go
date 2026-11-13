@@ -184,8 +184,8 @@ func TestPrincipalSpecsRefuseMalformedRequestsBeforeTheDatabase(t *testing.T) {
 	}
 	specs, err := principalSpecs([]*gatewayv1.PrincipalSpec{service("svc:helm-org"), human("usr_owner", "usr_owner"),
 		{PrincipalId: "agt:e", Kind: gatewayv1.PrincipalKind_PRINCIPAL_KIND_AGENT}})
-	if err != nil || len(specs) != 3 || specs[1].External == nil || specs[1].External.ID != "usr_owner" ||
-		specs[0].Kind != "service" || specs[2].Kind != "agent" || specs[0].External != nil {
+	if err != nil || len(specs) != 3 || specs[1].spec.External == nil || specs[1].spec.External.ID != "usr_owner" ||
+		specs[0].spec.Kind != "service" || specs[2].spec.Kind != "agent" || specs[0].spec.External != nil {
 		t.Fatalf("principalSpecs = %+v, %v", specs, err)
 	}
 	if _, err := principalSpecs(many[:maxPrincipalsPerRequest]); err != nil {

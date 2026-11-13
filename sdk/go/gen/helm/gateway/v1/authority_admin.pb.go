@@ -604,8 +604,12 @@ type PrincipalSpec struct {
 	Kind PrincipalKind `protobuf:"varint,2,opt,name=kind,proto3,enum=helm.gateway.v1.PrincipalKind" json:"kind,omitempty"`
 	// The external subject. Required for a human; optional otherwise.
 	ExternalSubject *ExternalSubject `protobuf:"bytes,3,opt,name=external_subject,json=externalSubject,proto3" json:"external_subject,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The human's passkeys (helm-tracker#334). Only a human carries them, and
+	// only the tenant's owner at genesis: exactly one, which signs
+	// EnsurePrincipalsRequest.genesis_assertion.
+	Credentials   []*PrincipalCredential `protobuf:"bytes,4,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PrincipalSpec) Reset() {
@@ -659,18 +663,113 @@ func (x *PrincipalSpec) GetExternalSubject() *ExternalSubject {
 	return nil
 }
 
-// EnsurePrincipalsRequest registers principals.
-type EnsurePrincipalsRequest struct {
+func (x *PrincipalSpec) GetCredentials() []*PrincipalCredential {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+// PrincipalCredential is a human's passkey: the public half of a WebAuthn
+// credential, converted from COSE to SubjectPublicKeyInfo by the Control
+// Plane at registration. The gateway verifies the human's assertions with it.
+type PrincipalCredential struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 1 to 64 principals, each named once.
-	Principals    []*PrincipalSpec `protobuf:"bytes,1,rep,name=principals,proto3" json:"principals,omitempty"`
+	// The WebAuthn credential id, 1 to 1023 bytes. One credential id names one
+	// passkey in a tenant.
+	CredentialId []byte `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	// The COSE algorithm: -7 (ES256: ECDSA on P-256 with SHA-256) or -8 (EdDSA:
+	// Ed25519).
+	Alg int32 `protobuf:"varint,2,opt,name=alg,proto3" json:"alg,omitempty"`
+	// The public key as DER SubjectPublicKeyInfo: a P-256 key for -7, an
+	// Ed25519 key for -8.
+	PublicKeySpki []byte `protobuf:"bytes,3,opt,name=public_key_spki,json=publicKeySpki,proto3" json:"public_key_spki,omitempty"`
+	// The WebAuthn relying party id the credential is scoped to, for example
+	// "app.example.com": the rpIdHash of every assertion is SHA-256 of it.
+	// 1 to 253 bytes of lower-case letters, digits, '.' and '-'.
+	RpId          string `protobuf:"bytes,4,opt,name=rp_id,json=rpId,proto3" json:"rp_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *PrincipalCredential) Reset() {
+	*x = PrincipalCredential{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrincipalCredential) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrincipalCredential) ProtoMessage() {}
+
+func (x *PrincipalCredential) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrincipalCredential.ProtoReflect.Descriptor instead.
+func (*PrincipalCredential) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PrincipalCredential) GetCredentialId() []byte {
+	if x != nil {
+		return x.CredentialId
+	}
+	return nil
+}
+
+func (x *PrincipalCredential) GetAlg() int32 {
+	if x != nil {
+		return x.Alg
+	}
+	return 0
+}
+
+func (x *PrincipalCredential) GetPublicKeySpki() []byte {
+	if x != nil {
+		return x.PublicKeySpki
+	}
+	return nil
+}
+
+func (x *PrincipalCredential) GetRpId() string {
+	if x != nil {
+		return x.RpId
+	}
+	return ""
+}
+
+// EnsurePrincipalsRequest registers principals.
+type EnsurePrincipalsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 1 to 64 principals, each named once.
+	Principals []*PrincipalSpec `protobuf:"bytes,1,rep,name=principals,proto3" json:"principals,omitempty"`
+	// The owner's self-signed enrolment, required with credentials on a tenant
+	// this call creates: a WebAuthn assertion by the owner's one credential whose
+	// clientDataJSON challenge is SHA-256 over, in order, the domain tag
+	// "helm.gateway.v1.genesis.v1", the tenant, the owner's principal id and the
+	// credential id, each prefixed with its length as a big-endian uint64. It is
+	// verified as ApproveRequest.owner_assertion is, and refused on a tenant
+	// that exists.
+	GenesisAssertion *OwnerAssertion `protobuf:"bytes,2,opt,name=genesis_assertion,json=genesisAssertion,proto3" json:"genesis_assertion,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
 func (x *EnsurePrincipalsRequest) Reset() {
 	*x = EnsurePrincipalsRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +781,7 @@ func (x *EnsurePrincipalsRequest) String() string {
 func (*EnsurePrincipalsRequest) ProtoMessage() {}
 
 func (x *EnsurePrincipalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,12 +794,19 @@ func (x *EnsurePrincipalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsurePrincipalsRequest.ProtoReflect.Descriptor instead.
 func (*EnsurePrincipalsRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EnsurePrincipalsRequest) GetPrincipals() []*PrincipalSpec {
 	if x != nil {
 		return x.Principals
+	}
+	return nil
+}
+
+func (x *EnsurePrincipalsRequest) GetGenesisAssertion() *OwnerAssertion {
+	if x != nil {
+		return x.GenesisAssertion
 	}
 	return nil
 }
@@ -718,7 +824,7 @@ type EnsurePrincipalsResponse struct {
 
 func (x *EnsurePrincipalsResponse) Reset() {
 	*x = EnsurePrincipalsResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +836,7 @@ func (x *EnsurePrincipalsResponse) String() string {
 func (*EnsurePrincipalsResponse) ProtoMessage() {}
 
 func (x *EnsurePrincipalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +849,7 @@ func (x *EnsurePrincipalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsurePrincipalsResponse.ProtoReflect.Descriptor instead.
 func (*EnsurePrincipalsResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{7}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EnsurePrincipalsResponse) GetPrincipals() []*AuthorityPrincipal {
@@ -779,7 +885,7 @@ type AuthorityPrincipal struct {
 
 func (x *AuthorityPrincipal) Reset() {
 	*x = AuthorityPrincipal{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +897,7 @@ func (x *AuthorityPrincipal) String() string {
 func (*AuthorityPrincipal) ProtoMessage() {}
 
 func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +910,7 @@ func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorityPrincipal.ProtoReflect.Descriptor instead.
 func (*AuthorityPrincipal) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{8}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AuthorityPrincipal) GetPrincipalId() string {
@@ -853,7 +959,7 @@ type GetProvisioningRequest struct {
 
 func (x *GetProvisioningRequest) Reset() {
 	*x = GetProvisioningRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +971,7 @@ func (x *GetProvisioningRequest) String() string {
 func (*GetProvisioningRequest) ProtoMessage() {}
 
 func (x *GetProvisioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +984,7 @@ func (x *GetProvisioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvisioningRequest.ProtoReflect.Descriptor instead.
 func (*GetProvisioningRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{9}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetProvisioningRequest) GetOrgRef() string {
@@ -899,7 +1005,7 @@ type GetProvisioningResponse struct {
 
 func (x *GetProvisioningResponse) Reset() {
 	*x = GetProvisioningResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -911,7 +1017,7 @@ func (x *GetProvisioningResponse) String() string {
 func (*GetProvisioningResponse) ProtoMessage() {}
 
 func (x *GetProvisioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -924,7 +1030,7 @@ func (x *GetProvisioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvisioningResponse.ProtoReflect.Descriptor instead.
 func (*GetProvisioningResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{10}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetProvisioningResponse) GetProvisioning() *Provisioning {
@@ -946,7 +1052,7 @@ type GetCurrentWorkReassignmentRequest struct {
 
 func (x *GetCurrentWorkReassignmentRequest) Reset() {
 	*x = GetCurrentWorkReassignmentRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -958,7 +1064,7 @@ func (x *GetCurrentWorkReassignmentRequest) String() string {
 func (*GetCurrentWorkReassignmentRequest) ProtoMessage() {}
 
 func (x *GetCurrentWorkReassignmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -971,7 +1077,7 @@ func (x *GetCurrentWorkReassignmentRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentWorkReassignmentRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentWorkReassignmentRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{11}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetCurrentWorkReassignmentRequest) GetOrgRef() string {
@@ -1015,7 +1121,7 @@ type GetCurrentWorkReassignmentResponse struct {
 
 func (x *GetCurrentWorkReassignmentResponse) Reset() {
 	*x = GetCurrentWorkReassignmentResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1027,7 +1133,7 @@ func (x *GetCurrentWorkReassignmentResponse) String() string {
 func (*GetCurrentWorkReassignmentResponse) ProtoMessage() {}
 
 func (x *GetCurrentWorkReassignmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1040,7 +1146,7 @@ func (x *GetCurrentWorkReassignmentResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentWorkReassignmentResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentWorkReassignmentResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{12}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetCurrentWorkReassignmentResponse) GetPresent() bool {
@@ -1193,7 +1299,7 @@ type Provisioning struct {
 
 func (x *Provisioning) Reset() {
 	*x = Provisioning{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1205,7 +1311,7 @@ func (x *Provisioning) String() string {
 func (*Provisioning) ProtoMessage() {}
 
 func (x *Provisioning) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1218,7 +1324,7 @@ func (x *Provisioning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provisioning.ProtoReflect.Descriptor instead.
 func (*Provisioning) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{13}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Provisioning) GetOrgRef() string {
@@ -1309,7 +1415,7 @@ type ProvisionedNode struct {
 
 func (x *ProvisionedNode) Reset() {
 	*x = ProvisionedNode{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1321,7 +1427,7 @@ func (x *ProvisionedNode) String() string {
 func (*ProvisionedNode) ProtoMessage() {}
 
 func (x *ProvisionedNode) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1334,7 +1440,7 @@ func (x *ProvisionedNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvisionedNode.ProtoReflect.Descriptor instead.
 func (*ProvisionedNode) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{14}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ProvisionedNode) GetNode() string {
@@ -1403,7 +1509,7 @@ type ProvisionedLimit struct {
 
 func (x *ProvisionedLimit) Reset() {
 	*x = ProvisionedLimit{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1521,7 @@ func (x *ProvisionedLimit) String() string {
 func (*ProvisionedLimit) ProtoMessage() {}
 
 func (x *ProvisionedLimit) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1534,7 @@ func (x *ProvisionedLimit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvisionedLimit.ProtoReflect.Descriptor instead.
 func (*ProvisionedLimit) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{15}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ProvisionedLimit) GetLimitId() string {
@@ -1489,7 +1595,7 @@ type ListEffectTypesRequest struct {
 
 func (x *ListEffectTypesRequest) Reset() {
 	*x = ListEffectTypesRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1501,7 +1607,7 @@ func (x *ListEffectTypesRequest) String() string {
 func (*ListEffectTypesRequest) ProtoMessage() {}
 
 func (x *ListEffectTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1620,7 @@ func (x *ListEffectTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffectTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListEffectTypesRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{16}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{17}
 }
 
 // ListEffectTypesResponse returns the catalog.
@@ -1528,7 +1634,7 @@ type ListEffectTypesResponse struct {
 
 func (x *ListEffectTypesResponse) Reset() {
 	*x = ListEffectTypesResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1540,7 +1646,7 @@ func (x *ListEffectTypesResponse) String() string {
 func (*ListEffectTypesResponse) ProtoMessage() {}
 
 func (x *ListEffectTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1553,7 +1659,7 @@ func (x *ListEffectTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffectTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListEffectTypesResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{17}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListEffectTypesResponse) GetEffectTypes() []*EffectTypeDeclaration {
@@ -1599,7 +1705,7 @@ type EffectTypeDeclaration struct {
 
 func (x *EffectTypeDeclaration) Reset() {
 	*x = EffectTypeDeclaration{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1611,7 +1717,7 @@ func (x *EffectTypeDeclaration) String() string {
 func (*EffectTypeDeclaration) ProtoMessage() {}
 
 func (x *EffectTypeDeclaration) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1624,7 +1730,7 @@ func (x *EffectTypeDeclaration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectTypeDeclaration.ProtoReflect.Descriptor instead.
 func (*EffectTypeDeclaration) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{18}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *EffectTypeDeclaration) GetEffectType() string {
@@ -1733,15 +1839,22 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\x0fevidence_digest\x18\t \x01(\fR\x0eevidenceDigest\"9\n" +
 	"\x0fExternalSubject\x12\x16\n" +
 	"\x06system\x18\x01 \x01(\tR\x06system\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xb3\x01\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xfb\x01\n" +
 	"\rPrincipalSpec\x12!\n" +
 	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x122\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.helm.gateway.v1.PrincipalKindR\x04kind\x12K\n" +
-	"\x10external_subject\x18\x03 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\"Y\n" +
+	"\x10external_subject\x18\x03 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\x12F\n" +
+	"\vcredentials\x18\x04 \x03(\v2$.helm.gateway.v1.PrincipalCredentialR\vcredentials\"\x89\x01\n" +
+	"\x13PrincipalCredential\x12#\n" +
+	"\rcredential_id\x18\x01 \x01(\fR\fcredentialId\x12\x10\n" +
+	"\x03alg\x18\x02 \x01(\x05R\x03alg\x12&\n" +
+	"\x0fpublic_key_spki\x18\x03 \x01(\fR\rpublicKeySpki\x12\x13\n" +
+	"\x05rp_id\x18\x04 \x01(\tR\x04rpId\"\xa7\x01\n" +
 	"\x17EnsurePrincipalsRequest\x12>\n" +
 	"\n" +
 	"principals\x18\x01 \x03(\v2\x1e.helm.gateway.v1.PrincipalSpecR\n" +
-	"principals\"\x86\x01\n" +
+	"principals\x12L\n" +
+	"\x11genesis_assertion\x18\x02 \x01(\v2\x1f.helm.gateway.v1.OwnerAssertionR\x10genesisAssertion\"\x86\x01\n" +
 	"\x18EnsurePrincipalsResponse\x12C\n" +
 	"\n" +
 	"principals\x18\x01 \x03(\v2#.helm.gateway.v1.AuthorityPrincipalR\n" +
@@ -1875,7 +1988,7 @@ func file_helm_gateway_v1_authority_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_helm_gateway_v1_authority_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_helm_gateway_v1_authority_admin_proto_goTypes = []any{
 	(ProvisionBudgetActivity)(0),               // 0: helm.gateway.v1.ProvisionBudgetActivity
 	(PrincipalKind)(0),                         // 1: helm.gateway.v1.PrincipalKind
@@ -1886,58 +1999,62 @@ var file_helm_gateway_v1_authority_admin_proto_goTypes = []any{
 	(*GetProvisionBudgetResponse)(nil),         // 6: helm.gateway.v1.GetProvisionBudgetResponse
 	(*ExternalSubject)(nil),                    // 7: helm.gateway.v1.ExternalSubject
 	(*PrincipalSpec)(nil),                      // 8: helm.gateway.v1.PrincipalSpec
-	(*EnsurePrincipalsRequest)(nil),            // 9: helm.gateway.v1.EnsurePrincipalsRequest
-	(*EnsurePrincipalsResponse)(nil),           // 10: helm.gateway.v1.EnsurePrincipalsResponse
-	(*AuthorityPrincipal)(nil),                 // 11: helm.gateway.v1.AuthorityPrincipal
-	(*GetProvisioningRequest)(nil),             // 12: helm.gateway.v1.GetProvisioningRequest
-	(*GetProvisioningResponse)(nil),            // 13: helm.gateway.v1.GetProvisioningResponse
-	(*GetCurrentWorkReassignmentRequest)(nil),  // 14: helm.gateway.v1.GetCurrentWorkReassignmentRequest
-	(*GetCurrentWorkReassignmentResponse)(nil), // 15: helm.gateway.v1.GetCurrentWorkReassignmentResponse
-	(*Provisioning)(nil),                       // 16: helm.gateway.v1.Provisioning
-	(*ProvisionedNode)(nil),                    // 17: helm.gateway.v1.ProvisionedNode
-	(*ProvisionedLimit)(nil),                   // 18: helm.gateway.v1.ProvisionedLimit
-	(*ListEffectTypesRequest)(nil),             // 19: helm.gateway.v1.ListEffectTypesRequest
-	(*ListEffectTypesResponse)(nil),            // 20: helm.gateway.v1.ListEffectTypesResponse
-	(*EffectTypeDeclaration)(nil),              // 21: helm.gateway.v1.EffectTypeDeclaration
-	(*timestamppb.Timestamp)(nil),              // 22: google.protobuf.Timestamp
-	(RiskClass)(0),                             // 23: helm.gateway.v1.RiskClass
+	(*PrincipalCredential)(nil),                // 9: helm.gateway.v1.PrincipalCredential
+	(*EnsurePrincipalsRequest)(nil),            // 10: helm.gateway.v1.EnsurePrincipalsRequest
+	(*EnsurePrincipalsResponse)(nil),           // 11: helm.gateway.v1.EnsurePrincipalsResponse
+	(*AuthorityPrincipal)(nil),                 // 12: helm.gateway.v1.AuthorityPrincipal
+	(*GetProvisioningRequest)(nil),             // 13: helm.gateway.v1.GetProvisioningRequest
+	(*GetProvisioningResponse)(nil),            // 14: helm.gateway.v1.GetProvisioningResponse
+	(*GetCurrentWorkReassignmentRequest)(nil),  // 15: helm.gateway.v1.GetCurrentWorkReassignmentRequest
+	(*GetCurrentWorkReassignmentResponse)(nil), // 16: helm.gateway.v1.GetCurrentWorkReassignmentResponse
+	(*Provisioning)(nil),                       // 17: helm.gateway.v1.Provisioning
+	(*ProvisionedNode)(nil),                    // 18: helm.gateway.v1.ProvisionedNode
+	(*ProvisionedLimit)(nil),                   // 19: helm.gateway.v1.ProvisionedLimit
+	(*ListEffectTypesRequest)(nil),             // 20: helm.gateway.v1.ListEffectTypesRequest
+	(*ListEffectTypesResponse)(nil),            // 21: helm.gateway.v1.ListEffectTypesResponse
+	(*EffectTypeDeclaration)(nil),              // 22: helm.gateway.v1.EffectTypeDeclaration
+	(*timestamppb.Timestamp)(nil),              // 23: google.protobuf.Timestamp
+	(*OwnerAssertion)(nil),                     // 24: helm.gateway.v1.OwnerAssertion
+	(RiskClass)(0),                             // 25: helm.gateway.v1.RiskClass
 }
 var file_helm_gateway_v1_authority_admin_proto_depIdxs = []int32{
 	3,  // 0: helm.gateway.v1.GetProvisionBudgetRequest.binding:type_name -> helm.gateway.v1.ProvisionBudgetBinding
 	3,  // 1: helm.gateway.v1.GetProvisionBudgetResponse.binding:type_name -> helm.gateway.v1.ProvisionBudgetBinding
-	22, // 2: helm.gateway.v1.GetProvisionBudgetResponse.as_of:type_name -> google.protobuf.Timestamp
+	23, // 2: helm.gateway.v1.GetProvisionBudgetResponse.as_of:type_name -> google.protobuf.Timestamp
 	0,  // 3: helm.gateway.v1.GetProvisionBudgetResponse.activity:type_name -> helm.gateway.v1.ProvisionBudgetActivity
 	5,  // 4: helm.gateway.v1.GetProvisionBudgetResponse.amounts:type_name -> helm.gateway.v1.ProvisionBudgetAmounts
 	1,  // 5: helm.gateway.v1.PrincipalSpec.kind:type_name -> helm.gateway.v1.PrincipalKind
 	7,  // 6: helm.gateway.v1.PrincipalSpec.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	8,  // 7: helm.gateway.v1.EnsurePrincipalsRequest.principals:type_name -> helm.gateway.v1.PrincipalSpec
-	11, // 8: helm.gateway.v1.EnsurePrincipalsResponse.principals:type_name -> helm.gateway.v1.AuthorityPrincipal
-	1,  // 9: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
-	2,  // 10: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
-	7,  // 11: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	16, // 12: helm.gateway.v1.GetProvisioningResponse.provisioning:type_name -> helm.gateway.v1.Provisioning
-	22, // 13: helm.gateway.v1.GetCurrentWorkReassignmentResponse.revoked_at:type_name -> google.protobuf.Timestamp
-	22, // 14: helm.gateway.v1.GetCurrentWorkReassignmentResponse.expires_at:type_name -> google.protobuf.Timestamp
-	17, // 15: helm.gateway.v1.Provisioning.nodes:type_name -> helm.gateway.v1.ProvisionedNode
-	22, // 16: helm.gateway.v1.Provisioning.applied_at:type_name -> google.protobuf.Timestamp
-	18, // 17: helm.gateway.v1.ProvisionedNode.limits:type_name -> helm.gateway.v1.ProvisionedLimit
-	21, // 18: helm.gateway.v1.ListEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.EffectTypeDeclaration
-	23, // 19: helm.gateway.v1.EffectTypeDeclaration.risk_class:type_name -> helm.gateway.v1.RiskClass
-	9,  // 20: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:input_type -> helm.gateway.v1.EnsurePrincipalsRequest
-	12, // 21: helm.gateway.v1.AuthorityAdminService.GetProvisioning:input_type -> helm.gateway.v1.GetProvisioningRequest
-	4,  // 22: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:input_type -> helm.gateway.v1.GetProvisionBudgetRequest
-	14, // 23: helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment:input_type -> helm.gateway.v1.GetCurrentWorkReassignmentRequest
-	19, // 24: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:input_type -> helm.gateway.v1.ListEffectTypesRequest
-	10, // 25: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:output_type -> helm.gateway.v1.EnsurePrincipalsResponse
-	13, // 26: helm.gateway.v1.AuthorityAdminService.GetProvisioning:output_type -> helm.gateway.v1.GetProvisioningResponse
-	6,  // 27: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:output_type -> helm.gateway.v1.GetProvisionBudgetResponse
-	15, // 28: helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment:output_type -> helm.gateway.v1.GetCurrentWorkReassignmentResponse
-	20, // 29: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:output_type -> helm.gateway.v1.ListEffectTypesResponse
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	9,  // 7: helm.gateway.v1.PrincipalSpec.credentials:type_name -> helm.gateway.v1.PrincipalCredential
+	8,  // 8: helm.gateway.v1.EnsurePrincipalsRequest.principals:type_name -> helm.gateway.v1.PrincipalSpec
+	24, // 9: helm.gateway.v1.EnsurePrincipalsRequest.genesis_assertion:type_name -> helm.gateway.v1.OwnerAssertion
+	12, // 10: helm.gateway.v1.EnsurePrincipalsResponse.principals:type_name -> helm.gateway.v1.AuthorityPrincipal
+	1,  // 11: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
+	2,  // 12: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
+	7,  // 13: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
+	17, // 14: helm.gateway.v1.GetProvisioningResponse.provisioning:type_name -> helm.gateway.v1.Provisioning
+	23, // 15: helm.gateway.v1.GetCurrentWorkReassignmentResponse.revoked_at:type_name -> google.protobuf.Timestamp
+	23, // 16: helm.gateway.v1.GetCurrentWorkReassignmentResponse.expires_at:type_name -> google.protobuf.Timestamp
+	18, // 17: helm.gateway.v1.Provisioning.nodes:type_name -> helm.gateway.v1.ProvisionedNode
+	23, // 18: helm.gateway.v1.Provisioning.applied_at:type_name -> google.protobuf.Timestamp
+	19, // 19: helm.gateway.v1.ProvisionedNode.limits:type_name -> helm.gateway.v1.ProvisionedLimit
+	22, // 20: helm.gateway.v1.ListEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.EffectTypeDeclaration
+	25, // 21: helm.gateway.v1.EffectTypeDeclaration.risk_class:type_name -> helm.gateway.v1.RiskClass
+	10, // 22: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:input_type -> helm.gateway.v1.EnsurePrincipalsRequest
+	13, // 23: helm.gateway.v1.AuthorityAdminService.GetProvisioning:input_type -> helm.gateway.v1.GetProvisioningRequest
+	4,  // 24: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:input_type -> helm.gateway.v1.GetProvisionBudgetRequest
+	15, // 25: helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment:input_type -> helm.gateway.v1.GetCurrentWorkReassignmentRequest
+	20, // 26: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:input_type -> helm.gateway.v1.ListEffectTypesRequest
+	11, // 27: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:output_type -> helm.gateway.v1.EnsurePrincipalsResponse
+	14, // 28: helm.gateway.v1.AuthorityAdminService.GetProvisioning:output_type -> helm.gateway.v1.GetProvisioningResponse
+	6,  // 29: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:output_type -> helm.gateway.v1.GetProvisionBudgetResponse
+	16, // 30: helm.gateway.v1.AuthorityAdminService.GetCurrentWorkReassignment:output_type -> helm.gateway.v1.GetCurrentWorkReassignmentResponse
+	21, // 31: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:output_type -> helm.gateway.v1.ListEffectTypesResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_authority_admin_proto_init() }
@@ -1952,7 +2069,7 @@ func file_helm_gateway_v1_authority_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_gateway_v1_authority_admin_proto_rawDesc), len(file_helm_gateway_v1_authority_admin_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1228,14 +1228,20 @@ establish a completed cross-seat transition.
 ## Step-up proof
 
 An approval of an effect that needs step-up (risk class high or irreversible,
-and every `helm.authority.*` widening) carries `ApproveRequest.step_up_proof`.
-The proof is the Control Plane issuer's attestation that it verified the
-approver's WebAuthn assertion, whose challenge is the approval digest. The
-gateway does not hold the approver's credential and does not verify WebAuthn
-itself: it verifies the issuer's signature, as it does for every token, and the
-binding below. That is a trust choice, recorded here: a compromised issuer can
-mint a proof, as it can mint a decide token. Independent verification needs a
-credential registry in the gateway and is not part of this contract.
+and every `helm.authority.*` widening) carries the approver's own
+`ApproveRequest.owner_assertion`, which the gateway verifies itself against the
+passkey it holds for the approver (helm-tracker#334; see "Humans and passkeys"
+in [gateway-provisioning-api.md](gateway-provisioning-api.md)), or
+`ApproveRequest.step_up_proof`. The proof is the Control Plane issuer's
+attestation that it verified the approver's WebAuthn assertion, whose challenge
+is the approval digest: the gateway verifies the issuer's signature, as it does
+for every token, and the binding below, so a compromised issuer can mint a
+proof, as it can mint a decide token. With
+`HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` on, a proof no longer satisfies the
+step-up of a `helm.authority.*` widening (a provision plan, a lift, a
+reassignment grant), and of every high-risk or irreversible effect: only a verified owner assertion does
+(`OWNER_ASSERTION_REQUIRED`). A verified owner assertion satisfies step-up
+wherever a proof does, and a proof sent beside it is then not used.
 
 The proof is a compact token verified like any other gateway token (one
 audience, the issuer's keys, the configured actor, the certificate binding when

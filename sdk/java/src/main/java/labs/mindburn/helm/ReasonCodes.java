@@ -402,6 +402,19 @@ public final class ReasonCodes {
     /** proposed again */
     public static final String PERMIT_EXPIRED = "PERMIT_EXPIRED";
 
+    /** DENY: An authority plan's mandates grant more than its stage allows: a draft plan grants no
+    /** write but an internal one, and an approval-required plan puts every write behind an approval */
+    public static final String STAGE_CEILING_EXCEEDED = "STAGE_CEILING_EXCEEDED";
+
+    /** DENY: A narrowing plan cannot raise an organization's stage; a higher stage is a provision
+    /** plan, which a distinct human approves */
+    public static final String STAGE_RAISE_REQUIRES_PROVISION = "STAGE_RAISE_REQUIRES_PROVISION";
+
+    /** DENY: Granting or widening authority needs the approver's own passkey assertion, verified by
+    /** the gateway against a credential enrolled at the tenant's genesis or by an approved plan;
+    /** the request carried none, or one that did not verify */
+    public static final String OWNER_ASSERTION_REQUIRED = "OWNER_ASSERTION_REQUIRED";
+
     /** Every registered reason code. */
     public static final Set<String> ALL = Set.of(
             POLICY_VIOLATION,
@@ -527,7 +540,10 @@ public final class ReasonCodes {
             APPROVAL_REJECTED,
             STEP_UP_REQUIRED,
             AUTHORITY_CHANGED,
-            PERMIT_EXPIRED);
+            PERMIT_EXPIRED,
+            STAGE_CEILING_EXCEEDED,
+            STAGE_RAISE_REQUIRES_PROVISION,
+            OWNER_ASSERTION_REQUIRED);
 
     /** Whether {@code code} is in the registry. */
     public static boolean isRegistered(String code) {

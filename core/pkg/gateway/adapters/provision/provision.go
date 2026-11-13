@@ -26,6 +26,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"maps"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -85,6 +87,24 @@ var declarations = []adapters.Declaration{
 type Adapter struct {
 	rows *authorityrows.Store
 	now  func() time.Time
+	// catalog is the declarations of every effect type the gateway performs,
+	// which admission.New binds (adapters.CatalogBinder). A plan's stage is
+	// judged from it; unbound, every effect type counts as undeclared.
+	catalog atomic.Pointer[adapters.Catalog]
+}
+
+// BindCatalog implements adapters.CatalogBinder: it keeps a copy of the
+// declarations a plan's stage is judged from when it is applied.
+func (a *Adapter) BindCatalog(c adapters.Catalog) {
+	bound := maps.Clone(c)
+	a.catalog.Store(&bound)
+}
+
+func (a *Adapter) boundCatalog() adapters.Catalog {
+	if c := a.catalog.Load(); c != nil {
+		return *c
+	}
+	return nil
 }
 
 // New returns the adapter over db, whose gateway schema is migrated.

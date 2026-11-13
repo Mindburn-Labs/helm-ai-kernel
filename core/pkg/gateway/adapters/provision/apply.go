@@ -101,11 +101,26 @@ func (a *Adapter) apply(ctx context.Context, tx *authorityrows.Tx, in applyInput
 	if applied != nil && applied.Digest == plan.Digest {
 		return nil // applied already: a lost response is safe to retry
 	}
+	// The stage ceiling, on the declarations admission holds: a plan admitted
+	// by a gateway that did not check it applies nothing.
+	if r := CheckStage(plan, a.boundCatalog()); r != nil {
+		return r
+	}
 
-	// 1. Principals, then the ones the plan disables.
+	// 1. Principals, then the ones the plan disables. A passkey the plan
+	// enrolls for a human is recorded with it: after the owner's genesis
+	// passkey, an approved provision plan is the only way one is enrolled.
 	for _, p := range plan.Principals {
 		if err := ensurePrincipal(ctx, tx, p, narrow); err != nil {
 			return err
+		}
+		for _, c := range p.Credentials {
+			if narrow {
+				return adapters.Refuse(contracts.ReasonPreconditionFailed, "a narrowing plan enrolls no passkey")
+			}
+			if err := enrollPlanCredential(ctx, sqlTx, tx.TenantID(), p.ID, in.attemptID, c); err != nil {
+				return err
+			}
 		}
 	}
 	for _, id := range plan.Disable {

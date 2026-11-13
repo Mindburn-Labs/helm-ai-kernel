@@ -167,6 +167,31 @@ type Declaration struct {
 	// gateway adapter, never by an MCP caller, and is stable across replay.
 	// Dynamic-price effects use their dedicated gateway route instead.
 	Quote []Amount
+	// Internal marks a write that changes only the composing Control Plane's
+	// own rows (its work items, for example helm.work.*), never a provider or
+	// the outside world. An authority plan at stage draft may grant an
+	// internal write and no other (helm-tracker#334). The composition that
+	// declares the effect type sets it; nothing in a request does.
+	Internal bool
+}
+
+// Writes reports whether the effect is a write: anything whose Reversible is
+// not "not applicable". An operation that writes nothing has nothing to
+// reverse, so a read declares ReversibleNotApplicable.
+func (d Declaration) Writes() bool { return d.Reversible != ReversibleNotApplicable }
+
+// Catalog is the declarations of every effect type a gateway performs, by
+// effect type: what admission holds once every adapter is composed.
+type Catalog map[string]Declaration
+
+// CatalogBinder is implemented by an adapter that judges an effect against the
+// declarations of the other effect types the gateway performs: the authority
+// plan adapter holds a plan's stage to what its grants are (draft grants no
+// write). admission.New hands it the catalog it built from every configured
+// adapter, once, before it serves anything. An adapter that was never bound
+// judges every effect type as undeclared.
+type CatalogBinder interface {
+	BindCatalog(Catalog)
 }
 
 // Amount is one quote entry, as the proto's ResourceAmount.

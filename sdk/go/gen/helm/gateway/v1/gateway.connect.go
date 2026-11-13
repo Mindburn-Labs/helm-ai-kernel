@@ -216,8 +216,14 @@ type EffectGatewayServiceClient interface {
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
-	//     authority widening) need the step_up_proof and fail closed without a
-	//     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
+	//     authority widening) need the step_up_proof or the owner_assertion and
+	//     fail closed without a valid one, with permission_denied
+	//     [reason_code: STEP_UP_REQUIRED]. An owner_assertion that is present is
+	//     verified by the gateway whatever the effect, and one that does not
+	//     verify is permission_denied [reason_code: OWNER_ASSERTION_REQUIRED].
+	//     With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, a step_up_proof does not
+	//     satisfy step-up for a helm.authority.* widening: only the approver's
+	//     verified owner_assertion does [reason_code: OWNER_ASSERTION_REQUIRED].
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
@@ -748,8 +754,14 @@ type EffectGatewayServiceHandler interface {
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
-	//     authority widening) need the step_up_proof and fail closed without a
-	//     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
+	//     authority widening) need the step_up_proof or the owner_assertion and
+	//     fail closed without a valid one, with permission_denied
+	//     [reason_code: STEP_UP_REQUIRED]. An owner_assertion that is present is
+	//     verified by the gateway whatever the effect, and one that does not
+	//     verify is permission_denied [reason_code: OWNER_ASSERTION_REQUIRED].
+	//     With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED on, a step_up_proof does not
+	//     satisfy step-up for a helm.authority.* widening: only the approver's
+	//     verified owner_assertion does [reason_code: OWNER_ASSERTION_REQUIRED].
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.

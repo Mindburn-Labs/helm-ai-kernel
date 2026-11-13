@@ -124,6 +124,66 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Security
 
+- helm-gateway holds an authority plan to its stage (helm-tracker#334). A
+  `helm.authority.provision.v1` or `narrow.v1` plan whose mandates grant more
+  than its stage allows is refused at Propose and again when it is applied
+  (`STAGE_CEILING_EXCEEDED`): `draft` grants no write but an internal one,
+  `approval-required` puts every write behind `approval_required` with no
+  `approval_threshold`, and the live stages grant by mandate terms. A write is
+  an effect type whose declaration's `Reversible` is not "not applicable"; an
+  undeclared effect type counts as a write. A narrowing plan never raises the
+  stage (`STAGE_RAISE_REQUIRES_PROVISION`). New `adapters.Declaration.Internal`
+  marks a write of the composing Control Plane's own rows. Control CTL-067.
+- helm-gateway verifies the owner's own passkey (helm-tracker#334). The
+  owner's WebAuthn credential is enrolled at the tenant's genesis by
+  `EnsurePrincipals` with a self-signed `genesis_assertion`; afterwards
+  `EnsurePrincipals` adds no human and no passkey to a tenant (provision plans
+  enrol them, through an optional `credentials` member of a human principal).
+  `ApproveRequest.owner_assertion` is verified by the gateway against the
+  approver's passkey over `pending_approval.owner_challenge`, and the approval
+  row keeps it. `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` (default off; chart
+  value `gateway.ownerAssertionRequired`) makes it the only proof of any required
+  step-up, including authority widening, high-risk and irreversible effects, requires a passkey owner at genesis and refuses
+  humans on existing tenants. Gateway schema version 17 adds
+  `authority_principal_credentials`. Control CTL-068; `OWNER_ASSERTION_REQUIRED`
+  joins the reason-code registry with the two stage codes. The receipt
+  binding is unchanged.
+
+  Control Plane migration, in order:
+
+  1. Compose the effect-type declarations every plan grants, in the gateway
+     and in kernel test fixtures: an `admission.Config` holding only the
+     provision adapter now judges `github.repository.get` and `helm.work.get`
+     undeclared, so a draft or approval-required plan granting them is refused
+     (on Control Plane `aafbe18e`:
+     `internal/organization/activation/authority_readback_kernel_observed_test.go:176`
+     and `internal/console/company_ai_os_attention_native_action_source_test.go:248`).
+  2. Set `Internal: true` on the `helm.work.*` and
+     `helm.org.request_capability` writes `gatewayadapter` declares
+     (`declarations.go`). `model.semantic.evaluate` (`ReversibleNo`) counts as a
+     write: keep it out of draft plans, or declare it `ReversibleNotApplicable`
+     as the kernel's `model.inference` is.
+  3. Classify a stage-rank increase as widening in
+     `internal/organization/provision/compare.go`, so it goes as a provision
+     plan.
+  4. Stop adding humans to an existing tenant through `EnsurePrincipals`
+     (`company_ai_os_attention_native_action_source_test.go:783` does): add
+     them through a provision plan, with their passkeys in `credentials`. The
+     stand's repeated bootstrap keeps working, since a registered human
+     presented as it is is answered unchanged.
+  5. Bump the kernel pin; `admission.Tables` now includes
+     `authority_principal_credentials`, which test fixtures grant to the
+     runtime role.
+  6. Signup: call `EnsurePrincipals` once per tenant with the owner's passkey
+     (SPKI converted from the go-webauthn COSE key, `rp_id` of the relying
+     party) and the genesis assertion over the genesis challenge. For tenants
+     registered before this change, enrol the owner's passkey through a
+     provision plan approved with the step-up proof while the flag is off.
+  7. Approval UI: use `pending_approval.owner_challenge`, read with the
+     approver's own token, as the WebAuthn challenge, and forward the
+     assertion as `owner_assertion`.
+  8. Set `HELM_GATEWAY_OWNER_ORIGINS` to the exact served Console origins.
+     Flip `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` once 6 and 7 are live.
 - Pack directory listings and directory `Open` calls acquire a directory-only
   handle and verify its identity. Replacing a checked child directory with a
   named pipe can no longer block either call; replacing it with a different

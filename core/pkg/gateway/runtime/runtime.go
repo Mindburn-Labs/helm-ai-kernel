@@ -50,6 +50,12 @@
 // HELM_GATEWAY_ACTIVITY_WEBHOOK_SECRET_FILE mounts signed push ingress on the
 // main listener; neither path accepts tenant identity from provider content.
 //
+// HELM_GATEWAY_OWNER_ASSERTION_REQUIRED=true (default off) makes the owner's
+// passkey the only proof that satisfies the step-up of a helm.authority.*
+// widening, requires a new tenant's genesis to register its passkey owner, and
+// refuses every human EnsurePrincipals is asked for on a tenant that exists
+// (helm-tracker#334). Owner assertions that are present are verified either way.
+//
 // With HELM_GATEWAY_MODEL_ROUTES_FILE the gateway also serves the model
 // gateway (package modelgw) under /v1/ on its main listener, for the Control
 // Plane, and each provider's API key is read from the key file that routes file
@@ -112,6 +118,13 @@ const (
 	envWorkerMaxTTL     = "HELM_GATEWAY_WORKER_MAX_TTL"
 	envExecutorAudience = "HELM_GATEWAY_EXECUTOR_AUDIENCE"
 	envExecutorMaxTTL   = "HELM_GATEWAY_EXECUTOR_MAX_TTL"
+	// Owner assertions (helm-tracker#334): on, only the approver's own
+	// verified passkey assertion satisfies the step-up of an authority
+	// widening, a new tenant's genesis registers its passkey owner, and
+	// EnsurePrincipals takes no human on a tenant that exists. Off by default
+	// until the Control Plane migrates.
+	envOwnerAssertionRequired = "HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+	envOwnerOrigins           = "HELM_GATEWAY_OWNER_ORIGINS"
 )
 
 // Configure installs gateway-owned adapters in this same server and lifecycle.
@@ -304,7 +317,8 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		Admission: svc,
 		Auth:      &server.Authenticator{Validator: identity.Validator(false), Actor: identity.Actor, RequireCNF: identity.RequireCNF},
 	}
-	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Admission: svc, Catalog: catalog}
+	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Admission: svc, Catalog: catalog,
+		OwnerAssertionRequired: admissionConfig.OwnerAssertionRequired, OwnerOrigins: admissionConfig.OwnerOrigins}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(admin.Handler())
@@ -615,7 +629,34 @@ func admissionConfigFromEnv(getenv func(string) string) (admission.Config, error
 		}
 		*target = d
 	}
+	required, err := ownerAssertionRequiredFromEnv(getenv)
+	if err != nil {
+		return c, err
+	}
+	c.OwnerAssertionRequired = required
+	if raw := strings.TrimSpace(getenv(envOwnerOrigins)); raw != "" {
+		for _, origin := range strings.Split(raw, ",") {
+			c.OwnerOrigins = append(c.OwnerOrigins, strings.TrimSpace(origin))
+		}
+		if err := admission.CheckOwnerOrigins(c.OwnerOrigins); err != nil {
+			return c, fmt.Errorf("%s: %w", envOwnerOrigins, err)
+		}
+	}
 	return c, effectsFromEnv(getenv, &c)
+}
+
+// ownerAssertionRequiredFromEnv reads HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+// (helm-tracker#334): "true" or "1" turns it on, unset, "false" or "0" leaves
+// it off, and anything else refuses to start rather than guess.
+func ownerAssertionRequiredFromEnv(getenv func(string) string) (bool, error) {
+	switch raw := strings.TrimSpace(getenv(envOwnerAssertionRequired)); raw {
+	case "", "false", "0":
+		return false, nil
+	case "true", "1":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s must be true, 1, false or 0, not %q", envOwnerAssertionRequired, raw)
+	}
 }
 
 // effectsFromEnv wires the GitHub adapter and the GitHub App custody.

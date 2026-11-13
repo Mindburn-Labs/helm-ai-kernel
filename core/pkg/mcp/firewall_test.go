@@ -289,6 +289,7 @@ func TestGovernanceFirewall_InterceptPlanBindsTrustedIdentityAndClassification(t
 	assert.Equal(t, "company.artifact.update", captured.Resource)
 	assert.Equal(t, "sha256:credential", captured.Context[guardian.ContextCredentialHash])
 	assert.Equal(t, "E2", captured.Context[guardian.ContextEffectClass])
+	assert.Equal(t, guardian.EffectClassSourceToolCatalog, captured.Context[guardian.ContextEffectClassSource])
 	assert.Equal(t, true, captured.Context[guardian.ContextSecurityTrusted])
 	assert.Equal(t, "session-fallback", captured.Context[guardian.ContextSessionID])
 	assert.Equal(t, "artifact-1", captured.Context["artifact_id"])

@@ -25,7 +25,15 @@ const (
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
 	ContextEffectClass     = "effect_class"
-	ContextDestination     = "destination"
+	// ContextEffectClassSource says who asserted effect_class: one of the
+	// EffectClassSource values. A class the caller declared is not attested,
+	// and the signed effect says so.
+	ContextEffectClassSource = "effect_class_source"
+	// ContextEffectClassDeclared is the caller's own value, kept when the
+	// kernel bound a different effect_class, so a rule that restricts on the
+	// declaration still sees it.
+	ContextEffectClassDeclared = "effect_class_declared"
+	ContextDestination         = "destination"
 	// ContextEgressDestinationRequired is set only by a trusted adapter or
 	// catalog boundary when the operation can transmit data over the network.
 	// Risk class is deliberately not used as an egress proxy: local mutations
@@ -39,11 +47,27 @@ const (
 	semanticScannerMissing    = "SCANNER_UNAVAILABLE"
 )
 
+// Values of ContextEffectClassSource.
+const (
+	// EffectClassSourceEffectCatalog: the bound class is the one the kernel's
+	// effect type catalog assigns the evaluated action.
+	EffectClassSourceEffectCatalog = "effect_catalog"
+	// EffectClassSourceToolCatalog: the operator's PEP tool catalog names it.
+	EffectClassSourceToolCatalog = "tool_catalog"
+	// EffectClassSourceKernelRoute: the route evaluates one fixed kind of
+	// effect and assigns its class itself.
+	EffectClassSourceKernelRoute = "kernel_route"
+	// EffectClassSourceCallerDeclared: the class is the one the authenticated
+	// caller declared. The kernel's catalog has no record of the evaluated
+	// action, or assigns it a lower class.
+	EffectClassSourceCallerDeclared = "caller_declared"
+)
+
 // IsReservedSecurityContextKey identifies context keys whose values must be
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextEffectClassSource, ContextEffectClassDeclared, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -196,12 +220,6 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 				EffectType: evalCtx.Request.Action,
 				Params:     evalCtx.Request.Context,
 				Taint:      contracts.TaintLabelsFromContext(evalCtx.Request.Context),
-			}
-			if evalCtx.Request.Action == "EXECUTE_TOOL" {
-				if effect.Params == nil {
-					effect.Params = make(map[string]interface{})
-				}
-				effect.Params["tool_name"] = evalCtx.Request.Resource
 			}
 			effectDigest, err := canonicalEffectDigest(effect)
 			if err != nil {

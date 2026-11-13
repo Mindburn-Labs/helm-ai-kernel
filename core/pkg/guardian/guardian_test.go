@@ -149,7 +149,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 	t.Run("Success Path", func(t *testing.T) {
 		decision := &contracts.DecisionRecord{ID: "dec-1"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-1",
 			Params:     map[string]any{"tool_name": "safe_tool"},
 		}
@@ -167,7 +167,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 	t.Run("Fail: Missing Evidence (Artifact not found)", func(t *testing.T) {
 		decision := &contracts.DecisionRecord{ID: "dec-2"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-2",
 			Params:     map[string]any{"tool_name": "safe_tool"},
 		}
@@ -181,7 +181,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 	t.Run("Fail: PRG Violation (Wrong Artifact Type) -> Fail Closed", func(t *testing.T) {
 		decision := &contracts.DecisionRecord{ID: "dec-3"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-3",
 			Params:     map[string]any{"tool_name": "safe_tool"},
 		}
@@ -198,7 +198,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 	t.Run("Fail: Unknown Action (No Policy) -> Fail Closed", func(t *testing.T) {
 		decision := &contracts.DecisionRecord{ID: "dec-4"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-4",
 			Params:     map[string]any{"tool_name": "rogue_tool"},
 		}
@@ -228,7 +228,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 
 		decision := &contracts.DecisionRecord{ID: "dec-cel-1"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-cel-1",
 			Params: map[string]any{
 				"tool_name": "cel_tool",
@@ -244,7 +244,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 	t.Run("Fail: CEL Expression Violation", func(t *testing.T) {
 		decision := &contracts.DecisionRecord{ID: "dec-cel-2"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-cel-2",
 			Params: map[string]any{
 				"tool_name": "cel_tool",
@@ -277,7 +277,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 
 		decision := &contracts.DecisionRecord{ID: "dec-policy-input", EffectDigest: "sha256:prebound"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-policy-input",
 			Params: map[string]any{
 				"tool_name": "serialization_tool",
@@ -297,7 +297,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 
 		decision := &contracts.DecisionRecord{ID: "dec-5"}
 		effect := &contracts.Effect{
-			EffectType: "tool_call",
+			EffectType: "EXECUTE_TOOL",
 			EffectID:   "eff-5",
 			Params:     map[string]any{"tool_name": "safe_tool"},
 		}

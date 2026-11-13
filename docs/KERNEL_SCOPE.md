@@ -34,8 +34,8 @@ conformance fixtures, verifier code, or release evidence. Do not add a new RLM
 proof universe or describe RLM output itself as Kernel verification.
 
 > **Canonical architecture**: see [ARCHITECTURE.md](ARCHITECTURE.md) for the
-> normative trust boundary model and TCB definition. For the canonical
-> 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
+> system-level model. The TCB package list is the table under TCB Packages
+> below; ARCHITECTURE.md does not repeat it.
 
 HELM AI Kernel is the **open, headless execution kernel and API contract** of the HELM stack.
 
@@ -64,9 +64,9 @@ or a particular model provider.
 
 ## Kernel TCB (Trusted Computing Base)
 
-The canonical TCB is bounded to **8 packages** — the minimal trusted core.
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the authoritative package list,
-expansion criteria, and CI enforcement details.
+The TCB is the seven packages in the TCB Packages table below. `make
+coverage-tcb` holds statement-coverage floors for the packages listed in
+`scripts/ci/tcb-coverage-floors.txt`.
 
 ## Active OSS Packages
 
@@ -95,7 +95,7 @@ non-TCB supporting infrastructure:
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
 | `kernel/`              | Freeze, scoped-stop fences, context guard; request rate limiting lives in `api/` (CTL-013) | ✅ Active |
-| `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
+| `a2a/`                 | Agent card at `/.well-known/agent-card.json` and A2A feature negotiation; the shipped tool does not verify envelope signatures | ✅ Active |
 | `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
 | `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
 | `policy/reconcile/`    | Runtime policy source reconciliation and snapshot swap | ✅ Active |
@@ -162,35 +162,38 @@ not an adapter. It provides:
 
 - Tool discovery with governance metadata (`/mcp/v1/capabilities`)
 - Governed tool execution with signed receipts (`/mcp/v1/execute`)
-- Schema validation against pinned tool contracts
-- Full ProofGraph integration — MCP calls produce the same receipt chain
-  as OpenAI proxy calls
+- Validation of tool arguments against the catalog tool's input schema before
+  the tool runs
+- Signed `receipt.v5` records through the same receipt store path as
+  `/api/v1/evaluate`; `mcp serve` writes no ProofGraph
 
 ### OpenAI-Compatible Proxy
 
-The governed proxy (`/v1/chat/completions`) intercepts OpenAI-compatible
-tool calls and routes them through the PEP boundary.
+`helm-ai-kernel proxy` forwards OpenAI-compatible requests to an upstream and
+holds each tool call in the response for a Guardian decision. The
+`/v1/chat/completions` route on `serve` is denied before any upstream is called,
+because the shipped Guardian allows no egress destination (`controls.yaml`
+CTL-047).
 
 ### Bounded-Surface Primitives
 
-The OSS kernel includes configurable surface containment primitives
+The OSS kernel includes these surface containment primitives
 (see [EXECUTION_SECURITY_MODEL.md](EXECUTION_SECURITY_MODEL.md)):
 
-- Domain-scoped tool bundles
-- Explicit capability manifests
-- Read-only / write-limited / side-effect-class profiles
-- Connector allowlists
-- Destination scoping
-- Filesystem/network deny-by-default (WASI)
-- Sandbox profile requirement per tool class
+- A fixed MCP tool catalog, listed at `/mcp/v1/capabilities`
+- Serve policy packs that name the actions a policy file can allow
+- Effect classes `E0` to `E4` on catalog tools and effect types
+- Deny-all egress in the shipped Guardian (CTL-047)
+- Sandbox grant and backend-profile records; the kernel has no sandbox runtime
+  (CTL-044, retired)
 
 ## Boundary Truth
 
 OSS includes:
 
-- **Surface containment** — capability manifests, tool bundles, sandbox profiles
+- **Surface containment** — capability manifests, policy packs, sandbox grant records
 - **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate had no shipped installer and was removed (CTL-011, retired)
-- **Verifiable receipts** — signed receipts, ProofGraph, replay
+- **Verifiable receipts** — signed receipts, ProofGraph, offline verification
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
 - **Headless API contract** — HTTP routes, schemas, receipts, SDKs, and conformance fixtures for external clients
@@ -206,7 +209,7 @@ OSS does not include:
 - Private entitlement, seat management, usage metering, or account-management systems
 - Non-OSS connector certification programs
 
-The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, and release artifacts. Hosted, organization-specific, and browser UI operations live outside this repository and integrate through those public contracts.
+The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, conformance, and release artifacts. Hosted, organization-specific, and browser UI operations live outside this repository and integrate through those public contracts.
 
 ## Troubleshooting
 

@@ -183,10 +183,9 @@ production `BindingProvider` backed by the durable source-owned connector
 registry, nor does it cryptographically validate the referenced connector
 signature or certification at binding time. `state=certified`, a certification
 reference, and their self-hashed snapshot are not proof that a release is
-currently certified. The internal effect reservation boundary now rechecks
-current revocation state, but until the production provider verifies
-source-owned provenance and the boundary is deployed in the Data Plane, the
-contract remains internal and non-production.
+currently certified. The effect reservation boundary that rechecked current
+revocation state had its write path deleted (`controls.yaml` CTL-015), so no
+shipped code rechecks it; the contract remains internal and non-production.
 
 - `POST /internal/v1/approval-grants/admit-dispatch` acquires the same
   tenant/workspace advisory lock as FENCE, verifies the exact signed
@@ -223,11 +222,11 @@ returned consumption and dispatch-admission records and signatures. Production
 promotion remains blocked until the Data Plane verifies the admission and
 persists it atomically with `CONSUMED -> DISPATCHING` before every connector
 effect, including cached and recovered consumptions. That gate is necessary
-but not sufficient. The internal effect reservation boundary now compares the
-immutable approved snapshot with the transactionally locked current release,
-persists append-only `ADMITTED / STARTED / NOT_STARTED / UNCERTAIN` truth, lists
-active work, and enforces the GitHub pre-network seam when explicitly wired.
-Deployed Data Plane wiring, connector-specific disposition execution under
+but not sufficient. The effect reservation boundary, which compared the
+immutable approved snapshot with the transactionally locked current release and
+persisted append-only `ADMITTED / STARTED / NOT_STARTED / UNCERTAIN` truth, had
+its write path deleted (`controls.yaml` CTL-015); no shipped code does this.
+A reservation write path, deployed Data Plane wiring, connector-specific disposition execution under
 separate current authority, source connector ACK, signed close evidence, and
 controlled runtime proof remain required before production or Emergency Stop
 claims. See `docs/operations/effect-reservation.md` and

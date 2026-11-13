@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -173,12 +174,12 @@ func GatewayChainID(tenantID, workspaceID string) string {
 const gatewayChainPrefix = "helm-gateway:"
 
 // parseClosedBinding decodes raw into the closed document out points to. It
-// refuses a duplicate or unknown member and bytes that are not their own
-// RFC 8785 (JCS) encoding: the bytes a receipt signs are the canonical bytes,
-// so a missing member, or any other spelling of the same values, is a
-// different document.
+// refuses a duplicate or unknown member, a member named in another letter
+// case, and bytes that are not their own RFC 8785 (JCS) encoding: the bytes a
+// receipt signs are the canonical bytes, so a missing member, or any other
+// spelling of the same values, is a different document.
 func parseClosedBinding(raw []byte, version string, out any) error {
-	if err := ValidateJSONStructure(raw); err != nil {
+	if err := validateJSON(raw, reflect.TypeOf(out)); err != nil {
 		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -297,11 +298,11 @@ func outcomeRows(r *contracts.Receipt, b GatewayOutcomeBinding) ([]bindingRow, e
 // not agree with, or "" when every one agrees. A version this verifier does
 // not know fails: it is never read as another version.
 func gatewayBindingMismatch(r *contracts.Receipt, raw []byte) (string, error) {
-	if err := ValidateJSONStructure(raw); err != nil {
-		return "", err
-	}
 	var head struct {
 		BindingVersion *string `json:"binding_version"`
+	}
+	if err := validateJSON(raw, reflect.TypeOf(head)); err != nil {
+		return "", err
 	}
 	if err := json.Unmarshal(raw, &head); err != nil || head.BindingVersion == nil {
 		return "", errors.New("the binding names no binding_version")

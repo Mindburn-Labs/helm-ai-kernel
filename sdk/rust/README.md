@@ -27,34 +27,33 @@ Protobuf bindings under `src/generated/` are generated from
 ## Usage
 
 ```rust
-use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmClient, Role};
+use helm_sdk::{EvaluateRequest, HelmClient};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = HelmClient::new("http://127.0.0.1:7714");
-    let result = client.chat_completions(&ChatCompletionRequest::new(
-        "gpt-6-sol".to_string(),
-        vec![ChatCompletionRequestMessagesInner::new(
-            Role::User,
-            "hello".to_string(),
-        )],
-    ))?;
-    println!("{:?}", result);
+    let client = HelmClient::with_auth(
+        "http://127.0.0.1:7714",
+        std::env::var("HELM_ADMIN_API_KEY").ok().as_deref(),
+        Some("tenant-a"),
+        Some("operator-a"),
+    );
+    let mut request = EvaluateRequest::new();
+    request.tool = Some("read-ticket".to_string());
+    request.effect_level = Some("ticket:123".to_string());
+    request.session_id = Some("example-session".to_string());
+
+    let decision = client.evaluate_decision_v5(&request)?;
+    println!("{} {}", decision.verdict, decision.receipt_id); // ALLOW, DENY or ESCALATE
     Ok(())
 }
 ```
 
-For a protected tenant-scoped route, construct the client with the API key and
-explicit server-bound tenant and principal IDs. `HelmClient::new` remains
-available for public routes.
+`/api/v1/evaluate` is a protected tenant-scoped route: `with_auth` takes the API
+key and the tenant and principal the server is configured for. `HelmClient::new`
+sends no credentials and remains available for public routes.
 
-```rust
-let client = HelmClient::with_auth(
-    "http://127.0.0.1:7714",
-    Some("api-key"),
-    Some("tenant-id"),
-    Some("principal-id"),
-);
-```
+`chat_completions` posts to `/v1/chat/completions`. `helm-ai-kernel serve`
+answers that route with 403 before any upstream is called, because its Guardian
+allows no egress destination (`controls.yaml` CTL-047).
 
 ## Execution Boundary Methods
 
@@ -65,9 +64,10 @@ telemetry export, and coexistence capabilities. `SandboxGrantInspection`
 returns either backend profiles or a sealed grant depending on whether a
 runtime query is provided.
 
-`evaluate_decision` accepts only `EvaluateRequest`, whose `tool`,
+`evaluate_decision_v5` accepts only `EvaluateRequest`, whose `tool`,
 `effect_level`, and `session_id` must be non-blank. The returned value is the
-receipt-bearing `EvaluateResponse`.
+receipt-bearing `EvaluateResponse`. `evaluate_decision` remains for dynamic
+callers: it sends any serializable body and returns untyped JSON.
 
 ## Source target
 

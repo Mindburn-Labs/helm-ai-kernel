@@ -104,15 +104,16 @@ Release process, cadence, and artifact set are documented in `RELEASE.md`.
 The release pipeline is automated via `.github/workflows/release.yml`.
 Releases ship checksum material, SBOM material, and release attestation.
 Cosign bundle and OpenVEX verification apply when those files are attached to
-the GitHub release; the current public `v0.8.4` release attaches those
+the GitHub release; the current public `v0.12.0` release attaches those
 assets. Per-release benchmark snapshots are pinned by `scripts/release/pin_benchmarks.sh`.
 
 A release is approved when:
 
 1. CI passes on the tagged commit.
 2. The reproducibility job in `release.yml` confirms byte-identical builds.
-3. A maintainer approves and publishes the tagged release. Release tags and
-   package publishes always require an explicit maintainer action; commit
+3. The `v<version>` tag is pushed for a commit on `main`. That push is the
+   release action: `release.yml` runs only on the tag and publishes once its
+   validation and smoke jobs pass, with no job that waits for a person. Commit
    trailers and automated reviews carry no release authority.
 
 ## Security Policy

@@ -71,18 +71,23 @@ func TestVerifyBundle_WithTapesDirectory(t *testing.T) {
 	}
 }
 
-func TestVerifyBundle_ReplayDeterminismNAWhenG2OutOfScope(t *testing.T) {
+// A pack whose gates omit G2 and that carries no replay material gives the
+// check nothing to read: it is NOT_RUN with the reason, and it is not a pass.
+func TestVerifyBundle_ReplayDeterminismNotRunWhenG2OutOfScope(t *testing.T) {
 	dir := createValidBundleFixture(t)
 	r, _ := VerifyBundle(dir)
+	if !r.Verified {
+		t.Fatalf("a pack that declares no replay gate should still verify: %s", r.Summary)
+	}
 	for _, c := range r.Checks {
 		if c.Name != "replay_determinism" {
 			continue
 		}
-		if !c.Pass {
-			t.Fatalf("replay_determinism should be N/A when G2 is omitted: %+v", c)
+		if c.Pass || c.Status != CheckNotRun {
+			t.Fatalf("replay_determinism should be NOT_RUN when G2 is omitted: %+v", c)
 		}
-		if c.Detail != "n/a: 00_INDEX.json gates omit G2 replay determinism" {
-			t.Fatalf("unexpected replay_determinism detail: %q", c.Detail)
+		if c.Reason != "00_INDEX.json gates do not declare G2, and the pack carries no replay material (no 08_TAPES/tape_manifest.json and no 02_PROOFGRAPH/determinism_manifest.json)" {
+			t.Fatalf("unexpected replay_determinism reason: %q", c.Reason)
 		}
 		return
 	}
@@ -96,11 +101,8 @@ func TestVerifyBundle_ReplayDeterminismPassesWithRequiredEvidence(t *testing.T) 
 	if err := os.MkdirAll(tapesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(tapesDir, "tape_manifest.json"), map[string]any{
-		"schema_version": "helm.tape_manifest.v1",
-		"run_id":         "test-session-001",
-		"entries":        []any{},
-	})
+	// Gate G2 requires a tape with entries to replay.
+	writeTape(t, dir, nil)
 	if err := os.MkdirAll(filepath.Join(dir, "02_PROOFGRAPH"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -134,6 +136,12 @@ func TestVerifyBundle_ReportIssueCount(t *testing.T) {
 	if r.IssueCount != len(filterFailed(r.Checks)) {
 		t.Fatalf("IssueCount %d does not match failed checks %d", r.IssueCount, len(filterFailed(r.Checks)))
 	}
+	if r.IssueCount != r.CheckCounts.Failed+r.CheckCounts.Unverifiable {
+		t.Fatalf("IssueCount %d does not match check_counts %+v", r.IssueCount, r.CheckCounts)
+	}
+	if r.CheckCounts.NotRun == 0 {
+		t.Fatal("an empty dir gives most checks nothing to read; none was reported as not run")
+	}
 }
 
 func TestSha256Hex_Deterministic(t *testing.T) {
@@ -155,21 +163,32 @@ func TestCheckResult_JSONRoundtrip(t *testing.T) {
 }
 
 func TestFileExists_False(t *testing.T) {
-	if fileExists("/tmp/does-not-exist-xyz-99999") {
-		t.Fatal("should return false for nonexistent file")
+	pack := openPack(t.TempDir())
+	defer pack.close()
+	if has, err := pack.hasFile("does-not-exist-xyz-99999"); has || err != nil {
+		t.Fatalf("hasFile = %v, %v; should return false and no error for a nonexistent file", has, err)
+	}
+	missing := openPack("/tmp/does-not-exist-xyz-99999")
+	defer missing.close()
+	if has, err := missing.hasFile("00_INDEX.json"); has || err != nil {
+		t.Fatalf("hasFile in a missing pack = %v, %v; should return false and no error", has, err)
 	}
 }
 
 func TestDirExists_False(t *testing.T) {
-	if dirExists("/tmp/does-not-exist-dir-xyz-99999") {
-		t.Fatal("should return false for nonexistent dir")
+	pack := openPack(t.TempDir())
+	defer pack.close()
+	if has, err := pack.hasDir("does-not-exist-dir-xyz-99999"); has || err != nil {
+		t.Fatalf("hasDir = %v, %v; should return false and no error for a nonexistent dir", has, err)
 	}
 }
 
+// filterFailed returns the checks that ran and did not pass. A check that did
+// not run is not an issue.
 func filterFailed(checks []CheckResult) []CheckResult {
 	var out []CheckResult
 	for _, c := range checks {
-		if !c.Pass {
+		if c.Status == CheckFailed || c.Status == CheckUnverifiable {
 			out = append(out, c)
 		}
 	}

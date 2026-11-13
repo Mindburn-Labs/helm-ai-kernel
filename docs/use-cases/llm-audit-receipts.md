@@ -20,7 +20,7 @@ concerned.
 ## What the signature covers
 
 The `receipt.v5` signing envelope is a fixed 13-key JCS object
-(`core/pkg/crypto/canonical.go:169-183`): `signature_version`, plus
+(`core/pkg/crypto/canonical.go:170-184`): `signature_version`, plus
 `receipt_id`, `decision_id`, `effect_id`, `status`, `output_hash`, `prev_hash`,
 `lamport_clock`, `args_hash`, `verdict`, `reason_code`, `policy_hash` and
 `session_id`.
@@ -53,14 +53,22 @@ Two limits apply today:
   breaks the successor's chain check. Those three anchoring fields are not
   covered by the causal hash, and the final receipt has no successor to provide
   successor-chain coverage.
-- **Unversioned receipts have two compatibility paths.** The standalone
-  `receipt_verify` path treats a receipt with no `signature_version` as legacy
-  V4: eight fields joined with `:`
-  (`core/pkg/receiptverify/receiptverify.go:225-229`). The separate
-  `crypto.VerifyReceiptSignature` compatibility helper first tries the
-  historical whole-receipt JCS candidate and then V4
-  (`core/pkg/crypto/canonical_v5.go:115-135`). The 13-key envelope applies only
-  to receipts that declare `receipt.v5`.
+- **Unversioned receipts are refused unless the caller opts in.** A receipt
+  with no `signature_version` is a legacy receipt, signed over eight fields
+  joined with `:` and no escaping (legacy V4). That signature does not cover
+  `verdict`, `tool_name` or `timestamp`, and the signed bytes of a `receipt.v5`
+  receipt can be read back as those eight fields, so a `receipt.v5` signature
+  verifies for a legacy receipt its signer never issued. `receipt_verify`
+  therefore does not check a legacy receipt (exit `2`) without
+  `--allow-legacy-v4` (`receiptverify.Options.AllowLegacyV4`), the JavaScript
+  verifier returns `UNVERIFIABLE`, and the `crypto` verifiers return
+  `ErrLegacyReceiptRefused` unless the caller passes
+  `crypto.AllowLegacyReceiptPreimages`. Under the opt-in,
+  `crypto.VerifyReceiptSignature` first tries the historical whole-receipt JCS
+  candidate and then V4, and every verifier refuses a legacy receipt whose
+  `receipt_id` begins with `{`: that is the replay, because the legacy
+  preimage begins with `receipt_id` and the replayed bytes are JSON text. The
+  13-key envelope applies only to receipts that declare `receipt.v5`.
 
 ## Verifying a receipt chain
 
@@ -92,15 +100,32 @@ chmod +x receipt_verify-linux-amd64
 
 Exit code `0` means the chain verified under the supplied key, `1` means
 verification failed, and `2` means no verdict was reported: a missing or unknown
-flag, no key supplied, a receipt file or `--key-file` that cannot be read, or a
-receipt file that does not parse as a receipt, receipt array or bundle. `--json`
+flag, no key supplied, a receipt file or `--key-file` that cannot be read, a
+receipt file that does not parse as a receipt, receipt array or bundle, or a
+legacy receipt without `--allow-legacy-v4`. `--json`
 prints the verdict as JSON. Verify the download itself with `make verify-cosign`
 as described in [Verification](../VERIFICATION.md).
 
+Member names are matched exactly. A file in which a receipt member is spelled
+in another letter case does not parse: `jq` and JavaScript match names
+exactly, and a decoder that did not would verify one value while they read
+another. Keys of `metadata` and other free-form values are compared exactly.
+In the bundle form (an object with a `receipts` array), a receipt member
+beside `receipts`, such as a top-level `verdict`, does not parse either:
+nothing checks it, and it is what a reader of the file would take for the
+verdict.
+
 For each receipt, the verifier reconstructs the preimage declared by
-`signature_version` (legacy V4 when absent, `receipt.v5` when declared) and
-accepts the signature if it verifies under any caller-supplied Ed25519 key. An
-unknown preimage version is rejected. The receipt's `key_id` is only a key-order
+`signature_version` and accepts the signature if it verifies under any
+caller-supplied Ed25519 key. An unknown preimage version is rejected. A receipt
+with no `signature_version` is not checked unless `--allow-legacy-v4` is given;
+it is then checked against the legacy V4 preimage, and the output says how many
+receipts are legacy and that their signature does not cover `verdict`,
+`tool_name` or `timestamp`. The `integrity` check compares nothing and is
+always `not_applicable`; it names the receipt whose members outside the
+signature nothing covers. A chain that mixes legacy and `receipt.v5` receipts
+reports `preimage_version` `mixed` and lists each in `preimage_versions`. The
+receipt's `key_id` is only a key-order
 hint; every supplied key is trusted, and the verifier does not bind any key to
 an organization. An auditor, insurer, or counterparty must obtain the signer's
 public key over an independent channel. Running with `--allow-self-attested`

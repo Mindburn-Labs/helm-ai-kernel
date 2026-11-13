@@ -5,9 +5,9 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 88,
-    "enforced": 49,
-    "observed_only": 25,
+    "total": 90,
+    "enforced": 52,
+    "observed_only": 24,
     "unmanaged": 14,
     "retired_invariants": 13,
     "build_plane": 1
@@ -1290,7 +1290,7 @@
       "id": "CTL-009",
       "title": "Evidence bundle verification",
       "owner": "Mindburn Labs core team (conformance)",
-      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification.",
+      "claim": "Receipts and evidence bundles verify, and a tampered, truncated or untrusted bundle fails verification. A check the bundle gives no input to is reported as not run and is never counted as passed. Evidence the bundle carries is validated whether or not anything requires it, and a recorded tape is replayed by the code `helm-ai-kernel replay` runs. Every check `verify` and `evidence inspect` run, except roots and evidence_pack_seal, reads the bundle only through an os.Root opened on its directory, and only from regular files: a path or symbolic link that leaves the bundle, an absolute symbolic link, a named pipe, a device or a socket is refused and never read, and the check that wanted the file fails (embedded_signature_trust skips it, and a directory walk passes over a link whose name it does not read). The layout check tests, lists and reads through the same os.Root. Directory opens require a directory handle and verify that it is the object checked before opening: a child directory swapped to a named pipe cannot block a listing or Open, and a different directory is refused. A file read whole is read up to 64 MiB; the EU AI Act scan reads at most 256 MiB and validates at most 1024 profiles per bundle, and a tape replay reads at most 256 MiB of entry files; the file a limit stops at fails the check by name.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1302,33 +1302,259 @@
       "gates": [],
       "config": [],
       "protected_operations": [
-        "`helm-ai-kernel verify` over an EvidencePack bundle."
+        "`helm-ai-kernel verify` over an EvidencePack bundle.",
+        "`helm-ai-kernel evidence inspect` over an EvidencePack bundle; it reaches its verdict through the same code as `verify`."
       ],
       "bypass_assumptions": [
         "A self-attested seal is rejected by default; a caller that opts into accepting one gets weaker evidence.",
-        "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check."
+        "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check.",
+        "A bundle that omits optional evidence (a receipt chain, manifest file hashes, connector evidence, an EU AI Act profile, host evidence, a replay gate, signed receipts) still verifies: those checks are NOT_RUN, and VERIFIED covers only the checks that ran. A caller that needs one of them must name it with `--require-check`.",
+        "The field-presence checks (policy_decision_hashes, connector_evidence, eu_ai_act_profile, replay_determinism) recompute nothing; their details say so.",
+        "Replay material is validated without gate G2: a determinism manifest with diverging hashes fails, and a tape that carries entries is replayed and fails if it does not replay. Under G2 a tape with no entries fails, as `replay` reports NOT_RUN for it. The entry files of a tape are sized before any is read, and entry files past 256 MiB in all fail by the name of the file that passes the bound, with none read. The files in 05_DIFFS are read as replay differences only under G2, where an empty file whose name starts with a dot is a placeholder. A tape that replays, in a bundle without a determinism manifest, states no replay result and leaves replay_determinism NOT_RUN. Replaying serves recorded inputs back; the run is not re-executed.",
+        "roots and evidence_pack_seal read the bundle by path through core/pkg/evidence. It refuses a symbolic link anywhere on the path of 00_INDEX.json, of the seal file and of every indexed file, and a last component that is not a regular file, by looking (os.Lstat) before it opens the file; a file swapped in between those two steps is not caught there.",
+        "The layout check `verify` and `evidence inspect` add for a bundle in the canonical layout (core/pkg/conform) tests whether the mandatory files and directories exist, lists the bundle directory and 99_EXT, and reads 00_INDEX.json through os.Root; a mandatory name or 99_EXT that is a symbolic link out of the bundle is an issue and is never listed. Whether the bundle is in the canonical layout and whether it carries a conformance signature are tested with os.Stat by path, which follows symbolic links and opens nothing.",
+        "Each check opens the bundle directory by path when it starts. A bundle directory replaced while it is being verified is outside this control.",
+        "A symbolic link that stays inside the bundle is followed. A path 00_INDEX.json or manifest.json names must match the directory listing letter for letter, so a case-insensitive file system fails it as a case-sensitive one does.",
+        "The EU AI Act scan matches the member name in any letter case, as encoding/json does. A .json file that does not parse fails eu_ai_act_profile only when it names the profile, in any letter case, as plain text or as a member the scan still finds; otherwise it is counted as unparsed in the reason. A failed eu_ai_act_profile reason lists the first 10 issues and counts the rest. The launch id and evidence graph `evidence inspect` prints are left out when their files are refused.",
+        "Reads that skip instead of failing: embedded_signature_trust skips a receipt or attestation file or directory it cannot read, and reads no receipts when the receipts directory is refused (chain_integrity, lamport_monotonicity and policy_decision_hashes fail that bundle); host_evidence skips a host evidence directory, or a directory under one, that it cannot list. The walks of eu_ai_act_profile, host_evidence and embedded_signature_trust do not follow a symbolic link: one whose name ends in a suffix the check reads is opened through os.Root, and any other, including a link to a directory inside or outside the bundle, is passed over without being named.",
+        "Under the host evidence directories a file named like a correlation or verification report that parses as one is not verified as a receipt chain; one that holds receipts is, and one that does not parse fails.",
+        "`helm-ai-kernel replay` is outside this control: it replays the tape with the code replay_determinism runs and does not check the bundle seal."
       ],
       "tests": {
         "allowed": [
+          "core/pkg/verifier/packfs.TestOpenedDirectoryKeepsItsHandle",
+          "core/pkg/verifier/packfs.TestDirectoryNamesUseSlashSeparators",
           "core/pkg/verifier.TestVerifyBundle_Valid"
         ],
         "forbidden": [
           "core/pkg/verifier.TestVerifyBundle_HashMismatch",
           "core/pkg/verifier.TestChainIntegrity_DetectsTamperedReceiptBody",
-          "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures"
+          "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures",
+          "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2",
+          "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack",
+          "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack",
+          "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles",
+          "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory",
+          "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks",
+          "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused",
+          "core/pkg/verifier/packfs.TestDirectoryNamesUseSlashSeparators",
+          "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails",
+          "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash",
+          "core/pkg/verifier.TestVerifyBundle_DeeplyNestedJSONLeavesTheCallerAReport",
+          "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesHostFilesLinkedFromOutsideThePack",
+          "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack",
+          "core/pkg/conform.TestVerifyReportReadsOnlyFromInsideThePack",
+          "core/cmd/helm-ai-kernel.TestVerifyFlagChecksReadOnlyFromInsideThePack",
+          "core/cmd/helm-ai-kernel.TestVerifyFlagChecksDoNotBlockOnANamedPipe",
+          "core/cmd/helm-ai-kernel.TestVerifyAndReplayAgreeOnTheTapeOfAG2Pack",
+          "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+          "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries",
+          "core/pkg/verifier.TestReplayDeterminism_ATapeThatCannotBeLoadedFails",
+          "core/pkg/verifier.TestReplayDeterminism_EntryFilesAnEmptyManifestDoesNotListFail",
+          "core/pkg/verifier.TestReplayDeterminism_AnEmptyDiffWithoutALeadingDotIsADifference",
+          "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails",
+          "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack"
         ],
         "removal": [
-          "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+          "core/pkg/verifier.TestVerifyBundle_HashMismatch",
+          "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput",
+          "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack",
+          "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2",
+          "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack",
+          "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles",
+          "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory",
+          "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks",
+          "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused",
+          "core/pkg/verifier.TestVerifyBundle_NamedPipesInSealedPathsDoNotBlock",
+          "core/pkg/verifier.TestEUAIActProfile_AFileOverTheReadLimitIsNamed",
+          "core/pkg/verifier.TestEUAIActProfile_FilesPastThePackBudgetAreNamed",
+          "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails",
+          "core/pkg/tape.TestManifest_RowsMustCarryEveryFieldTheRecorderWrites",
+          "core/cmd/helm-ai-kernel.TestVerifyCLIDoesNotBlockOnANamedPipe",
+          "core/pkg/conform.TestVerifyReportReadsOnlyFromInsideThePack",
+          "core/cmd/helm-ai-kernel.TestVerifyFlagChecksReadOnlyFromInsideThePack",
+          "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash",
+          "core/pkg/verifier.TestEUAIActProfile_AByteOrderMarkDoesNotHideAProfile",
+          "core/pkg/tape.TestReplay_RefusesEntryTypesTheRecorderDoesNotWrite",
+          "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack",
+          "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+          "core/pkg/tape.TestLoadTape_EntryFilesPastTheTapeBudgetFailByName",
+          "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries",
+          "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails",
+          "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack",
+          "core/pkg/verifier.TestEUAIActProfile_TheMemberNameMatchesInAnyLetterCase"
         ],
         "bypass": [
-          "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault"
+          "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault",
+          "core/pkg/verifier.TestVerifyBundle_RequireChecksFailsACheckThatDidNotRun",
+          "core/pkg/verifier.TestHostEvidence_ChainNamedLikeAReportIsVerified",
+          "core/pkg/verifier.TestEUAIActProfile_LargeFilesAreRead",
+          "core/pkg/verifier.TestPackContainmentDoesNotDependOnHowThePackPathIsWritten",
+          "core/pkg/verifier.TestFileHashes_NamesMustMatchTheFileExactly",
+          "core/pkg/verifier.TestEUAIActProfile_AFileThatNamesTheProfileAndDoesNotParseFails",
+          "core/pkg/verifier.TestReplayDeterminism_PlaceholdersIn05DiffsAreNotDifferences",
+          "core/pkg/verifier.TestEUAIActProfile_ADamagedFileThatNamesTheProfileAsPlainTextFails"
         ]
       },
       "removal_proofs": [
         {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestANamedPipeIsNeverListedAsADirectory"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestADirectorySwappedToAPipeNeverBlocks"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
+          ]
+        },
+        {
           "file": "core/pkg/verifier/verifier.go",
           "tests": [
             "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier.TestFileHashes_RefusePathsOutsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packread.go",
+          "tests": [
+            "core/pkg/verifier.TestChecksRefuseFilesLinkedFromOutsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packfs/packfs.go",
+          "tests": [
+            "core/pkg/verifier.TestChecksRefuseFilesThatAreNotRegularFiles"
+          ]
+        },
+        {
+          "file": "core/pkg/evidence/seal.go",
+          "tests": [
+            "core/pkg/verifier.TestVerifyBundle_NamedPipesInSealedPathsDoNotBlock"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_AFileOverTheReadLimitIsNamed"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_FilesPastThePackBudgetAreNamed"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails"
+          ]
+        },
+        {
+          "file": "core/pkg/tape/manifest.go",
+          "tests": [
+            "core/pkg/tape.TestManifest_RowsMustCarryEveryFieldTheRecorderWrites"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_DeeplyNestedFileIsAJSONErrorNotACrash"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_AByteOrderMarkDoesNotHideAProfile"
+          ]
+        },
+        {
+          "file": "core/pkg/tape/replay.go",
+          "tests": [
+            "core/pkg/tape.TestReplay_RefusesEntryTypesTheRecorderDoesNotWrite"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/externalreceipt/externalreceipt.go",
+          "tests": [
+            "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2"
+          ]
+        },
+        {
+          "file": "core/pkg/conform/report.go",
+          "tests": [
+            "core/pkg/conform.TestVerifyReportReadsOnlyFromInsideThePack",
+            "core/cmd/helm-ai-kernel.TestVerifyCLIDoesNotBlockOnANamedPipe"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/verify_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestVerifyFlagChecksReadOnlyFromInsideThePack"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_ProfilesPastTheCapFailByName"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/eu_ai_act.go",
+          "tests": [
+            "core/pkg/verifier.TestEUAIActProfile_TheMemberNameMatchesInAnyLetterCase"
+          ]
+        },
+        {
+          "file": "core/pkg/tape/replay.go",
+          "tests": [
+            "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName",
+            "core/pkg/tape.TestLoadTape_EntryFilesPastTheTapeBudgetFailByName"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/packread.go",
+          "tests": [
+            "core/pkg/verifier.TestReceiptsDirectoryLinkedOutOfThePackFails"
+          ]
+        },
+        {
+          "file": "core/pkg/conform/evidencepack.go",
+          "tests": [
+            "core/pkg/conform.TestValidateEvidencePackStructureReadsOnlyInsideThePack"
           ]
         }
       ]
@@ -1624,14 +1850,14 @@
       ],
       "gates": [],
       "config": [
-        "spend-proxy --addr (default 127.0.0.1; a non-loopback address is not refused)"
+        "spend-proxy --addr (default 127.0.0.1; a non-loopback address is refused, see CTL-026)"
       ],
       "protected_operations": [
         "Inference requests through the spend proxy."
       ],
       "bypass_assumptions": [
         "The ledger is a JSONL file, not Postgres (R5).",
-        "The spend-proxy listener has no auth; the tenant comes from configuration.",
+        "The spend-proxy listener has no auth and binds loopback only; any process on the host can reach it, and the tenant comes from configuration.",
         "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
       ],
       "tests": {
@@ -2092,10 +2318,9 @@
       "id": "CTL-026",
       "title": "Non-loopback listeners require auth",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The proxy and MCP listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer.",
-      "status": "observed-only",
+      "claim": "The proxy, MCP and spend-proxy listeners refuse to start on a non-loopback address without authentication, and the proxy requires its token as a bearer. The spend-proxy has no caller credential, so it never binds beyond loopback.",
+      "status": "enforced",
       "plane": "runtime",
-      "reason": "Reachable and tested, but deleting the check makes the listener start and block, so the refusal tests hang rather than fail. A removal proof needs a test that asserts the refusal without serving; none exists yet.",
       "entry_points": [
         {
           "symbol": "core/cmd/helm-ai-kernel.requireListenerAuth",
@@ -2108,13 +2333,16 @@
       ],
       "gates": [],
       "config": [
-        "helm-ai-kernel proxy and mcp serve bind flags and tokens"
+        "helm-ai-kernel proxy and mcp serve bind flags and tokens",
+        "helm-ai-kernel spend-proxy --addr"
       ],
       "protected_operations": [
-        "Starting the proxy or MCP listener on a non-loopback address."
+        "Starting the proxy, MCP or spend-proxy listener on a non-loopback address.",
+        "Calling the proxy when its token is configured."
       ],
       "bypass_assumptions": [
-        "A loopback bind needs no authentication; anything on the host can reach it."
+        "A loopback bind needs no authentication; anything on the host can reach it.",
+        "Removal of the bind check is proven through the spend-proxy refusal, which fails without serving. The proxy and MCP refusal tests would start a listener and block instead of failing, so they are forbidden tests only."
       ],
       "tests": {
         "allowed": [
@@ -2122,14 +2350,31 @@
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestProxyRefusesNonLoopbackBindWithoutToken",
-          "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth"
+          "core/cmd/helm-ai-kernel.TestMCPServeRefusesNonLoopbackBindWithoutAuth",
+          "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
         ],
-        "removal": [],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind",
+          "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
+        ],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestMetricsLoopbackOnlyOrAuthenticated"
         ]
       },
-      "removal_proofs": []
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/listener_auth.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestSpendProxyRefusesNonLoopbackBind"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/listener_auth.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestWrapProxyAuth"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-027",
@@ -2340,7 +2585,7 @@
       "bypass_assumptions": [
         "The proxy forwards the request upstream and governs the tool calls in the response; the request itself is not held.",
         "A stream without tools passes through with no receipt.",
-        "The proxy's Guardian is built without the emergency-stop fence."
+        "The proxy's Guardian reads the emergency-stop fence only while HELM_EMERGENCY_STOP_FENCE_ENABLED is on, for the configured tenant and workspace (CTL-005)."
       ],
       "tests": {
         "allowed": [
@@ -3522,7 +3767,7 @@
         "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which the gateway's authority adapter and EnsurePrincipals call (CTL-046); the gateway trusts the rows it finds.",
         "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2).",
         "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR).",
-        "helm-gateway has no container image or chart yet; it is enforced where it runs, and nothing deploys it.",
+        "helm-gateway ships in the kernel container image, and the chart deploys it only when gateway.enabled is set (off by default); where no gateway runs, nothing here is enforced.",
         "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
       ],
       "tests": {
@@ -5255,6 +5500,615 @@
           "file": "core/pkg/gateway/runtime/sandbox.go",
           "tests": [
             "core/pkg/gateway/runtime.TestSandboxEffectsAreWiredFromTheConfigurationFile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-063",
+      "title": "The evaluated action and its effect class come from the request tuple and the catalog",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "Guardian selects the policy rule, and names an execution intent's allowed tool, from the typed request it signs (helm-tracker#304). One helper (boundActionID) serves the rule lookup and the intent, so they cannot name different tools. It reads params.tool_name only for the tool-call effect types (EXECUTE_TOOL, CALL_TOOL). On an evaluated request the context is the caller's, so bindRequestTool runs before any gate or the policy decision point reads it: for EXECUTE_TOOL it replaces the top-level tool_name of the context with the request resource, and for every other action it removes it, so the top-level tool_name that policy reads is never the caller's and a CALL_TOOL request is evaluated as CALL_TOOL. A tool_name nested in args or in another context member is left as the caller sent it. On the evaluate and ext-authz routes the request's effect class is a declaration: it is bound as effect_class with effect_class_source caller_declared, unless the kernel's effect type catalog knows the evaluated action, in which case the bound class is never below the catalog's (effect_class_source effect_catalog). The evaluated action is the request's action and, for EXECUTE_TOOL, its resource, which Guardian evaluates as the tool. The resource of any other action proves nothing about the action and does not change the class. A declaration that was not bound is kept as effect_class_declared. The organization-runtime route checks the activation ceiling against the bound class and attests the submitted one. ManagedPolicyPDP matches every rule against the request as bound without effect_class_source and effect_class_declared, the text a pattern written before those members existed was written for, so such a pattern matches as it did and no pattern reads either member at the top level. Deny and escalate rules are also matched against that reading with effect_class holding the declaration; allow rules never are, so an allow rule's effect_class selector and pattern read only the bound class. The MCP path marks its class tool_catalog and the governed proxy kernel_route. effect_class, effect_class_source and effect_class_declared are reserved: a top-level context member or MCP argument of one of these names from the caller is removed or refused (CTL-022) before the transport binds its own, and members of these names nested deeper are left as the caller sent them.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/guardian.boundActionID",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/guardian.bindRequestTool",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.resolveEffectClass",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/pdp.managedPolicyReadings.matches",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [],
+      "protected_operations": [
+        "Policy rule selection and execution intent issuance for every Guardian decision.",
+        "The effect class bound for POST /api/v1/evaluate, the organization-runtime evaluate route, ext-authz and the governed OpenAI proxy."
+      ],
+      "bypass_assumptions": [
+        "For an action the kernel's effect type catalog does not list (any tool name or URN, and CALL_TOOL), the class is the caller's declaration, whatever resource the request names. It is recorded as caller_declared and still selects class-keyed policy rules; a server-owned class for arbitrary tool names does not exist yet (helm-tracker#319).",
+        "On the evaluate route the tool itself is caller-declared: the kernel decides and signs for the tool the request names and does not dispatch it.",
+        "An in-process caller that builds an Effect of a tool-call type sets params.tool_name itself and is trusted to; only the evaluated-request path replaces or removes it.",
+        "Only ManagedPolicyPDP matches restricting rules against the kept declaration. A CEL or PRG expression that reads context.effect_class sees the bound class; one that restricted on a caller's label for a catalogued effect must read effect_class_declared.",
+        "A ManagedPolicyPDP pattern is an unanchored regular expression over the whole canonical request without the top-level effect_class_source and effect_class_declared, caller args and nested context included. Any pattern, including one that names tool_name, effect_class, effect_class_source or effect_class_declared, also matches a member of that name the caller nested in args or in another context member, which no transport removes. The effect_class, action and resource selectors read the bound values, and for deny and escalate rules also the kept declaration.",
+        "A ManagedPolicyPDP pattern never reads the top-level effect_class_source, so managed policy cannot restrict on who asserted the class: a deny pattern on caller_declared refuses only a request whose caller nested that member. A PRG expression on effect_class_source refuses caller-declared classes only where the PDP's ALLOW is not authoritative (no PDP, or the CEL/PRG runtime policy); under ManagedPolicyPDP an ALLOW replaces local PRG evaluation, so nothing refuses a caller-declared class until a typed effect_class_source selector exists (helm-tracker#322).",
+        "A pattern that relies on two context members being adjacent in the canonical text, or that matches a member name case-insensitively, depends on the caller's other members. A member the caller sends that sorts between the two (foo, or effect_class0, between effect_class and principal_id) ends the adjacency. Reserved names are removed only when the key, trimmed, is spelled exactly, and tool_name only when it is spelled exactly, so Effect_Class, EFFECT_CLASS or Tool_Name from the caller reaches policy and matches a (?i) pattern written for effect_class or tool_name.",
+        "The signed ext-authz response echoes the request's effect_class and risk_class as submitted and carries neither the bound class nor its source: when the kernel evaluated a higher class, a verifier of that response alone does not learn it. The evaluated class is in the decision's effect. Carrying it in the response is a contract change that has not been made.",
+        "The organization-runtime decision attestation carries the submitted effect class, because the control plane verifies that member against the effect_level it sent. The class the ceiling was checked against, its source and the declaration are in the decision record's input context, which the attestation does not sign. When the activation gate refuses the request, the decision record signed for the refusal carries no effect digest, so its signature does not cover that input context either.",
+        "The class binding covers the routes and paths named in protected_operations and MCP tool calls. The kernel bridge (core/pkg/bridge) evaluates EXECUTE_TOOL with no effect_class, and the MCP tool helm.verify evaluates the action and resource named in its arguments with no effect_class, so class-keyed rules, the P0 E4 denial included, do not match there.",
+        "The plan adapter (core/pkg/effectgraph) passes a step id as the request resource, so an EXECUTE_TOOL plan step selects the rule named by its step id; a CALL_TOOL step is evaluated as CALL_TOOL."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/guardian.TestEvaluateDecisionSelectsPolicyByGuardianBoundAction",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteMarksDeclaredEffectClassAsCallerDeclared",
+          "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource",
+          "core/cmd/helm-ai-kernel.TestExecuteToolTakesTheCatalogClassOfItsTool",
+          "core/cmd/helm-ai-kernel.TestTheResourceDoesNotChangeTheClassOfAnotherAction",
+          "core/cmd/helm-ai-kernel.TestAClassAllowRuleAdmitsACataloguedActionSentWithALabel"
+        ],
+        "forbidden": [
+          "core/pkg/guardian.TestEvaluateDecisionIgnoresCallerSuppliedToolNameForPolicyAction",
+          "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType",
+          "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool",
+          "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction",
+          "core/pkg/guardian.TestEffectClassProvenanceKeysAreReserved",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteIgnoresCallerSuppliedToolNameForPolicyAction",
+          "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName",
+          "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches",
+          "core/cmd/helm-ai-kernel.TestGovernedOpenAIProxyIgnoresRequestBodyToolNameForPolicyAction",
+          "core/cmd/helm-ai-kernel.TestGovernedOpenAIProxyMarksItsEffectClassAsRouteAssigned",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime",
+          "core/cmd/helm-ai-kernel.TestOrganizationRuntimeChecksALabelOnACataloguedActionAgainstTheCatalogClass",
+          "core/cmd/helm-ai-kernel.TestActivationGateRefusesARequestWithNoBoundEffectClass",
+          "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass",
+          "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
+          "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
+        ],
+        "removal": [
+          "core/pkg/guardian.TestSignDecisionHonoursToolNameOnlyForExecuteTool",
+          "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction",
+          "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicySeesTheBoundToolName",
+          "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType",
+          "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool",
+          "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassForAToolCallEnvelope",
+          "core/cmd/helm-ai-kernel.TestExtAuthzBindsEffectClassLikeTheEvaluateRoute",
+          "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow",
+          "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource",
+          "core/cmd/helm-ai-kernel.TestTheResourceDoesNotChangeTheClassOfAnotherAction",
+          "core/cmd/helm-ai-kernel.TestOrganizationRuntimeAttestationCarriesTheSubmittedEffectClass",
+          "core/cmd/helm-ai-kernel.TestActivationGateLeavesTheTransportBoundEffectClass",
+          "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows",
+          "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
+          "core/pkg/pdp.TestManagedPolicyReadingsAreCutAsCanonicalizationWritesThem",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches",
+          "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass",
+          "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
+        ],
+        "bypass": [
+          "core/cmd/helm-ai-kernel.TestResolveEffectClass",
+          "core/pkg/mcp.TestGovernanceFirewall_AllowsReservedNamesNestedInsideAnArgument",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsAlsoMatchMembersTheCallerNested",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsDependOnTheCallersOtherMembers",
+          "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsCannotRestrictOnTheBoundEffectClassSource",
+          "core/cmd/helm-ai-kernel.TestActivationRefusalSignatureDoesNotCoverTheBoundEffectClass"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/guardian/guardian.go",
+          "tests": [
+            "core/pkg/guardian.TestSignDecisionHonoursToolNameOnlyForExecuteTool",
+            "core/pkg/guardian.TestExecutionIntentAllowsOnlyThePolicyEvaluatedAction"
+          ]
+        },
+        {
+          "file": "core/pkg/guardian/guardian.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicySeesTheBoundToolName",
+            "core/pkg/guardian.TestEvaluateDecisionEvaluatesCallToolRequestsAsTheirType"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/guardian_transport.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassOverCallerDeclaration",
+            "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsCatalogEffectClassForAToolCallEnvelope",
+            "core/cmd/helm-ai-kernel.TestExtAuthzBindsEffectClassLikeTheEvaluateRoute"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/guardian_transport.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestCataloguedResourceDoesNotClassAnActionTheCatalogDoesNotKnow",
+            "core/cmd/helm-ai-kernel.TestEffectLevelSpelledLikeACataloguedEffectStaysAPolicyResource",
+            "core/cmd/helm-ai-kernel.TestTheResourceDoesNotChangeTheClassOfAnotherAction"
+          ]
+        },
+        {
+          "file": "core/pkg/guardian/guardian.go",
+          "tests": [
+            "core/pkg/guardian.TestEvaluateDecisionRemovesACallersToolNameForEveryActionButExecuteTool",
+            "core/cmd/helm-ai-kernel.TestEvaluateRoutePolicyNeverSeesACallersToolName"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/company_activation_runtime.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestOrganizationRuntimeAttestationCarriesTheSubmittedEffectClass",
+            "core/cmd/helm-ai-kernel.TestActivationGateLeavesTheTransportBoundEffectClass"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers",
+            "core/cmd/helm-ai-kernel.TestEvaluateRouteDenyPatternWrittenBeforeTheProvenanceMembersStillMatches",
+            "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPPatternsNeverReadTheTopLevelProvenanceMembers",
+            "core/cmd/helm-ai-kernel.TestManagedPolicyPatternsNeverReadTheBoundProvenanceMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyReadingsAreCutAsCanonicalizationWritesThem",
+            "core/pkg/pdp.TestManagedPolicyPDPRestrictingPatternMatchesWithoutTheProvenanceMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPAllowRuleSeesOnlyTheBoundClass"
+          ]
+        },
+        {
+          "file": "core/pkg/pdp/managed_policy.go",
+          "tests": [
+            "core/pkg/pdp.TestManagedPolicyPDPDeclarationRestrictsButNeverAllows"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-064",
+      "title": "Receipt verifiers match member names exactly and do not check unversioned receipts",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A receipt verifier checks the receipt its reader reads, and checks a legacy receipt only when asked to (helm-tracker#305). receiptverify.ParseBundle and ParseReceipt, which receipt_verify, the WASM verifier, helm-ai-kernel verify receipt, POST /api/demo/verify and the receipt files of POST /api/v1/evidence/verify are parsed with, refuse a member that is a receipt, bundle, permit or gateway-binding member in another letter case, wherever a Go struct is decoded; those member names are read from the json tags of the Go types. The chain checks of the EvidencePack verifier (chain_integrity and lamport_monotonicity of helm-ai-kernel verify) decode a receipt file into contracts.Receipt only after receiptverify.ValidateReceiptMemberNames has applied the same member-name rules to it, and there a receipt.v5 receipt links only to a predecessor whose contracts.ReceiptChainHash, or the SHA-256 of whose file, is its prev_hash: a \"hash\" member a receipt declares about itself links only a successor with no signature_version. helm-ai-kernel evidence correlate-host applies ValidateReceiptMemberNames to each receipt file before it decodes one, and exits 2 naming a file it refuses. POST /api/demo/verify and POST /api/demo/tamper read their request body by exact member name and refuse any member but receipt, expected_receipt_hash and, for tamper, mutation, a letter-case variant of one of them included. Keys of maps and free-form values are compared exactly, and one name written twice is refused everywhere. In the bundle form a receipt member beside \"receipts\" is refused, so a reader cannot take a top-level verdict for a checked receipt's. A document nested deeper than 64 levels is refused before it is walked; the signature check of the EvidencePack verifier (embedded_signature_trust) fails for a file under receipts/ or 07_ATTESTATIONS/ that it refuses for that depth, and its reason counts such files as refused unread, not as signatures. A receipt with no signature_version is not checked. VerifyBundleWith answers with one error and no checks unless Options.AllowLegacyV4 is set, receipt_verify exits 2 without --allow-legacy-v4, and VerifyJSON, which the WASM verifier calls and which has no opt-in, reports UNVERIFIABLE. In core/pkg/crypto, ReceiptVerifyPayload, VerifyReceiptProfile and VerifyReceiptSignature return ErrLegacyReceiptRefused for a receipt with no signature_version unless given AllowLegacyReceiptPreimages, and no other option value opens the legacy preimage. Every VerifyReceipt method, KeyRing.VerifyReceipt included, takes no option and returns ErrLegacyReceiptRefused for such a receipt when it carries a signature. No shipped caller passes the option: the receipt signature check of POST /api/v1/evidence/verify reports an unversioned receipt as not checked (UNVERIFIABLE). The dev-local MCP branch of the EvidencePack verifier leaves an unversioned receipt unverified unless VerifyOptions.AllowLegacyV4Receipts is set, and embedded_signature_trust then says the receipt was not checked for want of a signature_version and names --allow-legacy-v4-receipts. Under every opt-in a legacy receipt whose receipt_id begins with \"{\" fails: it is a versioned signature replayed as a legacy receipt. An opted-in receiptverify result counts legacy_receipts, names every preimage in preimage_versions, and its identity check says a legacy signature does not cover verdict, tool_name or timestamp. The integrity check of receiptverify compares nothing and reports not_applicable, never a pass. key_id in a result is marked as the receipt's unsigned claim, and verify receipt lists the members its signature covers and the members it does not.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/receiptverify.ParseBundle",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ParseReceipt",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ValidateJSONStructure",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ValidateReceiptMemberNames",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.VerifyBundleWith",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.VerifyJSON",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.LegacyV4Refusal",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.ReceiptVerifyPayload",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.VerifyReceiptProfile",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/crypto.VerifyReceiptSignature",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/verifier.VerifyBundleWithOptions",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.checkEvidenceReceiptSignatures",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.readEvidenceVerificationInput",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.runVerifyReceiptCmd",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.verifyDemoReceipt",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.readDemoReceiptRequest",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/receiptverify.ValidateRequestBodyStructure",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.loadHELMReceipts",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "receipt_verify --allow-legacy-v4 (receiptverify.Options.AllowLegacyV4); helm-ai-kernel verify --allow-legacy-v4-receipts (verifier.VerifyOptions.AllowLegacyV4Receipts); and, for Go callers of core/pkg/crypto, AllowLegacyReceiptPreimages. None has an environment variable, and all default to refusing."
+      ],
+      "protected_operations": [
+        "receipt_verify --receipt, receiptverify.VerifyJSON in the WASM verifier, helm-ai-kernel verify receipt, the receipt files and the receipt signature check of POST /api/v1/evidence/verify, the request bodies and receipts of POST /api/demo/verify and POST /api/demo/tamper, the dev-local MCP receipt check and the chain checks of helm-ai-kernel verify, and the receipt files helm-ai-kernel evidence correlate-host reads."
+      ],
+      "bypass_assumptions": [
+        "Under an opt-in the replay of a versioned signature as a legacy receipt is refused by its receipt_id, which begins with \"{\". Everything a legacy signature never covered stays open under the opt-in: verdict, tool_name, timestamp and every member but the eight it signs can be rewritten on a receipt issued before receipt.v5, and the opted-in output says so.",
+        "Member names are matched exactly only where a Go struct is decoded from a document receiptverify has checked (ParseBundle, ParseReceipt, ValidateReceiptMemberNames). Keys of maps and free-form values (metadata, public_key_set, subject) are data: two keys there that differ in letter case are two keys. A member no decoded type names is ignored as before, except a receipt member at the top level of a bundle.",
+        "A bundle is refused for a receipt member beside receipts, in any letter case. A top-level member that is not a receipt member name (a comment, summary or paging member) is still ignored, so a reader must take a receipt's members from the entries of receipts and from nowhere else in the document.",
+        "The signature check of the EvidencePack verifier (embedded_signature_trust) reads receipt documents as maps, by exact member name, through receiptverify.ParseReceiptDocument: it refuses one name written twice, a member in another letter case is a separate member it does not read, and a file nested deeper than 64 levels is refused unread, fails the check and is counted in its reason as a file refused unread. Its chain checks (chain_integrity, lamport_monotonicity) decode each receipt file into contracts.Receipt after receiptverify.ValidateReceiptMemberNames has refused a member of a receipt, or of a struct a receipt holds, in another letter case, one name written twice at any depth, a trailing value, invalid JSON and nesting deeper than 64 levels; they do not apply the receipt.v5 member contract, because a pack holds receipts of more than one schema. In them a receipt.v5 successor links only to an identity recomputed from its predecessor, so a file put in a deleted receipt's place, signed or not, links it only if its contracts.ReceiptChainHash or the SHA-256 of its bytes is the successor's signed prev_hash. A successor whose signature_version is not receipt.v5 still links through a declared \"hash\", which has no specified preimage (security ledger F-20), so in a chain of such receipts a receipt can be replaced by a file that declares its hash. The chain checks do not see the last receipt of a chain deleted: the receipts left still link genesis-to-head. The signature check does not require every receipt file to be signed: an operator can strip the successor's signature members and hide a deletion with one fewer checked signature. A receipts/*.json file that is a bundle passes embedded_signature_trust unchecked and reads to the chain loader as a receipt with none of its members set; an array passes embedded_signature_trust the same way and fails the chain loader. Both predate this control and are left to helm-tracker#308. A Go consumer that decodes a pack's receipt file into contracts.Receipt parses it with receiptverify.ParseReceipt, or applies receiptverify.ValidateReceiptMemberNames first, as the chain checks and evidence correlate-host do.",
+        "POST /api/v1/evidence/verify and POST /api/demo/verify leave signature_profile and signature_algorithm to core/pkg/crypto (receiptverify.AnySignatureProfile), which verifies the hybrid and ML-DSA profiles. A signer of another type that exposes VerifyReceipt answers an unversioned receipt for itself.",
+        "A receipt.v5 signature covers 13 members. The other members of a single receipt, or of the last receipt of a chain, are covered by nothing; the integrity check and verify receipt say so and do not fail.",
+        "An unversioned DecisionRecord is a separate preimage with the same missing domain separation; it is outside this control."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/receiptverify.TestFrozenReceiptStillVerifies",
+          "core/pkg/receiptverify.TestFrozenGatewayChainStillVerifies",
+          "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo",
+          "core/pkg/receiptverify.TestLetterCaseRuleFollowsTheDecodedType",
+          "core/pkg/receiptverify.TestParseReceiptReadsExactlyOneReceipt",
+          "core/pkg/receiptverify.TestNativeParserSharesOnlyTheNestingLimit",
+          "core/cmd/receipt_verify.TestAllowLegacyV4ChecksALegacyReceiptAndSaysSo",
+          "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+          "core/pkg/crypto.TestReceiptPQHybridGoldenVectors"
+        ],
+        "forbidden": [
+          "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+          "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+          "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly",
+          "core/pkg/receiptverify.TestBindingVersionMemberIsMatchedExactly",
+          "core/pkg/receiptverify.TestBundleTopLevelHoldsNoReceiptMember",
+          "core/pkg/receiptverify.TestDeepNestingIsRefusedBeforeItIsWalked",
+          "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+          "core/pkg/receiptverify.TestOptedInReplayIsRefusedByItsReceiptID",
+          "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+          "core/cmd/receipt_verify.TestBundleWithAReceiptMemberBesideItsReceiptsIsNotVerified",
+          "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified",
+          "core/cmd/receipt_verify.TestReplayIsNotVerifiedUnderTheLegacyOptIn",
+          "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+          "core/cmd/receipt_verify.TestDeeplyNestedFileIsRefusedWithoutBeingWalked",
+          "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+          "core/pkg/crypto.TestKeyRingReportsALegacyReceiptAsNotChecked",
+          "core/pkg/crypto.TestReceiptPQHybridVectorsNeedTheLegacyOptIn",
+          "core/pkg/verifier.TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesAVersionMemberInAnotherLetterCase",
+          "core/cmd/helm-ai-kernel.TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked",
+          "core/cmd/helm-ai-kernel.TestDemoVerifyReadsTheReceiptAsItsReaderDoes",
+          "core/cmd/helm-ai-kernel.TestDemoRequestMembersAreMatchedExactly",
+          "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt",
+          "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust",
+          "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked",
+          "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules",
+          "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage",
+          "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn",
+          "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
+        ],
+        "removal": [
+          "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+          "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+          "core/pkg/receiptverify.TestLetterCaseRuleFollowsTheDecodedType",
+          "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly",
+          "core/pkg/receiptverify.TestBindingVersionMemberIsMatchedExactly",
+          "core/pkg/receiptverify.TestBundleTopLevelHoldsNoReceiptMember",
+          "core/pkg/receiptverify.TestDeepNestingIsRefusedBeforeItIsWalked",
+          "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+          "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo",
+          "core/pkg/receiptverify.TestOptedInReplayIsRefusedByItsReceiptID",
+          "core/pkg/receiptverify.TestLegacyReceiptInAVersionedChainIsNamed",
+          "core/pkg/receiptverify.TestKeyIDInTheResultIsMarkedAsAClaim",
+          "core/pkg/receiptverify.TestIntegrityCheckSaysOnlyWhatItChecked",
+          "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+          "core/cmd/receipt_verify.TestBundleWithAReceiptMemberBesideItsReceiptsIsNotVerified",
+          "core/cmd/receipt_verify.TestDeeplyNestedFileIsRefusedWithoutBeingWalked",
+          "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+          "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified",
+          "core/cmd/receipt_verify.TestReplayIsNotVerifiedUnderTheLegacyOptIn",
+          "core/cmd/receipt_verify.TestMixedChainNamesEveryPreimage",
+          "core/cmd/receipt_verify.TestJSONVerdictSaysKeyIDIsAClaim",
+          "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+          "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+          "core/pkg/crypto.TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch",
+          "core/pkg/crypto.TestKeyRingReportsALegacyReceiptAsNotChecked",
+          "core/pkg/verifier.TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked",
+          "core/cmd/helm-ai-kernel.TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesAVersionMemberInAnotherLetterCase",
+          "core/cmd/helm-ai-kernel.TestVerifyReceiptCLISaysWhatTheSignatureCovers",
+          "core/cmd/helm-ai-kernel.TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked",
+          "core/cmd/helm-ai-kernel.TestDemoVerifyReadsTheReceiptAsItsReaderDoes",
+          "core/cmd/helm-ai-kernel.TestDemoRequestMembersAreMatchedExactly",
+          "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt",
+          "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust",
+          "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked",
+          "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules",
+          "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage",
+          "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn",
+          "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
+        ],
+        "bypass": [
+          "core/pkg/receiptverify.TestIntegrityDetailIsTrueOfAChain",
+          "core/pkg/receiptverify.TestFoldNameMatchesEncodingJSON",
+          "core/pkg/receiptverify.TestMemberNamesAreTheOnesEncodingJSONBinds",
+          "core/pkg/receiptverify.TestMembersOfFollowsEncodingJSONFieldRules",
+          "core/pkg/receiptverify.TestCorpusHardeningDocumentsAreWhatTheirNamesSay",
+          "core/pkg/receiptverify.TestRefusalsNameWhereTheMemberIs",
+          "core/cmd/receipt_verify.TestHumanVerdictDoesNotClaimTheWholeReceiptWasSigned"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestCaseVariantMembersCannotShadowSignedFields",
+            "core/pkg/receiptverify.TestCaseVariantSpellingsOfKnownMembersAreRejected",
+            "core/pkg/receiptverify.TestLetterCaseRuleFollowsTheDecodedType",
+            "core/pkg/receiptverify.TestGatewayBindingMemberNamesAreMatchedExactly",
+            "core/cmd/receipt_verify.TestCaseVariantShadowMembersAreNotVerified",
+            "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesCaseVariantShadowMembers"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/input.go",
+          "tests": [
+            "core/pkg/receiptverify.TestBundleTopLevelHoldsNoReceiptMember",
+            "core/cmd/receipt_verify.TestBundleWithAReceiptMemberBesideItsReceiptsIsNotVerified"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestDeepNestingIsRefusedBeforeItIsWalked",
+            "core/cmd/receipt_verify.TestDeeplyNestedFileIsRefusedWithoutBeingWalked"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/gateway.go",
+          "tests": [
+            "core/pkg/receiptverify.TestBindingVersionMemberIsMatchedExactly"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt",
+            "core/pkg/receiptverify.TestLegacyReceiptIsCheckedOnlyUnderTheOptInAndSaysSo"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestOptedInReplayIsRefusedByItsReceiptID",
+            "core/cmd/receipt_verify.TestReplayIsNotVerifiedUnderTheLegacyOptIn"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestLegacyReceiptInAVersionedChainIsNamed",
+            "core/cmd/receipt_verify.TestMixedChainNamesEveryPreimage"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestKeyIDInTheResultIsMarkedAsAClaim",
+            "core/cmd/receipt_verify.TestJSONVerdictSaysKeyIDIsAClaim"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/json.go",
+          "tests": [
+            "core/pkg/receiptverify.TestReceiptV5SignatureDoesNotReplayAsALegacyReceipt"
+          ]
+        },
+        {
+          "file": "core/cmd/receipt_verify/main.go",
+          "tests": [
+            "core/cmd/receipt_verify.TestLegacyReceiptIsNotCheckedByDefault",
+            "core/cmd/receipt_verify.TestReceiptV5SignatureReplayedAsLegacyIsNotVerified"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+            "core/pkg/crypto.TestReceiptLegacyV4StillVerifies",
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical_v5.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy",
+            "core/pkg/crypto.TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical_v5.go",
+          "tests": [
+            "core/pkg/crypto.TestReceiptV5SignatureDoesNotReplayAsLegacy"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/keyring.go",
+          "tests": [
+            "core/pkg/crypto.TestKeyRingReportsALegacyReceiptAsNotChecked",
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/contract_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/contract_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/verify_receipt_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIRefusesAVersionMemberInAnotherLetterCase"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/verify_receipt_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestVerifyReceiptCLISaysWhatTheSignatureCovers"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/demo_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestDemoVerifyReadsTheReceiptAsItsReaderDoes"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault",
+            "core/cmd/helm-ai-kernel.TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/receiptverify.go",
+          "tests": [
+            "core/pkg/receiptverify.TestIntegrityCheckSaysOnlyWhatItChecked"
+          ]
+        },
+        {
+          "file": "core/pkg/receiptverify/input.go",
+          "tests": [
+            "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules",
+            "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/demo_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestDemoRequestMembersAreMatchedExactly"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/demo_routes.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestDemoVerifyReadsTheReceiptAsItsReaderDoes"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/verify_receipt_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestVerifyReceiptCLISaysWhatTheSignatureCovers"
+          ]
+        },
+        {
+          "file": "core/pkg/crypto/canonical.go",
+          "tests": [
+            "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
+          ]
+        },
+        {
+          "file": "core/pkg/verifier/verifier.go",
+          "tests": [
+            "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/host_evidence_cmd.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestCorrelateHostReadsAReceiptFileAsItsReaderDoes"
           ]
         }
       ]

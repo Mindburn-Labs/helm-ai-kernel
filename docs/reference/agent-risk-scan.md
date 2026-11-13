@@ -127,6 +127,42 @@ It also uses the local shadow scanner findings to project risk codes such as
 `MCP_WRITE_SCOPE_WITHOUT_APPROVAL`, `SECRET_CLASS_AGENT_READABLE`,
 `NO_MANAGED_SETTINGS`, and `NO_AUDIT_EXPORT`.
 
+## Scan Coverage
+
+`helm-risk-scan scan` needs complete coverage of the declared tree. If a path
+in scope cannot be traversed, inspected, or read in full, or a candidate file
+is over the 2 MiB scan limit, the scan stops without exporting an artifact.
+
+`helm-ai-kernel shadow scan` runs the same scanner and is best-effort by
+default. Its report counts what it left out:
+
+| Field | Meaning |
+| --- | --- |
+| `files_scanned` | candidate files read in full |
+| `files_skipped` | files that are not scan candidates, and candidates over the size limit |
+| `paths_unreadable` | in-scope entries that could not be traversed, inspected, or read in full |
+
+When `paths_unreadable` is not zero, the text report adds an `Unreadable:` line
+and the grade reason ends with `; N path(s) could not be read`. The letter
+covers only what was read. `helm-ai-kernel autoconfigure scan` and `onboard`
+print the same reason; `setup` prints the letter and stores the reason in
+`autoconfigure/inventory.json` under its data directory.
+
+A scan that read nothing has no grade. A `--path` that is missing or unreadable,
+or a tree where no candidate file was read and at least one path was
+unreadable, ends with `shadow: nothing could be examined`.
+
+`--require-complete` makes the kernel command all-or-nothing, like
+`helm-risk-scan`: any in-scope path that was not read in full, including a
+candidate over the size limit, ends the scan with
+`shadow: scan coverage incomplete` and no report.
+
+| `shadow scan` exit code | Meaning |
+| --- | --- |
+| 0 | report printed; no finding at or above `--fail-on-severity` |
+| 1 | report printed; a finding at or above `--fail-on-severity` |
+| 2 | no report: an invalid flag, nothing could be examined, or incomplete coverage under `--require-complete` |
+
 ## Receipt Projection
 
 Project observe-mode receipts into the same envelope shape:
@@ -237,6 +273,7 @@ old location, so pseudonyms stay stable across the move.
 | Go enum to JSON Schema parity | `tools/riskscan/internal/riskenvelope/envelope_test.go` |
 | grade reason is a closed sentence set in both Go and the schema | `tools/riskscan/internal/riskenvelope/envelope_test.go`, `tools/riskscan/internal/riskscan/scan_test.go` |
 | grade reaches the envelope, previews, and stdout | `tools/riskscan/internal/riskscan/scan_test.go`, `tools/riskscan/main_test.go` |
+| unreadable paths are counted, a scan that read nothing is an error, and `--require-complete` refuses partial coverage | `core/pkg/shadow/scanner_test.go`, `core/cmd/helm-ai-kernel/shadow_cmd_test.go` |
 | content hash changes when findings or any posture field changes, and stale hashes fail validation | `tools/riskscan/internal/riskenvelope/envelope_test.go` |
 | static projection omits raw paths, repo names, commands, and secrets | `tools/riskscan/internal/riskscan/scan_test.go` |
 | Markdown, HTML, and evidence pack outputs omit raw inputs | `tools/riskscan/internal/riskscan/scan_test.go` |

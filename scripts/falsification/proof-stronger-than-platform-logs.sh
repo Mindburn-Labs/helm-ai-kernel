@@ -97,7 +97,7 @@ case_result "self-attested seal refused" "False" "$got" "key declared inside the
 # self-attestation. This proves case 2 failed on the trust root and not on
 # something incidental (a malformed pack would fail here too).
 got="$(verdict "$SEALED_PACK" --allow-self-attested)"
-case_result "same pack, self-attestation opted in" "True" "$got" "12/12 checks"
+case_result "same pack, self-attestation opted in" "True" "$got" "no check failed; checks without input are reported as not run"
 
 echo
 if [ "$fail_count" -ne 0 ]; then

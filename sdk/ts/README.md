@@ -35,14 +35,22 @@ npm run build
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
+const client = new HelmClient({
+  baseUrl: "http://127.0.0.1:7714",
+  apiKey: process.env.HELM_ADMIN_API_KEY,
+  tenantId: "tenant-a",
+  principalId: "operator-a",
+});
 const decision = await client.evaluateDecisionV5({
   tool: "read-ticket",
   effect_level: "ticket:123",
   session_id: "example-session",
 });
-console.log(decision.verdict); // ALLOW or DENY
+console.log(decision.verdict); // ALLOW, DENY or ESCALATE
 ```
+
+`/api/v1/evaluate` needs the API key and the tenant and principal the server is
+configured for; without them the call throws `HelmApiError` with status 401.
 
 `tool`, `effect_level`, and `session_id` must all be non-blank for
 `evaluateDecisionV5`. The legacy `evaluateDecision` method remains available
@@ -52,43 +60,43 @@ for existing direct-daemon callers. The authenticated principal, not a body
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.
 
-## Agent Framework Adapters
+## Agent Framework Tool Calls
 
-The TypeScript SDK includes lightweight adapter helpers for Codex, Claude Code,
-Hermes, LangChain/LangGraph, AutoGen, CrewAI, OpenAI Agents SDK, Semantic
-Kernel, PydanticAI, LlamaIndex, LiteLLM, n8n, Zapier-style webhooks, and raw MCP
-tool-call events. These helpers normalize each framework event into a HELM
-governance request and submit it through `chatCompletionsWithReceipt`,
-preserving the kernel receipt returned in `X-Helm-*` headers. Frameworks
-without a named adapter can use the raw MCP adapter; no model-specific policy
-path is required. The named Codex, Claude Code, and Hermes helpers expect their
-canonical provider fields (`recipient_name` + `parameters`, `tool_name` +
-`tool_input`, `tool_name` + `arguments`) and throw before dispatch if alias
-fields conflict with that envelope.
+`NativeGatewayClient` sends a framework's tool call to the effect gateway's
+native MCP interface (`core/pkg/gateway/mcpserver`). Pass the exact tool name
+returned by `listTools`, the framework's arguments and an explicit target. The
+gateway decides, dispatches and records the attempt; the client holds no
+authority.
 
 ```ts
-import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm-ai-kernel";
+import { NativeGatewayClient } from "@mindburn/helm-ai-kernel";
 
-const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-const adapter = createAgentFrameworkAdapter(helm, { model: "helm-governance" });
+const gateway = new NativeGatewayClient({
+  mcpUrl, // HTTPS, or HTTP on literal loopback only
+  episodeToken: getEpisodeToken, // gateway episode bearer, read per request
+});
 
-const result = await adapter.submit(
-  fromOpenAIAgentsToolCall({
-    id: "call_123",
-    function: {
-      name: "crm.update_customer",
-      arguments: '{"customer_id":"cus_123","tier":"enterprise"}',
-    },
-  }),
-);
+const tools = await gateway.listTools();
+const result = await gateway.callEffect({
+  toolName: "github_repository_get",
+  target: "github.com/owner/repository",
+  arguments: { schema: "helm.github.repository.get.v1", branch: "main" },
+});
 
-console.log(result.governance.receiptId);
+console.log(result.structuredContent.status, result.structuredContent.attempt_id);
+if (result.structuredContent.status === "reconciling") {
+  await gateway.getAttempt(result.structuredContent.attempt_id!);
+}
 ```
 
-The helpers do not add Microsoft Agent Governance Toolkit as a dependency and
-do not claim Microsoft certification. They cover the same framework families
-so HELM can sit behind AGT or another orchestrator as the receipt-bearing
-enforcement boundary.
+A call is made once and never retried by the client. On failure,
+`NativeGatewayError.effectMayHaveOccurred` says whether the request may still
+have been dispatched; read the attempt with `getAttempt` instead of calling
+again.
+
+The earlier chat-completion helpers (`createAgentFrameworkAdapter` and the
+`from*ToolCall` normalizers) were removed. They sent the tool call as chat
+text, so nothing evaluated the named tool.
 
 ## Execution Boundary Methods
 

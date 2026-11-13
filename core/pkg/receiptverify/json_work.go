@@ -9,8 +9,10 @@ import (
 )
 
 // Adapter parsing budgets protect the persistent WASM instance before the
-// legacy parser constructs recursive diagnostics. The native CLI retains its
-// original parser. These limits reject input; they never normalize signed data.
+// parser walks the document. The native path applies MaxJSONDepth only
+// (checkJSONDepth), because its walk recurses once per level; the token and
+// size budgets stay the adapter's. These limits reject input; they never
+// normalize signed data.
 const (
 	MaxJSONDepth      = 64
 	MaxJSONTokens     = 100000
@@ -54,7 +56,7 @@ func validateJSONWork(raw []byte) error {
 					return err
 				}
 				if len(stack) >= MaxJSONDepth {
-					return errors.New("JSON exceeds the 64-level nesting limit")
+					return ErrJSONTooDeep
 				}
 				stack = append(stack, jsonFrame{object: delimiter == '{', key: delimiter == '{'})
 			case '}', ']':

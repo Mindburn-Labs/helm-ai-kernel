@@ -2,13 +2,15 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://mindburn.org/schemas/helm-kernel-cli/v1",
     "title": "HELM AI Kernel Verification Output",
-    "description": "JSON Schema for the output of `helm-ai-kernel verify --json` command. Exit code 0 = verified, non-zero = failure.",
+    "description": "JSON Schema for the output of `helm-ai-kernel verify --json` command. Exit code 0 = outcome VERIFIED, 1 = outcome FAILED or UNVERIFIABLE, 2 = no verdict (runtime or usage error). A check with status NOT_RUN had nothing to read and is never counted as passed. The fields outcome, check_counts and checks[].status are always present from verifier_version 0.3.0 and are required here, so a report from an older verifier, which lacks them, does not validate.",
     "type": "object",
     "required": [
         "bundle",
         "verified",
+        "outcome",
         "timestamp",
         "checks",
+        "check_counts",
         "summary",
         "issue_count",
         "verifier_version"
@@ -20,7 +22,12 @@
         },
         "verified": {
             "type": "boolean",
-            "description": "True if all verification checks passed, false otherwise."
+            "description": "True exactly when outcome is VERIFIED: no check failed and every check the pack is required to give input to ran and held. It does not mean every listed check ran; see check_counts.not_run."
+        },
+        "outcome": {
+            "type": "string",
+            "enum": ["VERIFIED", "FAILED", "UNVERIFIABLE"],
+            "description": "VERIFIED: every required check ran and held and none failed. FAILED: a check failed, evidence the pack is required to carry is missing, or no check ran. UNVERIFIABLE: the content is intact but no configured trust root vouches for the signer."
         },
         "timestamp": {
             "type": "string",
@@ -40,24 +47,50 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["name", "pass"],
+                "required": ["name", "pass", "status"],
                 "properties": {
                     "name": { "type": "string" },
-                    "pass": { "type": "boolean" },
-                    "detail": { "type": "string" },
-                    "reason": { "type": "string" }
+                    "pass": {
+                        "type": "boolean",
+                        "description": "True only when status is VERIFIED. False for FAILED, UNVERIFIABLE and NOT_RUN alike, so read status to tell a failure from a check that did not run."
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["VERIFIED", "FAILED", "UNVERIFIABLE", "NOT_RUN"],
+                        "description": "VERIFIED: the check read its input and the property held. FAILED: it did not hold, or required input is missing. UNVERIFIABLE: intact, but no trust root vouches for the signer. NOT_RUN: the pack carries nothing for this check to read and nothing requires it."
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "What a VERIFIED check established."
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why the check failed, was unverifiable or did not run."
+                    }
                 },
                 "additionalProperties": false
             }
         },
+        "check_counts": {
+            "type": "object",
+            "description": "Checks counted by status. passed + failed + unverifiable + not_run equals the length of checks.",
+            "required": ["passed", "failed", "unverifiable", "not_run"],
+            "properties": {
+                "passed": { "type": "integer", "minimum": 0 },
+                "failed": { "type": "integer", "minimum": 0 },
+                "unverifiable": { "type": "integer", "minimum": 0 },
+                "not_run": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+        },
         "summary": {
             "type": "string",
-            "description": "Human-readable summary of the checks results."
+            "description": "Human-readable verdict with the passed, failed and not-run counts stated separately."
         },
         "issue_count": {
             "type": "integer",
             "minimum": 0,
-            "description": "Number of failed checks."
+            "description": "Number of checks that ran and did not pass (FAILED or UNVERIFIABLE). Checks that did not run are not counted."
         },
         "verifier_version": {
             "type": "string"
@@ -78,6 +111,50 @@
             "type": ["integer", "null"]
         },
         "merkle_root": {
+            "type": "string"
+        },
+        "seal": {
+            "type": "object",
+            "description": "Native EvidencePack seal verification result.",
+            "required": ["state", "signature_valid", "anchor_status", "storage_status", "trust_level"],
+            "properties": {
+                "state": { "type": "string" },
+                "signature_valid": { "type": "boolean" },
+                "anchor_status": { "type": "string" },
+                "storage_status": { "type": "string" },
+                "trust_level": { "type": "string" },
+                "pack_id": { "type": "string" },
+                "index_hash": { "type": "string" },
+                "merkle_root": { "type": "string" },
+                "entry_count": { "type": "integer" },
+                "signer_key_id": { "type": "string" },
+                "signer_type": { "type": "string" },
+                "anchor_receipts": { "type": "integer" },
+                "storage_receipt": { "type": "string" },
+                "signed_at": { "type": "string" },
+                "errors": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+        },
+        "trust_level": {
+            "type": "string"
+        },
+        "seal_state": {
+            "type": "string"
+        },
+        "seal_signature_valid": {
+            "type": "boolean"
+        },
+        "anchor_status": {
+            "type": "string"
+        },
+        "storage_status": {
+            "type": "string"
+        },
+        "seal_subject_root": {
+            "type": "string"
+        },
+        "seal_id": {
             "type": "string"
         }
     },

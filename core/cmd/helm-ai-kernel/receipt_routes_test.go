@@ -713,8 +713,13 @@ func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
 			if capturing.request.Context[guardian.ContextSecurityTrusted] != true {
 				t.Fatalf("Guardian security marker = %#v", capturing.request.Context[guardian.ContextSecurityTrusted])
 			}
+			// The caller's context value does not survive: the bound value is
+			// the request's own effect_level, marked as its declaration.
 			if got := capturing.request.Context[guardian.ContextEffectClass]; got != "local.echo" {
 				t.Fatalf("Guardian effect class = %#v, want adapter-bound local.echo", got)
+			}
+			if got := capturing.request.Context[guardian.ContextEffectClassSource]; got != guardian.EffectClassSourceCallerDeclared {
+				t.Fatalf("Guardian effect class source = %#v, want caller_declared", got)
 			}
 			if _, exists := capturing.request.Context[guardian.ContextDestination]; exists {
 				t.Fatalf("caller destination reached Guardian: %#v", capturing.request.Context[guardian.ContextDestination])

@@ -16,7 +16,8 @@ import (
 //
 //	0 = clean scan, no MEDIUM+ findings
 //	1 = findings at or above fail-on-severity threshold
-//	2 = config error
+//	2 = config error, a scan that could read nothing, or, with
+//	    --require-complete, any in-scope path that was not read in full
 func runShadowCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel shadow <scan> [flags]")
@@ -45,14 +46,16 @@ func runShadowScan(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		path    string
-		jsonOut bool
-		failOn  string
+		path            string
+		jsonOut         bool
+		failOn          string
+		requireComplete bool
 	)
 
 	cmd.StringVar(&path, "path", ".", "Directory to scan (default: current directory)")
 	cmd.BoolVar(&jsonOut, "json", false, "Emit JSON report to stdout")
 	cmd.StringVar(&failOn, "fail-on-severity", "medium", "Exit 1 if any finding is >= this severity (info|low|medium|high)")
+	cmd.BoolVar(&requireComplete, "require-complete", false, "Exit 2 unless every in-scope path was read in full; by default unreadable paths are skipped and counted")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -65,6 +68,7 @@ func runShadowScan(args []string, stdout, stderr io.Writer) int {
 	}
 
 	scanner := shadow.NewScanner()
+	scanner.RequireComplete = requireComplete
 	report, err := scanner.Scan(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error scanning %q: %v\n", path, err)
@@ -109,6 +113,9 @@ func writeShadowReport(w io.Writer, r *shadow.Report, exitCode int) {
 	fmt.Fprintf(w, "  Root:          %s\n", r.ScanRoot)
 	fmt.Fprintf(w, "  Files scanned: %d\n", r.FilesScanned)
 	fmt.Fprintf(w, "  Files skipped: %d\n", r.FilesSkipped)
+	if r.PathsUnreadable > 0 {
+		fmt.Fprintf(w, "  %sUnreadable:    %d path(s) skipped — not examined%s\n", ColorYellow, r.PathsUnreadable, ColorReset)
+	}
 	fmt.Fprintf(w, "  Duration:      %dms\n", r.ScanDurationMs)
 	fmt.Fprintf(w, "  Findings:      %d\n", len(r.Findings))
 

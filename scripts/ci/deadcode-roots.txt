@@ -4,7 +4,8 @@
 #
 # core/cmd/helm-ai-kernel: release.yml binaries and the container image.
 # core/cmd/helm-gateway: the effect gateway (HELM-751), a separate Zone C
-# process; its image and chart follow in a later HELM-751 slice.
+# process. The Dockerfile builds it into the kernel image, and the chart runs
+# it when gateway.enabled is set.
 # core/cmd/receipt_verify: the standalone offline verifier. The release
 # workflow builds it for five platforms (release-binaries-reproducible) and
 # stage_release_assets.sh attaches it to every GitHub Release as

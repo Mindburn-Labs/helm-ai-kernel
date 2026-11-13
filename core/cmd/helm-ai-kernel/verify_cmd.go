@@ -12,19 +12,24 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 // runVerifyCmd implements `helm-ai-kernel verify` per §2.1.
@@ -32,11 +37,17 @@ import (
 // Validates a signed EvidencePack bundle: structure, hashes, and signature.
 // Supports auditor mode via --json-out for structured verification reports.
 //
+// Every check ends VERIFIED, FAILED, UNVERIFIABLE or NOT_RUN. A check with
+// nothing to read is NOT_RUN and is never counted as passed.
+//
 // Exit codes:
 //
-//	0 = verification passed
-//	1 = verification failed
-//	2 = runtime error
+//	0 = VERIFIED: no check failed and every check the pack, its declared gates,
+//	    the trust profile and the --require-* flags require ran and held.
+//	    Checks the pack gave no input to are listed as not run; name them with
+//	    --require-check to make their absence a failure.
+//	1 = FAILED or UNVERIFIABLE
+//	2 = runtime or usage error; no verdict was reached
 func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "external-receipt" {
 		return runVerifyExternalReceiptCmd(args[1:], stdout, stderr)
@@ -65,6 +76,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ledgerURL         string
 		profile           string
 		allowSelfAttested bool
+		allowLegacyV4     bool
 		configPath        string
 		storageReceipt    string
 		externalHostKey   string
@@ -73,6 +85,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		requireEIDAS      bool
 		eidasMaxAgeHours  int
 		requireTEE        string
+		requireCheckFlags []string
 	)
 
 	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
@@ -84,18 +97,30 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&allowSelfAttested, "allow-self-attested", false,
 		"Accept a dev-local seal whose verification key is carried inside the pack. "+
 			"Such a seal proves internal consistency only, never provenance — anyone can sign their own pack.")
+	cmd.BoolVar(&allowLegacyV4, "allow-legacy-v4-receipts", false,
+		"Check a dev-local MCP proof receipt that has no signature_version as a legacy V4 receipt instead of leaving it unverified. "+
+			"A legacy signature covers eight colon-joined fields, not the verdict, and a receipt.v5 signature can be replayed as one: "+
+			"use it only for a pack known to predate receipt.v5.")
 	cmd.StringVar(&configPath, "config", "", "Evidence trust config path, for example helm/helm.yaml (never read implicitly from the working directory)")
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
-	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
-	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for conformance report signatures")
-	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for embedded managed-agent receipt signatures")
+	envKeys := packVerifyKeysFromEnv()
+	cmd.StringVar(&externalHostKey, "external-host-public-key", envKeys.externalHost, "Trusted Ed25519 public key hex for external host evidence chains")
+	cmd.StringVar(&trustedPublicKey, "trusted-public-key", envKeys.conformanceReport, "Trusted Ed25519 public key hex for conformance report signatures")
+	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", envKeys.managedAgentReceipt, "Trusted Ed25519 public key hex for embedded managed-agent receipt signatures")
 	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require eIDAS-labelled anchor metadata (backend=eidas-qtsp with a parseable integrated_time); metadata-only, not RFC 3161 or EU Trusted List cryptographic verification")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of the declared integrated_time checked by --require-eidas; this does not verify the timestamp token")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
+	// flag.Func, not StringVar: a string flag keeps only its last value, so
+	// `--require-check a --require-check b` required b alone, and a pack on
+	// which check a never ran still verified.
+	cmd.Func("require-check", "Checks that must have run, for example chain_integrity,connector_evidence. Repeat the flag or separate names with commas; every named check is required. A named check the pack gives no input to is FAILED instead of not run. Checks: "+strings.Join(verifier.CheckNames(), ", "), func(value string) error {
+		requireCheckFlags = append(requireCheckFlags, value)
+		return nil
+	})
 
 	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
 	if normalizeErr != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", normalizeErr)
+		writeText(stderr, "Error: %v\n", normalizeErr)
 		return 2
 	}
 	if err := cmd.Parse(normalizedArgs); err != nil {
@@ -106,89 +131,66 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		bundle = cmd.Arg(0)
 	}
 	if cmd.NArg() > 1 {
-		_, _ = fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", cmd.Arg(1))
+		writeText(stderr, "Error: unexpected argument: %s\n", cmd.Arg(1))
 		return 2
 	}
 	if bundle == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: evidence pack path is required")
 		return 2
 	}
+	// Every occurrence of the flag adds to the required set.
+	var requiredChecks []string
+	for _, value := range requireCheckFlags {
+		names, err := parseRequiredChecks(value)
+		if err != nil {
+			writeText(stderr, "Error: --require-check %s\n", err)
+			return 2
+		}
+		requiredChecks = append(requiredChecks, names...)
+	}
 
 	verifyTarget := bundle
 	storageObjectPath := ""
 	info, err := os.Stat(bundle)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
+		writeText(stderr, "Error: verification failed: %s\n", err)
 		return 2
 	}
 	if !info.IsDir() {
 		storageObjectPath = bundle
 		tempDir, err := os.MkdirTemp("", "helm-verify-*")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: cannot create verification workspace: %v\n", err)
+			writeText(stderr, "Error: cannot create verification workspace: %v\n", err)
 			return 2
 		}
 		defer os.RemoveAll(tempDir)
 
+		// The error can quote an entry name out of the archive.
 		if err := extractEvidenceArchive(bundle, tempDir); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
+			writeText(stderr, "Error: verification failed: %s\n", err)
 			return 2
 		}
 		verifyTarget = tempDir
 	}
 
-	// Use the standalone verifier library (zero network deps)
 	profileOpt := evidencepkg.EvidenceTrustProfile("")
 	if strings.TrimSpace(profile) != "" {
 		profileOpt = normalizeEvidenceTrustProfile(profile)
 	}
-	conformanceSigPresent := hasConformanceSignature(verifyTarget)
-	var conformanceSigErr error
-	allowVerifiedConformanceSignature := false
-	if conformanceSigPresent {
-		conformanceSigErr = verifyConformanceReportSignature(verifyTarget, trustedPublicKey)
-		allowVerifiedConformanceSignature = conformanceSigErr == nil
-	}
-	report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{
-		Profile:                           profileOpt,
-		ConfigPath:                        configPath,
-		StorageReceiptPath:                storageReceipt,
-		StorageObjectPath:                 storageObjectPath,
-		ExternalHostKeyHex:                externalHostKey,
-		ManagedAgentReceiptPublicKeyHex:   managedAgentKey,
-		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
-		AllowSelfAttested:                 allowSelfAttested,
-	})
+	report, err := verifyPackDir(verifyTarget, verifier.VerifyOptions{
+		Profile:                         profileOpt,
+		ConfigPath:                      configPath,
+		StorageReceiptPath:              storageReceipt,
+		StorageObjectPath:               storageObjectPath,
+		ExternalHostKeyHex:              externalHostKey,
+		ManagedAgentReceiptPublicKeyHex: managedAgentKey,
+		AllowSelfAttested:               allowSelfAttested,
+		AllowLegacyV4Receipts:           allowLegacyV4,
+		RequireChecks:                   requiredChecks,
+	}, trustedPublicKey)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
+		writeText(stderr, "Error: verification failed: %s\n", err)
 		return 2
-	}
-
-	// Also run legacy conform-based checks for backward compat
-	if hasCanonicalEvidenceLayout(verifyTarget) {
-		structIssues := conform.ValidateEvidencePackStructure(verifyTarget)
-		if len(structIssues) > 0 {
-			for _, issue := range structIssues {
-				report.Checks = append(report.Checks, verifier.CheckResult{
-					Name:   "conform:" + issue,
-					Pass:   false,
-					Reason: issue,
-				})
-			}
-			report.Verified = false
-		}
-	}
-
-	// Verify report signature when a conformance report signature is present.
-	if conformanceSigPresent {
-		if conformanceSigErr != nil {
-			report.Checks = append(report.Checks, verifier.CheckResult{
-				Name:   "signature_verification",
-				Pass:   false,
-				Reason: fmt.Sprintf("signature: %v", conformanceSigErr),
-			})
-			report.Verified = false
-		}
 	}
 
 	if requireEIDAS {
@@ -210,6 +212,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
+
+	// The flag checks above appended results; the verdict follows them.
+	finalizeVerifyReport(report)
 
 	if online && report.Verified {
 		proof, proofErr := verifyOnlineProof(report, ledgerURL)
@@ -244,9 +249,10 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	finalizeVerifyReport(report)
 
 	recordVerification(context.Background(), helmotel.VerificationEvent{
-		EnvelopeID:  report.EnvelopeID,
-		Verified:    report.Verified,
-		CheckCount:  len(report.Checks),
+		EnvelopeID: report.EnvelopeID,
+		Verified:   report.Verified,
+		// Checks that did not run are not part of what was verified.
+		CheckCount:  report.CheckCounts.Ran(),
 		EvidenceRef: bundle,
 	})
 
@@ -254,13 +260,14 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if jsonOutFile != "" {
 		data, _ := json.MarshalIndent(report, "", "  ")
 		if writeErr := os.WriteFile(jsonOutFile, data, 0644); writeErr != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: cannot write audit report: %v\n", writeErr)
+			writeText(stderr, "Error: cannot write audit report: %s\n", writeErr)
 			return 2
 		}
-		_, _ = fmt.Fprintf(stdout, "Audit report written to %s\n", jsonOutFile)
+		writeText(stdout, "Audit report written to %s\n", jsonOutFile)
 	}
 
-	// Output
+	// Output. JSON carries every value as the pack states it; text goes
+	// through writeText, which makes pack-controlled strings safe to print.
 	if jsonOutput {
 		data, _ := json.MarshalIndent(report, "", "  ")
 		_, _ = fmt.Fprintln(stdout, string(data))
@@ -268,25 +275,144 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		if report.Verified {
 			printCompactVerifyReport(stdout, report)
 		} else {
-			headline := "FAILED"
-			if strings.HasPrefix(report.Summary, "UNVERIFIABLE") {
-				// Content intact, but no trust root names the signer.
-				headline = "UNVERIFIABLE"
-			}
-			_, _ = fmt.Fprintf(stdout, "%s · envelope %s\n", headline, displayEnvelopeID(report))
-			_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", bundle)
-			for _, c := range report.Checks {
-				if !c.Pass {
-					_, _ = fmt.Fprintf(stdout, "  - %s: %s\n", c.Name, c.Reason)
-				}
-			}
+			// UNVERIFIABLE: content intact, but no trust root names the signer.
+			writeText(stdout, "%s · envelope %s\n", report.Outcome, displayEnvelopeID(report))
+			writeText(stdout, "Bundle: %s\n", bundle)
+			printVerifyIssues(stdout, report)
 		}
+		printVerifyCheckCounts(stdout, report)
 	}
 
-	if !report.Verified {
+	if report.Outcome != receiptverify.VerdictVerified {
 		return 1
 	}
 	return 0
+}
+
+// maxNotRunLines bounds the not-run listing in text output. A pack with many
+// host receipts reports several not-run checks per receipt; --json has them all.
+const maxNotRunLines = 20
+
+// printVerifyCheckCounts prints how many checks passed, failed and did not
+// run, and names each check that did not run with its reason, so a VERIFIED
+// headline cannot be read as covering checks that had nothing to read.
+func printVerifyCheckCounts(stdout io.Writer, report *verifier.VerifyReport) {
+	counts := report.CheckCounts
+	line := fmt.Sprintf("checks: %d passed, %d failed, ", counts.Passed, counts.Failed)
+	if counts.Unverifiable > 0 {
+		line += fmt.Sprintf("%d unverifiable, ", counts.Unverifiable)
+	}
+	line += fmt.Sprintf("%d not run", counts.NotRun)
+	if counts.NotRun > 0 && report.Verified {
+		line += "; this result covers only the checks that ran"
+	}
+	writeText(stdout, "%s\n", line)
+	printed := 0
+	for _, c := range report.Checks {
+		if c.Status != verifier.CheckNotRun {
+			continue
+		}
+		if printed == maxNotRunLines {
+			writeText(stdout, "  ... and %d more not run (use --json for all of them)\n", counts.NotRun-printed)
+			break
+		}
+		writeText(stdout, "  not run: %s: %s\n", c.Name, c.Reason)
+		printed++
+	}
+}
+
+// printVerifyIssues lists the checks that ran and did not pass. A check name
+// can carry a file name and a reason can quote the pack, so both are printed
+// through writeText.
+func printVerifyIssues(stdout io.Writer, report *verifier.VerifyReport) {
+	for _, c := range report.Checks {
+		if c.Status == verifier.CheckFailed || c.Status == verifier.CheckUnverifiable {
+			writeText(stdout, "  - %s: %s\n", c.Name, c.Reason)
+		}
+	}
+}
+
+// packVerifyKeys are the trusted keys `verify` and `evidence inspect` both
+// read from the environment, so a pack is judged against the same roots
+// whichever command is used.
+type packVerifyKeys struct {
+	externalHost        string
+	conformanceReport   string
+	managedAgentReceipt string
+}
+
+func packVerifyKeysFromEnv() packVerifyKeys {
+	return packVerifyKeys{
+		externalHost:        strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")),
+		conformanceReport:   strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")),
+		managedAgentReceipt: strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")),
+	}
+}
+
+// verifyPackDir is the verdict on an extracted pack directory. `verify` and
+// `evidence inspect` both call it, so one pack cannot be FAILED by one command
+// and VERIFIED by the other.
+//
+// It runs the verifier library's checks, the §3.1 layout check on a pack in
+// the canonical layout, and the conformance report signature check when the
+// pack carries one, and returns the finalized report. conformanceKeyHex is the
+// trusted key for that signature.
+func verifyPackDir(dir string, opts verifier.VerifyOptions, conformanceKeyHex string) (*verifier.VerifyReport, error) {
+	conformanceSigPresent := hasConformanceSignature(dir)
+	var conformanceSigErr error
+	if conformanceSigPresent {
+		conformanceSigErr = verifyConformanceReportSignature(dir, conformanceKeyHex)
+		opts.AllowVerifiedConformanceSignature = conformanceSigErr == nil
+	}
+
+	// The standalone verifier library (zero network deps).
+	report, err := verifier.VerifyBundleWithOptions(dir, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if hasCanonicalEvidenceLayout(dir) {
+		for _, issue := range conform.ValidateEvidencePackStructure(dir) {
+			report.Checks = append(report.Checks, verifier.CheckResult{
+				Name:   "conform:" + issue,
+				Pass:   false,
+				Reason: issue,
+			})
+		}
+	}
+
+	if conformanceSigErr != nil {
+		report.Checks = append(report.Checks, verifier.CheckResult{
+			Name:   "signature_verification",
+			Pass:   false,
+			Reason: fmt.Sprintf("signature: %v", conformanceSigErr),
+		})
+	}
+
+	report.Finalize()
+	return report, nil
+}
+
+// parseRequiredChecks reads one --require-check value: check names separated
+// by commas. A name that is not a registered check is an error, and so is a
+// value that names none: either would otherwise require nothing and let a pack
+// verify without the check the caller asked for.
+func parseRequiredChecks(value string) ([]string, error) {
+	var names []string
+	for _, name := range strings.Split(value, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if !slices.Contains(verifier.CheckNames(), name) {
+			return nil, fmt.Errorf("names an unknown check %q (checks: %s)", name, strings.Join(verifier.CheckNames(), ", "))
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("value %q names no check (checks: %s)", value, strings.Join(verifier.CheckNames(), ", "))
+	}
+	return names, nil
 }
 
 func extractEvidenceArchive(bundlePath, dstDir string) error {
@@ -427,6 +553,8 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 		"-managed-agent-receipt-public-key":  true,
 		"--eidas-max-age-hours":              true,
 		"-eidas-max-age-hours":               true,
+		"--require-check":                    true,
+		"-require-check":                     true,
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -546,8 +674,8 @@ func printCompactVerifyReport(stdout io.Writer, report *verifier.VerifyReport) {
 	if storageStatus == "" {
 		storageStatus = "unknown"
 	}
-	_, _ = fmt.Fprintf(stdout, "envelope %s · seal %s · sig %d/%d · trust %s\n", displayEnvelopeID(report), sealState, report.SignatureValidCount, report.SignatureTotalCount, trust)
-	_, _ = fmt.Fprintf(stdout, "VERIFIED · sealed %s · anchor %s · storage %s\n", sealed, anchorStatus, storageStatus)
+	writeText(stdout, "envelope %s · seal %s · sig %d/%d · trust %s\n", displayEnvelopeID(report), sealState, report.SignatureValidCount, report.SignatureTotalCount, trust)
+	writeText(stdout, "VERIFIED · sealed %s · anchor %s · storage %s\n", sealed, anchorStatus, storageStatus)
 }
 
 func displayEnvelopeID(report *verifier.VerifyReport) string {
@@ -576,9 +704,27 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 
 	results := make([]verifier.CheckResult, 0, 4)
 
-	// Inventory candidate anchors from disk.
+	// Inventory candidate anchors from the pack, read through an os.Root on
+	// its directory: a link out of the pack or a named pipe is refused.
+	pack, packErr := packfs.Open(bundleRoot)
+	if packErr != nil {
+		return append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot open the pack: %v", packErr),
+		})
+	}
+	defer func() { _ = pack.Close() }()
+	const anchorsName = "02_PROOFGRAPH/anchors"
 	anchorsDir := filepath.Join(bundleRoot, "02_PROOFGRAPH", "anchors")
-	entries, _ := os.ReadDir(anchorsDir)
+	entries, err := pack.ReadDir(anchorsName)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read %s: %v", anchorsName, err),
+		})
+	}
 
 	type anchorMeta struct {
 		Path           string
@@ -593,7 +739,7 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 			continue
 		}
 		path := filepath.Join(anchorsDir, ent.Name())
-		data, err := os.ReadFile(path)
+		data, err := pack.ReadFile(anchorsName + "/" + ent.Name())
 		if err != nil {
 			results = append(results, verifier.CheckResult{
 				Name:   "eidas:read_anchor",
@@ -618,7 +764,13 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 	}
 
 	// Also check 00_INDEX.json's embedded anchor field, when present.
-	if data, err := os.ReadFile(filepath.Join(bundleRoot, "00_INDEX.json")); err == nil {
+	if data, err := pack.ReadFile("00_INDEX.json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:read_anchor",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read 00_INDEX.json: %v", err),
+		})
+	} else if err == nil {
 		var doc map[string]any
 		if json.Unmarshal(data, &doc) == nil {
 			if a, ok := doc["anchor"].(map[string]any); ok {
@@ -710,10 +862,28 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 		}}
 	}
 
+	// Receipts are read through an os.Root on the pack directory: a link out
+	// of the pack or a named pipe is refused.
+	pack, err := packfs.Open(bundleRoot)
+	if err != nil {
+		return []verifier.CheckResult{{
+			Name:   "tee:read_receipt",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot open the pack: %v", err),
+		}}
+	}
+	defer func() { _ = pack.Close() }()
 	receiptsDir := filepath.Join(bundleRoot, "receipts")
-	entries, _ := os.ReadDir(receiptsDir)
+	entries, err := pack.ReadDir("receipts")
 
 	var results []verifier.CheckResult
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		results = append(results, verifier.CheckResult{
+			Name:   "tee:read_receipt",
+			Pass:   false,
+			Reason: fmt.Sprintf("cannot read receipts: %v", err),
+		})
+	}
 	receiptsSeen := 0
 	receiptsWithTEE := 0
 	receiptsWrongPlatform := 0
@@ -723,7 +893,7 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 			continue
 		}
 		path := filepath.Join(receiptsDir, ent.Name())
-		data, err := os.ReadFile(path)
+		data, err := pack.ReadFile("receipts/" + ent.Name())
 		if err != nil {
 			results = append(results, verifier.CheckResult{
 				Name:   "tee:read_receipt",
@@ -779,5 +949,5 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 }
 
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas, --require-tee), a Kernel receipt.v5 file (receipt --receipt --trusted-public-key-file), a single redacted entry (--entry <path> --proof <file>), or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-check, --require-eidas, --require-tee), a Kernel receipt.v5 file (receipt --receipt --trusted-public-key-file), a single redacted entry (--entry <path> --proof <file>), or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
 }

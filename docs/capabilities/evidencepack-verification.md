@@ -14,6 +14,20 @@ offline.
 helm-ai-kernel verify evidence-pack.tar
 ```
 
+Each check ends `VERIFIED`, `FAILED`, `UNVERIFIABLE` or `NOT_RUN`. A check the
+pack gives no input to is `NOT_RUN`, never passed, and the result states the
+passed, failed and not-run counts separately. Exit 0 means no check failed and
+every required check held; it does not mean every check ran. Evidence a pack
+carries is validated whether or not anything requires it. Every check except
+`roots` and `evidence_pack_seal`, which read the pack through the seal code,
+reads it through an `os.Root` on its directory: a path or symbolic link
+that leaves the pack, an absolute symbolic link and a file that is not a
+regular file are refused and fail the check that wanted them. A recorded tape
+is replayed with the code `helm-ai-kernel replay` runs. `helm-ai-kernel evidence inspect`
+reaches the same verdict through the same code and exits the same way. The
+checks and what requires each are listed in
+[Receipts](../VERIFICATION.md#what-the-result-covers).
+
 ## API Routes
 
 ```text
@@ -30,7 +44,14 @@ that ran: `bundle_format`, `bundle_seal`, `manifest_hashes`,
 `receipt_signatures` and `receipt_chain`. Each check and the outcome is
 `VERIFIED`, `FAILED` or `UNVERIFIABLE`. A seal or receipt signed by any other
 key, including one the bundle carries about itself, is `UNVERIFIABLE` when
-intact and never `VERIFIED`. The route evaluates no policy.
+intact and never `VERIFIED`. A receipt with no `signature_version` is not
+checked and is `UNVERIFIABLE` too. Every receipt file is read by the parser
+`receipt_verify` uses: a file that writes a member twice, or spells a receipt
+member in another letter case, fails `bundle_format` and no receipt check
+runs. The route evaluates no policy. The route and the
+CLI derive their outcome with one rule: any failed check fails the result, an
+unverifiable or missing required check leaves it `UNVERIFIABLE`, and a result
+in which no check ran is never a pass.
 
 ## When To Use This
 

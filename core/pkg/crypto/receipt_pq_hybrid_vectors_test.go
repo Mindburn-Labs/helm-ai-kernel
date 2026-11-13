@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,12 @@ import (
 // deterministic: keys derive from fixed seeds (0x42 x 32) and ML-DSA-65 uses
 // deterministic signing, so regeneration is byte-identical on any platform.
 // Set HELM_UPDATE_VECTORS=1 to rewrite the fixture.
+//
+// The vector receipt has no signature_version: the profile's section 2 signs
+// the legacy preimage (CanonicalizeReceipt). A verifier refuses such a receipt
+// by default (helm-tracker#305), so every profile verification of a vector
+// below passes AllowLegacyReceiptPreimages, and
+// TestReceiptPQHybridVectorsNeedTheLegacyOptIn pins the default.
 
 const pqHybridFixturePath = "testdata/receipt_pq_hybrid_profile_v1.json"
 
@@ -185,7 +192,7 @@ func TestReceiptPQHybridGoldenVectors(t *testing.T) {
 			r := receipt
 			r.Signature = vec.Signature
 
-			profile, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &r)
+			profile, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &r, AllowLegacyReceiptPreimages)
 			if vec.Name == "hybrid_presented_as_classical" {
 				// Profile detection still reports hybrid; the classical-only
 				// acceptance checks in TestReceiptPQHybridProfileConfusion
@@ -228,6 +235,24 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 	if ok, err := classical.VerifyReceipt(&receipt); err == nil && ok {
 		t.Fatal("classical-only verifier accepted a hybrid envelope")
 	}
+	// The vector receipt is unversioned, which the classical verifier refuses
+	// before it reads the envelope. A receipt.v5 hybrid receipt reaches the
+	// envelope, and the envelope is what it must reject there.
+	edSigner, mldsaSigner := pqHybridTestSigners(t)
+	hybridSigner, err := NewHybridSignerFromSigners(edSigner, mldsaSigner, "pq-hybrid-vector")
+	if err != nil {
+		t.Fatalf("hybrid signer: %v", err)
+	}
+	versioned := pqHybridFixtureReceipt()
+	if err := hybridSigner.SignReceipt(&versioned); err != nil {
+		t.Fatalf("sign receipt.v5 hybrid receipt: %v", err)
+	}
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &versioned); err != nil || !valid {
+		t.Fatalf("the receipt.v5 hybrid receipt does not verify; the case proves nothing (valid=%v err=%v)", valid, err)
+	}
+	if ok, err := classical.VerifyReceipt(&versioned); errors.Is(err, ErrLegacyReceiptRefused) || (err == nil && ok) {
+		t.Fatalf("classical-only verifier must reject a receipt.v5 hybrid envelope for its envelope (ok=%v err=%v)", ok, err)
+	}
 
 	// Package-level classical verify must also reject it.
 	payload := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
@@ -236,17 +261,17 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 	}
 
 	// Missing PQ key: hybrid receipt must fail, never downgrade to classical.
-	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, "", &receipt); err == nil || valid {
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, "", &receipt, AllowLegacyReceiptPreimages); err == nil || valid {
 		t.Fatalf("hybrid receipt without PQ key must fail closed (valid=%v err=%v)", valid, err)
 	}
 
 	receipt.SignatureProfile = ReceiptProfileClassical
-	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt); err == nil || valid {
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, AllowLegacyReceiptPreimages); err == nil || valid {
 		t.Fatalf("hybrid envelope declared classical must fail closed (valid=%v err=%v)", valid, err)
 	}
 
 	receipt.SignatureProfile = ReceiptProfileHybrid
-	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileClassical)
+	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileClassical, AllowLegacyReceiptPreimages)
 	if err != nil || !valid || profile != ReceiptProfileHybrid {
 		t.Fatalf("classical-required verification should accept valid hybrid receipt (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
@@ -255,18 +280,18 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 	// under the classical profile (no retroactive invalidation).
 	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
 	receipt.SignatureProfile = ""
-	profile, valid, err = VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt)
+	profile, valid, err = VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, AllowLegacyReceiptPreimages)
 	if err != nil || !valid || profile != ReceiptProfileClassical {
 		t.Fatalf("classical receipt must remain valid (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
 
 	receipt.SignatureProfile = ReceiptProfileHybrid
-	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt); err == nil || valid {
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, AllowLegacyReceiptPreimages); err == nil || valid {
 		t.Fatalf("classical envelope declared hybrid must fail closed (valid=%v err=%v)", valid, err)
 	}
 	receipt.SignatureProfile = ""
 
-	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileHybrid)
+	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileHybrid, AllowLegacyReceiptPreimages)
 	if err == nil || valid {
 		t.Fatalf("hybrid-required verification must reject classical receipt (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
@@ -283,7 +308,7 @@ func TestReceiptRequiredProfileRejectsUnsupportedProfile(t *testing.T) {
 	receipt := pqHybridFixtureReceipt()
 	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
 
-	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfilePQC)
+	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfilePQC, AllowLegacyReceiptPreimages)
 	if err == nil || valid {
 		t.Fatalf("pqc-required verification must reject classical receipt (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
@@ -291,7 +316,7 @@ func TestReceiptRequiredProfileRejectsUnsupportedProfile(t *testing.T) {
 		t.Fatalf("unexpected pqc-required error: %v", err)
 	}
 
-	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, "quantum-only")
+	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, "quantum-only", AllowLegacyReceiptPreimages)
 	if err == nil || valid {
 		t.Fatalf("unsupported required profile must fail closed (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
@@ -330,5 +355,29 @@ func TestReceiptPQHybridIssuanceEnvelope(t *testing.T) {
 	tampered.Status = "FAILURE"
 	if ok, err := hv.VerifyReceipt(&tampered); err == nil && ok {
 		t.Fatal("hybrid verifier accepted tampered receipt")
+	}
+}
+
+// TestReceiptPQHybridVectorsNeedTheLegacyOptIn: the profile's vectors are
+// unversioned receipts, and an unversioned receipt is not checked unless the
+// caller opts in. Without the option both valid vectors are refused, with the
+// error that says they were not checked.
+func TestReceiptPQHybridVectorsNeedTheLegacyOptIn(t *testing.T) {
+	fixture := buildPQHybridFixture(t)
+	for _, vec := range fixture.Vectors {
+		if !vec.ExpectValid {
+			continue
+		}
+		receipt := pqHybridFixtureReceipt()
+		receipt.Signature = vec.Signature
+		if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt); valid || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("%s: an unversioned receipt verified without the opt-in (valid=%v err=%v)", vec.Name, valid, err)
+		}
+		if _, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ""); valid || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("%s: an unversioned receipt verified through VerifyReceiptRequiredProfile without the opt-in (valid=%v err=%v)", vec.Name, valid, err)
+		}
+		if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, AllowLegacyReceiptPreimages); err != nil || !valid {
+			t.Fatalf("%s: the vector does not verify under the opt-in (valid=%v err=%v)", vec.Name, valid, err)
+		}
 	}
 }

@@ -1,0 +1,26 @@
+{
+  "schema_version": "helm.skillpack.first-party-manifest.v1",
+  "policy": {
+    "path": "policies/skills/first-party.safe.toml",
+    "sha256": "sha256:4a3cff491ff2fc24fa9f8114aa7cb03e6c066cac8001e91c4dd3fd4af4a27ebf"
+  },
+  "packs": [
+    {
+      "id": "helm/repo-auditor",
+      "version": "0.2.0",
+      "content_digest": "sha256:569c8fe5d6b6c27f8f46961aa493375b2da12aa98a0354d8e0c512ac841d3b57",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "sha256:94b87df79a3ca9b5d74a9a20fa4beaa185dd6a6d31bb58384852d48fbb52ccb8",
+          "size": 1613
+        },
+        {
+          "path": "skillpack.json",
+          "sha256": "sha256:8bb127053717de1676f1ac59e4f49ee50136b24a77ac5d194dd0116c89bc3481",
+          "size": 879
+        }
+      ]
+    }
+  ]
+}

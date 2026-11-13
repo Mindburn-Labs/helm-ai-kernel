@@ -490,8 +490,61 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `tape.ReadManifest(dir)` in `core/pkg/tape`. Read the file and call
   `tape.ParseManifest`, or load the whole tape with `tape.LoadTape`.
 
+### Upgrade notes
+
+- `helm-ai-kernel skills verify` and `skills scan` exit 1 for every verdict
+  other than `ALLOW`. Text output used to exit 0 for `ESCALATE`.
+- `skills search --json` returns each skill as
+  `{"manifest": ..., "publisher_verification": ...}`; the manifest fields used
+  to be at the top level of each entry. The text output shows the computed
+  publisher state where it showed the status the manifest declares.
+- Go callers of `core/pkg/skillpacks`: `VerifyPublisherSignature`,
+  `TrustedPublisherKeyring`, `DefaultTrustedPublisherKeyring` and
+  `ValidatePolicyFile` are removed. `CheckPublisher` reports the computed
+  publisher state, `ListCatalog` returns `[]CatalogEntry`, and
+  `MarketplacePlugin.ScannedAt` is `RecordedAt` (`recorded_at`).
+  `ProjectionLifecycle` rejects a manifest that declares `status: verified`
+  unless its two files are a pack the binary pins.
+  The shipped pack explicitly records its `SKILL.md` content hash so those
+  exact pinned files also satisfy the lifecycle's artifact identity checks.
+
 ### Fixed
 
+- Skill Pack verification no longer trusts what a pack says about itself. The
+  check compared the manifest's publisher, a `signature_ref` that follows from
+  the pack name and version, and the `SKILL.md` hash, so any pack that copied
+  those strings scanned as `ALLOW` and installed, and the policy that judged a
+  pack was read from the pack's own repository. Now a pack is first party only
+  when every one of its files hashes to a digest compiled into the binary for
+  the packs under `registry/skills/helm/`. No signature is checked: that
+  comparison shows the pack is the one the binary was built with, and Skill
+  Packs from other publishers cannot be verified. `skills verify` reports the
+  computed `publisher_verification` state (`first_party`,
+  `first_party_mismatch` or `unsigned`), denies a pack that declares
+  `status: verified` without matching a pinned digest, escalates any other
+  unsigned pack, and `skills install` writes nothing for either.
+- The scan judges every pack under rules built into the binary and records the
+  SHA-256 of `policies/skills/first-party.safe.toml` as `policy_hash`. Receipts
+  used to carry the pack's own `policy_ref` string in that field, and a policy
+  file beside the pack could change the verdict.
+- The pack digest covers every file in the pack, read once without following a
+  link out of it. A file over 1 MiB, more than 1024 files or more than 16 MiB in
+  one pack is denied; files over 1 MiB used to skip the binary check.
+  The initial `SKILL.md` and manifest reads also enforce the file limit and
+  containment before scanning. Loading and scanning reuse the verifier's
+  nonblocking file and directory reader, so named pipes cannot stall them.
+- `skills verify` flags instructions that run commands or fetch from outside
+  the pack, such as a download piped into a shell, using the kernel's threat
+  scanner. Such a pack needs review even when it is first party.
+- `skills search`, `skills inspect` and the install record shown by
+  `skills list` carry the computed publisher state. They used to show only the
+  `verified` status a manifest declares. Pack-controlled values in formatted
+  text output are escaped so a version, description or publisher reason cannot
+  insert a forged verdict or terminal control sequence; JSON preserves the values.
+- A `skills export` receipt carries the scan's verdict instead of a constant
+  `ALLOW`, and `plugin.json` records the scan verdict and publisher state.
+  `skills marketplace add` records an entry as `recorded`; it runs no scan and
+  used to say `scanned`.
 - `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any

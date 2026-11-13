@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
 )
 
 func Load(ref string) (SkillPack, error) {
@@ -34,12 +36,33 @@ func Load(ref string) (SkillPack, error) {
 }
 
 func LoadDir(dir string) (SkillPack, error) {
-	manifestPath := filepath.Join(dir, "skillpack.json")
-	skillPath := filepath.Join(dir, "SKILL.md")
-	data, err := os.ReadFile(skillPath)
+	root, err := packfs.Open(dir)
+	if err != nil {
+		return SkillPack{}, fmt.Errorf("open pack directory: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	data, err := root.ReadFileLimit("SKILL.md", maxPackFileBytes)
 	if err != nil {
 		return SkillPack{}, fmt.Errorf("read SKILL.md: %w", err)
 	}
+	manifestBytes, err := root.ReadFileLimit("skillpack.json", maxPackFileBytes)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return SkillPack{}, fmt.Errorf("read skillpack.json: %w", err)
+	}
+	manifest, err := decodeManifest(dir, manifestBytes, data)
+	if err != nil {
+		return SkillPack{}, err
+	}
+	if err := ValidateManifest(manifest, data); err != nil {
+		return SkillPack{}, err
+	}
+	return SkillPack{Manifest: manifest, SkillMD: string(data), Root: dir}, nil
+}
+
+// decodeManifest applies skillpack.json (raw, nil when the pack has none) over
+// the loader's defaults. The scan decodes the bytes it hashed the same way, to
+// tell whether they are still the manifest that was loaded.
+func decodeManifest(dir string, raw, skillMD []byte) (Manifest, error) {
 	manifest := Manifest{
 		SchemaVersion:              "helm.skillpack.v1",
 		ID:                         filepath.Base(dir),
@@ -51,27 +74,28 @@ func LoadDir(dir string) (SkillPack, error) {
 		AgentTargets:               []string{"codex", "generic"},
 		PermissionsDoNotGrantTools: true,
 	}
-	if raw, err := os.ReadFile(manifestPath); err == nil {
+	if raw != nil {
 		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return SkillPack{}, fmt.Errorf("parse skillpack.json: %w", err)
+			return Manifest{}, fmt.Errorf("parse skillpack.json: %w", err)
 		}
 	}
 	if manifest.ContentHash == "" {
-		manifest.ContentHash = HashBytes(data)
+		manifest.ContentHash = HashBytes(skillMD)
 	}
-	if err := ValidateManifest(manifest, data); err != nil {
-		return SkillPack{}, err
-	}
-	return SkillPack{Manifest: manifest, SkillMD: string(data), Root: dir}, nil
+	return manifest, nil
 }
 
-func ListCatalog(query string) ([]Manifest, error) {
+// ListCatalog lists the packs in the registry of the repository the working
+// directory is in. That registry is whatever the checkout holds, so each entry
+// carries the publisher state computed for it; a manifest's own status is only
+// what the pack declares.
+func ListCatalog(query string) ([]CatalogEntry, error) {
 	root, err := findRepoRoot("")
 	if err != nil {
 		return nil, err
 	}
 	base := filepath.Join(root, "registry", "skills")
-	var out []Manifest
+	var out []CatalogEntry
 	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != "skillpack.json" {
 			return nil
@@ -81,11 +105,11 @@ func ListCatalog(query string) ([]Manifest, error) {
 			return nil
 		}
 		if query == "" || strings.Contains(strings.ToLower(pack.Manifest.ID+" "+pack.Manifest.Name+" "+pack.Manifest.Description), strings.ToLower(query)) {
-			out = append(out, pack.Manifest)
+			out = append(out, CatalogEntry{Manifest: pack.Manifest, PublisherVerification: CheckPublisher(pack)})
 		}
 		return nil
 	})
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	sort.Slice(out, func(i, j int) bool { return out[i].Manifest.ID < out[j].Manifest.ID })
 	return out, nil
 }
 

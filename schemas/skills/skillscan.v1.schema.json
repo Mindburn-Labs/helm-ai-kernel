@@ -9,6 +9,34 @@
     "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
     "reason_code": { "type": "string" },
     "skill_content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "publisher_verification": {
+      "description": "What the scan established about who published the pack. It is computed from the pack's files and trust material outside the pack; no manifest field sets it.",
+      "type": "object",
+      "required": ["state", "basis", "reason"],
+      "properties": {
+        "state": {
+          "description": "first_party: every file hashes to the digest the scanning binary pins for this id and version. first_party_mismatch: the binary pins this id and version and the files differ. unsigned: nothing was verified. not_checked: the caller verifies the publisher itself.",
+          "enum": ["first_party", "first_party_mismatch", "unsigned", "not_checked"]
+        },
+        "basis": { "enum": ["first_party_manifest", "projection_trust_verifier", "none"] },
+        "content_digest": {
+          "description": "Artifact set hash over the path, SHA-256 and size of every file in the pack. Absent when the pack could not be read in full.",
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "reason": { "type": "string" }
+      }
+    },
+    "policy": {
+      "description": "The policy the verdict was reached under. It is the scanning binary's own; a pack's policy_ref is never resolved.",
+      "type": "object",
+      "required": ["source", "ref", "hash"],
+      "properties": {
+        "source": { "const": "kernel" },
+        "ref": { "type": "string" },
+        "hash": { "type": "string" }
+      }
+    },
     "findings": {
       "type": "array",
       "items": {
@@ -32,6 +60,9 @@
         "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
         "reason_code": { "type": "string" },
         "skill_content_hash": { "type": "string" },
+        "publisher_state": { "enum": ["first_party", "first_party_mismatch", "unsigned", "not_checked"] },
+        "pack_content_digest": { "type": "string" },
+        "policy_hash": { "type": "string" },
         "created_at": { "type": "string", "format": "date-time" }
       }
     }

@@ -284,6 +284,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   without `--max-redirect=0` and `git` over HTTP without
   `-c http.followRedirects=false`, because the client follows redirects to
   hosts the hook cannot see.
+- SSH reverse forwarding now denies as undetermined under an egress allowlist,
+  including `-R` and `-o RemoteForward` SOCKS forms. OpenSSL DTLS destinations
+  are checked as UDP, so a TCP allowance cannot authorize them.
 - Git URL-scoped `http.<url>.curloptResolve` overrides and curl
   `--no-ftp-skip-pasv-ip` now deny the whole call under an egress allowlist.
   Both can select a destination absent from the URL. Ordinary scoped Git

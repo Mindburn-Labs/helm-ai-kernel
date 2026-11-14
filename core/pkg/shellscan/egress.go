@@ -251,6 +251,7 @@ var opaqueReasons = map[string]string{
 	"curl dns-servers":          "--dns-servers sends lookups to other resolvers",
 	"curl alt-svc":              "--alt-svc lets a cache file redirect the connection",
 	"curl no-ftp-skip-pasv-ip":  "--no-ftp-skip-pasv-ip accepts a server-selected data destination",
+	"ssh R":                     "-R lets a remote peer trigger additional local connections",
 	"curl ftp-port":             "--ftp-port opens a connection back from the server",
 	"curl proto-default":        "--proto-default changes the protocol of every URL",
 	"curl variable":             "--variable builds arguments at run time",
@@ -579,7 +580,7 @@ func sshFamilySpec(valueLetters, flagLetters string, roles map[string]optRole, o
 
 var (
 	sshSpec = sshFamilySpec("BbcDEeFIiJLlmOoPpQRSWw", "46AaCfGgKkMNnqsTtVvXxYy", map[string]optRole{
-		"p": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "O": roleOpaque,
+		"p": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "O": roleOpaque, "R": roleOpaque,
 		// ssh takes its host, then goes back to reading options, and treats
 		// the next operand as the start of the remote command (ssh.c parses
 		// the remaining arguments again after the host). An option written
@@ -656,7 +657,7 @@ var sshPlainOptions = names(`
 	kexalgorithms localforward loglevel logverbose macs
 	nohostauthenticationforlocalhost numberofpasswordprompts
 	passwordauthentication preferredauthentications pubkeyacceptedalgorithms
-	pubkeyauthentication rekeylimit remoteforward requesttty requiredrsasize
+	pubkeyauthentication rekeylimit requesttty requiredrsasize
 	sendenv serveralivecountmax serveraliveinterval sessiontype setenv stdinnull
 	stricthostkeychecking tcpkeepalive updatehostkeys user userknownhostsfile
 	verifyhostkeydns visualhostkey`)
@@ -689,6 +690,10 @@ func (c *sshConnection) configOption(option string) {
 		c.setPort(value)
 	case key == "proxyjump":
 		c.jump(value)
+	case key == "remoteforward":
+		// Unlike local forwarding, the client opens the destination socket.
+		// The destination-free form is a peer-controlled SOCKS proxy.
+		c.scan.refuse("-o RemoteForward lets a remote peer trigger additional local connections")
 	case sshOpaqueOptions[key]:
 		if !strings.EqualFold(value, "none") && !strings.EqualFold(value, "no") {
 			c.scan.refuse("-o " + original + " moves the connection")
@@ -994,7 +999,7 @@ func telnetEgress(tokens []string) egressScan {
 // -provider), and a table that skipped what it did not know would pass them.
 var opensslClientFlags = names(`
 	4 6 quiet brief showcerts crlf ign_eof no_ign_eof state debug msg prexit
-	tls1 tls1_1 tls1_2 tls1_3 dtls dtls1 dtls1_2 no_ssl3 no_tls1 no_tls1_1
+	tls1 tls1_1 tls1_2 tls1_3 no_ssl3 no_tls1 no_tls1_1
 	no_tls1_2 no_tls1_3 reconnect status tlsextdebug nocommands
 	verify_return_error verify_quiet no_ticket comp no_comp bugs nbio
 	noservername trace security_debug security_debug_verbose partial_chain
@@ -1018,13 +1023,14 @@ var opensslClientValues = names(`
 func opensslEgress(tokens []string) egressScan {
 	var scan egressScan
 	host, port := "", ""
-	connected := false
+	var peers []string
+	transport := "tcp"
+	proxied, explicitTLS := false, false
 	for i := 1; i < len(tokens); i++ {
 		token := tokens[i]
 		if !strings.HasPrefix(token, "-") || token == "-" {
 			// OpenSSL 3 takes the peer as an operand.
-			scan.addTarget(token, "tcp", "the host")
-			connected = true
+			peers = append(peers, token)
 			continue
 		}
 		name, value, attached := strings.Cut(strings.TrimLeft(token, "-"), "=")
@@ -1045,9 +1051,15 @@ func opensslEgress(tokens []string) egressScan {
 			return egressScan{}
 		case name == "connect" || name == "proxy":
 			if target, ok := next(); ok {
-				scan.addTarget(target, "tcp", "-"+name)
-				connected = connected || name == "connect"
+				if name == "proxy" {
+					proxied = true
+					scan.addTarget(target, "tcp", "-proxy")
+				} else {
+					peers = append(peers, target)
+				}
 			}
+		case (name == "dtls" || name == "dtls1" || name == "dtls1_2") && !attached:
+			transport = "udp"
 		case name == "host":
 			host, _ = next()
 		case name == "port":
@@ -1056,6 +1068,7 @@ func opensslEgress(tokens []string) egressScan {
 			scan.refuse("-unix connects through a local socket")
 		default:
 			if _, flag := opensslClientFlags[name]; flag && !attached {
+				explicitTLS = explicitTLS || strings.HasPrefix(name, "tls1")
 				continue
 			}
 			if _, takesValue := opensslClientValues[name]; !takesValue {
@@ -1068,8 +1081,15 @@ func opensslEgress(tokens []string) egressScan {
 			}
 		}
 	}
+	if transport == "udp" && (proxied || explicitTLS) {
+		scan.refuse("DTLS combined with a proxy or TLS mode has an unresolved transport")
+	}
+	// Determine the transport after all options: DTLS can follow the peer.
+	for _, peer := range peers {
+		scan.addTarget(peer, transport, "the host")
+	}
 	switch {
-	case connected:
+	case len(peers) > 0:
 		// -connect wins over -host and -port when both are given.
 	case host != "" || port != "":
 		if host == "" {
@@ -1078,10 +1098,10 @@ func opensslEgress(tokens []string) egressScan {
 		if port == "" {
 			port = "4433"
 		}
-		scan.addHost("tcp", host, port, "-host")
+		scan.addHost(transport, host, port, "-host")
 	default:
 		// Without a peer the client dials its built-in default address.
-		scan.addHost("tcp", "localhost", "4433", "the default address")
+		scan.addHost(transport, "localhost", "4433", "the default address")
 	}
 	return scan
 }

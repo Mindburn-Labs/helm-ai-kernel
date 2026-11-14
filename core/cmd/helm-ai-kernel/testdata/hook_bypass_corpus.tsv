@@ -418,3 +418,7 @@ allow	-	mcp__fs__search	{"path":"{{HOME}}/copies","pattern":"foo|bar"}
 # Connection overrides must not hide behind an allowed URL.
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git -c http.followRedirects=false -c http.https://api.github.com/.curloptResolve=api.github.com:443:127.0.0.1 ls-remote https://api.github.com/o/r.git
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --no-ftp-skip-pasv-ip https://api.github.com/zen
+
+# Reverse forwarding lets the peer trigger connections from the local client.
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh -NR9000:other.example:8080 allowed.example
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh -o "RemoteForward=9000" allowed.example

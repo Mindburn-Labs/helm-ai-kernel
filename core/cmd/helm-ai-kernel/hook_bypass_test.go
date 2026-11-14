@@ -128,6 +128,10 @@ func TestHookUsesTheEffectiveSSHDestination(t *testing.T) {
 		name, command, target, reason string
 		denied                        bool
 	}{
+		{"remote TCP forwarding", "ssh -N -R 9000:other.example:8080 allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
+		{"remote SOCKS forwarding", "ssh -NR9000 allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
+		{"remote forwarding config", "ssh -o 'RemoteForward=9000 other.example:8080' allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
+		{"plain SSH", "ssh -N allowed.example", "ssh://allowed.example", "", false},
 		{"first host denied", "ssh -o HostName=other.example -o HostName=allowed.example allowed.example", "ssh://other.example", "EGRESS_DESTINATION_NOT_ALLOWED", true},
 		{"first host allowed", "ssh -o HostName=allowed.example -o HostName=other.example allowed.example", "ssh://allowed.example", "", false},
 		{"conflicting ports", "ssh -p 2222 -p 22 allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
@@ -243,6 +247,46 @@ func TestHookRefusesDestinationOverrides(t *testing.T) {
 				if !tc.denied && receipt.Verdict != contracts.WorkstationVerdictAllow {
 					t.Errorf("supported call was refused: %s", describeReceipts(receipts))
 				}
+			}
+		})
+	}
+}
+
+func TestHookUsesOpenSSLTransport(t *testing.T) {
+	for _, protocol := range []string{"tcp", "udp"} {
+		t.Run(protocol, func(t *testing.T) {
+			env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+			profile, err := workstation.LoadPolicyProfileFile(env.policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{{Host: "allowed.example", Protocol: protocol}}
+			raw, err := json.Marshal(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+			for _, tc := range []struct{ flag, transport string }{
+				{"-dtls", "udp"}, {"-dtls1", "udp"}, {"-dtls1_2", "udp"}, {"-tls1_2", "tcp"},
+			} {
+				t.Run(tc.flag, func(t *testing.T) {
+					command := "openssl s_client -connect allowed.example:443 " + tc.flag
+					denied, receipts := env.run(t, "Bash", map[string]any{"command": command})
+					wantDenied := protocol != tc.transport
+					if denied != wantDenied || len(receipts) != 1 {
+						t.Fatalf("denied=%v receipts=%s; want denied=%v and one receipt", denied, describeReceipts(receipts), wantDenied)
+					}
+					r := receipts[0]
+					if r.Request.Target != fingerprintHookTarget(tc.transport+"://allowed.example:443") {
+						t.Errorf("wrong transport in receipt target: %q", r.Request.Target)
+					}
+					if wantDenied && (r.Verdict != contracts.WorkstationVerdictDeny || r.ReasonCode != "EGRESS_DESTINATION_NOT_ALLOWED") || !wantDenied && r.Verdict != contracts.WorkstationVerdictAllow {
+						t.Errorf("wrong protocol decision: %s", describeReceipts(receipts))
+					}
+				})
 			}
 		})
 	}

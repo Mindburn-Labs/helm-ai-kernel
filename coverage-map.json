@@ -2802,6 +2802,7 @@
           "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput",
           "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding",
           "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination",
+          "core/cmd/helm-ai-kernel.TestHookRefusesMixedProtocolCurlRemappings",
           "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone",
           "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         ],
@@ -2850,6 +2851,7 @@
         "removal": [],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/cmd/helm-ai-kernel.TestHookRefusesMixedProtocolCurlRemappings",
           "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination",
           "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs",
           "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools",

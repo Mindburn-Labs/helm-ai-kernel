@@ -155,6 +155,49 @@ func TestHookUsesTheEffectiveSSHDestination(t *testing.T) {
 	}
 }
 
+func TestHookRefusesMixedProtocolCurlRemappings(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{
+		{Host: "allowed.example", Protocol: "https"},
+		{Host: "allowed.example", Protocol: "http"},
+		{Host: "other.example", Protocol: "https"},
+		{Host: "203.0.113.7", Protocol: "https"},
+	}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, tc := range []struct {
+		name, command string
+		denied        bool
+	}{
+		{"mixed connect-to", "curl https://allowed.example/ --next --connect-to allowed.example:80:other.example:8080 http://allowed.example/", true},
+		{"mixed resolve", "curl https://allowed.example/ --next --resolve allowed.example:80:203.0.113.7 http://allowed.example/", true},
+		{"HTTPS remap", "curl --connect-to allowed.example:443:other.example:8080 https://allowed.example/", false},
+		{"mixed without remapping", "curl https://allowed.example/ --next http://allowed.example/", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
+			if denied != tc.denied || len(receipts) == 0 {
+				t.Fatalf("denied=%v receipts=%s; want denied=%v and signed receipts", denied, describeReceipts(receipts), tc.denied)
+			}
+			for _, receipt := range receipts {
+				if tc.denied && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "EGRESS_DESTINATION_UNDETERMINED" || receipt.Request.Target != fingerprintHookTarget("<undetermined>")) {
+					t.Errorf("ambiguous call left a misleading receipt: %s target=%q", describeReceipts(receipts), receipt.Request.Target)
+				}
+			}
+		})
+	}
+}
+
 func describeReceipts(receipts []*contracts.WorkstationPolicyDecisionReceipt) string {
 	parts := make([]string, 0, len(receipts))
 	for _, receipt := range receipts {

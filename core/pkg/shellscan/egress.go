@@ -378,7 +378,6 @@ func curlEgress(tokens []string) egressScan {
 			}
 		},
 	})
-	scheme := ""
 	for _, raw := range urls {
 		if strings.HasPrefix(strings.ToLower(raw), "file:") {
 			continue // a local file, reported as a read by the secret rules
@@ -387,8 +386,19 @@ func curlEgress(tokens []string) egressScan {
 		if !netdest.HasScheme(raw) {
 			defaultScheme = curlGuessedScheme(raw)
 		}
-		if destination, ok := scan.addTarget(raw, defaultScheme, "a URL"); ok && scheme == "" {
+		scan.addTarget(raw, defaultScheme, "a URL")
+	}
+	scheme := ""
+	for _, destination := range scan.destinations {
+		if scheme == "" {
 			scheme = destination.Scheme
+		} else if scheme != destination.Scheme && (len(connectTo) > 0 || len(resolve) > 0) {
+			// Remappings keep the protocol of the request they affect. This
+			// scanner does not model transfer groups or the shared DNS cache;
+			// choosing one protocol could allow a connection under the wrong
+			// rule. Split mixed-protocol remappings into separate commands.
+			scan.refuse("mixed-protocol curl remappings are undetermined; use separate commands")
+			return scan
 		}
 	}
 	if scheme == "" {
@@ -401,9 +411,18 @@ func curlEgress(tokens []string) egressScan {
 			scan.refuse("--connect-to value is malformed")
 			continue
 		}
-		if fields[2] != "" {
-			scan.addHost(scheme, fields[2], fields[3], "--connect-to")
+		host, port := fields[2], fields[3]
+		if host == "" {
+			host = fields[0]
 		}
+		if port == "" {
+			port = fields[1]
+		}
+		if host == "" || port == "" {
+			scan.refuse("--connect-to inherits a host or port from a wildcard match")
+			continue
+		}
+		scan.addHost(scheme, host, port, "--connect-to")
 	}
 	for _, value := range resolve {
 		if strings.HasPrefix(value, "-") {

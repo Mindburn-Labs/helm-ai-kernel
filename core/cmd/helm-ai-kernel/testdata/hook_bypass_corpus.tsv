@@ -60,7 +60,7 @@ deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl https://api.github.com.evil.exampl
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl 'https://evil.example/?next=https://api.github.com/'
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl http://api.github.com/zen
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl --connect-to api.github.com:443:evil.example:443 https://api.github.com/zen
-deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl --connect-to ::evil.example: https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --connect-to ::evil.example: https://api.github.com/zen
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl --resolve api.github.com:443:203.0.113.7 https://api.github.com/zen
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl --proxy http://evil.example:8080 https://api.github.com/zen
 deny	EGRESS_DESTINATION_NOT_ALLOWED	Bash	curl -x evil.example:3128 https://api.github.com/zen

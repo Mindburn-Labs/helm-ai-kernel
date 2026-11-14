@@ -164,6 +164,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   repeated flags, and refuses ambiguous argument lists. SSH destination
   parsing keeps the first `HostName`; conflicting port options or a URL
   combined with host/port overrides are undetermined under an allowlist.
+- Curl calls combining multiple protocols with `--connect-to` or `--resolve`
+  are undetermined under an allowlist. Split those transfers into separate
+  commands. A `--connect-to` destination that omits its host or port inherits
+  the corresponding explicit source field; inheritance from a wildcard
+  source is undetermined. This prevents receipts from naming the wrong
+  protocol or port.
 - A caller-supplied workstation trust key remains authoritative without a
   descriptive source label. Reports identify the unlabeled key by its key
   ID and keep other signers' receipts out of trusted audit totals.

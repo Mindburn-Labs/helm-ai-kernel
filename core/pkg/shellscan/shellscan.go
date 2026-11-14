@@ -408,17 +408,38 @@ func (c *collector) guardWord(word *syntax.Word) {
 	if c.cwdUnknown {
 		cwd = ""
 	}
-	if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
-		c.protectedPath = rule
+	match := func(pattern string, dynamicAt int) bool {
+		if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
+			c.protectedPath = rule
+			return true
+		}
+		// A working directory written with backslashes is also read with
+		// them as separators, as it was before they were kept as name bytes.
+		if converted := slashPath(cwd); converted != nativePath(cwd) {
+			if rule, ok := c.guard.matchPattern(pattern, dynamicAt, converted, c.dotGlob); ok {
+				c.protectedPath = rule
+				return true
+			}
+		}
+		return false
+	}
+	if match(pattern, dynamicAt) {
 		return
 	}
-	// A working directory written with backslashes is also read with them
-	// as separators, as it was before they were kept as name bytes.
-	if converted := slashPath(cwd); converted != nativePath(cwd) {
-		if rule, ok := c.guard.matchPattern(pattern, dynamicAt, converted, c.dotGlob); ok {
-			c.protectedPath = rule
-		}
+	// The value attached to a long option (--file=$HOME/input) is a path the
+	// whole word hides. The option name must be literal text. The shell
+	// expands a glob over the whole word, not over the value, so the value's
+	// own text is matched literally.
+	split := strings.IndexByte(pattern, '=')
+	if split < 0 || split+1 >= len(pattern) || dynamicAt >= 0 && dynamicAt <= split || !strings.HasPrefix(unescapeLit(pattern[:split]), "--") || split < 3 {
+		return
 	}
+	if dynamicAt < 0 {
+		match(globEscape(unescapeLit(pattern[split+1:])), -1)
+		return
+	}
+	known := globEscape(unescapeLit(pattern[split+1 : dynamicAt]))
+	match(known+pattern[dynamicAt:], len(known))
 }
 
 // guardOptionPaths extracts values using the same option grammar as egress
@@ -442,8 +463,6 @@ func (c *collector) guardOptionPaths(command Command) {
 		spec = scpSpec
 	case "sftp":
 		spec = sftpSpec
-	default:
-		return
 	}
 	cwd := c.cwd
 	if c.cwdUnknown {
@@ -456,6 +475,17 @@ func (c *collector) guardOptionPaths(command Command) {
 		if rule, ok := c.guard.Match(value, cwd); ok {
 			c.protectedPath = rule
 		}
+	}
+	if spec.value == nil {
+		// A command without an option table: the value attached to a long
+		// option (--files-from=FILE, --output=FILE) is a path the whole
+		// word hides. A separate value is a word of its own, checked as one.
+		for _, token := range command.Tokens[1:] {
+			if _, value, attached := strings.Cut(token, "="); attached && strings.HasPrefix(token, "--") {
+				check(value)
+			}
+		}
+		return
 	}
 	// A download without a named output file is written under a name the
 	// client takes from the URL. Curl saves that file, and one --output

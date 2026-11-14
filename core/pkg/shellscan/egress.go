@@ -1327,8 +1327,13 @@ func commandEgress(command Command, overrides []envOverride) (scan egressScan, n
 				marked[i] = dynamicToken
 			}
 		}
-		var configured bool
-		scan, network, configured = gitEgress(marked)
+		var configured, unknown bool
+		scan, network, configured, unknown = gitEgress(marked)
+		if !network && unknown && movesConfiguration("git", overrides) {
+			// Configuration moved by the command line may define the word
+			// as an alias for a command that connects.
+			return egressScan{undetermined: "git runs a subcommand that moved configuration can define"}, true
+		}
 		// A configured remote is operator configuration, unless the command
 		// line also sets a variable that moves the connection.
 		return scan, network && !(configured && len(overrides) == 0)
@@ -1341,7 +1346,9 @@ func commandEgress(command Command, overrides []envOverride) (scan egressScan, n
 		}
 	case egressResolvers[command.Name] != nil:
 		scan = egressResolvers[command.Name](tokens)
-		network = len(scan.destinations) > 0 || scan.undetermined != "" || command.Dynamic && hasOperand(tokens)
+		// A computed argument may be an address even when the text left of
+		// it starts with "-".
+		network = len(scan.destinations) > 0 || scan.undetermined != "" || command.Dynamic && (hasOperand(tokens) || dynamicArgument(command))
 	case unparsedNetworkTools[command.Name] != "":
 		if !hasOperand(tokens) && !command.Dynamic {
 			return egressScan{}, false // --help, --version: nothing connects
@@ -1353,6 +1360,17 @@ func commandEgress(command Command, overrides []envOverride) (scan egressScan, n
 		scan = egressScan{undetermined: "an argument is computed at run time"}
 	}
 	return scan, network
+}
+
+// dynamicArgument reports an argument, not the command word, with a part
+// computed at run time.
+func dynamicArgument(command Command) bool {
+	for index := 1; index < len(command.dynamic); index++ {
+		if command.dynamic[index] {
+			return true
+		}
+	}
+	return false
 }
 
 func hasOperand(tokens []string) bool {
@@ -1380,6 +1398,7 @@ var proxyVariables = map[string]bool{
 // connects with, so the destination is no longer what the arguments say.
 var connectionVariables = map[string]bool{
 	"home": true, "xdg_config_home": true, "curl_home": true, "wgetrc": true,
+	"git_template_dir": true, "system_wgetrc": true,
 	"git_ssh": true, "git_ssh_command": true, "git_proxy_command": true,
 	"git_config": true, "git_config_global": true, "git_config_system": true,
 	"git_config_count": true, "git_config_parameters": true, "git_exec_path": true,
@@ -1398,9 +1417,72 @@ func tracksVariable(name string) bool {
 	return proxyVariables[lower] || connectionVariables[lower] || shellStartupVariables[name]
 }
 
-func applyEnvOverrides(scan *egressScan, overrides []envOverride) {
+// configurationVariables locate the files a client reads before its
+// arguments. A .curlrc or wgetrc can add a URL to a command that names
+// none, and git configuration can define the word after "git" as an alias.
+var configurationVariables = map[string]map[string]bool{
+	"curl": {"curl_home": true, "home": true, "xdg_config_home": true},
+	"wget": {"wgetrc": true, "system_wgetrc": true, "home": true, "xdg_config_home": true},
+	"git": {
+		"home": true, "xdg_config_home": true, "git_exec_path": true,
+		"git_config": true, "git_config_global": true, "git_config_system": true,
+		"git_config_count": true, "git_config_parameters": true,
+	},
+}
+
+// toolVariables are connection variables only one client reads; set for
+// another client they change nothing.
+var toolVariables = map[string]string{"git_template_dir": "git", "system_wgetrc": "wget"}
+
+// movesConfiguration reports an assignment that moves the configuration tool
+// reads, or one whose name is computed and may be such a variable.
+func movesConfiguration(tool string, overrides []envOverride) bool {
+	for _, override := range overrides {
+		if override.name == "" || configurationVariables[tool][strings.ToLower(override.name)] {
+			return true
+		}
+	}
+	return false
+}
+
+// configurationOverride says why a curl or wget command that names no
+// destination of its own is still undetermined: an assignment moves the
+// configuration file the client reads first. It is "" when none applies.
+func configurationOverride(command Command, overrides []envOverride) string {
+	if len(command.Tokens) == 0 || !movesConfiguration(command.Name, overrides) {
+		return ""
+	}
+	arguments := command.Tokens[1:]
+	switch command.Name {
+	case "curl":
+		// Curl skips its configuration file only when this is the first
+		// argument, written out in full.
+		static := len(command.dynamic) < 2 || !command.dynamic[1]
+		if static && len(arguments) > 0 && (arguments[0] == "-q" || arguments[0] == "--disable") {
+			return ""
+		}
+	case "wget":
+		skipped := false
+		walkCLI(wgetSpec, arguments, cliVisitor{
+			option:  func(name string, _ optRole, _ string) { skipped = skipped || name == "no-config" },
+			operand: func(string) {},
+			invalid: func(string) {},
+		})
+		if skipped && !command.Dynamic {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return "an assignment moves the configuration " + command.Name + " reads before its arguments"
+}
+
+func applyEnvOverrides(scan *egressScan, overrides []envOverride, tool string) {
 	for _, override := range overrides {
 		name := strings.ToLower(override.name)
+		if only := toolVariables[name]; only != "" && only != tool {
+			continue
+		}
 		switch {
 		case override.name == "":
 			// The name itself is computed, so it may be any of the variables
@@ -1424,9 +1506,12 @@ func applyEnvOverrides(scan *egressScan, overrides []envOverride) {
 func networkFacts(command Command, overrides []envOverride) []EffectFact {
 	scan, network := commandEgress(command, overrides)
 	if !network {
+		if reason := configurationOverride(command, overrides); reason != "" {
+			return egressScan{undetermined: reason}.facts(command.Name)
+		}
 		return nil
 	}
-	applyEnvOverrides(&scan, overrides)
+	applyEnvOverrides(&scan, overrides, command.Name)
 	return scan.facts(command.Name)
 }
 

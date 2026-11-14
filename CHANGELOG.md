@@ -166,6 +166,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   are checked against protected material. Names
   curl builds from a glob, and names wget takes from a server reply or
   rewrites, are undetermined.
+- The value attached to a long option of a command without an option table
+  (`rsync --files-from=FILE`, `tar --file=FILE`) is checked against protected
+  material. `git clone --template`, `init.templateDir` and `GIT_TEMPLATE_DIR`
+  are undetermined. A curl or wget command with no destination of its own is
+  undetermined when an assignment moves the configuration it reads. A word
+  after `git` that is not one of git's own commands is undetermined when a
+  `-c alias.` entry defines it or when it comes with an address or with moved
+  configuration. A
+  computed argument that begins with `-` no longer hides a destination.
 - Git `clone --bundle-uri` and curl `file:` URLs with a glob are undetermined
   under an allowlist. A relative search root keeps its symlink and parent
   components when protected material is checked.

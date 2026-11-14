@@ -195,7 +195,12 @@ func VerifyStorageReceiptForSeal(seal EvidencePackSeal, profile EvidenceTrustPro
 	if len(errs) > 0 {
 		return "invalid", path, errs
 	}
-	return "immutable-off-host", path, nil
+	// This receipt is unsigned local JSON. Matching metadata and archive bytes
+	// establish consistency, not S3 origin or active Object Lock retention.
+	if profileRequiresExternalTrust(profile) {
+		return externalProofUnverifiable, path, []string{fmt.Sprintf("%s profile requires verified off-host storage: unsigned receipt; storage authenticity and Object Lock NOT CHECKED", profile)}
+	}
+	return externalProofNotChecked, path, nil
 }
 
 func HashFile(path string) (string, error) {

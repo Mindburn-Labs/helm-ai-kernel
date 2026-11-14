@@ -279,9 +279,8 @@ func SealEvidencePack(ctx context.Context, packDir string, opts SealEvidencePack
 	if anchor.Time.IsZero() {
 		anchor.Time = now
 	}
-	if anchor.Status == "" {
-		anchor.Status = statusForTrustType(anchor.Type)
-	}
+	// Producer metadata cannot assert checks that sealing did not perform.
+	anchor.Status = statusForTrustType(anchor.Type)
 	storage := opts.Storage
 	if storage.Type == "" && cfg != nil {
 		storage = cfg.Storage
@@ -292,9 +291,7 @@ func SealEvidencePack(ctx context.Context, packDir string, opts SealEvidencePack
 	if storage.Receipt == "" {
 		storage.Receipt = opts.StorageReceiptPath
 	}
-	if storage.Status == "" {
-		storage.Status = statusForTrustType(storage.Type)
-	}
+	storage.Status = statusForTrustType(storage.Type)
 
 	packID := strings.TrimSpace(opts.PackID)
 	if packID == "" {
@@ -323,7 +320,7 @@ func SealEvidencePack(ctx context.Context, packDir string, opts SealEvidencePack
 		}
 	}
 	if len(anchorReceipts) > 0 {
-		anchor.Status = "verified-externally"
+		anchor.Status = externalProofNotChecked
 		if anchor.Type == "" {
 			anchor.Type = anchorReceipts[0].Backend
 		}

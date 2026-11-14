@@ -318,7 +318,7 @@ func TestRekorBackend_MockServer(t *testing.T) {
 	assert.Equal(t, int64(100), receipt.InclusionProof.TreeSize)
 	assert.NotEmpty(t, receipt.ReceiptHash)
 
-	// Verify against mock.
+	// A matching mock response has no cryptographic log proof.
 	err = backend.Verify(context.Background(), receipt)
-	assert.NoError(t, err)
+	assert.ErrorIs(t, err, ErrVerificationUnavailable)
 }

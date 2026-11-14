@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,8 +43,8 @@ func TestRFC3161VerifyBindsMessageImprintToRoot(t *testing.T) {
 		Request:   AnchorRequest{MerkleRoot: root},
 		Signature: base64.StdEncoding.EncodeToString(rfc3161TestResponse(t, 0, rfc3161ImprintForRoot(t, root))),
 	}
-	if err := backend.Verify(context.Background(), receipt); err != nil {
-		t.Fatalf("bound token rejected: %v", err)
+	if err := backend.Verify(context.Background(), receipt); !errors.Is(err, ErrVerificationUnavailable) {
+		t.Fatalf("unsigned bound token must remain unverifiable: %v", err)
 	}
 
 	other := strings.Repeat("11", 32)
@@ -61,8 +62,8 @@ func TestRFC3161VerifyBindsMessageImprintToRoot(t *testing.T) {
 
 	bareToken := *receipt
 	bareToken.Signature = base64.StdEncoding.EncodeToString(rfc3161TestToken(t, rfc3161ImprintForRoot(t, root)))
-	if err := backend.Verify(context.Background(), &bareToken); err != nil {
-		t.Fatalf("bare TimeStampToken rejected: %v", err)
+	if err := backend.Verify(context.Background(), &bareToken); !errors.Is(err, ErrVerificationUnavailable) {
+		t.Fatalf("unsigned bare TimeStampToken must remain unverifiable: %v", err)
 	}
 }
 
@@ -91,8 +92,8 @@ func TestRekorVerifyBindsEntryBodyAndTimeToReceipt(t *testing.T) {
 		LogIndex:       7,
 		IntegratedTime: integrated,
 	}
-	if err := backend.Verify(context.Background(), receipt); err != nil {
-		t.Fatalf("bound Rekor entry rejected: %v", err)
+	if err := backend.Verify(context.Background(), receipt); !errors.Is(err, ErrVerificationUnavailable) {
+		t.Fatalf("unsigned bound Rekor entry must remain unverifiable: %v", err)
 	}
 
 	entryRoot = strings.Repeat("11", 32)

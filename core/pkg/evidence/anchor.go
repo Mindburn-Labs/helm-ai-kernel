@@ -10,6 +10,12 @@ import (
 	proofanchor "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph/anchor"
 )
 
+// These statuses describe external proof checks, independently of seal signatures.
+const (
+	externalProofNotChecked   = "not-checked"
+	externalProofUnverifiable = "unverifiable"
+)
+
 func createEvidenceAnchorReceipts(ctx context.Context, subjectRoot string, cfg *EvidencePackTrustConfig, anchor EvidencePackSealAnchor) ([]proofanchor.AnchorReceipt, error) {
 	anchorType := strings.ToLower(strings.TrimSpace(firstNonEmpty(anchor.Type, anchorTypeFromConfig(cfg))))
 	switch anchorType {
@@ -56,35 +62,56 @@ func verifyEvidenceAnchorReceipts(ctx context.Context, seal EvidencePackSeal, cf
 		return "missing", []string{fmt.Sprintf("%s profile requires external anchor receipt", profile)}
 	}
 	for i := range seal.AnchorReceipts {
-		receipt := &seal.AnchorReceipts[i]
-		if receipt.Request.MerkleRoot != seal.MerkleRoot {
+		if seal.AnchorReceipts[i].Request.MerkleRoot != seal.MerkleRoot {
 			return "invalid", []string{"anchor receipt subject root mismatch"}
 		}
-		if profileRequiresExternalTrust(profile) {
-			if err := verifyEvidenceAnchorReceipt(ctx, receipt, cfg); err != nil {
-				return "invalid", []string{err.Error()}
+	}
+	if !profileRequiresExternalTrust(profile) {
+		// Optional external evidence is retained, but no external check ran.
+		return externalProofNotChecked, nil
+	}
+	var errs []string
+	for i := range seal.AnchorReceipts {
+		if err := verifyEvidenceAnchorReceipt(ctx, &seal.AnchorReceipts[i], cfg); err != nil {
+			errs = append(errs, err.Error())
+			if !errors.Is(err, proofanchor.ErrVerificationUnavailable) {
+				return "invalid", errs
 			}
 		}
+	}
+	if len(errs) > 0 {
+		return externalProofUnverifiable, errs
 	}
 	return "verified-externally", nil
 }
 
 func verifyEvidenceAnchorReceipt(ctx context.Context, receipt *proofanchor.AnchorReceipt, cfg *EvidencePackTrustConfig) error {
-	switch receipt.Backend {
+	if receipt.Backend != "rekor-v2" && receipt.Backend != "rfc3161" {
+		return fmt.Errorf("unsupported anchor backend %q", receipt.Backend)
+	}
+	// Only verifier-owned configuration can select the backend and endpoint.
+	// Neither the receipt backend nor its LogID is a trust root.
+	configuredBackend := strings.ToLower(strings.TrimSpace(anchorTypeFromConfig(cfg)))
+	if configuredBackend == "rekor" {
+		configuredBackend = "rekor-v2"
+	}
+	if configuredBackend == "" || configuredBackend == "local-dev" {
+		return fmt.Errorf("%w: external anchor backend is not configured; signature and trust NOT CHECKED", proofanchor.ErrVerificationUnavailable)
+	}
+	if receipt.Backend != configuredBackend {
+		return fmt.Errorf("anchor receipt backend %q does not match configured backend %q", receipt.Backend, configuredBackend)
+	}
+	endpoint := strings.TrimSpace(anchorEndpoint(EvidencePackSealAnchor{}, cfg))
+	if endpoint == "" {
+		return fmt.Errorf("%w: external anchor URL is not configured; signature and trust NOT CHECKED", proofanchor.ErrVerificationUnavailable)
+	}
+	switch configuredBackend {
 	case "rekor-v2":
-		var opts []proofanchor.RekorOption
-		if endpoint := anchorEndpoint(EvidencePackSealAnchor{}, cfg); endpoint != "" {
-			opts = append(opts, proofanchor.WithRekorURL(strings.TrimRight(endpoint, "/")))
-		}
-		return proofanchor.NewRekorBackend(opts...).Verify(ctx, receipt)
+		return proofanchor.NewRekorBackend(proofanchor.WithRekorURL(strings.TrimRight(endpoint, "/"))).Verify(ctx, receipt)
 	case "rfc3161":
-		endpoint := firstNonEmpty(anchorEndpoint(EvidencePackSealAnchor{}, cfg), receipt.LogID)
-		if endpoint == "" {
-			return errors.New("rfc3161 anchor URL is required")
-		}
 		return proofanchor.NewRFC3161Backend(endpoint).Verify(ctx, receipt)
 	default:
-		return fmt.Errorf("unsupported anchor backend %q", receipt.Backend)
+		return fmt.Errorf("unsupported configured anchor backend %q", configuredBackend)
 	}
 }
 

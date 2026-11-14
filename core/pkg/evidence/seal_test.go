@@ -425,7 +425,7 @@ func TestVerifyEvidencePackSealRejectsUnindexedConformanceSignature(t *testing.T
 	}
 }
 
-func TestVerifyStorageReceiptForSealRequiresCustomerGradeS3(t *testing.T) {
+func TestVerifyStorageReceiptForSealRejectsUnsignedCustomerClaim(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "pack.tar")
 	if err := os.WriteFile(archivePath, []byte("sealed archive"), 0o600); err != nil {
 		t.Fatal(err)
@@ -456,8 +456,8 @@ func TestVerifyStorageReceiptForSealRequiresCustomerGradeS3(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, path, errs := VerifyStorageReceiptForSeal(seal, EvidenceTrustProfileCustomer, receiptPath, archivePath, fixedSealTime())
-	if status != "immutable-off-host" || path != receiptPath || len(errs) != 0 {
-		t.Fatalf("valid storage receipt rejected: status=%s path=%s errs=%v", status, path, errs)
+	if status != "unverifiable" || path != receiptPath || !strings.Contains(strings.Join(errs, "; "), "NOT CHECKED") {
+		t.Fatalf("unsigned storage receipt claimed trust: status=%s path=%s errs=%v", status, path, errs)
 	}
 
 	receipt.RetentionMode = "GOVERNANCE"
@@ -509,7 +509,7 @@ func TestVerifyStorageReceiptForSealRejectsHashAndSubjectMismatch(t *testing.T) 
 	}
 }
 
-func TestVerifyEvidenceAnchorReceiptsAcceptsBoundRFC3161AndRekorReceipts(t *testing.T) {
+func TestVerifyEvidenceAnchorReceiptsRejectsUnsignedBoundRFC3161AndRekorReceipts(t *testing.T) {
 	root := strings.Repeat("a", 64)
 	token := rfc3161TokenForRoot(t, root)
 	rfcSeal := EvidencePackSeal{
@@ -524,8 +524,8 @@ func TestVerifyEvidenceAnchorReceiptsAcceptsBoundRFC3161AndRekorReceipts(t *test
 	status, errs := verifyEvidenceAnchorReceipts(context.Background(), rfcSeal, &EvidencePackTrustConfig{
 		Anchor: EvidencePackSealAnchor{Type: "rfc3161", URI: "http://tsa.example"},
 	}, EvidenceTrustProfileCustomer)
-	if status != "verified-externally" || len(errs) != 0 {
-		t.Fatalf("rfc3161 receipt rejected: status=%s errs=%v", status, errs)
+	if status != "unverifiable" || !strings.Contains(strings.Join(errs, "; "), "NOT CHECKED") {
+		t.Fatalf("unsigned rfc3161 receipt claimed trust: status=%s errs=%v", status, errs)
 	}
 
 	rekor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -549,8 +549,8 @@ func TestVerifyEvidenceAnchorReceiptsAcceptsBoundRFC3161AndRekorReceipts(t *test
 	status, errs = verifyEvidenceAnchorReceipts(context.Background(), rekorSeal, &EvidencePackTrustConfig{
 		Anchor: EvidencePackSealAnchor{Type: "rekor", URI: rekor.URL},
 	}, EvidenceTrustProfileCustomer)
-	if status != "verified-externally" || len(errs) != 0 {
-		t.Fatalf("rekor receipt rejected: status=%s errs=%v", status, errs)
+	if status != "unverifiable" || !strings.Contains(strings.Join(errs, "; "), "NOT CHECKED") {
+		t.Fatalf("unsigned rekor receipt claimed trust: status=%s errs=%v", status, errs)
 	}
 }
 

@@ -298,8 +298,16 @@ Offline verification is the default. If a pack has no public anchor, HELM
 reports that directly; it does not invent one. Under the `customer` and
 `high-assurance` profiles an anchor receipt must name this pack's root: a
 Rekor entry's hash and integrated time must match the receipt, and an RFC 3161
-token's message imprint must match the root. The RFC 3161 check does not yet
-validate the TSA's signature or certificate chain.
+token's message imprint must match the root. These consistency checks do not
+establish external trust. RFC 3161 verification lacks the TSA signature and
+certificate-chain checks; Rekor verification lacks the signed entry, inclusion
+proof and trusted log-key checks. An unsigned storage receipt also cannot prove
+off-host retention. These external checks report `unverifiable` and reject the
+`customer` and `high-assurance` profiles until their required verification is
+implemented. Optional external evidence in `dev-local` and `team` reports
+`not-checked`; a valid local seal signature remains independently checkable.
+Anchor backend and endpoint selection come from the verifier's configuration,
+never from the receipt's claimed backend or log URL.
 
 ## Read A Decision
 

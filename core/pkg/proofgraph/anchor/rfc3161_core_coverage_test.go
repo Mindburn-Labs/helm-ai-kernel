@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/asn1"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -49,8 +50,8 @@ func TestRFC3161BackendAnchorAndVerifyBranches(t *testing.T) {
 	if receipt.Backend != rfc3161BackendName || receipt.Signature == "" || len(receipt.RawResponse) != 0 {
 		t.Fatalf("receipt = %#v, want rfc3161 receipt with base64 signature and no raw archival bytes", receipt)
 	}
-	if err := backend.Verify(context.Background(), receipt); err != nil {
-		t.Fatalf("Verify valid receipt: %v", err)
+	if err := backend.Verify(context.Background(), receipt); !errors.Is(err, ErrVerificationUnavailable) {
+		t.Fatalf("Verify unsigned receipt must be unavailable: %v", err)
 	}
 
 	if _, err := backend.Anchor(context.Background(), AnchorRequest{MerkleRoot: "not-hex"}); err == nil {

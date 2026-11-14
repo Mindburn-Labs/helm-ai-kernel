@@ -329,6 +329,19 @@ export class HelmClient {
     return this.request<Receipt>('GET', `/api/v1/proofgraph/receipts/${receiptHash}`);
   }
 
+  /** Fetch exact receipt JSON bytes, preserving wire input for verifyReceipt. */
+  async getReceiptJSON(receiptId: string): Promise<Uint8Array> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/v1/proofgraph/receipts/${encodeURIComponent(receiptId)}`, {
+        method: 'GET', headers: this.headers, signal: controller.signal,
+      });
+      if (!res.ok) throw new HelmApiError(res.status, (await res.json()) as HelmError);
+      return new Uint8Array(await res.arrayBuffer());
+    } finally { clearTimeout(timer); }
+  }
+
   // ── Evidence ─────────────────────────────────────
   async exportEvidence(sessionId?: string): Promise<Blob> {
     const controller = new AbortController();

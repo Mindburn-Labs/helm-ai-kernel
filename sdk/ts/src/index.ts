@@ -51,3 +51,6 @@ export type {
   NativeGatewayTool,
   NativeGatewayToolResult,
 } from "./adapters/native-gateway.js";
+
+export { verifyReceipt } from "./verify.js";
+export type { ReceiptVerification, TrustedKeys } from "./verify.js";

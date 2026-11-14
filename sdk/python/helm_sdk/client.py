@@ -330,6 +330,14 @@ class HelmClient:
         assert result is not None
         return result
 
+    def get_receipt_json(self, receipt_id: str) -> bytes:
+        """Fetch exact receipt JSON bytes, preserving wire input for verify_receipt."""
+        resp = self._client.get(
+            f"/api/v1/proofgraph/receipts/{_path_segment(receipt_id, 'receipt_id')}"
+        )
+        self._check(resp)
+        return resp.content
+
     # ── Evidence ────────────────────────────────────
     def export_evidence(self, session_id: Optional[str] = None) -> bytes:
         resp = self._client.post(

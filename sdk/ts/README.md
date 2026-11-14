@@ -1,3 +1,5 @@
+<!-- quantum_posture: offline receipt.v5 verification is classical Ed25519 only; no post-quantum protection is claimed. -->
+
 # HELM SDK - TypeScript
 
 Typed TypeScript client for the retained HELM kernel API.
@@ -106,6 +108,36 @@ vectors, MCP quarantine and authorization profiles, sandbox profiles and
 grants, authz snapshots, approvals, budgets, telemetry export, and coexistence
 capabilities. These methods keep external envelopes, MCP quarantine decisions,
 and sandbox grants attached to HELM-native receipts and EvidencePacks.
+
+## Offline receipt verification
+
+```ts
+import { verifyReceipt } from "@mindburn/helm-ai-kernel";
+
+const raw = await helm.getReceiptJSON(receiptId);
+const result = await verifyReceipt(raw, trustedPublicKeyHex);
+if (!result.valid) throw new Error(result.detail);
+console.log(result.verdict, result.signed);
+```
+
+This API requires WebCrypto Ed25519 support, as provided by Node.js 22. A host
+without it returns `unsupported_runtime`; browser compatibility depends on the
+host's WebCrypto implementation.
+
+The verifier checks the classical Ed25519 signature of one `receipt.v5`
+envelope using public keys supplied by the caller. It makes no network request.
+Pass the original JSON bytes: decoding and re-encoding can hide duplicate members
+and change number spellings. Invalid UTF-8, duplicate names, typed member-name
+case aliases, nesting beyond 64 containers and non-interoperable clock values
+are refused. Legacy, hybrid and post-quantum signatures are not supported.
+
+Only the thirteen members returned in the signed-field map are authenticated.
+`key_id`, timestamps, tool names and other metadata are unsigned claims; their
+schemas are not validated by this function. A successful result does not establish
+chain closure, permits or gateway bindings. Use `receipt_verify` for those
+additional checks. Neither verifier attests that an external effect actually
+executed. Obtain trusted public keys independently of the
+receipt; an embedded key or a key fetched from its producer is not a trust root.
 
 ## Source target
 

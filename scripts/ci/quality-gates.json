@@ -26,6 +26,7 @@
         "tla-tools-hardening",
         "python-sdk",
         "ts-sdk",
+        "sdk-offline-smoke",
         "rust-sdk",
         "java-sdk",
         "json-schemas",
@@ -81,6 +82,7 @@
         "go-race",
         "python-sdk",
         "ts-sdk",
+        "sdk-offline-smoke",
         "rust-sdk",
         "java-sdk",
         "sdk-manifest-tests",
@@ -132,6 +134,7 @@
         "go-sdk",
         "python-sdk",
         "ts-sdk",
+        "sdk-offline-smoke",
         "rust-sdk",
         "java-sdk",
         "json-schemas",
@@ -1187,6 +1190,22 @@
         "scripts/build_receipt_verifier_wasm.sh",
         "scripts/test_receipt_verifier_wasm*",
         ".github/workflows/receipt-verifier-wasm.yml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "sdk-offline-smoke",
+      "seconds": 60,
+      "title": "Supported SDK receipt round trips and offline verification",
+      "command": "make sdk-offline-smoke",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/go/**",
+        "sdk/python/**",
+        "sdk/ts/**",
+        "core/**",
+        "scripts/sdk/**",
+        "examples/launch/policies/agent_tool_call_boundary.*",
         "Makefile"
       ]
     }

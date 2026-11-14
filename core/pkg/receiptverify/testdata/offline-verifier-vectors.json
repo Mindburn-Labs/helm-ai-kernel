@@ -1,0 +1,663 @@
+{
+  "schema_version": "helm.offline-receipt-verifier-vectors.v1",
+  "$comment": "quantum_posture: classical Ed25519 receipt.v5 only. Shared exact-wire signed fixtures and adversarial mutations. Validity expectations are checked by receipt_verify and every public SDK verifier. Unsigned metadata schemas, chain closure, permits and gateway bindings are outside the SDK signature-verification scope.",
+  "sources": {
+    "core/pkg/receiptverify/testdata/frozen-chain-2026.json": "835725e918b756952bc7b9eeca964cf3b1f9c3ee2aed970c2e05af90b28a48f2",
+    "reference_packs/receipt-v5/vectors.json": "49e6759d3c2ad49fa18dcc005b7dab7c4f6b04fb166bed754666ed5f1a0b88cb"
+  },
+  "keys": {
+    "frozen": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+    "reference": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+  },
+  "vectors": [
+    {
+      "id": "frozen_rcpt-001",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "frozen_rcpt-002",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-002\",\"decision_id\":\"dec-rcpt-002\",\"effect_id\":\"eff-rcpt-002\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22e4a0e42b8f7efb7f50bd88bc5670b354eb106b1147e57241f197ea16020fc4bac12acf7c4064dfb08e1fa77554e6ae5a4bfd4fddda83b3ec42c63a5641ff03\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"7ddb403ce5b6d7068ef1c48841fd6b3e8e7cae66e4767eca62ecc80a5957180e\",\"lamport_clock\":2,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-002\",\"args_hash\":\"sha256:args-rcpt-002\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-002"
+    },
+    {
+      "id": "frozen_rcpt-003",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-003\",\"decision_id\":\"dec-rcpt-003\",\"effect_id\":\"eff-rcpt-003\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"34df841a55254d4770bfe3479299037f4b59072472f217acd8b32277537945022969176a9a6ffce7d65f73f6a95853c7a3263df9bf4820bdab25962a4a127d0e\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"d474ce7c63b2f8d2b719e0a3e512281d7a9f3b1087655d62659005c110cac70f\",\"lamport_clock\":3,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-003\",\"args_hash\":\"sha256:args-rcpt-003\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-003"
+    },
+    {
+      "id": "reference_decision_deny_genesis",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\":\"sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\",\"blob_hash\":\"sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\",\"correlation_id\":\"corr-01K0CORRDENY000000000000A\",\"created_at\":\"0001-01-01T00:00:00Z\",\"decision_hash\":\"sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea\",\"decision_id\":\"dec-01K0DECIDENY0000000000000A\",\"effect_id\":\"eff-01K0EFFCDENY0000000000000A\",\"executor_id\":\"agent-alpha\",\"external_reference_id\":\"\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"key_id\":\"receipt-v5-reference-key-v1\",\"lamport_clock\":1,\"leaf_index\":41,\"log_id\":\"translog-reference-a\",\"metadata\":{\"tenant_id\":\"tenant-a\"},\"output_hash\":\"sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea\",\"policy_hash\":\"sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\",\"prev_hash\":\"\",\"public_key_set\":{\"ed25519\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"},\"reason_code\":\"POLICY_VIOLATION\",\"receipt_id\":\"rcpt-01K0RCPTDENY0000000000000A\",\"session_id\":\"sess-01K0SESSDENY000000000000A\",\"signature\":\"997493bfdd9db8c14f0acff911419c25e7e1e527155923bf8b52405dd825d0b292b89d9bda576dcedcb933e9b45187315c9645abd452c4280fa9f6c0ce586905\",\"signature_algorithm\":\"ed25519\",\"signature_profile\":\"classical\",\"signature_version\":\"receipt.v5\",\"status\":\"DENY\",\"timestamp\":\"2026-08-06T12:00:00Z\",\"transparency\":{\"backend\":\"translog\",\"deferred_until\":\"0001-01-01T00:00:00Z\",\"log_id\":\"translog-reference-a\"},\"verdict\":\"DENY\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": true,
+      "verdict": "DENY",
+      "receipt_id": "rcpt-01K0RCPTDENY0000000000000A"
+    },
+    {
+      "id": "reference_executor_success_empty_governance",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\":\"\",\"created_at\":\"0001-01-01T00:00:00Z\",\"decision_id\":\"dec-01K0DECIOKAY0000000000000B\",\"effect_id\":\"eff-01K0EFFCOKAY0000000000000B\",\"executor_id\":\"executor-beta\",\"external_reference_id\":\"\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"key_id\":\"receipt-v5-reference-key-v1\",\"lamport_clock\":9007199254740991,\"output_hash\":\"sha256:6b23c0d5f35d1b11f9b683f0b0a617355deb11277d91ae091d399c655b87940d\",\"policy_hash\":\"\",\"prev_hash\":\"1f4a2b6bd9f6d0e5c40a4a4ee6a1cd4f3d2f6de5e4b2c0f1a9d8c7b6a5948372\",\"public_key_set\":{\"ed25519\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"},\"reason_code\":\"\",\"receipt_id\":\"rcpt-01K0RCPTOKAY0000000000000B\",\"session_id\":\"sess-01K0SESSOKAY000000000000B\",\"signature\":\"5f1210a65ba385cad9443156c1ab3161d5a40c209e2ddcdc09ef288bd3679b16aea23a94e77e8e31d274bc401073e4b824942b982712438447603d29a372a107\",\"signature_algorithm\":\"ed25519\",\"signature_profile\":\"classical\",\"signature_version\":\"receipt.v5\",\"status\":\"SUCCESS\",\"timestamp\":\"2026-08-06T12:00:01Z\",\"verdict\":\"\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": true,
+      "verdict": "",
+      "receipt_id": "rcpt-01K0RCPTOKAY0000000000000B"
+    },
+    {
+      "id": "reference_escaped_string_members",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\":\"sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a\",\"created_at\":\"0001-01-01T00:00:00Z\",\"decision_id\":\"dec-01K0DECIESCP0000000000000C\",\"effect_id\":\"eff-01K0EFFCESCP0000000000000C\",\"executor_id\":\"agent-gamma\",\"external_reference_id\":\"\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"key_id\":\"receipt-v5-reference-key-v1\",\"lamport_clock\":2,\"output_hash\":\"sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35\",\"policy_hash\":\"sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d\",\"prev_hash\":\"4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce\",\"public_key_set\":{\"ed25519\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"},\"reason_code\":\"ALLOWED_BY_POLICY\",\"receipt_id\":\"rcpt-01K0RCPTESCP0000000000000C\",\"session_id\":\"sess-\\\"quote\\\\solidus\\ttab\u2028ls\u2029ps\ud83d\udd10lock\",\"signature\":\"b7e80b35657dc17ab5e4555bce416f16a40d381d4d7ba6dc52c9fe48d0f52512736c8e7ce0df43ddf3bd1af710e8e86ce3532cdc64f4040f495ad18bf37cfd0c\",\"signature_algorithm\":\"ed25519\",\"signature_profile\":\"classical\",\"signature_version\":\"receipt.v5\",\"status\":\"ALLOW\",\"timestamp\":\"2026-08-06T12:00:02Z\",\"verdict\":\"ALLOW\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-01K0RCPTESCP0000000000000C"
+    },
+    {
+      "id": "key_id_is_a_hint_not_a_filter",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"some-other-key\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001",
+      "note": "key_id is unsigned routing data; every trusted key is tried"
+    },
+    {
+      "id": "any_trusted_key_may_verify",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "pretty_printed_whitespace",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\n  \"receipt_id\": \"rcpt-001\",\n  \"decision_id\": \"dec-rcpt-001\",\n  \"effect_id\": \"eff-rcpt-001\",\n  \"external_reference_id\": \"\",\n  \"status\": \"COMPLETED\",\n  \"timestamp\": \"2026-08-09T12:00:00Z\",\n  \"signature\": \"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\n  \"key_id\": \"frozen-fixture-key-1\",\n  \"prev_hash\": \"\",\n  \"lamport_clock\": 1,\n  \"signature_version\": \"receipt.v5\",\n  \"created_at\": \"0001-01-01T00:00:00Z\",\n  \"installed_at\": \"0001-01-01T00:00:00Z\",\n  \"issued_at\": \"0001-01-01T00:00:00Z\",\n  \"output_hash\": \"sha256:out-rcpt-001\",\n  \"args_hash\": \"sha256:args-rcpt-001\",\n  \"verdict\": \"ALLOW\",\n  \"reason_code\": \"POLICY_SATISFIED\",\n  \"policy_hash\": \"sha256:policy-frozen-v1\",\n  \"session_id\": \"sess-frozen-2026\"\n}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "ascii_escaped_text",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\": \"sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a\", \"created_at\": \"0001-01-01T00:00:00Z\", \"decision_id\": \"dec-01K0DECIESCP0000000000000C\", \"effect_id\": \"eff-01K0EFFCESCP0000000000000C\", \"executor_id\": \"agent-gamma\", \"external_reference_id\": \"\", \"installed_at\": \"0001-01-01T00:00:00Z\", \"issued_at\": \"0001-01-01T00:00:00Z\", \"key_id\": \"receipt-v5-reference-key-v1\", \"lamport_clock\": 2, \"output_hash\": \"sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35\", \"policy_hash\": \"sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d\", \"prev_hash\": \"4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce\", \"public_key_set\": {\"ed25519\": \"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"}, \"reason_code\": \"ALLOWED_BY_POLICY\", \"receipt_id\": \"rcpt-01K0RCPTESCP0000000000000C\", \"session_id\": \"sess-\\\"quote\\\\solidus\\ttab\\u2028ls\\u2029ps\\ud83d\\udd10lock\", \"signature\": \"b7e80b35657dc17ab5e4555bce416f16a40d381d4d7ba6dc52c9fe48d0f52512736c8e7ce0df43ddf3bd1af710e8e86ce3532cdc64f4040f495ad18bf37cfd0c\", \"signature_algorithm\": \"ed25519\", \"signature_profile\": \"classical\", \"signature_version\": \"receipt.v5\", \"status\": \"ALLOW\", \"timestamp\": \"2026-08-06T12:00:02Z\", \"verdict\": \"ALLOW\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-01K0RCPTESCP0000000000000C",
+      "note": "the same receipt with every non-ASCII character written as a \\u escape"
+    },
+    {
+      "id": "verdict_substituted",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"DENY\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "reason_code_substituted",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\":\"sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\",\"blob_hash\":\"sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\",\"correlation_id\":\"corr-01K0CORRDENY000000000000A\",\"created_at\":\"0001-01-01T00:00:00Z\",\"decision_hash\":\"sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea\",\"decision_id\":\"dec-01K0DECIDENY0000000000000A\",\"effect_id\":\"eff-01K0EFFCDENY0000000000000A\",\"executor_id\":\"agent-alpha\",\"external_reference_id\":\"\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"key_id\":\"receipt-v5-reference-key-v1\",\"lamport_clock\":1,\"leaf_index\":41,\"log_id\":\"translog-reference-a\",\"metadata\":{\"tenant_id\":\"tenant-a\"},\"output_hash\":\"sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea\",\"policy_hash\":\"sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\",\"prev_hash\":\"\",\"public_key_set\":{\"ed25519\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"},\"reason_code\":\"ALLOWED_BY_POLICY\",\"receipt_id\":\"rcpt-01K0RCPTDENY0000000000000A\",\"session_id\":\"sess-01K0SESSDENY000000000000A\",\"signature\":\"997493bfdd9db8c14f0acff911419c25e7e1e527155923bf8b52405dd825d0b292b89d9bda576dcedcb933e9b45187315c9645abd452c4280fa9f6c0ce586905\",\"signature_algorithm\":\"ed25519\",\"signature_profile\":\"classical\",\"signature_version\":\"receipt.v5\",\"status\":\"DENY\",\"timestamp\":\"2026-08-06T12:00:00Z\",\"transparency\":{\"backend\":\"translog\",\"deferred_until\":\"0001-01-01T00:00:00Z\",\"log_id\":\"translog-reference-a\"},\"verdict\":\"DENY\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "signature_bit_flipped",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770c\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "untrusted_key",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+      ],
+      "valid": false,
+      "error": "signature_rejected",
+      "note": "the receipt's own public_key_set is never a trust root"
+    },
+    {
+      "id": "embedded_key_is_not_trusted",
+      "source": "reference_packs/receipt-v5",
+      "receipt": "{\"args_hash\":\"\",\"created_at\":\"0001-01-01T00:00:00Z\",\"decision_id\":\"dec-01K0DECIOKAY0000000000000B\",\"effect_id\":\"eff-01K0EFFCOKAY0000000000000B\",\"executor_id\":\"executor-beta\",\"external_reference_id\":\"\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"key_id\":\"receipt-v5-reference-key-v1\",\"lamport_clock\":9007199254740991,\"output_hash\":\"sha256:6b23c0d5f35d1b11f9b683f0b0a617355deb11277d91ae091d399c655b87940d\",\"policy_hash\":\"\",\"prev_hash\":\"1f4a2b6bd9f6d0e5c40a4a4ee6a1cd4f3d2f6de5e4b2c0f1a9d8c7b6a5948372\",\"public_key_set\":{\"ed25519\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\"},\"reason_code\":\"\",\"receipt_id\":\"rcpt-01K0RCPTOKAY0000000000000B\",\"session_id\":\"sess-01K0SESSOKAY000000000000B\",\"signature\":\"5f1210a65ba385cad9443156c1ab3161d5a40c209e2ddcdc09ef288bd3679b16aea23a94e77e8e31d274bc401073e4b824942b982712438447603d29a372a107\",\"signature_algorithm\":\"ed25519\",\"signature_profile\":\"classical\",\"signature_version\":\"receipt.v5\",\"status\":\"SUCCESS\",\"timestamp\":\"2026-08-06T12:00:01Z\",\"verdict\":\"\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected",
+      "note": "the receipt carries public_key_set for the reference key; only the supplied key is trusted"
+    },
+    {
+      "id": "lamport_clock_above_max_safe_integer",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":9007199254740993,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "lamport_clock_fraction",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1.0,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "lamport_clock_string",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":\"1\",\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "missing_member"
+    },
+    {
+      "id": "lamport_clock_negative",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":-1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "missing_signed_member",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "missing_member"
+    },
+    {
+      "id": "signed_member_null",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":null}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "missing_member"
+    },
+    {
+      "id": "unknown_signature_version",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v6\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "unsupported_version"
+    },
+    {
+      "id": "unversioned_legacy_receipt",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "unsupported_version",
+      "note": "a receipt.v5 signature presented as a legacy receipt; the SDKs verify receipt.v5 only"
+    },
+    {
+      "id": "duplicate_member",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"verdict\":\"DENY\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "duplicate_member"
+    },
+    {
+      "id": "letter_case_shadow_member",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"Verdict\":\"DENY\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member",
+      "note": "a reader keyed case-insensitively would see DENY beside the signed ALLOW"
+    },
+    {
+      "id": "hybrid_signature_metadata",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"signature_profile\":\"hybrid\",\"signature_algorithm\":\"ed25519\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_metadata"
+    },
+    {
+      "id": "unsigned",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "unsigned"
+    },
+    {
+      "id": "signature_not_hex",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"zzdd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "trailing_value",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}{}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "not_an_object",
+      "source": "frozen-chain-2026.json",
+      "receipt": "\"rcpt-001\"",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "empty_object",
+      "source": "frozen-chain-2026.json",
+      "receipt": "{}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "unsupported_version"
+    },
+    {
+      "id": "unsigned_member_case",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"TOOL_NAME\":\"forged\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member"
+    },
+    {
+      "id": "unicode_long_s_member",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"\u017ftatus\":\"forged\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member"
+    },
+    {
+      "id": "unicode_kelvin_member",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"\u212aey_id\":\"forged\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member"
+    },
+    {
+      "id": "nested_member_case",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"provenance\":{\"GENERATED_BY\":\"forged\"}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member"
+    },
+    {
+      "id": "nested_array_member_case",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"witness_signatures\":[{\"SIGNATURE\":\"forged\"}]}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "shadow_member"
+    },
+    {
+      "id": "map_keys_are_case_sensitive",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"metadata\":{\"STATUS\":\"a\",\"status\":\"b\",\"\u017ftatus\":\"c\",\"\ud83d\udd10\":\"z\",\"\ue000\":\"v\"}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "unknown_keys_are_case_sensitive",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"unknown\":{\"STATUS\":\"a\",\"status\":\"b\"}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "nested_duplicate",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"metadata\":{\"x\":1,\"x\":2}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "duplicate_member"
+    },
+    {
+      "id": "escaped_duplicate",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"metadata\":{\"x\":1,\"\\u0078\":2}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "duplicate_member"
+    },
+    {
+      "id": "surrogate_alias_duplicate",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"metadata\":{\"\\ud800\":1,\"\ufffd\":2}}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "duplicate_member"
+    },
+    {
+      "id": "bundle_decoy",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"receipts\":[]}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "clock_exponent",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1e0,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "clock_negative_zero",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":-0,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "clock_leading_plus",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":+1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "clock_nan",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":NaN,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "clock_huge_exponent",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1e100000,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "signature_profile_null",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"signature_profile\":null}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_metadata"
+    },
+    {
+      "id": "signature_algorithm_null",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"signature_algorithm\":null}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_metadata"
+    },
+    {
+      "id": "metadata_pair_incomplete",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"signature_profile\":\"classical\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_metadata"
+    },
+    {
+      "id": "classical_metadata",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"signature_profile\":\"classical\",\"signature_algorithm\":\"ed25519\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "trailing_garbage",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"} garbage",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "empty_input",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "truncated_document",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "no_trusted_keys",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [],
+      "valid": false,
+      "error": "no_trusted_key"
+    },
+    {
+      "id": "malformed_trusted_key",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "bad-key"
+      ],
+      "valid": false,
+      "error": "bad_key"
+    },
+    {
+      "id": "depth_boundary",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"unknown\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": true,
+      "verdict": "ALLOW",
+      "receipt_id": "rcpt-001"
+    },
+    {
+      "id": "depth_exceeded",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\",\"unknown\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "id": "signature_noncanonical_s",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb32fade5a9cf9d99ef736a21915ed602e87d1e8937cc0cb6876db72ab6c98f771d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "signature_short",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f77\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "signature_zero",
+      "source": "mutation of frozen signed receipt; signature unchanged",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "signature_rejected"
+    },
+    {
+      "id": "clock_extreme_integer",
+      "source": "oversized integer mutation of frozen receipt",
+      "receipt": "{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "non_interoperable_number"
+    },
+    {
+      "id": "leading_utf8_bom",
+      "source": "leading byte-order mark before frozen receipt",
+      "receipt": "\ufeff{\"receipt_id\":\"rcpt-001\",\"decision_id\":\"dec-rcpt-001\",\"effect_id\":\"eff-rcpt-001\",\"external_reference_id\":\"\",\"status\":\"COMPLETED\",\"timestamp\":\"2026-08-09T12:00:00Z\",\"signature\":\"22dd1755f0ef0d2ec4f748164d4594553f0fbfde51111fd69bdcc1a7529beeb342d9ef4cb53a87979dcd29ee7fdc23d37d1e8937cc0cb6876db72ab6c98f770d\",\"key_id\":\"frozen-fixture-key-1\",\"prev_hash\":\"\",\"lamport_clock\":1,\"signature_version\":\"receipt.v5\",\"created_at\":\"0001-01-01T00:00:00Z\",\"installed_at\":\"0001-01-01T00:00:00Z\",\"issued_at\":\"0001-01-01T00:00:00Z\",\"output_hash\":\"sha256:out-rcpt-001\",\"args_hash\":\"sha256:args-rcpt-001\",\"verdict\":\"ALLOW\",\"reason_code\":\"POLICY_SATISFIED\",\"policy_hash\":\"sha256:policy-frozen-v1\",\"session_id\":\"sess-frozen-2026\"}",
+      "trusted_keys": [
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      ],
+      "valid": false,
+      "error": "malformed"
+    }
+  ]
+}

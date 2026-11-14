@@ -289,6 +289,25 @@ func (c *HelmClient) GetReceipt(receiptHash string) (*Receipt, error) {
 	return &out, err
 }
 
+// GetReceiptJSON fetches the receipt's exact JSON bytes for offline verification.
+// It preserves duplicate member names and number spellings for VerifyReceipt.
+func (c *HelmClient) GetReceiptJSON(receiptID string) ([]byte, error) {
+	req, err := http.NewRequest("GET", c.BaseURL+"/api/v1/proofgraph/receipts/"+url.PathEscape(receiptID), nil)
+	if err != nil {
+		return nil, err
+	}
+	c.applyHeaders(req)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, helmAPIErrorFromResponse(resp)
+	}
+	return io.ReadAll(resp.Body)
+}
+
 // Health calls GET /healthz.
 func (c *HelmClient) Health() (map[string]string, error) {
 	var out map[string]string

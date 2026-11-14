@@ -88,6 +88,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+- Go, Python and TypeScript SDKs expose exact receipt JSON fetches and offline classical receipt.v5 signature verification using caller-pinned public keys. Shared reference vectors cover malformed and tampered inputs. The merge gate exercises authenticated ALLOW/DENY round trips, then verifies saved receipts with the server stopped. This signature check does not establish chain closure, permits, bindings or effect completion.
+
 ### Upgrade notes
 
 - Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook

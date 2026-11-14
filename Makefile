@@ -152,6 +152,10 @@ sdk-manifest-verify:
 test-sdk-manifest:
 	python3 -m unittest discover -s scripts/sdk/tests -v
 
+.PHONY: sdk-offline-smoke
+sdk-offline-smoke:
+	bash scripts/sdk/offline_verify_smoke.sh
+
 sdk-examples-smoke:
 	bash scripts/sdk/examples_smoke.sh
 

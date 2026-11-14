@@ -12,6 +12,7 @@ from .client import (
     SandboxGrant,
 )
 from . import reason_codes
+from .verify import ReceiptVerification, verify_receipt
 
 from .types_gen import (
     ApprovalRequest,
@@ -37,6 +38,8 @@ ChatTool = ChatCompletionRequestToolsInner
 ChatToolFunction = ChatCompletionRequestToolsInnerFunction
 
 __all__ = [
+    "ReceiptVerification",
+    "verify_receipt",
     "reason_codes",
     "HelmClient",
     "HelmApiError",

@@ -82,6 +82,15 @@ are client libraries, not executable Kernel installs.
 | Conformance | `helm-ai-kernel conform vectors --json` and `conform negative --json` |
 | SDKs | source clients under `sdk/` with local test targets |
 
+`receipts status`, `receipts list`, `authz health` and `authz check` contact the
+server selected by `--server` or `HELM_URL`. Supply its admin credential through
+`HELM_ADMIN_API_KEY` or a private `--api-key-file`. Receipt inspection also needs
+the server's configured tenant and principal bindings, supplied with `--tenant`
+and `--principal` or `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_PRINCIPAL_ID`.
+Unavailable, unauthorized or malformed responses return a failure exit code.
+Receipt availability checks inspect the response; they do not verify receipt
+signatures. Use the verification commands for that proof.
+
 ## Prove The Boundary
 
 ```bash

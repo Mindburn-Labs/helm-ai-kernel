@@ -2018,29 +2018,42 @@
         }
       ],
       "gates": [],
-      "config": [],
+      "config": [
+        "Threat scanner or semantic escalation configured on Guardian",
+        "Argument traversal: 64 container levels, 4096 nodes, 1 MiB of text and keys"
+      ],
       "protected_operations": [
-        "Guardian evaluations that carry user_input, text or content from an untrusted source."
+        "Guardian evaluations that carry user_input, text, content or decoded string leaves under context.args."
       ],
       "bypass_assumptions": [
-        "Only the user_input, text and content context keys are scanned.",
-        "Only tainted (untrusted) input with high-risk findings is denied; trusted input is scanned and recorded, not denied."
+        "Only the three top-level text fields and context.args are scanned; proxy payloads must bind their text into these fields.",
+        "Only tainted (untrusted) input with high-risk findings is denied; trusted input is scanned and recorded, not denied.",
+        "Incomplete or unsupported argument traversal is denied with SCHEMA_VIOLATION; opaque native values must be decoded into JSON values."
       ],
       "tests": {
         "allowed": [
           "core/pkg/threatscan.TestPromptArmorDoesNotFlagBenignDiscussion",
-          "core/pkg/threatscan.TestThreat_CleanInput"
+          "core/pkg/threatscan.TestThreat_CleanInput",
+          "core/pkg/guardian.TestGuardianToolArgumentsThreatScan",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianScansNestedToolArguments"
         ],
         "forbidden": [
           "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields",
           "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack",
-          "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+          "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments",
+          "core/pkg/conformance/scenarios.TestGuardianInputBoundaryConformance"
         ],
         "removal": [
           "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields",
-          "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
+          "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack",
+          "core/pkg/guardian.TestGuardianToolArgumentsThreatScan",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
         ],
-        "bypass": []
+        "bypass": [
+          "core/pkg/guardian.TestThreatInputsDeterministicAndBounded",
+          "core/pkg/guardian.TestGuardianToolArgumentsMissingSemanticScannerEscalates"
+        ]
       },
       "removal_proofs": [
         {
@@ -2048,6 +2061,18 @@
           "tests": [
             "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields",
             "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
+          ]
+        },
+        {
+          "file": "core/pkg/guardian/threat_inputs.go",
+          "tests": [
+            "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
+          ]
+        },
+        {
+          "file": "core/pkg/guardian/interceptor.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
           ]
         }
       ]
@@ -2145,7 +2170,7 @@
       "id": "CTL-022",
       "title": "The request body carries no security authority",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Reserved security context keys supplied by a caller are stripped before the Guardian sees them; trusted values come only from the authenticated transport.",
+      "claim": "Reserved security context keys supplied by a caller are stripped before the Guardian sees them. Guardian-produced evidence is removed and recomputed at evaluation; transport metadata comes from authenticated transport binding.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -2156,27 +2181,35 @@
         {
           "symbol": "core/pkg/guardian.IsReservedSecurityContextKey",
           "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/guardian.Guardian.EvaluateDecision",
+          "reachability": "reachable"
         }
       ],
       "gates": [],
       "config": [],
       "protected_operations": [
-        "Evaluate, proxy and MCP requests bound through bindAuthenticatedGuardianContext."
+        "Evaluate, proxy and MCP requests bound through bindAuthenticatedGuardianContext.",
+        "Direct Guardian evaluations remove caller-authored trust, session, delegation, threat, stop and assumption output claims."
       ],
       "bypass_assumptions": [
         "Tenant and principal headers are still caller assertions checked against configuration (CTL-007)."
       ],
       "tests": {
         "allowed": [
-          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal"
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal",
+          "core/pkg/guardian.TestGuardianDerivedContextRecomputesConfiguredEnrichment"
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext",
           "core/cmd/helm-ai-kernel.TestEvaluateRouteRejectsConflictingAliasesBeforeReceiptIssuance",
-          "core/cmd/helm-ai-kernel.TestConfiguredTenantRuntimeAuthRejectsCallerIdentityOverride"
+          "core/cmd/helm-ai-kernel.TestConfiguredTenantRuntimeAuthRejectsCallerIdentityOverride",
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianClaimsCannotGrantAuthority"
         ],
         "removal": [
-          "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext"
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext",
+          "core/pkg/guardian.TestGuardianDerivedContextCannotBeSuppliedByCaller"
         ],
         "bypass": [
           "core/pkg/guardian.TestPDPInterceptorIgnoresUntrustedSecurityContextOverrides"
@@ -2187,6 +2220,12 @@
           "file": "core/cmd/helm-ai-kernel/guardian_transport.go",
           "tests": [
             "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext"
+          ]
+        },
+        {
+          "file": "core/pkg/guardian/guardian.go",
+          "tests": [
+            "core/pkg/guardian.TestGuardianDerivedContextCannotBeSuppliedByCaller"
           ]
         }
       ]

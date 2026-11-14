@@ -798,11 +798,10 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 	ctx = decisionCtx
 	ctx, span := otel.Tracer("helm.kernel").Start(ctx, "Guardian.EvaluateDecision")
 	defer span.End()
-	// A capability token is a bearer credential: it never enters a
-	// decision's InputContext, on any path.
-	if req.Context != nil {
-		delete(req.Context, contextKeyCapabilityToken)
-	}
+	// Remove caller-authored Guardian evidence before any gate or early exit.
+	// Preserve the existing in-place removal of sensitive request fields.
+	// Bearer capability tokens also stay out of every decision InputContext.
+	req.Context = evaluationInputContext(req.Context)
 	// Bind the tool before any gate or the policy decision point reads the
 	// context, so none of them sees a caller's tool_name as the tool.
 	req.Context = bindRequestTool(req.Action, req.Resource, req.Context)

@@ -1,0 +1,1361 @@
+package shellscan
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+// guardFixture lays out a home directory the way a workstation signer does: a
+// data directory with a key directory inside, a policy file elsewhere, and a
+// symlink that reaches the key directory under another name.
+type guardFixture struct {
+	home, data, keys, seed, policy, link string
+	guard                                *PathGuard
+}
+
+func newGuardFixture(t *testing.T) guardFixture {
+	t.Helper()
+	home := t.TempDir()
+	f := guardFixture{
+		home: home,
+		data: filepath.Join(home, ".signer"),
+		keys: filepath.Join(home, ".signer", "keys"),
+	}
+	f.seed = filepath.Join(f.keys, "signer.seed")
+	f.policy = filepath.Join(t.TempDir(), "policy.json")
+	for _, dir := range []string{f.keys, filepath.Join(f.data, "receipts")} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []string{f.seed, f.policy, filepath.Join(f.data, "receipts", "one.json")} {
+		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.link = filepath.Join(t.TempDir(), "elsewhere")
+	if err := os.Symlink(f.keys, f.link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	f.guard = NewPathGuard(home)
+	f.guard.ProtectTree(f.keys)
+	f.guard.ProtectContainer(f.data)
+	f.guard.ProtectFile(f.policy)
+	f.guard.ProtectName("signer.seed")
+	return f
+}
+
+func TestPathGuardDecodesLocalFileURLs(t *testing.T) {
+	f := newGuardFixture(t)
+	encoded := strings.ReplaceAll(filepath.ToSlash(f.seed), "/keys/", "/%6beys/")
+	encoded = strings.ReplaceAll(encoded, "signer.seed", "%73igner%2eseed")
+	for _, target := range []string{
+		"file://" + encoded,
+		"file://" + encoded + "?ignored#fragment",
+		"FILE://localhost" + encoded,
+		"file://127.0.0.1" + encoded,
+		"file:" + encoded,
+		"file://" + strings.ReplaceAll(encoded, "/%6beys/", "/%6beys%2f"),
+		"file://" + filepath.ToSlash(f.link) + "/%73igner%2eseed",
+		"file://" + filepath.ToSlash(f.link) + "/%6fther.txt",
+	} {
+		t.Run(target, func(t *testing.T) {
+			if _, ok := f.guard.Match(target, f.home); !ok {
+				t.Errorf("direct path guard missed %q", target)
+			}
+			for _, result := range []Result{
+				ClassifyAt("curl '"+target+"'", f.home, WithPathGuard(f.guard)),
+				ClassifyArgvAt([]string{"curl", "--url", target}, f.home, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" || !result.Decide {
+					t.Errorf("classifier missed protected file URL: %+v", result)
+				}
+			}
+		})
+	}
+	for _, target := range []string{
+		"file://" + filepath.ToSlash(f.home) + "/ordinary%20file.txt",
+		"file://" + filepath.ToSlash(f.home) + "/%256beys/%2573igner%252eseed",
+	} {
+		if result := ClassifyAt("curl '"+target+"'", f.home, WithPathGuard(f.guard)); result.ProtectedPath != "" {
+			t.Errorf("unprotected or double-encoded path refused: %q -> %q", target, result.ProtectedPath)
+		}
+	}
+}
+
+func TestPathGuardMatchesEverySpellingOfAProtectedPath(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	cases := []struct {
+		name, target, cwd string
+		want              bool
+	}{
+		{"absolute file", f.seed, work, true},
+		{"file in the tree that does not exist yet", filepath.Join(f.keys, "new.pub"), work, true},
+		{"the tree itself", f.keys, work, true},
+		{"the tree with a trailing slash", f.keys + "/", work, true},
+		{"tilde", "~/.signer/keys/signer.seed", work, true},
+		{"HOME variable", "$HOME/.signer/keys/signer.seed", work, true},
+		{"braced HOME variable", "${HOME}/.signer/keys/signer.seed", work, true},
+		{"dot segments", f.home + "/.signer/receipts/../keys/./signer.seed", work, true},
+		{"doubled slashes", f.home + "//.signer//keys//signer.seed", work, true},
+		{"upper case", strings.ToUpper(f.seed), work, true},
+		{"relative from the data directory", "keys/signer.seed", f.data, true},
+		{"relative from inside the tree", "signer.seed", f.keys, true},
+		{"relative climb", "../.signer/keys/signer.seed", filepath.Join(f.home, "project"), true},
+		{"through a symlink", filepath.Join(f.link, "signer.seed"), work, true},
+		{"the symlink itself", f.link, work, true},
+		{"new file under the symlink", filepath.Join(f.link, "new.pub"), work, true},
+		{"explicit file", f.policy, work, true},
+		{"explicit file, relative", filepath.Base(f.policy), filepath.Dir(f.policy), true},
+		{"the container itself", f.data, work, true},
+		{"the container by tilde", "~/.signer", work, true},
+		{"protected name under an unknown directory", "backup/signer.seed", "", true},
+
+		{"other content of the container", filepath.Join(f.data, "receipts", "one.json"), work, false},
+		{"sibling with a longer name", f.keys + "-old/signer.pub", work, false},
+		{"sibling of the container", f.data + "-backup", work, false},
+		{"the home directory", f.home, work, false},
+		{"unrelated file", filepath.Join(work, "README.md"), work, false},
+		{"relative path with no working directory", "keys/other.pub", "", false},
+		{"a bare mention of the protected name", "signer.seed", "", false},
+		{"empty", "", work, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if rule, got := f.guard.Match(tc.target, tc.cwd); got != tc.want {
+				t.Fatalf("Match(%q, %q) = %q, %v; want %v", tc.target, tc.cwd, rule, got, tc.want)
+			}
+		})
+	}
+}
+
+// shellPattern matches a shell glob with dotglob on, the way a search tool's
+// wildcard may match a dot directory.
+func shellPattern(g *PathGuard, pattern, cwd string) (string, bool) {
+	return g.matchPattern(slashPath(strings.TrimSpace(pattern)), -1, cwd, true)
+}
+
+func TestPathGuardMatchesPatternsAndText(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for pattern, want := range map[string]bool{
+		"~/.signer/keys/*":      true,
+		"~/.signer/k*/s*.seed":  true,
+		"~/.signer/*":           true,
+		"~/.sig*":               true,
+		"~/.*":                  true,
+		f.link + "/*":           true,
+		"~/.signer/receipts/*":  false,
+		"~/*":                   false, // listing home does not name the container
+		"~/*/keys/*":            true,  // a search tool's wildcard may match a dot directory
+		"**/*.go":               false,
+		work + "/*.json":        false,
+		"~/.signer/keys-old/*":  false,
+		"~/.signer/receipts/**": false,
+		// "**" spans any number of directories, as globstar and the search
+		// tools' glob syntax read it.
+		"/**/keys/*":         true,
+		"/**/s*.seed":        true,
+		"/**/*.go":           false,
+		f.home + "/**/*.go":  false,
+		f.home + "/**/*":     true,
+		f.home + "/**/k*/**": true,
+	} {
+		if rule, got := shellPattern(f.guard, pattern, work); got != want {
+			t.Errorf("shellPattern(%q) = %q, %v; want %v", pattern, rule, got, want)
+		}
+	}
+	for text, want := range map[string]bool{
+		"open('" + f.seed + "').read()":                          true,
+		"os.path.expanduser('~/.signer/keys/signer.seed')":       true,
+		"path.join(os.homedir(), '.signer/keys', 'signer.seed')": true,
+		"fs.readFileSync(process.env.HOME + '/.signer/keys/x')":  true,
+		"cat $HOME/.signer/keys/signer.seed":                     true,
+		"see " + f.data + "/receipts/one.json":                   false,
+		"the signer keeps its seed in a file called signer.seed": false,
+		"~/.signer/keys-old is unrelated":                        false,
+		"nothing to see":                                         false,
+	} {
+		if rule, got := f.guard.MatchText(text); got != want {
+			t.Errorf("MatchText(%q) = %q, %v; want %v", text, rule, got, want)
+		}
+	}
+}
+
+func TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs(t *testing.T) {
+	root := t.TempDir()
+	guard := NewPathGuard(root)
+	protected := filepath.Join(root, "Protected")
+	benign := filepath.Join(root, "Public")
+	for _, dir := range []string{protected, benign} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data.bin"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	guard.ProtectTree(protected)
+	for _, tc := range []struct {
+		alias, target string
+		want          bool
+	}{
+		{"KeyAlias", protected, true},
+		{"PublicAlias", benign, false},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			alias := filepath.Join(root, tc.alias)
+			if err := os.Symlink(tc.target, alias); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			for name, glob := range map[string]string{
+				"simple":            "*.bin",
+				"bracket class":     "[a-z]*.bin",
+				"oversized segment": "*" + strings.Repeat("a", maxShellGlobSegment),
+			} {
+				t.Run(name, func(t *testing.T) {
+					pattern := filepath.ToSlash(alias) + "/" + glob
+					if rule, got := shellPattern(guard, pattern, root); got != tc.want {
+						t.Errorf("shellPattern = %q, %v; want %v", rule, got, tc.want)
+					}
+					res := ClassifyAt("cat "+pattern, root, WithPathGuard(guard))
+					if (res.ProtectedPath != "") != tc.want {
+						t.Errorf("ProtectedPath = %q; want protected %v", res.ProtectedPath, tc.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestPathGuardNilAndEmptyAreInert(t *testing.T) {
+	var none *PathGuard
+	if _, ok := none.Match("/etc/passwd", "/"); ok {
+		t.Fatal("nil guard matched")
+	}
+	if _, ok := none.MatchText("anything"); ok {
+		t.Fatal("nil guard matched text")
+	}
+	if _, _, ok := none.MatchSearch(NewSearchCall("/", "")); ok {
+		t.Fatal("nil guard matched a search")
+	}
+	if _, _, ok := (&PathGuard{}).MatchSearch(nil); ok {
+		t.Fatal("a guard matched a nil search")
+	}
+	empty := NewPathGuard("")
+	empty.ProtectFile("")
+	empty.ProtectTree(" ")
+	empty.ProtectName("")
+	if _, ok := empty.Match("/etc/passwd", "/"); ok {
+		t.Fatal("empty guard matched")
+	}
+}
+
+// The classifier reports a protected path through whatever shell syntax
+// carries it, and stays quiet about its neighbours.
+func TestClassifyReportsProtectedPaths(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	script := filepath.Join(work, "dump.py")
+	if err := os.WriteFile(script, []byte("print(open('"+f.seed+"').read())\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clean := filepath.Join(work, "build.py")
+	if err := os.WriteFile(clean, []byte("print('ok')\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hit := []string{
+		"cat ~/.signer/keys/signer.seed",
+		"base64 $HOME/.signer/keys/signer.seed",
+		`xxd "${HOME}/.signer/keys/signer.seed"`,
+		"cat ~/.signer/ke''ys/signer.seed",
+		`cat ~/.signer/"keys"/signer.seed`,
+		`cat ~/.signer/k\eys/signer.seed`,
+		"cat ~/.signer/k*/s*.seed",
+		"cat ~/.signer/keys/{signer.seed,other}",
+		"cat ~/.signer/$SUB/signer.seed",
+		"cat ~/.sig$REST",
+		`cat "$HOME/.signer/keys/$NAME"`,
+		"cat " + f.link + "/*",
+		"cd ~/.signer/keys && cat *",
+		"cd ~/.signer && cat keys/*",
+		"cd && cat .signer/keys/signer.seed",
+		"cd ~ && cat .signer/k*/*",
+		"pushd ~/.signer/keys",
+		"tar czf /tmp/k.tgz -C ~/.signer keys",
+		"cp -R ~/.signer /tmp/copy",
+		"head -c 64 < ~/.signer/keys/signer.seed",
+		"echo 00 > ~/.signer/keys/signer.pub",
+		"F=~/.signer/keys/signer.seed; cat \"$F\"",
+		"sh -c 'cat ~/.signer/keys/signer.seed'",
+		"eval 'cat ~/.signer/keys/signer.seed'",
+		"sudo -u root cat ~/.signer/keys/signer.seed",
+		"find ~/.signer/keys -type f -exec cat {} +",
+		"echo ~/.signer/keys/signer.seed | xargs cat",
+		"python3 -c \"open('" + f.seed + "')\"",
+		"python3 <<'EOF'\nopen('" + f.seed + "')\nEOF",
+		"python3 " + script,
+		"python3 dump.py",
+		"bash -c 'python3 dump.py'",
+		"shopt -s dotglob; cat ~/*/keys/*",
+		"cat " + f.policy,
+		// A word with a brace group is matched on its text before the group:
+		// refused when that text is inside protected material or has begun
+		// to spell its name.
+		"cat ~/.signer/{keys,zz}/*",
+		"cp -r ~/.sig{ner,x} /tmp/out",
+		// A bracket class is outside the grammar: it is refused where it
+		// starts at, inside or above protected material.
+		"cat ~/.signer/k[]e]ys/*",
+		`cat ~/.signer/k[\e]ys/*`,
+		"cat ~/.signer/k[[:alpha:]]ys/*",
+		"cat ~/.signer/[!r]*/*",
+		"ls ~/[a-z]*",
+	}
+	for _, command := range hit {
+		res := ClassifyAt(command, work, WithPathGuard(f.guard))
+		if res.ProtectedPath == "" || !res.Decide {
+			t.Errorf("ClassifyAt(%q) reported no protected path", command)
+		}
+	}
+	miss := []string{
+		"cat README.md",
+		"ls ~/.signer/receipts",
+		"cat ~/.signer/receipts/one.json",
+		"cat ~/.signer/receipts/$ID.json",
+		"ls ~/*",
+		"cat ~/*/keys/*",
+		"grep -rn signer.seed docs/",
+		"python3 build.py",
+		"python3 " + clean,
+		"cd /tmp && cat keys/other.pub",
+		"cat \"/Users/$USER/project/file\"",
+		"cat src/[ab]*.go",
+		"cat '~/.signer/k[e]ys/x'",
+		"cp ~/.bashrc{,.bak}",
+		"mkdir -p src/{api,web}/{lib,test}",
+		"echo {a,b}",
+		"touch src/f{1..1000}.go",
+		"F=~/{.signer,zz}/keys; echo done",
+		// Brace groups with an empty alternative, and words of many groups.
+		"touch ~/proj/f{1..300}{.go,}",
+		"echo {1..300}{,}",
+		"echo {1..256}; cp ~/.bashrc{,.bak}",
+		"echo {1..256}; ls f{a,}",
+		"for i in {1..300}; do echo $i; done",
+		"echo {1..1000}",
+		`printf '%s\n' {a..z}{a..z}`,
+		"touch ~/f{1..300}.txt",
+	}
+	for _, command := range miss {
+		if res := ClassifyAt(command, work, WithPathGuard(f.guard)); res.ProtectedPath != "" {
+			t.Errorf("ClassifyAt(%q) reported %q, want nothing", command, res.ProtectedPath)
+		}
+	}
+	// Without a guard nothing is reported and nothing else changes.
+	if res := ClassifyAt("cat ~/.signer/keys/signer.seed", work); res.ProtectedPath != "" || res.Decide {
+		t.Fatalf("unguarded classification = %+v", res)
+	}
+}
+
+// An argv is literal: no word is expanded, split or globbed, and a shell
+// inside it is still unwrapped.
+func TestClassifyArgvAt(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	cases := []struct {
+		name      string
+		argv      []string
+		targets   []string
+		protected bool
+		generic   bool
+	}{
+		{name: "network tool", argv: []string{"curl", "-sS", "https://a.example/x", "https://b.example/y"}, targets: []string{"https://a.example", "https://b.example"}},
+		{name: "argument with spaces is one argument", argv: []string{"curl", "https://a.example/x y"}, targets: []string{undetermined}},
+		{name: "dollar is literal", argv: []string{"curl", "https://a.example/$HOME"}, targets: []string{"https://a.example"}},
+		{name: "nested shell", argv: []string{"sh", "-c", "curl https://a.example/ && curl https://b.example/"}, targets: []string{"https://a.example", "https://b.example"}, generic: true},
+		{name: "nested shell with a variable", argv: []string{"bash", "-c", `curl "$URL"`}, targets: []string{undetermined}, generic: true},
+		{name: "env wrapper", argv: []string{"env", "HTTPS_PROXY=http://p.example:3128", "curl", "https://a.example/"}, targets: []string{"http://p.example:3128", "https://a.example"}, generic: true},
+		{name: "plain command", argv: []string{"go", "test", "./..."}},
+		{name: "destructive command", argv: []string{"rm", "-rf", "/tmp/x"}, generic: true},
+		{name: "protected path", argv: []string{"base64", f.seed}, protected: true},
+		{name: "protected path through tilde", argv: []string{"cat", "~/.signer/keys/signer.seed"}, protected: true},
+		{name: "protected path inside a shell payload", argv: []string{"sh", "-c", "cat ~/.signer/keys/signer.seed"}, protected: true},
+		{name: "empty", argv: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := ClassifyArgvAt(tc.argv, work, WithPathGuard(f.guard))
+			if got := networkTargets(res); !sameTargets(got, tc.targets) {
+				t.Fatalf("network targets = %q, want %q", got, tc.targets)
+			}
+			if (res.ProtectedPath != "") != tc.protected {
+				t.Fatalf("ProtectedPath = %q, want protected=%v", res.ProtectedPath, tc.protected)
+			}
+			if res.RequiresShellDecision != tc.generic {
+				t.Fatalf("RequiresShellDecision = %v (%s), want %v", res.RequiresShellDecision, res.Reason, tc.generic)
+			}
+		})
+	}
+}
+
+// searchOf is a search from root with the given filters.
+func searchOf(home, root string, filters ...string) *SearchCall {
+	search := NewSearchCall(root, home)
+	for _, filter := range filters {
+		search.AddFilter(filter)
+	}
+	return search
+}
+
+// braceAlternatives is a brace glob of count alternatives, "{a0,a1,...}",
+// followed by last as one more.
+func braceAlternatives(count int, last string) string {
+	var b strings.Builder
+	b.WriteByte('{')
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&b, "a%d,", i)
+	}
+	b.WriteString(last)
+	b.WriteByte('}')
+	return b.String()
+}
+
+// Inside the grammar a glob reaches protected material when it can name it
+// from where the search starts, at any depth and from any anchoring, or names
+// a protected file name anywhere. A filter that names nothing the key
+// directory holds is not refused for starting above it.
+func TestPathGuardDecidesGlobsInTheGrammar(t *testing.T) {
+	f := newGuardFixture(t)
+	elsewhere := t.TempDir()
+	for _, tc := range []struct {
+		root, glob string
+		want       bool
+	}{
+		{f.home, "*.seed", true},
+		{f.home, "**/*.seed", true},
+		{f.home, "keys/*", true},
+		{f.home, ".signer/k*/*", true},
+		{f.home, "**/.signer/k*/*", true},
+		{f.home, "{*.go,s*.seed}", true},
+		{f.home, braceAlternatives(200, "*.s") + "{eed,zz}", true},
+		{f.home, "*", true},
+		{"/", "**/.signer/keys/*", true},
+		{"", "**/.signer/keys/*", true},
+		{f.keys, "*", true},
+		{elsewhere, "signer.see?", true}, // a copy of a protected file is that file
+		{elsewhere, "backup/{signer,other}.seed", true},
+
+		{f.home, "src/**/*.go", false},
+		{f.home, "docs/*.md", false},
+		{f.home, "*/package.json", false},
+		{f.home, "**/*.{ts,tsx}", false},
+		{f.home, "keys/*/x", false}, // the key directory holds no directory
+		{f.home, ".signer/receipts/*", false},
+		{f.home, ".?/keys/*", false}, // a leading ".?" can stand for "..", not for ".signer"
+		{"/", "src/*.go", false},
+		{"", "src/**/*.go", false},
+		{elsewhere, "*", false},
+		{elsewhere, "keys/*", false},
+		{elsewhere, "*.pub", false},
+	} {
+		if rule, reason, got := f.guard.MatchSearch(searchOf(f.home, tc.root, tc.glob)); got != tc.want {
+			t.Errorf("MatchSearch(%q from %q) = %q (%s), %v; want %v", tc.glob, tc.root, rule, reason, got, tc.want)
+		}
+	}
+	// A path pattern that names its own directory is read from there.
+	for _, tc := range []struct {
+		root, pattern string
+		want          bool
+	}{
+		{elsewhere, f.home + "/.sig*/k*/*", true},
+		{elsewhere, "~/.signer/k*/*", true},
+		{filepath.Join(f.home, "project"), "../.sig*/k*/*", true},
+		{filepath.Join(f.home, "a", "b"), "*/../../.sig*/k*/*", true},
+		{elsewhere, f.keys, true},
+		{elsewhere, f.home + "/**/*.go", false},
+		{elsewhere, "./src/*.go", false},
+	} {
+		search := NewSearchCall(tc.root, f.home)
+		search.AddPathPattern(tc.pattern)
+		if rule, reason, got := f.guard.MatchSearch(search); got != tc.want {
+			t.Errorf("MatchSearch(path %q from %q) = %q (%s), %v; want %v", tc.pattern, tc.root, rule, reason, got, tc.want)
+		}
+	}
+}
+
+// An absolute path pattern is read from the directory its literal head names,
+// and from "/" when its first segment already has a wildcard, a brace or a
+// bracket, as Claude Code's Glob roots it: the search root it was given does
+// not change where such a pattern starts.
+func TestPathGuardRootsAnAbsolutePatternAtItsLiteralHead(t *testing.T) {
+	f := newGuardFixture(t)
+	elsewhere := t.TempDir()
+	parts := strings.Split(strings.Trim(filepath.ToSlash(f.home), "/"), "/")
+	first, rest := parts[0], strings.Join(parts[1:], "/")
+	for _, pattern := range []string{
+		"/" + strings.TrimSuffix(strings.Repeat("*/", len(parts)), "/") + "/.sig*/k*/*",
+		"/" + first[:1] + "*/" + rest + "/.sig*/k*/*",
+		"/**/" + parts[len(parts)-1] + "/.sig*/k*/*",
+		"/{" + first + ",x}/" + rest + "/.sig*/k*/*",
+		"/[" + first[:1] + "]" + first[1:] + "/" + rest + "/.sig*/k*/*",
+	} {
+		search := NewSearchCall(elsewhere, f.home)
+		search.AddPathPattern(pattern)
+		if rule, reason, got := f.guard.MatchSearch(search); !got {
+			t.Errorf("MatchSearch(path %q from %q) = %q (%s), %v; want it refused", pattern, elsewhere, rule, reason, got)
+		}
+	}
+	for _, pattern := range []string{"/*/" + rest + "/src/**/*.go", "/" + first[:1] + "*/" + rest + "/docs/*.md"} {
+		search := NewSearchCall(elsewhere, f.home)
+		search.AddPathPattern(pattern)
+		if rule, reason, got := f.guard.MatchSearch(search); got {
+			t.Errorf("MatchSearch(path %q from %q) = %q (%s); want it passed", pattern, elsewhere, rule, reason)
+		}
+	}
+}
+
+// Outside the grammar a glob is not read. It is refused when the search
+// starts at, inside or above protected material, with a reason that names
+// what was not read, and otherwise when the search can reach a file with a
+// protected name.
+func TestPathGuardRefusesAGlobOutsideTheGrammarWhereItCanReach(t *testing.T) {
+	f := newGuardFixture(t)
+	empty := t.TempDir()
+	copies := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(copies, "backup"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copies, "backup", "signer.seed"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		root, glob, construct string
+		want                  bool
+	}{
+		{f.home, "*.see[]d]", `"["`, true},
+		{f.home, `*.see\d`, `"\\"`, true},
+		{f.home, "!**/node_modules/**", `"!"`, true},
+		{f.home, "/.signer/k*/*", `a leading "/"`, true},
+		{f.home, "*.seed ", "white space", true},
+		{f.home, "{a,b", "never closed", true},
+		{f.home, "a}", `"}" outside braces`, true},
+		{f.home, "{a}", "one alternative", true},
+		{f.home, "{a,{b,{c,{d,{e,f}}}}}.go", "nested deeper", true},
+		{f.home, "src/../.signer/*", `".."`, true},
+		{f.home, "a**b", `"**" inside`, true},
+		{f.data, "[a-z]*", `"["`, true},
+		{filepath.Join(f.data, "receipts"), "[a-z]*", `"["`, true},
+		{"", "[a-z]*", `"["`, true},
+		{copies, `*.see\d`, "a copy of HELM signing material", true},
+		{empty, "*.see[]d]", "", false},
+		{empty, "!**/node_modules/**", "", false},
+		{filepath.Join(empty, "absent"), "[ab]*", "", false},
+	} {
+		rule, reason, got := f.guard.MatchSearch(searchOf(f.home, tc.root, tc.glob))
+		if got != tc.want || !strings.Contains(reason, tc.construct) {
+			t.Errorf("MatchSearch(%q from %q) = %q (%s), %v; want %v naming %s", tc.glob, tc.root, rule, reason, got, tc.want, tc.construct)
+		}
+	}
+}
+
+// A glob selects credential files by the rules SecretReadPath uses: inside
+// the grammar when it can name one, outside it when the search can reach one.
+func TestSearchCallSecretReadDecidesByReach(t *testing.T) {
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, ".env"), []byte("TOKEN=x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	empty := t.TempDir()
+	for _, tc := range []struct {
+		root, glob string
+		want       bool
+	}{
+		{empty, ".env", true},
+		{empty, "**/.en*", true},
+		{empty, "*.pem", true},
+		{empty, "{a,.env}", true},
+		{empty, "**/id_rsa", true},
+		{project, ".en[]v]", true},
+		{project, `.en\v`, true},
+		{project, "{.e[n]v,[}]}", true},
+		// A credential file inside a directory is selected by a glob that
+		// names the directory, or one whose "**" can stand for it.
+		{empty, "**/*.json", true},
+		{empty, ".docker/*.json", true},
+		{empty, "*/config", true},
+		{empty, "**/gcloud/*.db", true},
+		{empty, ".ssh/*", true},
+		{empty, "*/credentials", true},
+
+		{empty, "*.json", false},
+		{empty, "*.db", false},
+		{empty, "*config", false},
+		{empty, "config.json", false},
+		{empty, "credentials", false},
+		{empty, "gcloud/*.db", false},
+		// A last segment that selects files in general is not aimed at one,
+		// whatever directory the glob names.
+		{empty, ".docker/*", false},
+		{empty, ".env.example", false},
+		{empty, "*.pub", false},
+		{empty, "**/*.go", false},
+		{empty, "*", false},
+		{empty, "*.md", false},
+		{empty, ".en[]v]", false},
+		{empty, `.en\v`, false},
+	} {
+		if glob, reason, got := searchOf("", tc.root, tc.glob).SecretRead(); got != tc.want {
+			t.Errorf("SecretRead(%q from %q) = %q (%s), %v; want %v", tc.glob, tc.root, glob, reason, got, tc.want)
+		}
+	}
+}
+
+// The globs of one call share one budget of alternatives and bytes. Past it
+// the call is refused as reaching trust material without being expanded, and
+// the work one call costs stays bounded however many globs it sends.
+func TestSearchCallSharesOneBudgetAcrossItsGlobs(t *testing.T) {
+	f := newGuardFixture(t)
+	empty := t.TempDir()
+	for _, tc := range []struct {
+		name  string
+		globs []string
+		over  bool
+	}{
+		{"alternatives of one glob", []string{braceAlternatives(MaxSearchGlobAlternatives, "x")}, true},
+		{"alternatives of two globs", []string{braceAlternatives(150, "x"), braceAlternatives(150, "y")}, true},
+		{"bytes of two globs", []string{strings.Repeat("a", MaxSearchGlobBytes/2) + "*", strings.Repeat("b", MaxSearchGlobBytes/2) + "*"}, true},
+		{"bytes of a brace expansion", []string{"{" + strings.Repeat("a", MaxSearchGlobBytes/3) + "," + strings.Repeat("b", MaxSearchGlobBytes/3) + "}{c,d}"}, true},
+		{"globs outside the grammar count too", strings.Split(strings.Repeat("[x],", MaxSearchGlobAlternatives+1), ",")[:MaxSearchGlobAlternatives+1], true},
+		{"bytes of globs outside the grammar", []string{"[" + strings.Repeat("a", MaxSearchGlobBytes/2), "[" + strings.Repeat("b", MaxSearchGlobBytes/2)}, true},
+		{"under the budget", []string{braceAlternatives(100, "x"), braceAlternatives(100, "y"), strings.Repeat("c", MaxSearchGlobBytes/4)}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			search := searchOf(f.home, empty, tc.globs...)
+			rule, _, matched := f.guard.MatchSearch(search)
+			_, _, secret := search.SecretRead()
+			if over := matched && rule == UnexpandableSearchGlob; over != tc.over || secret != tc.over {
+				t.Fatalf("MatchSearch = %q, %v; SecretRead = %v; want over budget %v", rule, matched, secret, tc.over)
+			}
+		})
+	}
+}
+
+// generousBound is the most time a decision the tests time may take. The
+// allocation bounds are what pin the work down; the time bound only has to
+// catch a decision that has gone super-linear again (those took 30 s and more
+// under the reviews' load), while leaving a wide margin for a loaded machine,
+// where 250 ms has been exceeded by work that is linear. The hook's own
+// deadline is 10 s.
+const generousBound = 3 * time.Second
+
+// A budget-sized call is decided at once, in bounded memory. Past the budget
+// it is refused as reaching trust material and as a secret read; a glob
+// nested past the grammar is refused above the data directory.
+func TestPathGuardDecidesALargeSearchInBoundedTimeAndMemory(t *testing.T) {
+	f := newGuardFixture(t)
+	var many []string
+	for size := 0; size < 4<<20; {
+		glob := braceAlternatives(255, fmt.Sprintf("g%d.go", len(many)))
+		many = append(many, glob)
+		size += len(glob)
+	}
+	for _, tc := range []struct {
+		name       string
+		globs      []string
+		overBudget bool
+	}{
+		{"1 MiB of two-way groups", []string{strings.Repeat("{a,b}", (1<<20)/5)}, true},
+		{"one group of many alternatives", []string{braceAlternatives(20000, "x")}, true},
+		{"deeply nested groups", []string{strings.Repeat("{a,", 4000) + strings.Repeat("}", 4000)}, false},
+		{"4 MiB of distinct globs of 255 alternatives", many, true},
+		{"a 4 MiB glob", []string{strings.Repeat("a/", 2<<20)}, true},
+		{"few, long alternatives", []string{"{" + strings.Repeat("a", 512<<10) + "," + strings.Repeat("b", 512<<10) + "}" + strings.Repeat("{x,y}", 7)}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			start := time.Now()
+			search := searchOf(f.home, f.home, tc.globs...)
+			rule, _, matched := f.guard.MatchSearch(search)
+			_, _, secret := search.SecretRead()
+			elapsed := time.Since(start)
+			runtime.ReadMemStats(&after)
+			if !matched || (rule == UnexpandableSearchGlob) != tc.overBudget || secret != tc.overBudget {
+				t.Fatalf("MatchSearch = %q, %v; SecretRead = %v; want refused, over budget %v", rule, matched, secret, tc.overBudget)
+			}
+			if elapsed > generousBound {
+				t.Fatalf("deciding the search took %s, want under %s", elapsed, generousBound)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 16<<20 {
+				t.Fatalf("deciding the search allocated %d bytes, want at most 16 MiB", allocated)
+			}
+		})
+	}
+}
+
+// "**" matches no directory as well as any number of them.
+func TestPathGuardReadsDoubleStarAsZeroOrMoreDirectories(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	if rule, got := shellPattern(f.guard, filepath.Dir(f.policy)+"/**/policy.json", work); !got {
+		t.Fatalf("shellPattern(<dir>/**/policy.json) = %q, %v; want the policy file", rule, got)
+	}
+	if _, _, got := f.guard.MatchSearch(searchOf(f.home, filepath.Dir(f.policy), "**/**/policy.json")); !got {
+		t.Fatal("a search filter **/**/policy.json did not reach the policy file")
+	}
+}
+
+// A long pattern is compared by the segments a target can hold, so its
+// length costs little and changes nothing.
+func TestPathGuardDecidesALongPatternByItsLastSegments(t *testing.T) {
+	f := newGuardFixture(t)
+	start := time.Now()
+	if rule, got := shellPattern(f.guard, strings.Repeat("/zz*", 4097), t.TempDir()); got {
+		t.Fatalf("a pattern of 4097 segments matched %q", rule)
+	}
+	if _, _, got := f.guard.MatchSearch(searchOf(f.home, f.home, strings.Repeat("x/", 4000)+".signer/keys/*")); !got {
+		t.Fatal("a filter of many leading directories did not reach the key directory")
+	}
+	if elapsed := time.Since(start); elapsed > generousBound {
+		t.Fatalf("long patterns took %s, want under %s", elapsed, generousBound)
+	}
+}
+
+// A wildcard aimed into a protected directory matches when it can name a file
+// the directory holds, not only a protected name.
+func TestPathGuardListsTheProtectedDirectory(t *testing.T) {
+	f := newGuardFixture(t)
+	if err := os.WriteFile(filepath.Join(f.keys, "extra.bin"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	if rule, got := shellPattern(f.guard, "~/.signer/k*/*.bin", work); !got {
+		t.Fatalf("shellPattern(~/.signer/k*/*.bin) = %q, %v; want the file in the key directory", rule, got)
+	}
+	if rule, got := shellPattern(f.guard, "~/.signer/k*/*.absent", work); got {
+		t.Fatalf("shellPattern(~/.signer/k*/*.absent) = %q, %v; want no match", rule, got)
+	}
+	if _, _, got := f.guard.MatchSearch(searchOf(f.home, f.home, "*.bin")); !got {
+		t.Fatal("a filter for the extra file did not reach it")
+	}
+}
+
+// A walk the guard cannot finish, because the root cannot be read or the call
+// has more roots than the guard walks, cannot show that a glob outside the
+// grammar misses everything: the search is refused.
+func TestSearchCallRefusesWhatItCannotWalk(t *testing.T) {
+	f := newGuardFixture(t)
+	unreadable := t.TempDir()
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o700) })
+	if _, err := os.ReadDir(unreadable); err == nil {
+		t.Skip("running with permissions that read any directory")
+	}
+	search := searchOf(f.home, unreadable, "[a]*")
+	if rule, reason, got := f.guard.MatchSearch(search); !got || rule != UnexpandableSearchGlob {
+		t.Fatalf("MatchSearch of an unreadable root = %q (%s), %v; want it refused", rule, reason, got)
+	}
+	if _, _, got := search.SecretRead(); !got {
+		t.Fatal("SecretRead of an unreadable root did not refuse")
+	}
+	many := NewSearchCall(t.TempDir(), f.home)
+	for i := 0; i <= maxReachWalks; i++ {
+		many.AddPathPattern(t.TempDir() + "/[a]*")
+	}
+	if rule, reason, got := f.guard.MatchSearch(many); !got || rule != UnexpandableSearchGlob {
+		t.Fatalf("MatchSearch over %d roots = %q (%s), %v; want it refused", maxReachWalks+1, rule, reason, got)
+	}
+}
+
+// A shell word is decided in time linear in its length. A segment longer
+// than any file name is not matched name by name: the word is refused when it
+// starts at, inside or above protected material, and passes otherwise. The
+// guard may cost a small multiple of what classifying the same command
+// without it costs, measured at the same moment so that load on the machine
+// slows both; before this bound it cost a thousand times more.
+func TestClassifyDecidesALongShellWordInBoundedTime(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, tc := range []struct {
+		name, command string
+		protected     bool
+	}{
+		{"unclosed brackets elsewhere", "cat " + work + "/*" + strings.Repeat("[", 1<<20), false},
+		{"unclosed brackets above protected material", "cat ~/*" + strings.Repeat("[", 1<<20), true},
+		{"a long segment elsewhere", "cat " + work + "/*" + strings.Repeat("a", 1<<20), false},
+		{"a long segment inside the data directory", "cat ~/.signer/*" + strings.Repeat("a", 1<<20), true},
+		{"many double stars", "cat " + work + "/" + strings.Repeat("**/", 1<<19) + "x", false},
+		{"a long word after a brace sequence", "cat " + work + "/{1..256}" + strings.Repeat("a", 1<<20), false},
+		{"a long word after many brace groups", "cat " + work + "/" + strings.Repeat("{a,b}", 8) + strings.Repeat("a", 1<<20), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			ClassifyAt(tc.command, work)
+			unguarded := time.Since(start)
+			bound := 10*unguarded + time.Second
+			done := make(chan Result, 1)
+			start = time.Now()
+			go func() { done <- ClassifyAt(tc.command, work, WithPathGuard(f.guard)) }()
+			select {
+			case res := <-done:
+				if (res.ProtectedPath != "") != tc.protected {
+					t.Fatalf("ProtectedPath = %q, want protected %v", res.ProtectedPath, tc.protected)
+				}
+				if elapsed := time.Since(start); elapsed > bound {
+					t.Fatalf("deciding the word took %s with the guard and %s without it, want under %s", elapsed, unguarded, bound)
+				}
+			case <-time.After(2 * bound):
+				t.Fatalf("the word was not decided within %s; without the guard it took %s", 2*bound, unguarded)
+			}
+		})
+	}
+}
+
+// A stopped guard ends every decision at once as a refusal, a walk of a
+// search root included, so a classifier past its deadline stops instead of
+// running on.
+func TestPathGuardStopEndsEveryDecisionAsARefusal(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	search := searchOf(f.home, work, "[a]*.go")
+	if _, _, got := f.guard.MatchSearch(search); got {
+		t.Fatal("a search that reaches nothing was refused before the guard was stopped")
+	}
+	f.guard.Stop()
+	if rule, got := f.guard.Match(filepath.Join(work, "main.go"), work); !got || rule != stoppedRule {
+		t.Fatalf("Match after Stop = %q, %v; want %q", rule, got, stoppedRule)
+	}
+	if rule, _, got := f.guard.MatchSearch(searchOf(f.home, work, "*.go")); !got || rule != stoppedRule {
+		t.Fatalf("MatchSearch after Stop = %q, %v; want %q", rule, got, stoppedRule)
+	}
+	if res := ClassifyAt("cat README.md", work, WithPathGuard(f.guard)); res.ProtectedPath != stoppedRule {
+		t.Fatalf("ClassifyAt after Stop reported %q, want %q", res.ProtectedPath, stoppedRule)
+	}
+	// The walk a glob outside the grammar needs stops too, and a walk that
+	// did not finish is refused.
+	fresh := searchOf(f.home, work, "[a]*.go")
+	_, _, _ = f.guard.MatchSearch(fresh)
+	if _, reason, got := fresh.SecretRead(); !got || !strings.Contains(reason, reachTooLarge) {
+		t.Fatalf("SecretRead after Stop = %v (%s); want the unfinished walk refused", got, reason)
+	}
+}
+
+// An MCP tool's pattern may be a path pattern or a regular expression. In
+// the grammar it is decided as a path pattern; outside it, it is a regular
+// expression: refused where the search starts at, inside or above protected
+// material, and otherwise neither walked for nor refused.
+func TestSearchCallReadsAPatternOutsideTheGrammarAsARegex(t *testing.T) {
+	f := newGuardFixture(t)
+	copies := t.TempDir()
+	if err := os.WriteFile(filepath.Join(copies, "signer.seed"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := t.TempDir()
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o700) })
+	for _, tc := range []struct {
+		root, pattern string
+		want          bool
+	}{
+		{f.home, "foo|bar", true},
+		{f.home, "**/*.seed", true},
+		{copies, "**/*.seed", true},
+		{unreadable, "foo|bar", false},
+		{unreadable, `\bneedle\b`, false},
+		{copies, "sig.*seed", false},
+	} {
+		search := NewSearchCall(tc.root, f.home)
+		search.AddPatternOrRegex(tc.pattern)
+		rule, reason, got := f.guard.MatchSearch(search)
+		_, _, secret := search.SecretRead()
+		if got != tc.want || secret {
+			t.Errorf("MatchSearch(pattern %q from %q) = %q (%s), %v, secret read %v; want %v and no secret read", tc.pattern, tc.root, rule, reason, got, secret, tc.want)
+		}
+	}
+}
+
+func TestPathGuardResolvesSymlinksBeforeParentSegments(t *testing.T) {
+	root := t.TempDir()
+	secretDir, publicDir, work := filepath.Join(root, "secrets"), filepath.Join(root, "public"), filepath.Join(root, "work")
+	for _, dir := range []string{secretDir + "/receipts", publicDir + "/receipts", work} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, dir := range []string{secretDir, publicDir, work} {
+		for _, name := range []string{"signing.seed", "settings.json"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(dir), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	guard := NewPathGuard(root)
+	for _, name := range []string{"signing.seed", "settings.json"} {
+		guard.ProtectFile(filepath.Join(secretDir, name))
+	}
+	for _, tc := range []struct {
+		name, target string
+		want         bool
+	}{
+		{"absolute", secretDir + "/receipts", true}, {"relative", "../secrets/receipts", true}, {"ordinary", publicDir + "/receipts", false},
+	} {
+		alias := filepath.Join(work, tc.name)
+		if err := os.Symlink(tc.target, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"signing.seed", "settings.json"} {
+			spelling := filepath.ToSlash(alias) + "/../" + name
+			contents, err := os.ReadFile(spelling)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want && string(contents) != secretDir {
+				t.Fatal("reference read missed protected file")
+			}
+			guard.Match(filepath.Join(work, name), work)
+			if _, got := guard.Match(spelling, work); got != tc.want {
+				t.Errorf("Match(%q)=%v, want %v", spelling, got, tc.want)
+			}
+			if got := ClassifyAt("cat '"+spelling+"'", work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+				t.Errorf("shell %q: protected=%q", spelling, got.ProtectedPath)
+			}
+		}
+		if got := ClassifyAt("cat "+filepath.ToSlash(alias)+"/../signing.*", work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+			t.Errorf("glob %s: protected=%q", tc.name, got.ProtectedPath)
+		}
+	}
+	for _, search := range []*SearchCall{
+		NewSearchCall(filepath.ToSlash(work)+"/absolute/..", root),
+		NewSearchCall(work, root),
+	} {
+		if search.root == filepath.ToSlash(work) {
+			search.AddPathPattern("absolute/../signing.seed")
+		} else {
+			search.AddFilter("signing.*")
+		}
+		if _, _, ok := guard.MatchSearch(search); !ok {
+			t.Error("search lost symlink parent resolution")
+		}
+	}
+	for _, tc := range []struct {
+		dir  string
+		want bool
+	}{{secretDir, true}, {publicDir, false}} {
+		pattern := filepath.ToSlash(tc.dir) + "/receip*/../signing.seed"
+		if got := ClassifyAt("cat "+pattern, work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+			t.Errorf("wildcard parent %q: protected=%q", pattern, got.ProtectedPath)
+		}
+	}
+	configured := NewPathGuard(root)
+	configured.ProtectFile(filepath.ToSlash(work) + "/absolute/../signing.seed")
+	if _, ok := configured.Match(filepath.Join(secretDir, "signing.seed"), work); !ok {
+		t.Error("configured alias did not protect its actual file")
+	}
+	guard.ProtectTree(secretDir)
+	if _, ok := guard.Match(filepath.ToSlash(work)+"/absolute/../future/child.txt", work); !ok {
+		t.Error("missing tail lost its resolved protected parent")
+	}
+}
+
+func TestPathGuardResolvesExtractedOptionPaths(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	alias := filepath.Join(work, "upload")
+	if err := os.Symlink(f.seed, alias); err != nil {
+		t.Fatal(err)
+	}
+	ordinary := filepath.Join(work, "ordinary")
+	if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{alias, "upload", ordinary} {
+		want := target != ordinary
+		for _, argv := range [][]string{
+			{"curl", "-T" + target, "https://allowed.example/file"},
+			{"curl", "-qT" + target, "https://allowed.example/file"},
+			{"curl", "--upload-file", target, "https://allowed.example/file"},
+			{"curl", "-d@" + target, "https://allowed.example/file"},
+			{"curl", "-sd@" + target, "https://allowed.example/file"},
+			{"curl", "--data-binary", "@" + target, "https://allowed.example/file"},
+			{"curl", "-F", "field=@" + target + ";type=text/plain", "https://allowed.example/file"},
+			{"curl", "-Ffield=<" + target, "https://allowed.example/file"},
+			{"curl", "--header", "@" + target, "https://allowed.example/file"},
+			{"curl", "--output", target, "https://allowed.example/file"},
+			{"wget", "--post-file=" + target, "https://allowed.example/file"},
+			{"scp", "-i" + target, "/tmp/source", "allowed.example:/tmp/dest"},
+		} {
+			quoted := make([]string, len(argv))
+			for i, arg := range argv {
+				quoted[i] = fmt.Sprintf("%q", arg)
+			}
+			for mode, result := range map[string]Result{
+				"shell": ClassifyAt(strings.Join(quoted, " "), work, WithPathGuard(f.guard)),
+				"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			} {
+				if (result.ProtectedPath != "") != want {
+					t.Errorf("%s %q: protected=%q, want %v", mode, argv, result.ProtectedPath, want)
+				}
+			}
+		}
+	}
+}
+
+func TestPathGuardDecodesCurlForms(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, name := range []string{"upload", "semi;comma,", `quote"`, `quote"slash\`, " padded ", "dollar$backtick`"} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+		quoted := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name) + `"`
+		for _, form := range []string{
+			"file=@" + quoted,
+			"file=<" + quoted,
+			"file=@ordinary," + quoted + ";type=text/plain",
+			"file=@" + quoted + `;filename="public;name,";encoder=base64`,
+			"file=literal;headers=@" + quoted,
+			"file=literal;HEADERS=<" + quoted,
+			"file=@ordinary;headers=<" + quoted,
+			"file=@ \t" + quoted + " \t",
+		} {
+			for _, args := range [][]string{{"-F", form}, {"-qF" + form}, {"--form", form}} {
+				argv := append(append([]string{"curl"}, args...), "https://allowed.example/")
+				words := make([]string, len(argv))
+				single := make([]string, len(argv))
+				for i, arg := range argv {
+					words[i] = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`").Replace(arg) + `"`
+					single[i] = "'" + arg + "'"
+				}
+				for mode, result := range map[string]Result{
+					"argv":          ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+					"double-quoted": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+					"single-quoted": ClassifyAt(strings.Join(single, " "), work, WithPathGuard(f.guard)),
+				} {
+					if strings.Contains(name, `\`) {
+						if !sameTargets(networkTargets(result), []string{undetermined}) {
+							t.Errorf("%s %q: backslash path was not refused", mode, argv)
+						}
+					} else if result.ProtectedPath == "" {
+						t.Errorf("%s %q escaped protected path guard", mode, argv)
+					}
+				}
+			}
+		}
+	}
+	for _, form := range []string{`file=@"ordinary"`, `file=<"ordinary;comma,"`, `file=@first,"second";type=text/plain`, `file=literal;headers=@"public-headers"`, `file=@ordinary;filename="public;name,"`} {
+		result := ClassifyArgvAt([]string{"curl", "-F", form, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary form %q refused: %+v", form, result)
+		}
+	}
+}
+
+func TestPathGuardChecksCurlEncodedFileInputs(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, name := range []string{"upload", "input ", "input@part"} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+		for _, option := range []string{"--data-urlencode", "--url-query"} {
+			for _, prefix := range []string{"field@", "@"} {
+				for _, target := range []string{name, filepath.Join(work, name)} {
+					value := prefix + target
+					argv := []string{"curl", option, value, "https://allowed.example/"}
+					for mode, result := range map[string]Result{
+						"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+						"shell": ClassifyAt("curl "+option+" '"+value+"' https://allowed.example/", work, WithPathGuard(f.guard)),
+					} {
+						if result.ProtectedPath == "" {
+							t.Errorf("%s %q missed protected encoded input", mode, argv)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, option := range []string{"--data-urlencode", "--url-query"} {
+		for _, value := range []string{"field=literal@upload", "field@upload=literal", "=field@upload", "field@ordinary", "literal"} {
+			result := ClassifyArgvAt([]string{"curl", option, value, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+			if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+				t.Errorf("ordinary %s %q refused: %+v", option, value, result)
+			}
+		}
+	}
+	result := ClassifyArgvAt([]string{"curl", "--url-query", "+field@upload", "https://allowed.example/"}, work, WithPathGuard(f.guard))
+	if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+		t.Errorf("literal query refused: %+v", result)
+	}
+}
+
+func TestPathGuardPreservesFilesystemWhitespace(t *testing.T) {
+	f := newGuardFixture(t)
+	work := filepath.Join(t.TempDir(), "workspace ")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ordinary := filepath.Join(work, "input")
+	if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"input ", " input", "input\t", "input\n", "input\u00a0"} {
+		alias := filepath.Join(work, name)
+		if err := os.Symlink(f.seed, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, target := range []string{alias, name} {
+			if _, ok := f.guard.Match(target, work); !ok {
+				t.Errorf("direct %q missed", target)
+			}
+			for mode, result := range map[string]Result{
+				"shell": ClassifyAt("cat '"+target+"'", work, WithPathGuard(f.guard)),
+				"argv":  ClassifyArgvAt([]string{"cat", target}, work, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" {
+					t.Errorf("%s %q missed", mode, target)
+				}
+			}
+		}
+	}
+	escaped := filepath.ToSlash(work) + "/input\\ "
+	escaped = strings.ReplaceAll(escaped, "workspace ", "workspace\\ ")
+	if result := ClassifyAt("cat "+escaped, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+		t.Errorf("escaped terminal space missed: %q", escaped)
+	}
+	if _, ok := f.guard.Match(ordinary, work); ok {
+		t.Fatal("ordinary trimmed sibling incorrectly protected")
+	}
+	// Registration and search roots must preserve the same filesystem spelling.
+	custom := filepath.Join(work, "configuration ")
+	if err := os.WriteFile(custom, []byte("protected"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guard := NewPathGuard(work)
+	guard.ProtectFile(custom)
+	alias := filepath.Join(work, "configured-alias")
+	if err := os.Symlink(custom, alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := guard.Match(alias, work); !ok {
+		t.Fatal("whitespace in registered file lost")
+	}
+	dirAlias := filepath.Join(work, "search ")
+	if err := os.Symlink(f.keys, dirAlias); err != nil {
+		t.Fatal(err)
+	}
+	search := NewSearchCall(dirAlias, f.home)
+	search.AddPathPattern("signer.seed")
+	if _, _, ok := f.guard.MatchSearch(search); !ok {
+		t.Fatal("whitespace in search root lost")
+	}
+}
+
+func TestPathGuardPreservesLiteralBackslashNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a backslash separates path components on Windows")
+	}
+	f := newGuardFixture(t)
+	work := filepath.Join(t.TempDir(), `work\space`)
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{`in\put`, `\input`, `input\`, `a\..\b`} {
+		alias := work + "/" + name
+		if err := os.Symlink(f.seed, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct{ target, cwd string }{{alias, ""}, {name, work}, {"./" + name, work}} {
+			if _, ok := f.guard.Match(tc.target, tc.cwd); !ok {
+				t.Errorf("Match(%q, %q) missed a literal-backslash alias", tc.target, tc.cwd)
+			}
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt([]string{"cat", name}, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt("cat '"+name+"'", work, WithPathGuard(f.guard)),
+			"cd":    ClassifyAt("cd '"+work+"' && cat '"+name+"'", "/", WithPathGuard(f.guard)),
+			"curl":  ClassifyArgvAt([]string{"curl", "-T", name, "https://allowed.example/"}, work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath == "" {
+				t.Errorf("%s %q missed a literal-backslash alias", mode, name)
+			}
+		}
+	}
+	for _, name := range []string{`plain\name`, `notes\`} {
+		ordinary := work + "/" + name
+		if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct{ target, cwd string }{{ordinary, ""}, {name, work}} {
+			if rule, ok := f.guard.Match(tc.target, tc.cwd); ok {
+				t.Errorf("Match(%q, %q) refused an ordinary file: %s", tc.target, tc.cwd, rule)
+			}
+		}
+		if result := ClassifyAt("cat '"+name+"'", work, WithPathGuard(f.guard)); result.ProtectedPath != "" {
+			t.Errorf("ordinary %q refused: %s", name, result.ProtectedPath)
+		}
+	}
+	// A protected location written with backslashes for slashes stays refused,
+	// as a target and as a working directory.
+	if _, ok := f.guard.Match(strings.ReplaceAll(f.seed, "/", `\`), ""); !ok {
+		t.Error("backslash spelling of a protected file is no longer refused")
+	}
+	keys := strings.ReplaceAll(f.keys, "/", `\`)
+	if _, ok := f.guard.Match("other", keys); !ok {
+		t.Error("backslash spelling of a protected working directory is no longer refused")
+	}
+	if result := ClassifyAt("cat other", keys, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+		t.Error("shell word under a backslash-spelled protected working directory is no longer refused")
+	}
+}
+
+func TestPathGuardChecksCurlWriteOutFiles(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	alias := filepath.Join(work, "output")
+	if err := os.Symlink(f.seed, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{
+		"%output{output}replacement",
+		"%output{>>output}appended",
+		"%{http_code}%output{" + alias + "}",
+		"%output{ordinary.txt}first%output{output}second",
+		"%{stderr}%output{output}",
+	} {
+		for _, argv := range [][]string{
+			{"curl", "-w", format, "file:///etc/hostname"},
+			{"curl", "--write-out", format, "https://allowed.example/"},
+			{"curl", "-w" + format, "https://allowed.example/"},
+			{"curl", "-sw", format, "https://allowed.example/"},
+		} {
+			words := make([]string, len(argv))
+			for i, arg := range argv {
+				words[i] = "'" + arg + "'"
+			}
+			for mode, result := range map[string]Result{
+				"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+				"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" {
+					t.Errorf("%s %q missed a protected write-out file", mode, argv)
+				}
+			}
+		}
+	}
+	for _, format := range []string{`%{http_code}\n`, "%output{ordinary.txt}%{http_code}", "%output{>>ordinary.log}%{url}", "%output{unterminated", "%header{output}"} {
+		result := ClassifyArgvAt([]string{"curl", "-w", format, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary write-out %q refused: %+v", format, result)
+		}
+	}
+}
+
+func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	saved := filepath.Join(work, "saved")
+	if err := os.Mkdir(saved, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"output", "out put", "output?v=1", "index.html", "curl_response", "page.html", filepath.Join("saved", "output"), filepath.Join("saved", "only")} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, argv := range [][]string{
+		{"curl", "-O", "https://allowed.example/dir/output"},
+		{"curl", "--remote-name", "https://allowed.example/output?v=1#top"},
+		{"curl", "--remote-name-all", "https://allowed.example/a", "https://allowed.example/output"},
+		{"curl", "-O", "--url", "https://allowed.example/output"},
+		{"curl", "-O", "https://allowed.example/out%20put"},
+		{"curl", "-O", "https://allowed.example/"},
+		{"curl", "-O", "allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-O", "https://allowed.example/output"},
+		{"curl", "--output-dir", saved + "/", "-O", "https://allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-o", "only", "file:///etc/hostname"},
+		{"curl", "-o", "only", "--output-dir", saved, "https://allowed.example/"},
+		{"curl", "--output-dir", "elsewhere", "--output-dir", "saved", "-oonly", "https://allowed.example/"},
+		{"curl", "--output-dir", work, "--output", "saved/only", "https://allowed.example/"},
+		{"curl", "-E", "output:password", "https://allowed.example/"},
+		{"curl", "--proxy-cert", alias(work, "output") + ":pass:word", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/dir/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-N", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-c", "https://allowed.example/out%20put"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/output?v=1"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-E", "https://allowed.example/page"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "--directory-prefix=" + saved, "https://allowed.example/output"},
+		// A transfer after --next has no output directory.
+		{"curl", "--output-dir", "saved", "-o", "a", "https://allowed.example/a", "--next", "-O", "https://allowed.example/output"},
+		{"curl", "-O", "https://allowed.example/output", "-:", "--output-dir", "saved", "-o", "x", "https://allowed.example/b"},
+		// "://" in a query or fragment is not the scheme separator.
+		{"curl", "-O", "allowed.example/output?u=http://other.example/y"},
+		{"curl", "-O", "allowed.example/output#http://other.example/y"},
+		{"wget", "--max-redirect=0", "--no-hsts", "allowed.example/output#frag://y/z"},
+		// Wget drops trailing slashes from a prefix; an empty one is the working directory.
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "/", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved//", "https://allowed.example/only"},
+		{"wget", "--max-redirect=0", "--no-hsts", "--default-page=output", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "--default-page", "only", "https://allowed.example/dir/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/output?v%3D1"},
+	} {
+		words := make([]string, len(argv))
+		for i, arg := range argv {
+			words[i] = "'" + arg + "'"
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath == "" {
+				t.Errorf("%s %q missed a protected derived file name", mode, argv)
+			}
+		}
+	}
+	if runtime.GOOS != "windows" {
+		// Curl reads "\\\\" in a cert value as one backslash.
+		if err := os.Symlink(f.seed, work+`/ce\rt`); err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range []string{`ce\\rt:password`, `ce\\rt`} {
+			argv := []string{"curl", "--cert", value, "https://allowed.example/"}
+			if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+				t.Errorf("%q missed a protected certificate file", argv)
+			}
+		}
+	}
+	for _, argv := range [][]string{
+		{"curl", "-O", "https://allowed.example/ordinary.txt"},
+		{"curl", "https://allowed.example/output"},
+		{"curl", "-o", "ordinary.txt", "https://allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-o", "ordinary.txt", "https://allowed.example/"},
+		{"curl", "--output-dir", "elsewhere", "-o", "only", "https://allowed.example/"},
+		{"curl", "-o", "only", "https://allowed.example/"},
+		{"curl", "-E", "client.pem:password", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/ordinary.txt"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-O", "ordinary.txt", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "elsewhere", "https://allowed.example/only"},
+		{"curl", "-O", "https://allowed.example/x?u=http://other.example/output"},
+		{"curl", "-E", `client\\cert.pem:pass`, "https://allowed.example/"},
+	} {
+		result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary %q refused: protected=%q targets=%q", argv, result.ProtectedPath, networkTargets(result))
+		}
+	}
+}
+
+func alias(dir, name string) string { return filepath.Join(dir, name) }

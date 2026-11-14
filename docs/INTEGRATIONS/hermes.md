@@ -57,9 +57,9 @@ helm-ai-kernel setup remove hermes --scope user --yes
 
 Setup writes `hooks.pre_tool_call` with:
 
-- matcher `^(terminal|write_file|patch|mcp_.*)$` (Hermes tool names, plus
-  MCP names as Hermes emits them: `mcp__server__tool` or older
-  `mcp_server_tool`)
+- matcher `^(terminal|write_file|patch|read_file|search_files|web_extract|execute_code|browser_navigate|vision_analyze|mcp_.*)$`
+  (Hermes tool names, plus MCP names as Hermes emits them:
+  `mcp__server__tool` or older `mcp_server_tool`)
 - command `helm-ai-kernel hook pre-tool --client hermes`
 - `fail_closed: true`
 - `timeout: 30`
@@ -72,8 +72,33 @@ Without the hook entry, Hermes never calls Kernel and the tool runs. A
 DENY path cannot be skipped by omitting the hook and still claiming the
 gate is active.
 
-Unclassified tools are pass-through and write no receipt. The classifier
-decides `terminal`, `write_file`, `patch`, and Hermes-emitted MCP names.
+A read of an ordinary file and a write to an ordinary file pass without a
+receipt. The classifier decides `terminal`, `write_file`, `patch`, a
+`read_file` or `search_files` call on a credential path or with a `file_glob`
+that selects credential or key files, `web_extract` and `browser_navigate` as
+network egress to their URL, `vision_analyze` as a read when `image_url` is a
+local file and as network egress otherwise, `execute_code` as a shell
+operation (the code is not a command line the hook can read; it needs
+`shell.operate`), and Hermes-emitted MCP names. A `vision_analyze` image named
+by a relative path that does not exist in the working directory is taken as a
+host; pass an absolute path for a local image. A tool it has no class for is
+decided as an unclassified tool call, which the default profile denies.
+`search_files` `pattern` is a regular expression for a content search and is
+read as a glob only when `target` is `files`; a `file_glob` is always a glob.
+Globs are decided in the grammar that
+[workstation governance](../reference/workstation-governance.md) describes,
+and one outside it is refused when the search starts at, inside or above the
+data directory.
+
+These Hermes tools are not routed, so the hook never sees them:
+`web_search` (it names no URL), and `skill_manage`, `memory`,
+`cronjob_manage` and `process_manage`, which the hook has no class for; what
+they do is not decided. An install made by an earlier
+release keeps its narrower matcher until `helm-ai-kernel setup hermes --yes`
+is run again; `setup status` reports it as outdated. `setup status` reads a
+Hermes matcher as a regular expression that may match anywhere in the tool
+name; if Hermes anchors the matcher, or reads a plain name exactly, it routes
+no more tools than `setup status` reports and may route fewer.
 
 ## First-use consent
 

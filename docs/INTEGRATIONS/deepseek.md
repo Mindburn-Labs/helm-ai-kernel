@@ -65,7 +65,7 @@ helm-ai-kernel setup remove deepseek --scope user --yes
 Setup writes two files:
 
 1. `hooks.json` `hooks.PreToolUse` with:
-   - matcher `^(bash|write|edit|mcp_.*)$` (DeepSeek lowercase tool names)
+   - matcher `^(bash|write|edit|read|grep|glob|webfetch|mcp_.*)$` (DeepSeek lowercase tool names)
    - command `helm-ai-kernel hook pre-tool --client deepseek`
    - `fail_closed: true`
    - `timeout: 30`
@@ -83,8 +83,15 @@ HELM-native agent runtime, stop instead of inventing one.
 Without the hook entry, or without a profile `configPath` that points at
 that file, Kernel never sees the tool call and the tool runs.
 
-Unclassified tools are pass-through and write no receipt. The classifier
-decides `bash`, `write`, `edit`, and MCP names that start with `mcp_`.
+A read of an ordinary file and a write to an ordinary file pass without a
+receipt. The classifier decides `bash`, `write`, `edit`, a `read`, `grep` or
+`glob` call on a credential path, `webfetch` as network egress, and MCP names
+that start with `mcp_`. A tool it has no class for is decided as an
+unclassified tool call, which the default profile denies; the matcher above
+does not route any. `setup status` reads the matcher as a regular expression
+that may match anywhere in the tool name; if the harness anchors it, or reads
+a plain name exactly, it routes no more tools than `setup status` reports and
+may route fewer.
 
 ## Coverage
 

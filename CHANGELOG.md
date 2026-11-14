@@ -90,6 +90,332 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Upgrade notes
 
+- Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook
+  matcher for Claude Code, Hermes and the DeepSeek harness now also routes the
+  read and fetch tools (`Read`, `Grep`, `Glob`, `WebFetch` and their
+  equivalents), Claude Code's `ReadMcpResourceTool` and
+  `ListMcpResourcesTool`, and Hermes `execute_code`, `browser_navigate` and
+  `vision_analyze`; an existing install keeps its narrower matcher until then.
+  `setup status` now reports such a matcher: `hook_matcher` (the first
+  entry's), `hook_matchers` (every entry that holds the HELM hook),
+  `hook_matcher_expected`, `hook_matcher_outdated`,
+  `hook_matcher_missing_tools` (the tools no such entry routes) and
+  `hook_matcher_upgrade_command` (the `setup` command, with the install's
+  `--scope`, `--workspace`, `--data-dir` and `--policy-profile`, that
+  upgrades it) in `--json`, client state `degraded` and a non-zero exit. A
+  Claude Code matcher is read as Claude Code reads it: one made only of
+  letters, digits, `_` and `|` is a list of exact tool names, so `Edit` does
+  not route `MultiEdit`. Two entries that hold the same HELM hook command no
+  longer make `setup status` fail as ambiguous. When the HELM hook shares a
+  hook entry with another hook, `setup` leaves that entry's matcher alone and
+  prints a warning naming the file and the matcher (`warnings` in `--json`).
+  `setup status` gives that warning, not an upgrade command, when every entry
+  that holds the HELM hook is shared, since setup would not change it; it
+  then has no `hook_matcher_upgrade_command`.
+- Under the built-in profile, which has no egress allowlist, once setup has
+  been run again: a routed `WebFetch` and Hermes `browser_navigate` are
+  denied like `curl` already was, Hermes `vision_analyze` given a URL is
+  denied as network egress, `execute_code` is denied like any shell
+  operation, and Claude Code `ReadMcpResourceTool` and `ListMcpResourcesTool`
+  are denied as MCP calls (`mcp.mutate`), except for the HELM server setup
+  installs.
+- A tool the hook has no class for is no longer passed: it is decided as a
+  tool call and needs the `mcp.mutate` permission. The installed matchers do
+  not route such tools; a matcher you widened yourself now does get denials
+  for them under the built-in profile.
+- Hook network receipts bind the destination, not the URL: `request.target` is
+  the SHA-256 of `scheme://host[:port]`, one receipt per destination, and
+  `target_binding` is `sha256:utf-8:network-destination`. Receipts written by
+  earlier releases carry `sha256:utf-8` over the whole URL and still verify;
+  other hook receipts keep `sha256:utf-8`.
+- Every hook receipt carries, in its signed bytes, `call_id`,
+  `call_receipts`, `call_verdict`, `tool_input_binding: jcs-sha256` and
+  `tool_input_sha256`. The hook decides every effect of a call before writing
+  any receipt; a denied call leaves only its denials on disk, where an
+  earlier release could leave an `ALLOW` receipt for an effect decided before
+  the denial. When a later receipt of a call cannot be written, the call is
+  denied and the `ALLOW` receipts already written for it are removed; a
+  denial already written stays.
+- An MCP resource receipt carries `mcp_server`, the server the call names.
+- A hook call that names more than 64 destinations is one
+  `EGRESS_DESTINATION_UNDETERMINED` decision, and one that names more than 64
+  credential paths is one secret read with `secret.target_count`. A hook
+  payload over 4 MiB is not classified: it is denied with the new reason code
+  `TOOL_INPUT_TOO_LARGE` and a receipt of effect type
+  `WORKSTATION_MCP_TOOL_CALL` (a call into a tool the hook cannot see into),
+  action `oversized_tool_call`, `tool_input_limit_bytes`, and in place of the
+  input digest `tool_input_binding: payload-prefix-sha256`,
+  `tool_input_sha256` (the SHA-256 of the bytes the hook read) and
+  `tool_input_bytes_read`. Its `tool_id` and `tool` name the tool when the
+  payload names it before the limit, and are `unknown` and empty otherwise.
+- The hook decides on the first JSON value on standard input and no longer
+  reads to the end of it: a client that leaves standard input open after the
+  payload gets its answer at once, and anything after the first value is
+  ignored. A payload over 4 MiB whose JSON is malformed well before the
+  limit is now a decode error (exit 2), as a shorter malformed payload always
+  was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
+- A shell tool call whose `command` is missing or is not a string is decided
+  as a shell operation (`shell.operate`) instead of passed.
+- Curl `--write-out` output files (`%output{name}`) are checked against
+  protected material, and a format read from a file is undetermined. Wget FTP
+  and FTPS transfers are undetermined under an allowlist, because a server
+  can select the data connection's address; use curl for FTP. A path keeps its
+  literal backslashes when protected paths and sensitive writes are resolved
+  on platforms where a backslash is part of a file name. Download names that
+  curl and wget take from the URL, and curl output names below `--output-dir`,
+  are checked against protected material. Names
+  curl builds from a glob, and names wget takes from a server reply or
+  rewrites, are undetermined.
+- Git `clone --bundle-uri` and curl `file:` URLs with a glob are undetermined
+  under an allowlist. A relative search root keeps its symlink and parent
+  components when protected material is checked.
+- Named curl URL-encoded data and query file inputs are checked against
+  protected material and secret-read policy. SFTP direct-server and other
+  opaque-option refusals survive an absent destination.
+- Curl form uploads check decoded filenames, every file in a list and form
+  header files against protected material and secret-read policy. Shell double
+  quotes decode escapes before command classification. Unsupported form syntax
+  is refused; ordinary quoted forms and literal form strings remain supported.
+- Curl crypto-engine overrides and wget's FTPS-to-FTP fallback are refused as
+  unresolved effects. Trust-material checks preserve significant whitespace in
+  paths, working directories and configured protected paths before resolution.
+- OpenSSL help retains earlier opaque-option refusals, and scp's direct SFTP
+  program override is refused. The trust-material guard extracts recognized
+  network-client option values before resolving symlinks, including attached
+  curl upload options and file-input markers.
+- The shell path guard preserves directory spelling when resolving symlinks
+  before matching globs. On case-sensitive filesystems, a mixed-case alias
+  to protected signing material is now refused; aliases to unrelated
+  directories still pass this guard.
+- Setup's preview exception uses the effective `--dry-run` value, including
+  repeated flags, and refuses ambiguous argument lists. SSH destination
+  parsing keeps the first `HostName`; conflicting port options or a URL
+  combined with host/port overrides are undetermined under an allowlist.
+- Curl calls combining multiple protocols with `--connect-to` or `--resolve`
+  are undetermined under an allowlist. Split those transfers into separate
+  commands. A `--connect-to` destination that omits its host or port inherits
+  the corresponding explicit source field; inheritance from a wildcard
+  source is undetermined. This prevents receipts from naming the wrong
+  protocol or port.
+- A caller-supplied workstation trust key remains authoritative without a
+  descriptive source label. Reports identify the unlabeled key by its key
+  ID and keep other signers' receipts out of trusted audit totals.
+- Under the built-in profile, `ls ~/.helm-ai-kernel` and any other command
+  that names the data directory itself is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED`, and `Read` or `Grep` of a credential path
+  (`.env`, `~/.ssh/id_ed25519`, `~/.aws/credentials`) is a denied secret read
+  where it was passed. A search glob is decided too: one aimed at the hook's
+  key files (`**/*.seed`, `file_glob: workstation-ed25519.*`) is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and one that selects
+  credential files (`glob: .env`, `**/*.pem`) is a secret read. Upgrade note:
+  a glob selects a credential file inside a directory (`.docker/config.json`,
+  `.ssh/config`, `.kube/config`, `.aws/credentials`, `.config/gcloud/`) when
+  it names that directory or its `**` can stand for it, so `Grep` or `Glob`
+  with `**/*.json`, `**/config`, `*/credentials` or `.docker/*.json` is a
+  denied secret read under the built-in profile; `*.json`, `*.db`, `*config`
+  and `credentials` are not. A glob whose last segment matches ordinary file
+  names (`*`, `*.*`) selects files in general and is a secret read only when
+  its text names a credential path, so `.ssh/*` is one and `.docker/*`,
+  `.kube/*` and `.aws/*` are not, although ripgrep selects the credential
+  file in that directory with each of them. A public key
+  and an example env file (`.env.example`, `.env.sample`, `.env.template`)
+  are not credentials: reading one passes, through `Read` and through a shell
+  alike. A search glob for every public key (`Grep` `glob: *.pub`, `Glob`
+  `**/*.pub`) is denied with `TRUST_MATERIAL_ACCESS_DENIED` under every
+  profile wherever it runs, because it names the hook's trusted public key
+  `workstation-ed25519.pub`; search for a key by its name (`id_ed25519.pub`).
+- Search and shell globs are read in a small grammar, not by imitating each
+  tool's dialect: `/`-separated segments of letters, digits, `.`, `_`, `-`,
+  `+`, `@`, `=`, `%`, `:`, `*` and `?`, a whole-segment `**`, and in a search
+  glob brace groups of two or more alternatives, nested at most 4 deep.
+  Inside the grammar a glob is matched against what the key directory holds
+  as a search tool may anchor it. A search reaches the hook's key files only
+  when it starts at the data directory, inside it or above it (`/` is above
+  everything, a missing `path` means the working directory, and a start that
+  cannot be resolved, or a `path` that does not exist, is taken as `/`, since
+  Hermes searches every comma- or white-space-separated part of such a
+  `path`), and then only through a glob that can name what the key
+  directory holds; `src/**/*.go` and `docs/*.md` from the home directory pass.
+  An absolute `Glob` pattern starts at the directory its literal leading
+  segments name, and at `/` when its first segment has a wildcard, a brace
+  group or a bracket (`/*/*/.h*/k*/*` is denied whatever `path`
+  the call gives). Claude Code `Grep`'s `glob` is split on white space, and on
+  commas when a part has no brace group, as Claude Code splits it, so
+  `*.ts,*.tsx` is two globs in the grammar and is not refused in a large
+  repository, and `*.go *.seed` is denied.
+  A glob outside the grammar is not read: a bracket class, a backslash, a
+  leading `/`, `!`, white space, a character outside ASCII, a brace group that
+  is unbalanced, has one alternative or nests deeper than 4, a `.` or `..`
+  segment, or `**` inside a segment. Upgrade note: such a glob is now denied
+  with `TRUST_MATERIAL_ACCESS_DENIED` under every profile, and a reason that
+  names the construct, when the search starts at, inside or above the data
+  directory (`Grep` from the home directory with `glob: *.[ch]` or
+  `glob: !**/node_modules/**`), or when a walk of the search root (65,536
+  entries, four roots per call) finds a file named like a key file or cannot
+  finish; under the built-in profile it is a secret read when that walk finds
+  a credential file (`glob: .en[v]` in a project holding `.env`). Rewrite such
+  a glob in the grammar (`*.c` and `*.h` for `*.[ch]`) or start the search
+  below the home directory. A shell word with a bracket class
+  (`cat ~/.helm-ai-kernel/k[]e]ys/*`) or a segment longer than 1024 bytes is
+  denied when the directory it starts in is at, inside or above the data
+  directory. A shell word with a brace group is matched on its text before
+  the first group: it is denied with `TRUST_MATERIAL_ACCESS_DENIED` under
+  every profile when that text is at the data directory, at or inside the key
+  directory, or has begun to spell the name of one of them
+  (`cat ~/.helm-ai-kernel/{keys,x}/*`, `cat ~/.helm-{ai-kernel,x}/keys/*`).
+  The groups are not expanded, so a group that spells the data directory's
+  name from above it (`cat ~/{.helm-ai-kernel,zz}/keys/*`) or climbs to it
+  with `..` (`cat ~/proj/{..,x}/.helm-ai-kernel/k*/*`) is not a
+  trust-material denial: the built-in profile denies it as an opaque shell
+  operation (`OPERATE_PERMISSIONS_EMPTY`) and a profile that grants
+  `shell.operate` runs it. CTL-035 states this as a bypass assumption; the
+  structural fix is to keep the signing seed out of the agent's reach
+  (helm-tracker#333). In a repository of more than 65,536 entries a filter
+  outside the grammar (`!node_modules/**`, `*.[jt]s`) is denied because the
+  walk cannot finish. So a search from `/`, an
+  escaped spelling of a key file name (`*.see\d`, `*.see[d\]`) and a filter
+  that starts with `/`, which ripgrep anchors at its working directory, are
+  denied.
+- Upgrade note: the globs of one call share one expansion budget, 256
+  alternatives and 64 KiB of expansion together, a glob outside the grammar
+  counting as one alternative of its own length. A call past it is denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, with a reason that says
+  its globs are too large to expand; a call of many globs, each under what one
+  glob was allowed, used to be expanded glob by glob, and close to 4 MiB of
+  them held the hook past the client's timeout. The hook also stops
+  classifying a call after 10 seconds, denies it the same way and stops the
+  classification. A call whose classifier panics is denied the same way, with
+  a signed receipt, instead of ending the hook without a decision.
+- Hermes `search_files` `pattern` is read as a glob only when `target` is
+  `files`; for a content search it is a regular expression and is not
+  decided as a glob, so a regular expression with many `{m,n}` quantifiers is
+  no longer refused as a glob too large to expand.
+- Upgrade note: an MCP tool's `pattern` is decided as a path pattern when it
+  is in the glob grammar, so `mcp__fs__search` with `pattern: **/*.seed` is
+  denied with `TRUST_MATERIAL_ACCESS_DENIED` under every profile wherever it
+  runs. Outside the grammar it is taken as a regular expression: it is denied
+  with `TRUST_MATERIAL_ACCESS_DENIED` under every profile when the search
+  starts at, inside or above the data directory (`pattern: foo|bar` with
+  `path` set to the home directory), and is otherwise not decided as a glob.
+- Through a shell, a credential path is read with a backslash taken as
+  quoting the next character, so `rg -g '.en\v'` and
+  `grep --include='.en\v'` are secret reads. A shell word whose wildcard or
+  bracket would expand to a credential file (`cat .en?`, `cat .e*`,
+  `cat .en[v]`) is still decided on its text, not on what it expands to, and
+  is not a secret read under the built-in profile.
+- `BASH_ENV` and `ENV` set on a command line, like a connection variable, make
+  its network destinations undetermined.
+- Under a profile with an egress allowlist, a command whose destinations
+  cannot all be read from its arguments is denied with
+  `EGRESS_DESTINATION_UNDETERMINED`. This includes `curl --location`, `wget`
+  without `--max-redirect=0` and `git` over HTTP without
+  `-c http.followRedirects=false`, because the client follows redirects to
+  hosts the hook cannot see.
+- Recursive wget modes and netcat `-Z` are now undetermined under an egress
+  allowlist. Setup verifies MCP family coverage rather than one sample tool;
+  custom coverage it cannot establish is reported as degraded. Protected paths
+  resolve symlink components before parent segments, including custom signing
+  seed and policy paths, local file URLs and searches.
+- Wget credential-helper and HSTS-file overrides now deny as undetermined
+  under an egress allowlist. Local FILE URLs are decoded once before the
+  trust-material and secret-read checks, closing encoded-key-path bypasses
+  while preserving ordinary local-file reads.
+- Curl HSTS cache inputs and Git executable transport-helper overrides now
+  deny as undetermined under an egress allowlist. Local Git repositories do
+  not exempt helper overrides from the network decision; ordinary local
+  operations remain supported.
+- SSH reverse forwarding now denies as undetermined under an egress allowlist,
+  including `-R` and `-o RemoteForward` SOCKS forms. OpenSSL DTLS destinations
+  are checked as UDP, so a TCP allowance cannot authorize them.
+- Git URL-scoped `http.<url>.curloptResolve` overrides and curl
+  `--no-ftp-skip-pasv-ip` now deny the whole call under an egress allowlist.
+  Both can select a destination absent from the URL. Ordinary scoped Git
+  settings and explicit FTP PASV address protection remain supported.
+- Under an allowlist profile, an option the hook's table for a client does
+  not know is denied with `EGRESS_DESTINATION_UNDETERMINED` instead of being
+  skipped: an `ssh -o` key outside the common ones, an `openssl s_client`
+  option that loads code or fetches from an address, a `git` global option
+  the table does not list. `scp` and `sftp` options written after an operand
+  are denied the same way.
+- `git clone`, `fetch`, `pull`, `push` and `ls-remote` with an address on the
+  command line, `git remote add` and `set-url`, and `git submodule update` are
+  now network egress. `git` with a remote named in git configuration is
+  unchanged.
+- A credential path given to any command, not only to `cat`, `grep` and the
+  other readers, is a secret read. `ls`, `test`, `chmod`, `rm` and similar
+  commands that do not show content are the exception.
+- `workstation enforce -- command` decides on the command's argv. `--class
+  network --target URL` with a command that does not connect to that host is
+  refused, as is a shell `--target` that is not the command line. It also
+  decides on its own environment: a proxy variable set there is a destination
+  the allowlist must hold, and a connection variable, `LD_PRELOAD`,
+  `DYLD_INSERT_LIBRARIES`, `BASH_ENV` or `ENV` makes the destinations
+  undetermined. It exits with the command's own exit code (it was 1 for any
+  failure), 128 plus the signal number when a signal ends it, 127 when the
+  command cannot be started, and 126, not 1, when a receipt cannot be written;
+  the command does not run then. Exit 2 means the flags could not be parsed
+  or no decision could be made (the policy profile or the signing seed is
+  unavailable); the command does not run then either.
+- `workstation enforce` writes only the denials of a command it refuses, as
+  the hook does, so `--receipt-dir` no longer holds an `ALLOW` receipt for an
+  effect of a command that never ran, and `audit scope` over it no longer
+  counts that effect as allowed. A command whose decisions are all `ALLOW`
+  but not all in operate mode (`--class shell` decides in observe mode) is
+  refused before any receipt is written, and leaves none; it left an observe
+  `ALLOW` before. Upgrade note: every `enforce` receipt now has a random
+  `request_id`, so its `decision_id` and its file name in `--receipt-dir`
+  differ on every run, and each such file is created new, never replacing
+  one already there; two runs of the same command used to leave one receipt.
+  A script that predicted the file name must list the directory instead.
+  `--out` still replaces the file it names. Every `enforce` receipt now carries, in its
+  signed bytes, `call_id` (shared by the receipts of one run),
+  `call_receipts` and `call_verdict`, beside `argv_binding` and
+  `argv_sha256`. When a receipt cannot be written, the `ALLOW` receipts
+  already written for the run are removed.
+- `workstation list`, `denied`, `memory`, `loops`, `operator` and
+  `audit scope` leave out a receipt that is unsigned or does not match its
+  signature, and `audit scope` fails when no input is left. The Go functions
+  `workstation.BuildOperatorView` and `workstation.BuildScopeAudit` take a
+  `workstation.TrustAnchor` as their first argument.
+- `workstation list`, `denied`, `memory` and `loops` with `--json` print an
+  object instead of a bare array: the section's items under the key
+  `operator --json` uses (`runs`, `denied_timeline`, `memory_review_queue`,
+  `recurring_loops`) and `verification` beside them. Every denied, memory and
+  loop item carries the `signature_status` of its receipt. Read `.runs` where
+  you read the array before.
+- The text output of `workstation denied`, `memory`, `loops`, `list` and
+  `operator` ends each run, denied, memory and loop row with the
+  `signature_status` of its receipt, and starts with a `Signatures:` line, a
+  line per input not counted or counted once, and a `Signer trust:` line. The
+  text output of `audit scope` gains `signatures:`, `not counted:`,
+  `duplicate, counted once:`, `signer trust:` and, when there are any,
+  `other signers:` lines, and `scope-audit.md` a `Receipts of another signer,
+  counted apart` line and the signature statements under Limitations. A
+  script that splits these lines on spaces or counts them needs updating.
+- An input file that repeats a receipt already read is counted once by the
+  operator commands and `audit scope`, and named in
+  `verification.duplicate_inputs`.
+- With a trusted key available, `audit scope` counts a receipt signed by any
+  other key, the retired built-in key included, in
+  `summary.untrusted_signer_receipts` and `summary.untrusted_signer_actions`
+  only; it was in every total. The scope audit report schema gains these two
+  properties.
+- `workstation evidence` refuses an output directory that is not empty; export
+  into a new or empty one. So does `audit scope --out`, with or without
+  `--evidence-pack`, and the Go function `workstation.WriteScopeAuditArtifacts`:
+  running an audit into the
+  directory of an earlier one now fails, so write each into a directory of
+  its own. Every file is created new through the opened directory, so a file
+  or directory linked to one elsewhere is not written through.
+- The unused Go export wrapper `workstation.ExportScopeAuditEvidencePack` is
+  removed. Use `workstation.WriteScopeAuditArtifacts(report, outDir, true)`;
+  the pack is written under `scope-audit-evidencepack` and its path is returned
+  in `EvidencePackDir`. The CLI export path is unchanged.
+- New workstation decision-receipt directories are owner-only (`0700`), as
+  the receipt files already are (`0600`). Existing directories keep their mode.
+- `shellscan` network facts carry the canonical destination in `Target`, and
+  a command with several destinations yields several facts.
+
 - Live model spending uses `helm-gateway serve` and the existing transactional
   Postgres authority ledger. `helm-ai-kernel spend-proxy`, including `up`,
   live flags and `reconcile`, now exits 2 with migration guidance. Local logs,
@@ -350,6 +676,22 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Added
 
+- `shellscan.ClassifyArgvAt` classifies a command given as argv, and
+  `shellscan.PathGuard` with `shellscan.WithPathGuard` reports any reference
+  to paths the caller protects. The new `netdest` package parses a URL or host
+  into the endpoint a client connects to.
+- `workstation list`, the other operator commands and `audit scope` take
+  `--data-dir` and `--trusted-public-key-file`, print which signature checks
+  the input receipts went through, and give each run a `signature_status`.
+- `shellscan.WithEnvironment` classifies a command as run with an inherited
+  environment. `shellscan.NewSearchCall` collects the globs of one search
+  call (`AddFilter`, `AddPathPattern`) under one budget,
+  `shellscan.MaxSearchGlobAlternatives` and `shellscan.MaxSearchGlobBytes`;
+  `PathGuard.MatchSearch` decides whether it reaches protected material and
+  `SearchCall.SecretRead` whether it selects credential files, and a call
+  past the budget is reported as `shellscan.UnexpandableSearchGlob`. A path
+  guard pattern reads `**` as any number of directories.
+
 - `helm-ai-kernel shadow scan --require-complete` exits 2, with no report,
   unless every in-scope path was read in full.
 
@@ -604,6 +946,48 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ### Fixed
 
+- The hook's egress allowlist was decided on the first URL of a command only.
+  A second URL, a host hidden behind `user@`, and an option or variable that
+  moves the connection (`--connect-to`, `--resolve`, a proxy, `ssh -J`) now
+  each count as a destination, in the hook and in `workstation` policy
+  evaluation, which share one parser. The parser reads each client's command
+  line the way the client does: `ssh` options written after the host,
+  `-o=Key=Value`, an `openssl s_client` peer given as an operand or with
+  `-host` and `-port`, the last value of a repeated `git -c
+  http.followRedirects`, an address stored with `git config --file`, and a
+  proxy variable exported as one quoted word.
+- A fetch tool that takes a list (`urls`) is decided on every URL in it. It
+  was denied as undetermined under an allowlist profile even when every URL
+  was allowed.
+- A shell path pattern with a bracket class (`[!x]*`) is no longer matched
+  as if `!` were a member: it is outside the glob grammar and is denied when
+  it starts at, inside or above the data directory.
+- The hook did not protect its own signing material. A call that reaches the
+  key directory, a seed passed by flag, the policy profile, or the kernel
+  command that signs or installs the hook is now denied with
+  `TRUST_MATERIAL_ACCESS_DENIED` under every profile, through any tool.
+- `Read`, `WebFetch` and other tools that are not a shell were passed without
+  a decision when routed to the hook.
+- `workstation evidence` wrote outside its output directory when a receipt
+  carried a `receipt_id` with path separators. The identifier is now checked
+  and every pack file is written through the opened directory.
+- `workstation enforce` ran a command after deciding on the declared class and
+  target instead of the command, and passed its own environment to the command
+  undecided, so an inherited `HTTPS_PROXY` moved the connection after an
+  `ALLOW` for the named host.
+- `audit scope` and `workstation list` reported on receipts whose signature
+  was missing or did not match.
+- The operator commands and `audit scope` counted a duplicated input file
+  twice.
+- `workstation evidence` opened pack files with truncation, so a file
+  hard-linked into a reused output directory was written through, and a
+  re-export left stale receipt files the index did not list. `audit scope
+  --out` with `--evidence-pack` did the same with its report and pack files,
+  and wrote through a pack subdirectory linked to a directory elsewhere.
+- The hook waited for standard input to close before deciding, so a client
+  that kept it open after the payload got no answer until its timeout.
+- When a later receipt of a call could not be written, the hook removed the
+  denials it had already written with the `ALLOW` receipts.
 - Retired live `helm-ai-kernel spend-proxy`, local-file reconciliation and
   the legacy `core/pkg/inferencegateway` / `api.GovernedGateway` execution
   surfaces. Model calls use `helm-gateway` and its transactional Postgres
@@ -764,7 +1148,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   given as a list, are refused instead of forwarded; `anthropic-beta` no
   longer reaches an upstream on the OpenAI APIs; a start verifies the
   signatures of the lines that debit or free a hold (r2).
-- `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- Standalone `core` builds resolve the Go SDK from merged revision `33742a8a`,
+  which contains the owner-assertion types. The previous branch-only revision
+  could not be fetched from origin.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any
   caller that reaches it; `proxy` and `mcp serve` already refused an

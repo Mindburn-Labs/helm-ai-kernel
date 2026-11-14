@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-93 controls: 55 enforced (1 of them by CI gates), 24 observed-only, 14 unmanaged (13 of them retired invariants).
+93 controls: 57 enforced (1 of them by CI gates), 22 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -132,9 +132,9 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-032 | Savings-pack verification needs a pinned issuer | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
 | CTL-033 | Launchpad local-container preflight and egress allowlist | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
 | CTL-034 | Delegation-session gate | observed-only | Production wires an empty in-memory delegation store that nothing writes, so every delegation_session_id denies. The documented checks (session capabilities within the delegator's policy, scope and principal) never run against a real session. |
-| CTL-035 | Local coding-agent hook shell guard | observed-only | The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. It denies a narrow set of destructive patterns and syntax it cannot evaluate statically. |
-| CTL-036 | Workstation enforce wrapper | observed-only | Only a refusal test exists; no allowed-case or removal test shows the wrapper exits 126 on DENY and runs the command on ALLOW. |
-| CTL-037 | Workstation decision-receipt verification | observed-only | Tested, but no removal proof deletes the check yet, so R1 does not count it as enforced. |
+| CTL-035 | Local coding-agent hook shell guard | observed-only | The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. Deleting the trust-material override in workstation.Decide, the tool-input guard (guardedToolTarget), the decision for a tool with no class, or the per-destination split makes the tests named for them fail, but the registry holds removal proofs for enforced entries only, and no removal proof can cover the claim about each client's command line as a whole. |
+| CTL-036 | Workstation enforce wrapper | enforced | — |
+| CTL-037 | Workstation receipt verification and the views built on it | enforced | — |
 | CTL-038 | Kubernetes transparent egress for Launchpad | observed-only | Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them. |
 | CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
 | CTL-040 | Effect close | observed-only | Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule. |

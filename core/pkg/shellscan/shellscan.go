@@ -2,12 +2,17 @@ package shellscan
 
 import (
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
 )
 
 // Signal names recorded during classification. Signals are audit metadata for
@@ -43,6 +48,9 @@ type Command struct {
 	Prefix  string   // arity-aware prefix, e.g. "git checkout"
 	Via     string   // wrapper chain this command was reached through ("" = direct)
 	Dynamic bool     // true when any token could not be resolved statically
+
+	// dynamic marks, per token, the ones that were not resolved statically.
+	dynamic []bool
 }
 
 // EffectFact is a static-syntax indicator that callers can route to its
@@ -79,6 +87,10 @@ type Result struct {
 	// target is combined with a concrete destructive shell effect. Consumers
 	// must require shell permission in addition to the sensitive-file write.
 	RequiresShellPermission bool
+	// ProtectedPath is the first reference to material the caller's PathGuard
+	// protects, or empty. It is set whatever command or syntax carried the
+	// reference, and no effect class describes it: the caller refuses.
+	ProtectedPath string
 }
 
 // legacyNeedles is the pre-AST substring list from hook_cmd.go, kept verbatim
@@ -115,6 +127,8 @@ var sensitiveFileRules = []string{
 	"id_ed25519",
 	"authorized_keys",
 	".netrc",
+	".curlrc",
+	".wgetrc",
 	".npmrc",
 	".pypirc",
 	".gitconfig",
@@ -151,6 +165,7 @@ var sensitivePathRules = []string{
 	".docker/config.json",
 	".config/gcloud/",
 	".config/git/config",
+	".config/curlrc",
 	".config/fish/config.fish",
 	".config/systemd/",
 	".config/autostart/",
@@ -169,14 +184,29 @@ var sensitivePathRules = []string{
 // at login, on a schedule or with privilege, and returns the matching rule.
 // Matching is case-insensitive and runs on the normalized path: backslashes
 // become slashes and ".", ".." and "//" segments are cleaned, so alternate
-// spellings of one file match alike. Path rules also see the target resolved
-// against cwd, so a relative write made inside a protected directory matches.
+// spellings of one file match alike. Where a backslash is a byte of a file
+// name, the path is also matched with its backslashes kept. Path rules also
+// see the target resolved against cwd, so a relative write made inside a
+// protected directory matches.
 func SensitiveWriteTarget(target, cwd string) (string, bool) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return "", false
 	}
-	cleaned := path.Clean(slashPath(target))
+	cwd = strings.TrimSpace(cwd)
+	if rule, ok := sensitiveWriteSpelling(slashPath(target), slashPath(cwd)); ok {
+		return rule, true
+	}
+	// Where a backslash is a byte of a file name, ".." beside one is not a
+	// parent directory: the path as the filesystem reads it is matched too.
+	if native := nativePath(target); native != slashPath(target) || nativePath(cwd) != slashPath(cwd) {
+		return sensitiveWriteSpelling(native, nativePath(cwd))
+	}
+	return "", false
+}
+
+func sensitiveWriteSpelling(target, cwd string) (string, bool) {
+	cleaned := path.Clean(target)
 	lower := strings.ToLower(cleaned)
 	for _, rule := range sensitiveFileRules {
 		if strings.Contains(lower, rule) {
@@ -184,8 +214,8 @@ func SensitiveWriteTarget(target, cwd string) (string, bool) {
 		}
 	}
 	resolved := cleaned
-	if cwd = strings.TrimSpace(cwd); cwd != "" && !path.IsAbs(cleaned) {
-		resolved = path.Join(slashPath(cwd), cleaned)
+	if cwd != "" && !path.IsAbs(cleaned) {
+		resolved = path.Join(cwd, cleaned)
 	}
 	// Wrapping in slashes lets a directory rule such as ".git/" match the
 	// directory itself as well as anything below it.
@@ -202,6 +232,45 @@ func slashPath(value string) string {
 	return strings.ReplaceAll(value, `\`, "/")
 }
 
+// nativePath keeps a path as the local filesystem reads it. A backslash
+// separates components only on Windows; elsewhere it is a byte of a file name,
+// and rewriting it would resolve a different file from the one a tool opens.
+func nativePath(value string) string {
+	if filepath.Separator == '\\' {
+		return slashPath(value)
+	}
+	return value
+}
+
+// Option adjusts one classification.
+type Option func(*collector)
+
+// WithEnvironment classifies the command as run with environ, the
+// NAME=value entries of an environment it inherits: a proxy set there is a
+// destination of every network command, and a variable that changes how a
+// client connects, or what a shell runs first, makes the destinations
+// undetermined. The command line's own assignments still apply after it.
+func WithEnvironment(environ []string) Option {
+	return func(c *collector) {
+		for _, entry := range environ {
+			if name, value, ok := strings.Cut(entry, "="); ok && tracksVariable(name) {
+				c.env = append(c.env, envOverride{name: name, value: value})
+			}
+		}
+	}
+}
+
+// WithPathGuard makes the classifier report, in Result.ProtectedPath, any
+// reference to the material guard protects.
+func WithPathGuard(guard *PathGuard) Option {
+	return func(c *collector) {
+		c.guard = guard
+		if guard != nil {
+			c.home = guard.home
+		}
+	}
+}
+
 // Classify parses and structurally classifies a raw shell command string.
 // Fail-closed: anything the classifier cannot statically understand in a
 // security-relevant position is decision-worthy, never safe.
@@ -212,25 +281,60 @@ func Classify(raw string) Result {
 // ClassifyAt parses and structurally classifies a raw shell command string in
 // cwd. Relative paths written and later executed in the same command are
 // normalized against cwd before their generated-source relationship is tested.
-func ClassifyAt(raw, cwd string) Result {
-	res := Result{ParseOK: true}
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return res
+func ClassifyAt(raw, cwd string, opts ...Option) Result {
+	if strings.TrimSpace(raw) == "" {
+		return Result{ParseOK: true}
 	}
+	c := newCollector(cwd, opts)
+	// Fallback layer: legacy substring needles on the raw text.
+	if needle := legacyNeedleHit(raw); needle != "" {
+		c.decide(fmt.Sprintf("legacy needle %q", needle))
+	}
+	// dotglob and zsh's globdots let a wildcard match a leading dot.
+	c.dotGlob = strings.Contains(raw, "dotglob") || strings.Contains(strings.ToLower(raw), "globdots")
+	c.guardText(raw)
+	c.classifyString(raw, "", 0)
+	return c.result()
+}
 
-	cwd = strings.TrimSpace(cwd)
+// ClassifyArgvAt classifies a command that will be executed directly from
+// argv, with no shell in between: every element is a literal argument. A
+// program in argv that is itself a shell or a wrapper is unwrapped as in
+// ClassifyAt.
+func ClassifyArgvAt(argv []string, cwd string, opts ...Option) Result {
+	if len(argv) == 0 {
+		return Result{ParseOK: true}
+	}
+	c := newCollector(cwd, opts)
+	if needle := legacyNeedleHit(strings.Join(argv, " ")); needle != "" {
+		c.decide(fmt.Sprintf("legacy needle %q", needle))
+	}
+	args := make([]wordTok, 0, len(argv))
+	for _, arg := range argv {
+		args = append(args, wordTok{text: arg})
+		if c.protectedPath == "" {
+			if rule, ok := c.guard.Match(arg, c.cwd); ok {
+				c.protectedPath = rule
+			}
+		}
+	}
+	c.classifyTokens(args, "", 0)
+	return c.result()
+}
+
+func newCollector(cwd string, opts []Option) *collector {
 	if cwd != "" {
 		cwd = path.Clean(cwd)
 	}
 	c := &collector{parseOK: true, cwd: cwd}
-	// Fallback layer: legacy substring needles on the raw text.
-	if needle := legacyNeedleHit(trimmed); needle != "" {
-		c.decide(fmt.Sprintf("legacy needle %q", needle))
+	for _, opt := range opts {
+		opt(c)
 	}
-	c.classifyString(trimmed, "", 0)
+	return c
+}
 
-	effectFacts, factCrossesIndirection := classifyEffectFacts(c.commands)
+func (c *collector) result() Result {
+	effectFacts, factCrossesIndirection := classifyEffectFacts(c.commands, c.facts, c.env)
 	if len(effectFacts) > 0 && (c.hasIndirection || factCrossesIndirection) {
 		// Parsed syntax can identify a potential effect, but it cannot prove
 		// runtime execution across expansion, eval, wrappers, or functions.
@@ -238,55 +342,275 @@ func ClassifyAt(raw, cwd string) Result {
 		// the fact into a runtime claim.
 		c.decide("shell effect crosses an indirection boundary (fail-closed)")
 	}
-	res.Decide = c.decideFlag || len(effectFacts) > 0
-	res.Reason = strings.Join(c.reasons, "; ")
+	res := Result{
+		Decide:                  c.decideFlag || len(effectFacts) > 0 || c.protectedPath != "",
+		Reason:                  strings.Join(c.reasons, "; "),
+		ParseOK:                 c.parseOK,
+		Commands:                c.commands,
+		Signals:                 c.signalList(),
+		RequiresShellDecision:   c.decideFlag,
+		EffectFacts:             effectFacts,
+		SensitiveTarget:         c.sensitiveTarget,
+		RequiresShellPermission: c.requiresShellPermission,
+		ProtectedPath:           c.protectedPath,
+	}
 	if res.Reason == "" && len(effectFacts) > 0 {
 		res.Reason = effectFacts[0].Reason
 	}
-	res.Commands = c.commands
-	res.Signals = c.signalList()
-	res.ParseOK = c.parseOK
-	res.RequiresShellDecision = c.decideFlag
-	res.EffectFacts = effectFacts
-	res.SensitiveTarget = c.sensitiveTarget
-	res.RequiresShellPermission = c.requiresShellPermission
 	return res
 }
 
-var networkEgressCommands = map[string]bool{
-	"aria2c": true,
-	"curl":   true,
-	"ftp":    true,
-	"http":   true,
-	"httpie": true,
-	"lftp":   true,
-	"nc":     true,
-	"ncat":   true,
-	"netcat": true,
-	"rsync":  true,
-	"scp":    true,
-	"sftp":   true,
-	"socat":  true,
-	"telnet": true,
-	"wget":   true,
+// guardText checks free text, and guardWord one shell word, against the
+// caller's PathGuard. The first reference found is kept.
+func (c *collector) guardText(text string) {
+	if c.protectedPath != "" {
+		return
+	}
+	if rule, ok := c.guard.MatchText(text); ok {
+		c.protectedPath = rule
+	}
 }
 
-var secretReadCommands = map[string]bool{
-	".":      true,
-	"awk":    true,
-	"cat":    true,
-	"egrep":  true,
-	"fgrep":  true,
-	"gawk":   true,
-	"grep":   true,
-	"head":   true,
-	"less":   true,
-	"mawk":   true,
-	"more":   true,
-	"nawk":   true,
-	"sed":    true,
-	"source": true,
-	"tail":   true,
+// maxGuardedScriptBytes bounds how much of a script file guardScript reads.
+const maxGuardedScriptBytes = 1 << 20
+
+// guardScript checks a script file that is about to be run for a reference to
+// protected material. The script was written by a call that named only its
+// own path, so its content is the first place the reference can be seen. The
+// check is textual and the file can change before it runs: it catches the
+// plain form, not a path the script computes.
+func (c *collector) guardScript(script string) {
+	if c.guard == nil || c.protectedPath != "" || script == "" {
+		return
+	}
+	if !path.IsAbs(slashPath(script)) && (c.cwd == "" || c.cwdUnknown) {
+		return
+	}
+	//nolint:gosec // G304: reading the script the caller is about to execute is the purpose; the content is only searched.
+	file, err := os.Open(c.normalizedPath(script))
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, maxGuardedScriptBytes))
+	if err != nil {
+		return
+	}
+	c.guardText(string(content))
+}
+
+func (c *collector) guardWord(word *syntax.Word) {
+	if c.guard == nil || c.protectedPath != "" {
+		return
+	}
+	pattern, dynamicAt := guardWordPattern(word, c.home)
+	cwd := c.cwd
+	if c.cwdUnknown {
+		cwd = ""
+	}
+	if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
+		c.protectedPath = rule
+		return
+	}
+	// A working directory written with backslashes is also read with them
+	// as separators, as it was before they were kept as name bytes.
+	if converted := slashPath(cwd); converted != nativePath(cwd) {
+		if rule, ok := c.guard.matchPattern(pattern, dynamicAt, converted, c.dotGlob); ok {
+			c.protectedPath = rule
+		}
+	}
+}
+
+// guardOptionPaths extracts values using the same option grammar as egress
+// classification. A whole word such as -T/tmp/upload is not a filesystem
+// path: only /tmp/upload can resolve through a symlink to protected material.
+// This runs when recording a command, so shell, argv and unwrapped calls use
+// the command's effective working directory.
+func (c *collector) guardOptionPaths(command Command) {
+	if c.guard == nil || c.protectedPath != "" || len(command.Tokens) < 2 {
+		return
+	}
+	var spec cliSpec
+	switch command.Name {
+	case "curl":
+		spec = curlSpec
+	case "wget":
+		spec = wgetSpec
+	case "ssh":
+		spec = sshSpec
+	case "scp":
+		spec = scpSpec
+	case "sftp":
+		spec = sftpSpec
+	default:
+		return
+	}
+	cwd := c.cwd
+	if c.cwdUnknown {
+		cwd = ""
+	}
+	check := func(value string) {
+		if c.protectedPath != "" || value == "" {
+			return
+		}
+		if rule, ok := c.guard.Match(value, cwd); ok {
+			c.protectedPath = rule
+		}
+	}
+	// A download without a named output file is written under a name the
+	// client takes from the URL. Curl saves that file, and one --output
+	// names, below the directory --output-dir gives; wget saves the file it
+	// names itself below --directory-prefix.
+	var urls, outputs, outputDirs []string
+	impliedNames := command.Name == "wget"
+	walkCLI(spec, command.Tokens[1:], cliVisitor{
+		option: func(name string, _ optRole, value string) {
+			check(value)
+			switch command.Name + " " + name {
+			case "curl remote-name", "curl remote-name-all":
+				impliedNames = true
+			case "curl url":
+				urls = append(urls, value)
+			case "curl output-dir", "wget directory-prefix":
+				outputDirs = append(outputDirs, value)
+			case "curl output":
+				outputs = append(outputs, value)
+			case "wget output-document":
+				impliedNames = false
+			case "wget default-page":
+				outputs = append(outputs, value) // the name saved for a URL that names none
+			case "curl cert", "curl proxy-cert":
+				// file[:password]. The file as curl reads it, and, because
+				// its Windows build keeps a drive colon, every prefix that
+				// ends at a colon.
+				check(curlCertFile(value))
+				for index := 0; index < len(value); index++ {
+					if value[index] == ':' {
+						check(strings.ReplaceAll(value[:index], `\:`, ":"))
+					}
+				}
+			}
+			if command.Name == "curl" {
+				check(curlAtPath(value))
+				if name == "data-urlencode" || name == "url-query" {
+					check(curlEncodedFilePath(name, value))
+				}
+				if name == "form" {
+					paths, _ := curlFormPaths(value)
+					for _, path := range paths {
+						check(path)
+					}
+				}
+				if name == "write-out" {
+					for _, path := range curlWriteOutPaths(value) {
+						check(path)
+					}
+				}
+			}
+		},
+		operand: func(token string) {
+			if command.Name == "curl" || command.Name == "wget" {
+				urls = append(urls, token)
+			}
+		},
+		invalid: func(string) {}, // The egress classifier owns invalid-option refusal.
+	})
+	if impliedNames {
+		for _, raw := range urls {
+			outputs = append(outputs, downloadFileNames(command.Name, raw)...)
+		}
+	}
+	// Which directory applies to which transfer is not modelled (curl --next
+	// starts a transfer without one, and an empty directory means none):
+	// every name is checked in the working directory and below every
+	// directory the command gives. Curl joins the two even when the name is
+	// absolute.
+	for _, name := range outputs {
+		check(name)
+		for _, dir := range outputDirs {
+			check(strings.TrimRight(dir, "/") + "/" + name)
+		}
+	}
+}
+
+// curlCertFile is the file part of a curl cert[:password] value as curl
+// parses it outside Windows: `\\` is a backslash, `\:` a colon, any other
+// backslash is kept, and the file ends at the first colon left. A value with
+// neither character, or a pkcs11: URI, is the file as written.
+func curlCertFile(value string) string {
+	if !strings.ContainsAny(value, `:\`) || strings.HasPrefix(value, "pkcs11:") {
+		return value
+	}
+	var file strings.Builder
+	for index := 0; index < len(value); index++ {
+		switch {
+		case value[index] == ':':
+			return file.String()
+		case value[index] == '\\' && index+1 < len(value) && (value[index+1] == '\\' || value[index+1] == ':'):
+			index++
+			file.WriteByte(value[index])
+		default:
+			file.WriteByte(value[index])
+		}
+	}
+	return file.String()
+}
+
+// urlAfterScheme drops "scheme://" from a URL. The separator counts only
+// before the first "/", "?" or "#": later it is part of the path or query.
+func urlAfterScheme(raw string) string {
+	if index := strings.Index(raw, "://"); index >= 0 && !strings.ContainsAny(raw[:index], "/?#") {
+		return raw[index+len("://"):]
+	}
+	return raw
+}
+
+// downloadFileNames lists the names a client may give the file it saves a
+// URL to when the command line names none: the last segment of the URL path,
+// as written and percent-decoded, and the client's name for an empty one.
+// Wget appends the query. Curl also splits the segment at a backslash.
+func downloadFileNames(tool, raw string) []string {
+	rest, _, _ := strings.Cut(urlAfterScheme(raw), "#")
+	rest, query, hasQuery := strings.Cut(rest, "?")
+	segment := ""
+	if index := strings.IndexByte(rest, '/'); index >= 0 {
+		segment = rest[index+1:]
+		segment = segment[strings.LastIndexByte(segment, '/')+1:]
+	}
+	names := []string{segment}
+	if decoded, err := url.PathUnescape(segment); err == nil && decoded != segment {
+		names = append(names, decoded)
+	}
+	if tool == "curl" {
+		if index := strings.LastIndexByte(segment, '\\'); index >= 0 {
+			names = append(names, segment[index+1:])
+		}
+		if segment == "" {
+			names = append(names, "curl_response")
+		}
+		return names
+	}
+	if segment == "" {
+		names = []string{"index.html"}
+	}
+	if hasQuery {
+		// The query follows the name, as written and as wget decodes it
+		// (a decoded "/" stays escaped).
+		queries := []string{query}
+		if decoded, err := url.PathUnescape(query); err == nil && decoded != query {
+			queries = append(queries, strings.ReplaceAll(decoded, "/", "%2F"))
+		}
+		for _, name := range names {
+			for _, suffix := range queries {
+				names = append(names, name+"?"+suffix)
+			}
+		}
+	}
+	// --adjust-extension adds the suffix of the type the server reports.
+	for _, name := range names {
+		names = append(names, name+".html", name+".css")
+	}
+	return names
 }
 
 var transferReadCommands = map[string]bool{
@@ -316,8 +640,9 @@ var secretReadPathNeedles = []string{
 // classifyEffectFacts derives narrowly-scoped facts from commands that the
 // shell parser already resolved. It deliberately never tokenizes raw shell
 // source, so wrapper, background, and subshell behavior stays owned by the
-// AST traversal above.
-func classifyEffectFacts(commands []Command) ([]EffectFact, bool) {
+// AST traversal above. syntaxFacts are the facts that traversal found in
+// redirects, where no command carries them.
+func classifyEffectFacts(commands []Command, syntaxFacts []EffectFact, overrides []envOverride) ([]EffectFact, bool) {
 	facts := make([]EffectFact, 0)
 	seen := make(map[string]bool)
 	factCrossesIndirection := false
@@ -331,25 +656,37 @@ func classifyEffectFacts(commands []Command) ([]EffectFact, bool) {
 				Reason: "secret read via " + command.Name,
 			})
 		}
-		if networkEgressCommands[command.Name] {
-			if target, ok := networkEgressTarget(command); ok {
-				reason := "network egress via " + command.Name
-				if target == command.Name {
-					reason += " with an unresolved destination"
-				}
-				facts = appendEffectFact(facts, seen, EffectFact{
-					Class:  "network",
-					Action: "network_egress",
-					Target: target,
-					Reason: reason,
-				})
-			}
+		for _, fact := range networkFacts(command, overrides) {
+			facts = appendEffectFact(facts, seen, fact)
 		}
 		if len(facts) > factCount && (command.Dynamic || command.Via != "") {
 			factCrossesIndirection = true
 		}
 	}
-	return facts, factCrossesIndirection
+	for _, fact := range syntaxFacts {
+		facts = appendEffectFact(facts, seen, fact)
+	}
+	return undeterminedEgressOnly(facts), factCrossesIndirection
+}
+
+// undeterminedEgressOnly drops the named destinations once any part of the
+// command's egress is undetermined. A receipt that named some hosts would
+// read as the whole set, and the call is refused either way.
+func undeterminedEgressOnly(facts []EffectFact) []EffectFact {
+	undetermined := false
+	for _, fact := range facts {
+		undetermined = undetermined || fact.Class == "network" && fact.Target == netdest.Undetermined
+	}
+	if !undetermined {
+		return facts
+	}
+	kept := facts[:0]
+	for _, fact := range facts {
+		if fact.Class != "network" || fact.Target == netdest.Undetermined {
+			kept = append(kept, fact)
+		}
+	}
+	return kept
 }
 
 func appendEffectFact(facts []EffectFact, seen map[string]bool, fact EffectFact) []EffectFact {
@@ -359,73 +696,6 @@ func appendEffectFact(facts []EffectFact, seen map[string]bool, fact EffectFact)
 	}
 	seen[key] = true
 	return append(facts, fact)
-}
-
-func networkEgressTarget(command Command) (string, bool) {
-	remoteTarget := ""
-	bareHost := ""
-	for _, token := range command.Tokens[1:] {
-		for _, candidate := range networkTokenCandidates(token) {
-			if strings.Contains(candidate, "://") {
-				return candidate, true
-			}
-			if remoteTarget == "" && isRemotePathSpec(candidate) {
-				remoteTarget = candidate
-			}
-			if bareHost == "" && isBareNetworkHost(candidate) {
-				bareHost = candidate
-			}
-		}
-	}
-	if remoteTarget != "" {
-		return remoteTarget, true
-	}
-	if bareHost != "" {
-		return bareHost, true
-	}
-	if networkCommandMayEgress(command) {
-		// A dynamic or nonstandard destination cannot make the operation
-		// ungoverned. Bind the command identity rather than guessing a target.
-		return command.Name, true
-	}
-	return "", false
-}
-
-func networkTokenCandidates(token string) []string {
-	candidates := []string{token}
-	if strings.HasPrefix(token, "-") {
-		if index := strings.IndexByte(token, '='); index >= 0 && index+1 < len(token) {
-			candidates = append(candidates, token[index+1:])
-		}
-	}
-	return candidates
-}
-
-func networkCommandMayEgress(command Command) bool {
-	for _, token := range command.Tokens[1:] {
-		if token == "" {
-			continue
-		}
-		if token == "-h" || token == "--help" || token == "-V" || token == "--version" {
-			continue
-		}
-		if strings.HasPrefix(token, "-") && token != "-" {
-			continue
-		}
-		return true
-	}
-	return command.Dynamic
-}
-
-func isBareNetworkHost(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" || strings.Contains(value, "://") || isRemotePathSpec(value) {
-		return false
-	}
-	if strings.HasPrefix(value, "-") || strings.ContainsAny(value, `/\\@`) {
-		return false
-	}
-	return value == "localhost" || strings.Contains(value, ".") || strings.Count(value, ":") > 1
 }
 
 // isRemotePathSpec recognizes the scp/rsync host:path notation while keeping
@@ -447,17 +717,51 @@ func isRemotePathSpec(value string) bool {
 	return !strings.ContainsAny(host, `/\\`)
 }
 
+// fileReaderCommands print or search the files they are given, so every
+// operand of theirs is a path, including one with spaces in it.
+var fileReaderCommands = map[string]bool{
+	".": true, "awk": true, "cat": true, "egrep": true, "fgrep": true, "gawk": true,
+	"grep": true, "head": true, "less": true, "mawk": true, "more": true, "nawk": true,
+	"sed": true, "source": true, "tail": true,
+}
+
+// nonDisclosingCommands take a path without revealing what the file holds:
+// they list, test, create, remove or re-permission it. Every other command
+// given a credential path is treated as reading it, because a list of the
+// programs that can read a file is never complete.
+var nonDisclosingCommands = map[string]bool{
+	"[": true, "basename": true, "cd": true, "chgrp": true, "chmod": true, "chown": true,
+	"dirname": true, "echo": true, "ls": true, "mkdir": true, "popd": true, "printf": true,
+	"pushd": true, "readlink": true, "realpath": true, "rm": true, "rmdir": true,
+	"stat": true, "test": true, "touch": true, "unlink": true,
+}
+
 func secretReadTargets(command Command) []string {
-	var targets []string
-	switch {
-	case secretReadCommands[command.Name]:
-		targets = append(targets, secretReaderTargets(command.Tokens[1:])...)
-	case command.Name == "curl":
-		targets = append(targets, curlSecretReadTargets(command.Tokens[1:])...)
-	case transferReadCommands[command.Name]:
-		targets = append(targets, transferSecretReadTargets(command.Tokens[1:])...)
+	// Tokens[0] is the command word, except in the records the wrapper code
+	// writes for a shell, which hold its arguments only.
+	operands := command.Tokens
+	if len(operands) > 0 && path.Base(slashPath(operands[0])) == command.Name {
+		operands = operands[1:]
 	}
-	return targets
+	switch {
+	case command.Name == "curl":
+		return curlSecretReadTargets(operands)
+	case transferReadCommands[command.Name]:
+		return transferSecretReadTargets(operands)
+	case nonDisclosingCommands[command.Name]:
+		return nil
+	case fileReaderCommands[command.Name]:
+		return secretReaderTargets(operands)
+	}
+	// For any other program an argument with white space in it is taken as
+	// text, such as a commit message that mentions a file name, not as a path.
+	paths := make([]string, 0, len(operands))
+	for _, operand := range operands {
+		if !strings.ContainsAny(operand, " \t\n") {
+			paths = append(paths, operand)
+		}
+	}
+	return secretReaderTargets(paths)
 }
 
 func secretReaderTargets(tokens []string) []string {
@@ -474,14 +778,63 @@ func secretReaderTargets(tokens []string) []string {
 			}
 			continue
 		}
+		// dd if=PATH and similar name=value operands carry the path as the value.
+		if name, value, ok := strings.Cut(token, "="); ok && name != "" && !strings.ContainsAny(name, "/.") {
+			targets = appendLocalSecretTarget(targets, value)
+			continue
+		}
 		targets = appendLocalSecretTarget(targets, token)
 	}
 	return targets
 }
 
+// localFileURLPath decodes a local FILE URL exactly once. URL.Path is already
+// percent-decoded; decoding it again would turn a literal percent escape in a
+// filename into a different path. Curl ignores query and fragment suffixes for
+// FILE reads; URL.Path excludes them and preserves a literal +.
+func localFileURLPath(raw string) (string, bool) {
+	if !strings.HasPrefix(strings.ToLower(raw), "file:") {
+		return "", false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Opaque != "" || u.User != nil {
+		return "", false
+	}
+	switch strings.ToLower(u.Host) {
+	case "", "localhost", "127.0.0.1":
+	default:
+		return "", false
+	}
+	if !path.IsAbs(u.Path) || strings.ContainsRune(u.Path, 0) {
+		return "", false
+	}
+	return u.Path, true
+}
+
 func curlSecretReadTargets(tokens []string) []string {
 	var targets []string
+	if len(tokens) > 0 {
+		walkCLI(curlSpec, tokens, cliVisitor{
+			option: func(name string, _ optRole, value string) {
+				if name == "data-urlencode" || name == "url-query" {
+					targets = appendLocalSecretTarget(targets, curlEncodedFilePath(name, value))
+				}
+				if name == "form" {
+					paths, _ := curlFormPaths(value)
+					for _, path := range paths {
+						targets = appendLocalSecretTarget(targets, path)
+					}
+				}
+			},
+			operand: func(string) {},
+			invalid: func(string) {}, // curlEgress refuses unsupported syntax.
+		})
+	}
 	for index, token := range tokens {
+		// A file: URL makes curl read a local file.
+		if local, ok := localFileURLPath(token); ok {
+			targets = appendLocalSecretTarget(targets, local)
+		}
 		targets = appendLocalSecretTarget(targets, curlInlineSecretPath(token))
 		if index+1 >= len(tokens) {
 			continue
@@ -489,8 +842,6 @@ func curlSecretReadTargets(tokens []string) []string {
 		switch token {
 		case "-d", "--data", "--data-binary", "--data-ascii":
 			targets = appendLocalSecretTarget(targets, curlAtPath(tokens[index+1]))
-		case "-F", "--form":
-			targets = appendLocalSecretTarget(targets, curlFormPath(tokens[index+1]))
 		case "-T", "--upload-file":
 			targets = appendLocalSecretTarget(targets, tokens[index+1])
 		}
@@ -512,10 +863,6 @@ func curlInlineSecretPath(token string) string {
 		return strings.TrimPrefix(token, "-T")
 	case strings.HasPrefix(token, "--upload-file="):
 		return strings.TrimPrefix(token, "--upload-file=")
-	case strings.HasPrefix(token, "-F") && len(token) > len("-F"):
-		return curlFormPath(strings.TrimPrefix(token, "-F"))
-	case strings.HasPrefix(token, "--form="):
-		return curlFormPath(strings.TrimPrefix(token, "--form="))
 	default:
 		return curlAtPath(token)
 	}
@@ -528,16 +875,46 @@ func curlAtPath(value string) string {
 	return ""
 }
 
-func curlFormPath(value string) string {
-	separator := strings.IndexByte(value, '@')
-	if separator < 0 {
+// Curl's data_urlencode checks for '=' before '@': any '=' makes this
+// literal content, even if an '@' occurs earlier. Otherwise the first '@'
+// separates the optional field name from a filename, preserved verbatim.
+// --url-query shares that grammar except that a leading '+' is literal.
+func curlEncodedFilePath(option, value string) string {
+	if option == "url-query" && strings.HasPrefix(value, "+") || strings.ContainsRune(value, '=') {
 		return ""
 	}
-	pathValue := value[separator+1:]
-	if option := strings.IndexByte(pathValue, ';'); option >= 0 {
-		pathValue = pathValue[:option]
+	if _, filename, ok := strings.Cut(value, "@"); ok {
+		return filename
 	}
-	return pathValue
+	return ""
+}
+
+// curlWriteOutPaths lists the files a --write-out format sends its output to.
+// Curl takes the text between "%output{" and the next "}" as the name. Newer
+// releases read a leading ">>" as append and older ones as part of the name,
+// so both are returned. Every marker is read, including one curl would print
+// as text after "%%": a name too many is checked, never one too few.
+func curlWriteOutPaths(format string) []string {
+	const marker = "%output{"
+	var paths []string
+	for offset := 0; ; {
+		index := strings.Index(format[offset:], marker)
+		if index < 0 {
+			return paths
+		}
+		offset += index + len(marker)
+		end := strings.IndexByte(format[offset:], '}')
+		if end < 0 {
+			return paths
+		}
+		name := format[offset : offset+end]
+		if name != "" {
+			paths = append(paths, name)
+		}
+		if appended := strings.TrimPrefix(name, ">>"); appended != name && appended != "" {
+			paths = append(paths, appended)
+		}
+	}
 }
 
 func transferSecretReadTargets(tokens []string) []string {
@@ -570,15 +947,53 @@ func appendLocalSecretTarget(targets []string, value string) []string {
 	return targets
 }
 
+// SecretReadPath reports whether path names credential material by the rules
+// a shell read of it is classified with, so a read through any other tool is
+// decided alike.
+func SecretReadPath(path string) bool {
+	return isLocalSecretPath(path)
+}
+
+// secretGlobSamples are credential files as a search finds them, at least one
+// for each rule in secretReadPathNeedles, so a glob can be asked whether it
+// selects one.
+var secretGlobSamples = []string{
+	".env", ".env.local", "server.pem", "cert.p12", "tls.key", "id_rsa", "id_ed25519", "id_ecdsa",
+	".ssh/id_rsa", ".ssh/config", ".aws/credentials", ".config/gcloud/credentials.db",
+	".kube/config", ".netrc", ".npmrc", ".pypirc", ".docker/config.json",
+}
+
+// publicCounterpart reports a file that sits beside credential material and
+// is named like it but holds none: a public key, or an example env file kept
+// in the repository for its variable names.
+func publicCounterpart(normalized string) bool {
+	base := path.Base(path.Clean(normalized))
+	if strings.HasSuffix(base, ".pub") {
+		return true
+	}
+	switch base {
+	case ".env.example", ".env.sample", ".env.template":
+		return true
+	}
+	return false
+}
+
 func isLocalSecretPath(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.Contains(value, "://") || isRemotePathSpec(value) {
 		return false
 	}
 	normalized := strings.ToLower(strings.ReplaceAll(value, `\\`, "/"))
-	for _, needle := range secretReadPathNeedles {
-		if strings.Contains(normalized, needle) {
-			return true
+	// A search tool reads a backslash in a glob as quoting the next byte, so
+	// ".en\v" given to rg -g or grep --include selects ".env".
+	for _, candidate := range []string{normalized, strings.ReplaceAll(normalized, `\`, "")} {
+		if publicCounterpart(candidate) {
+			continue
+		}
+		for _, needle := range secretReadPathNeedles {
+			if strings.Contains(candidate, needle) {
+				return true
+			}
 		}
 	}
 	return false
@@ -602,6 +1017,19 @@ type collector struct {
 	// literalWords are heredoc bodies and assignment values, which bash does
 	// not brace-expand.
 	literalWords map[*syntax.Word]bool
+
+	// guard, when set, names paths whose mention is recorded in
+	// protectedPath. home lets "cd" and "~" resolve the way the shell would.
+	guard         *PathGuard
+	home          string
+	dotGlob       bool
+	protectedPath string
+
+	// facts are effects found in syntax that no command carries, such as a
+	// redirect; env holds the variables the command line sets that change
+	// where a network client connects.
+	facts []EffectFact
+	env   []envOverride
 }
 
 func (c *collector) decide(reason string) {
@@ -684,6 +1112,9 @@ func (c *collector) classifyString(src, via string, depth int) {
 			c.classifySubstitution(n.Stmts)
 		case *syntax.Assign:
 			c.markLiteralWord(n.Value)
+			c.recordAssignment(n)
+		case *syntax.Stmt:
+			c.classifyShellInput(n, via, depth)
 		case *syntax.SglQuoted:
 			if n.Dollar {
 				c.signal(SignalANSICQuoting)
@@ -695,6 +1126,7 @@ func (c *collector) classifyString(src, via string, depth int) {
 				c.decide("locale quoting cannot be evaluated statically (fail-closed)")
 			}
 		case *syntax.Word:
+			c.guardWord(n)
 			if !c.literalWords[n] && hasBraceExpansion(n) {
 				c.signal(SignalBraceExpansion)
 				c.decide("brace expansion cannot be evaluated statically (fail-closed)")
@@ -719,6 +1151,65 @@ func (c *collector) markLiteralWord(w *syntax.Word) {
 		c.literalWords = map[*syntax.Word]bool{}
 	}
 	c.literalWords[w] = true
+}
+
+// recordAssignment keeps an assignment to a variable that network clients
+// read. Scope is not modelled: a prefix assignment, an export and a plain
+// assignment all count for every network command in the text.
+func (c *collector) recordAssignment(assign *syntax.Assign) {
+	if assign.Name == nil && assign.Naked && assign.Value != nil {
+		// export "NAME=value" and declare -x 'NAME=value' reach the parser as
+		// one quoted word, not as a name and a value; the shell still assigns.
+		word := resolveWord(assign.Value)
+		name, value, isAssignment := strings.Cut(word.text, "=")
+		switch {
+		case strings.HasPrefix(word.text, "-"):
+			// an option of the builtin
+		case word.dynamic && (!isAssignment || !assignmentWord(word.text)):
+			c.env = append(c.env, envOverride{dynamic: true})
+		case isAssignment && tracksVariable(name):
+			c.env = append(c.env, envOverride{name: name, value: value, dynamic: word.dynamic})
+		}
+		return
+	}
+	if assign.Name == nil || !tracksVariable(assign.Name.Value) {
+		return
+	}
+	override := envOverride{name: assign.Name.Value, dynamic: assign.Append || assign.Array != nil || assign.Index != nil}
+	if assign.Value != nil {
+		value := resolveWord(assign.Value)
+		override.value, override.dynamic = value.text, override.dynamic || value.dynamic
+	}
+	c.env = append(c.env, override)
+}
+
+// classifyShellInput classifies a heredoc or here-string that feeds a shell
+// its commands. The shell invocation itself still fails closed as reading
+// standard input; this adds what the visible script would do.
+func (c *collector) classifyShellInput(stmt *syntax.Stmt, via string, depth int) {
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) == 0 {
+		return
+	}
+	name := resolveCommandWord(call.Args[0])
+	if name.dynamic || !shellNames[path.Base(name.text)] {
+		return
+	}
+	for _, redirect := range stmt.Redirs {
+		var body *syntax.Word
+		switch redirect.Op {
+		case syntax.Hdoc, syntax.DashHdoc:
+			body = redirect.Hdoc
+		case syntax.WordHdoc:
+			body = redirect.Word
+		}
+		if body == nil {
+			continue
+		}
+		if script := resolveWord(body); !script.dynamic {
+			c.classifyString(script.text, joinVia(via, path.Base(name.text)+" stdin"), depth+1)
+		}
+	}
 }
 
 // classifySubstitution decides whether a command or process substitution
@@ -906,16 +1397,56 @@ func isDecoderCall(name string, args []wordTok) bool {
 
 func (c *collector) classifyRedirect(r *syntax.Redirect) {
 	c.signal(SignalRedirect)
-	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll:
-		// write-capable redirect
-	default:
-		return
-	}
 	if r.Word == nil {
 		return
 	}
-	c.recordWriteTarget(resolveWord(r.Word), "write redirect")
+	switch r.Op {
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll:
+		// write-capable redirect
+	case syntax.DplOut:
+		// ">&word" duplicates a descriptor when word is a number or "-", and
+		// writes stdout and stderr to the file word otherwise.
+		if word := resolveWord(r.Word); !word.dynamic && (word.text == "-" || fileDescriptor(word.text)) {
+			return
+		}
+	case syntax.RdrIn:
+		target := resolveWord(r.Word)
+		if scan, ok := deviceSocketEgress(target); ok {
+			c.facts = append(c.facts, scan.facts("a shell socket redirect")...)
+		} else if !target.dynamic && isLocalSecretPath(target.text) {
+			c.facts = append(c.facts, EffectFact{
+				Class:  "secret",
+				Action: "secret_read",
+				Target: target.text,
+				Reason: "secret read via input redirect",
+			})
+		}
+		return
+	default:
+		return
+	}
+	target := resolveWord(r.Word)
+	if scan, ok := deviceSocketEgress(target); ok {
+		// Bash opens a socket for this path; no file is written.
+		c.facts = append(c.facts, scan.facts("a shell socket redirect")...)
+		return
+	}
+	c.recordWriteTarget(target, "write redirect")
+}
+
+// fileDescriptor reports whether a redirect word names a descriptor ("2",
+// "10", or "3-" for a move) rather than a file.
+func fileDescriptor(word string) bool {
+	word = strings.TrimSuffix(word, "-")
+	if word == "" {
+		return false
+	}
+	for i := 0; i < len(word); i++ {
+		if word[i] < '0' || word[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *collector) recordWriteTarget(tok wordTok, source string) {
@@ -934,7 +1465,7 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	}
 	c.writtenPaths[c.normalizedPath(tok.text)] = true
 	c.recordSensitiveTarget(tok, "write redirect", SignalSensitiveRedirect)
-	if c.cwdUnknown && !path.IsAbs(slashPath(tok.text)) {
+	if c.cwdUnknown && !path.IsAbs(nativePath(tok.text)) {
 		c.decide(source + " relative to an unresolved directory change (fail-closed)")
 	}
 }
@@ -985,14 +1516,22 @@ func (c *collector) changeDirectory(args []wordTok) {
 			c.cwdUnknown = true
 			return
 		}
-		target := slashPath(tok.text)
+		target := nativePath(tok.text)
+		if c.home != "" && (target == "~" || strings.HasPrefix(target, "~/")) {
+			target = c.home + target[1:]
+		}
 		if path.IsAbs(target) {
 			c.cwdUnknown = false
 		}
 		c.cwd = c.normalizedPath(target)
 		return
 	}
-	c.cwdUnknown = true // no operand: cd changes to $HOME
+	// No operand: cd changes to $HOME.
+	if c.home == "" {
+		c.cwdUnknown = true
+		return
+	}
+	c.cwd, c.cwdUnknown = c.home, false
 }
 
 // recordDestructiveEffect marks a statically identified effect that needs a
@@ -1071,6 +1610,9 @@ type wordTok struct {
 // hasGlobPattern reports whether an unquoted literal holds an unescaped "*",
 // "?" or bracket expression. A lone "[" (the test builtin) is not a pattern.
 func hasGlobPattern(lit string) bool {
+	// A "[" is glob syntax when a "]" follows it anywhere; the last "]" is
+	// found once, so a word of many "[" costs one pass, not one per "[".
+	lastClose := strings.LastIndexByte(lit, ']')
 	for i := 0; i < len(lit); i++ {
 		switch lit[i] {
 		case '\\':
@@ -1078,7 +1620,7 @@ func hasGlobPattern(lit string) bool {
 		case '*', '?':
 			return true
 		case '[':
-			if strings.IndexByte(lit[i+1:], ']') >= 0 {
+			if lastClose > i {
 				return true
 			}
 		}
@@ -1122,6 +1664,25 @@ func unescapeLit(s string) string {
 	return b.String()
 }
 
+// Inside shell double quotes, only these escapes lose their backslash.
+// A quoted curl form can itself contain quotes; preserve the argv curl sees.
+func unescapeDoubleQuoted(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case '\n':
+				i++
+				continue
+			case '$', '`', '"', '\\':
+				i++
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
 func resolveCommandWord(w *syntax.Word) wordTok {
 	var b strings.Builder
 	glob := false
@@ -1144,7 +1705,7 @@ func resolveCommandWord(w *syntax.Word) wordTok {
 				if !ok {
 					return wordTok{dynamic: true}
 				}
-				b.WriteString(lit.Value)
+				b.WriteString(unescapeDoubleQuoted(lit.Value))
 			}
 		default:
 			return wordTok{dynamic: true}
@@ -1173,7 +1734,7 @@ func resolveWord(w *syntax.Word) wordTok {
 			dynamic = dynamic || p.Dollar
 			for _, inner := range p.Parts {
 				if lit, ok := inner.(*syntax.Lit); ok {
-					b.WriteString(lit.Value)
+					b.WriteString(unescapeDoubleQuoted(lit.Value))
 				} else {
 					dynamic = true
 				}
@@ -1573,6 +2134,7 @@ func (c *collector) classifyInterpreterScript(name string, args []wordTok, scrip
 		c.decide(name + " executes a script generated earlier in the command")
 		return
 	}
+	c.guardScript(script.text)
 	tokens := make([]string, 0, len(args)+1)
 	tokens = append(tokens, name)
 	tokens = append(tokens, staticTokens(args)...)
@@ -1941,6 +2503,14 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			}
 			args = dropWrapperFlags("sudo", args[1:])
 			via = joinVia(via, name)
+			// sudo takes NAME=value before the command; those words are its
+			// environment, not the program it runs.
+			for len(args) > 0 && !args[0].dynamic && assignmentWord(args[0].text) {
+				if variable, value, _ := strings.Cut(args[0].text, "="); tracksVariable(variable) {
+					c.env = append(c.env, envOverride{name: variable, value: value})
+				}
+				args = args[1:]
+			}
 			if args != nil && len(args) == 0 {
 				c.decide(name + " without a command (fail-closed)")
 				return
@@ -2056,7 +2626,10 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 					}
 					continue
 				}
-				if strings.Contains(tok.text, "=") {
+				if name, value, ok := strings.Cut(tok.text, "="); ok {
+					if tracksVariable(name) {
+						c.env = append(c.env, envOverride{name: name, value: value})
+					}
 					continue // VAR=value assignment
 				}
 				commandIdx = i
@@ -2284,6 +2857,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				c.decide(name + " executes a script generated earlier in the command")
 				return
 			}
+			c.guardScript(script.text)
 			c.record(Command{Name: name, Tokens: staticTokens(args), Via: via, Prefix: name})
 			return
 		case shellNames[name]:
@@ -2319,6 +2893,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 					c.decide(name + " executes a script generated earlier in the command")
 					return
 				}
+				c.guardScript(positional.text)
 				c.record(Command{Name: name, Tokens: staticTokens(rest), Via: via, Prefix: name})
 				return
 			}
@@ -2327,9 +2902,11 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				c.recordTeeWrites(args)
 			}
 			tokens := make([]string, 0, len(args))
+			perToken := make([]bool, 0, len(args))
 			dynamic := false
 			for _, tok := range args {
 				tokens = append(tokens, tok.text)
+				perToken = append(perToken, tok.dynamic)
 				if tok.dynamic {
 					dynamic = true
 				}
@@ -2340,9 +2917,11 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				Prefix:  Prefix(tokens),
 				Via:     via,
 				Dynamic: dynamic,
+				dynamic: perToken,
 			}
 			c.record(cmd)
 			c.matchDestructive(cmd, args, via, depth)
+			c.classifyWrappedNetworkTool(name, args, via, depth)
 			return
 		}
 		if args == nil {
@@ -2351,6 +2930,46 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		}
 	}
 	// Wrapper chain consumed all tokens (e.g. bare `sudo`): nothing executes.
+}
+
+// assignmentWord reports whether a word has the NAME=value shape of an
+// environment assignment.
+func assignmentWord(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// classifyWrappedNetworkTool covers a prefix command this scanner has no
+// entry for (watch, sshpass, a container run): when a later argument is a
+// network tool followed by an address, the rest is classified as that tool's
+// command line too. It only adds findings. An address is required so that an
+// argument which merely names the tool, as in a package install, is left
+// alone; echo and printf print their arguments and run nothing.
+func (c *collector) classifyWrappedNetworkTool(name string, args []wordTok, via string, depth int) {
+	if egressTool(name) || name == "echo" || name == "printf" {
+		return
+	}
+	for i := 1; i < len(args); i++ {
+		if args[i].dynamic || !egressTool(path.Base(slashPath(args[i].text))) {
+			continue
+		}
+		for _, later := range args[i+1:] {
+			if netdest.HasScheme(later.text) || strings.Contains(later.text, "@") {
+				c.classifyTokens(args[i:], joinVia(via, name), depth+1)
+				return
+			}
+		}
+		return
+	}
 }
 
 func (c *collector) classifyTrap(args []wordTok, via string, depth int) {
@@ -2395,6 +3014,7 @@ func staticTokens(args []wordTok) []string {
 }
 
 func (c *collector) record(cmd Command) {
+	c.guardOptionPaths(cmd)
 	c.commands = append(c.commands, cmd)
 }
 

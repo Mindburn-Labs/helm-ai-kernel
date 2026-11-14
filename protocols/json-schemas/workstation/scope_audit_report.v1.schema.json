@@ -90,7 +90,9 @@
         "missing_controls": { "type": "integer", "minimum": 0 },
         "memory_writes": { "type": "integer", "minimum": 0 },
         "recurring_loops": { "type": "integer", "minimum": 0 },
-        "high_impact_metadata": { "type": "integer", "minimum": 0 }
+        "high_impact_metadata": { "type": "integer", "minimum": 0 },
+        "untrusted_signer_receipts": { "type": "integer", "minimum": 0 },
+        "untrusted_signer_actions": { "type": "integer", "minimum": 0 }
       }
     },
     "boundary_name": {

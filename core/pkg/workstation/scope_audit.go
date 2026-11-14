@@ -56,6 +56,13 @@ type ScopeAuditSummary struct {
 	MemoryWrites       int `json:"memory_writes"`
 	RecurringLoops     int `json:"recurring_loops"`
 	HighImpactMetadata int `json:"high_impact_metadata"`
+	// UntrustedSignerReceipts counts receipts whose signature matches a key
+	// other than the trusted one, the retired built-in key included, and
+	// UntrustedSignerActions the actions they claim. Those receipts show what
+	// their signer claims, not what this workstation decided, so they are in
+	// no other count of the report.
+	UntrustedSignerReceipts int `json:"untrusted_signer_receipts"`
+	UntrustedSignerActions  int `json:"untrusted_signer_actions"`
 }
 
 type BoundarySummary struct {
@@ -165,7 +172,14 @@ type scopeAuditBuilder struct {
 	generatedAt time.Time
 }
 
-func BuildScopeAudit(paths ...string) (ScopeAuditReport, error) {
+// BuildScopeAudit audits the receipts whose signature matches their content.
+// An input that is unsigned or altered is named in Limitations and left out
+// of every count; how far the remaining signers are trusted is stated there
+// too. When a trust anchor is given, receipts signed by another key, the
+// retired built-in key included, are counted apart, in
+// UntrustedSignerReceipts and UntrustedSignerActions, and in nothing else. A file that repeats a receipt already read is counted once.
+// With no input left there is nothing to audit.
+func BuildScopeAudit(trust TrustAnchor, paths ...string) (ScopeAuditReport, error) {
 	files, err := expandJSONInputs(paths)
 	if err != nil {
 		return ScopeAuditReport{}, err
@@ -173,33 +187,73 @@ func BuildScopeAudit(paths ...string) (ScopeAuditReport, error) {
 	if len(files) == 0 {
 		return ScopeAuditReport{}, errors.New("no workstation receipt JSON files found")
 	}
-	view, err := BuildOperatorView(files...)
+	inputs, verification, err := loadCheckedInputs(trust, files)
 	if err != nil {
 		return ScopeAuditReport{}, err
 	}
-	builder := newScopeAuditBuilder(len(files), view)
-	for _, file := range files {
-		receipt, decision, err := loadWorkstationReceipt(file)
-		if err != nil {
-			return ScopeAuditReport{}, err
+	if verification.Counted() == 0 {
+		return ScopeAuditReport{}, fmt.Errorf("no input receipt has a signature that matches its content: %s", strings.Join(verification.Statements(), " "))
+	}
+	builder := newScopeAuditBuilder(len(files), operatorViewFrom(inputs, verification))
+	for _, input := range inputs {
+		switch input.status {
+		case SignatureUnsigned, SignatureInvalid:
+			continue
+		case SignatureUntrustedKey, SignatureRetiredKey:
+			// Only an anchor tells the workstation's own receipts from
+			// others'; without one every receipt whose signature holds is
+			// counted, and the limitations say trust was not checked.
+			if verification.TrustAnchor != "" {
+				builder.addUntrusted(input)
+				continue
+			}
 		}
-		if receipt != nil {
-			builder.addAgentRunReceipt(file, receipt)
+		if input.receipt != nil {
+			builder.addAgentRunReceipt(input.path, input.receipt)
 		}
-		if decision != nil {
-			builder.addDecisionReceipt(file, decision)
+		if input.decision != nil {
+			builder.addDecisionReceipt(input.path, input.decision)
 		}
+	}
+	if untrusted := builder.report.Summary.UntrustedSignerReceipts; untrusted > 0 {
+		builder.report.Limitations = append(builder.report.Limitations, fmt.Sprintf(
+			"%d receipts signed by a key other than the trusted one are counted apart (untrusted_signer_receipts) with the %d actions they claim (untrusted_signer_actions); they are in no other count of this report.",
+			untrusted, builder.report.Summary.UntrustedSignerActions))
 	}
 	return builder.finish(), nil
 }
 
+// addUntrusted counts a receipt whose signer is not the trusted key, and the
+// actions it claims, apart from the report's totals.
+func (b *scopeAuditBuilder) addUntrusted(input checkedReceipt) {
+	scratch := newScopeAuditBuilder(0, OperatorView{})
+	if input.receipt != nil {
+		scratch.addAgentRunReceipt(input.path, input.receipt)
+	}
+	if input.decision != nil {
+		scratch.addDecisionReceipt(input.path, input.decision)
+	}
+	b.report.Summary.UntrustedSignerReceipts++
+	b.report.Summary.UntrustedSignerActions += scratch.report.Summary.TotalActions
+}
+
+// WriteScopeAuditArtifacts writes the report, its Markdown and its evidence
+// references into outDir, and with includeEvidencePack the evidence pack in
+// its scope-audit-evidencepack subdirectory. outDir must be new or empty, as
+// an evidence pack's directory must: in a used one a file left from an
+// earlier audit would sit beside the new ones, and a file or directory linked
+// to one elsewhere would be written through. Every file is created new
+// through the opened directory, which refuses a path that leaves it.
 func WriteScopeAuditArtifacts(report ScopeAuditReport, outDir string, includeEvidencePack bool) (ScopeAuditExport, error) {
 	if outDir == "" {
 		return ScopeAuditExport{}, errors.New("output directory is required")
 	}
-	if err := os.MkdirAll(outDir, 0o750); err != nil {
-		return ScopeAuditExport{}, fmt.Errorf("create scope audit dir: %w", err)
+	root, err := openEmptyOutputDir(outDir, "scope audit")
+	if err != nil {
+		return ScopeAuditExport{}, err
 	}
+	defer root.Close()
+	writer := newPackWriter(root)
 	export := ScopeAuditExport{
 		OutDir:           outDir,
 		ReportPath:       filepath.Join(outDir, "scope-audit.json"),
@@ -207,37 +261,66 @@ func WriteScopeAuditArtifacts(report ScopeAuditReport, outDir string, includeEvi
 		EvidenceRefsPath: filepath.Join(outDir, "evidence-refs.json"),
 		FileHashes:       map[string]string{},
 	}
-	if err := writeCanonical(export.ReportPath, report); err != nil {
-		return ScopeAuditExport{}, fmt.Errorf("write scope audit JSON: %w", err)
+	reportJSON, err := canonicalize.JCS(report)
+	if err != nil {
+		return ScopeAuditExport{}, fmt.Errorf("canonicalize scope audit JSON: %w", err)
 	}
-	if err := os.WriteFile(export.MarkdownPath, []byte(RenderScopeAuditMarkdown(report)), 0o600); err != nil {
-		return ScopeAuditExport{}, fmt.Errorf("write scope audit Markdown: %w", err)
+	refsJSON, err := canonicalize.JCS(report.EvidenceRefs)
+	if err != nil {
+		return ScopeAuditExport{}, fmt.Errorf("canonicalize evidence refs: %w", err)
 	}
-	if err := writeCanonical(export.EvidenceRefsPath, report.EvidenceRefs); err != nil {
-		return ScopeAuditExport{}, fmt.Errorf("write evidence refs: %w", err)
-	}
-	for rel, path := range map[string]string{
-		"scope-audit.json":   export.ReportPath,
-		"scope-audit.md":     export.MarkdownPath,
-		"evidence-refs.json": export.EvidenceRefsPath,
+	for _, file := range []struct {
+		name, what string
+		data       []byte
+	}{
+		{"scope-audit.json", "scope audit JSON", append(reportJSON, '\n')},
+		{"scope-audit.md", "scope audit Markdown", []byte(RenderScopeAuditMarkdown(report))},
+		{"evidence-refs.json", "evidence refs", append(refsJSON, '\n')},
 	} {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return ScopeAuditExport{}, err
+		if err := writer.create(file.name, file.data); err != nil {
+			return ScopeAuditExport{}, fmt.Errorf("write %s: %w", file.what, err)
 		}
-		export.FileHashes[rel] = hashBytes(data)
+		export.FileHashes[file.name] = hashBytes(file.data)
 	}
 	export.FileHashes = sortedStringMap(export.FileHashes)
 	if includeEvidencePack {
-		packDir := filepath.Join(outDir, "scope-audit-evidencepack")
-		pack, err := ExportScopeAuditEvidencePack(report, packDir)
+		const packName = "scope-audit-evidencepack"
+		if err := root.Mkdir(packName, 0o750); err != nil {
+			return ScopeAuditExport{}, fmt.Errorf("create scope audit evidence pack: %w", err)
+		}
+		pack, err := root.OpenRoot(packName)
+		if err != nil {
+			return ScopeAuditExport{}, fmt.Errorf("open scope audit evidence pack: %w", err)
+		}
+		defer pack.Close()
+		exported, err := writeScopeAuditEvidencePack(report, pack, filepath.Join(outDir, packName))
 		if err != nil {
 			return ScopeAuditExport{}, err
 		}
-		export.EvidencePackDir = pack.OutDir
-		export.EvidencePackRootHash = pack.RootHash
+		export.EvidencePackDir = exported.OutDir
+		export.EvidencePackRootHash = exported.RootHash
 	}
 	return export, nil
+}
+
+// openEmptyOutputDir creates outDir if needed and opens it, refusing one that
+// already holds an entry.
+func openEmptyOutputDir(outDir, what string) (*os.Root, error) {
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
+		return nil, fmt.Errorf("create %s directory: %w", what, err)
+	}
+	root, err := os.OpenRoot(outDir)
+	if err != nil {
+		return nil, fmt.Errorf("open %s directory: %w", what, err)
+	}
+	if empty, err := rootIsEmpty(root); err != nil {
+		_ = root.Close()
+		return nil, fmt.Errorf("read %s directory: %w", what, err)
+	} else if !empty {
+		_ = root.Close()
+		return nil, fmt.Errorf("%s directory %s is not empty: write into a new or empty directory", what, outDir)
+	}
+	return root, nil
 }
 
 type ScopeAuditEvidencePackExport struct {
@@ -246,41 +329,46 @@ type ScopeAuditEvidencePackExport struct {
 	FileHashes map[string]string `json:"file_hashes"`
 }
 
-func ExportScopeAuditEvidencePack(report ScopeAuditReport, outDir string) (ScopeAuditEvidencePackExport, error) {
-	if outDir == "" {
-		return ScopeAuditEvidencePackExport{}, errors.New("output directory is required")
-	}
-	dirs := []string{
+// writeScopeAuditEvidencePack writes the pack through an opened, empty
+// directory: its subdirectories are created there, so none can be a link
+// planted ahead of the export, and each file is created new.
+func writeScopeAuditEvidencePack(report ScopeAuditReport, root *os.Root, outDir string) (ScopeAuditEvidencePackExport, error) {
+	for _, dir := range []string{
 		"02_PROOFGRAPH",
 		"07_ATTESTATIONS",
 		"12_REPORTS",
 		"99_EXT/workstation",
-	}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(outDir, dir), 0o750); err != nil {
+	} {
+		if err := root.MkdirAll(dir, 0o750); err != nil {
 			return ScopeAuditEvidencePackExport{}, fmt.Errorf("create scope audit evidence dir %s: %w", dir, err)
 		}
 	}
+	writer := newPackWriter(root)
 	files := map[string]any{
 		"07_ATTESTATIONS/source-receipts.json":  report.EvidenceRefs,
 		"12_REPORTS/scope-audit.json":           report,
 		"99_EXT/workstation/evidence-refs.json": report.EvidenceRefs,
 		"99_EXT/workstation/operator-view.json": report.OperatorView,
 	}
+	names := make([]string, 0, len(files))
+	for rel := range files {
+		names = append(names, rel)
+	}
+	sort.Strings(names)
 	fileHashes := map[string]string{}
-	for rel, value := range files {
-		data, err := canonicalize.JCS(value)
+	for _, rel := range names {
+		data, err := canonicalize.JCS(files[rel])
 		if err != nil {
 			return ScopeAuditEvidencePackExport{}, fmt.Errorf("canonicalize %s: %w", rel, err)
 		}
-		if err := os.WriteFile(filepath.Join(outDir, rel), append(data, '\n'), 0o600); err != nil {
+		if err := writer.create(rel, append(data, '\n')); err != nil {
 			return ScopeAuditEvidencePackExport{}, fmt.Errorf("write %s: %w", rel, err)
 		}
 		fileHashes[rel] = hashBytes(data)
 	}
 	markdownRel := "12_REPORTS/scope-audit.md"
 	markdown := []byte(RenderScopeAuditMarkdown(report))
-	if err := os.WriteFile(filepath.Join(outDir, markdownRel), markdown, 0o600); err != nil {
+	if err := writer.create(markdownRel, markdown); err != nil {
 		return ScopeAuditEvidencePackExport{}, fmt.Errorf("write %s: %w", markdownRel, err)
 	}
 	fileHashes[markdownRel] = hashBytes(markdown)
@@ -294,7 +382,7 @@ func ExportScopeAuditEvidencePack(report ScopeAuditReport, outDir string) (Scope
 		"extensions":     []string{"workstation", "scope-audit"},
 		"files":          sortedStringMap(fileHashes),
 	}
-	if err := writeCanonical(filepath.Join(outDir, "00_INDEX.json"), index); err != nil {
+	if err := writer.createCanonical("00_INDEX.json", index); err != nil {
 		return ScopeAuditEvidencePackExport{}, err
 	}
 	score := map[string]any{
@@ -306,7 +394,7 @@ func ExportScopeAuditEvidencePack(report ScopeAuditReport, outDir string) (Scope
 		"raw_chat_required":     false,
 		"deterministic_root":    rootHash,
 	}
-	if err := writeCanonical(filepath.Join(outDir, "01_SCORE.json"), score); err != nil {
+	if err := writer.createCanonical("01_SCORE.json", score); err != nil {
 		return ScopeAuditEvidencePackExport{}, err
 	}
 	return ScopeAuditEvidencePackExport{OutDir: outDir, RootHash: rootHash, FileHashes: sortedStringMap(fileHashes)}, nil
@@ -319,7 +407,8 @@ func RenderScopeAuditMarkdown(report ScopeAuditReport) string {
 	fmt.Fprintf(&b, "- Inputs: %d\n", report.Summary.InputFiles)
 	fmt.Fprintf(&b, "- Actions: %d allowed=%d denied=%d tainted=%d\n", report.Summary.TotalActions, report.Summary.AllowedActions, report.Summary.DeniedActions, report.Summary.TaintedActions)
 	fmt.Fprintf(&b, "- Out-of-scope attempts: %d\n", report.Summary.OutOfScopeAttempts)
-	fmt.Fprintf(&b, "- Missing controls: %d\n\n", report.Summary.MissingControls)
+	fmt.Fprintf(&b, "- Missing controls: %d\n", report.Summary.MissingControls)
+	fmt.Fprintf(&b, "- Receipts of another signer, counted apart: %d (actions: %d)\n\n", report.Summary.UntrustedSignerReceipts, report.Summary.UntrustedSignerActions)
 	fmt.Fprintf(&b, "## Boundaries\n\n")
 	for _, boundary := range report.Boundaries {
 		fmt.Fprintf(&b, "- %s: total=%d allow=%d deny=%d tainted=%d unknown=%d\n", boundary.Boundary, boundary.Total, boundary.Allowed, boundary.Denied, boundary.Tainted, boundary.Unknown)
@@ -356,6 +445,9 @@ func newScopeAuditBuilder(inputFiles int, view OperatorView) *scopeAuditBuilder 
 			"It does not claim full desktop, browser, OS, or proprietary hosted-agent control.",
 			"Secret values are never required and secret-like metadata is redacted unless it is a safe reference field.",
 		},
+	}
+	if view.Verification != nil {
+		report.Limitations = append(report.Limitations, view.Verification.Statements()...)
 	}
 	builder := &scopeAuditBuilder{
 		report:      report,
@@ -678,6 +770,8 @@ func (b *scopeAuditBuilder) addReasonMissingControl(action scopeAuditAction) {
 		b.addMissingControl("network", action.runID, action.effectID, "egress.allowlist", action.reasonCode, "network egress allowlist is empty", action.receipt)
 	case "EGRESS_DESTINATION_NOT_ALLOWED":
 		b.addMissingControl("network", action.runID, action.effectID, "egress.destination", action.reasonCode, "network destination is outside the allowlist", action.receipt)
+	case "EGRESS_DESTINATION_UNDETERMINED":
+		b.addMissingControl("network", action.runID, action.effectID, "egress.destination", action.reasonCode, "network destination could not be determined", action.receipt)
 	case "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE":
 		b.addMissingControl("filesystem", action.runID, action.effectID, "draft.workspace_roots", action.reasonCode, "file target is outside the configured workspace roots", action.receipt)
 	case "MEMORY_CLASS_DISALLOWED":

@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 const (
@@ -272,4 +274,22 @@ func resolveTrustedWorkstationPublicKey(dataDir, explicitPath string) (ed25519.P
 		return nil, path, false, err
 	}
 	return key, path, true, nil
+}
+
+// receiptTrustAnchor resolves the key that commands reading receipts check
+// signers against: the explicit file, else the local workstation key. With
+// neither, it returns no anchor, and the caller reports that signer trust was
+// not checked.
+func receiptTrustAnchor(dataDir, explicitPath string) (workstation.TrustAnchor, error) {
+	if strings.TrimSpace(explicitPath) == "" && strings.TrimSpace(dataDir) == "" {
+		return workstation.TrustAnchor{}, nil
+	}
+	key, source, available, err := resolveTrustedWorkstationPublicKey(dataDir, explicitPath)
+	if err != nil {
+		return workstation.TrustAnchor{}, err
+	}
+	if !available {
+		return workstation.TrustAnchor{}, nil
+	}
+	return workstation.TrustAnchor{PublicKey: key, Source: source}, nil
 }

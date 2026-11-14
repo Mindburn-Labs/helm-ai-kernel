@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,11 +13,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/netdest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -40,40 +44,113 @@ func runWorkstationDecisionCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
-	receipt, out, jsonOut, remaining, err := buildEnforceFromFlags(args, stderr)
+	flags, err := parseEnforceFlags(args, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if _, err := writeDecisionReceipt(out, "", receipt); err != nil {
+	effects, refusal := enforceEffects(flags)
+	receipts, err := decideEnforceEffects(flags, effects, nil)
+	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 1
+		return 2
 	}
-	if jsonOut {
-		data, _ := canonicalize.JCS(receipt)
-		_, _ = fmt.Fprintln(stdout, string(data))
-	} else {
-		printDecisionSummary(stdout, receipt)
+	denied := false
+	for _, receipt := range receipts {
+		denied = denied || receipt.Verdict == contracts.WorkstationVerdictDeny
 	}
-	if receipt.Verdict == contracts.WorkstationVerdictDeny {
+	// A command runs only on operate-mode ALLOW receipts. One that would not
+	// is refused here, before any receipt is written, so no ALLOW is left on
+	// disk for a command that never ran.
+	for _, receipt := range receipts {
+		if !denied && refusal == "" && len(flags.argv) > 0 && (receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate) {
+			refusal = fmt.Sprintf("no operate-mode ALLOW receipt covers it (verdict=%s mode=%s)", receipt.Verdict, receipt.Request.EffectMode)
+		}
+	}
+	if denied || refusal == "" {
+		// The receipts that are written are signed again, with the outcome of
+		// the whole command in them: a refused command keeps only its
+		// denials, as a refused hook call does.
+		if receipts, err = bindEnforceReceipts(flags, effects, receipts, denied); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 2
+		}
+	}
+	// The receipt that settles the outcome: the first denial, else the first
+	// decision. With several effects the rest go to --receipt-dir.
+	var decisive *contracts.WorkstationPolicyDecisionReceipt
+	for _, receipt := range receipts {
+		if receipt.Verdict == contracts.WorkstationVerdictDeny && decisive == nil {
+			decisive = receipt
+		}
+	}
+	if decisive == nil && len(receipts) > 0 {
+		decisive = receipts[0]
+	}
+	if denied || refusal == "" {
+		var written []string
+		for _, receipt := range receipts {
+			out := ""
+			if receipt == decisive {
+				out = flags.out
+			}
+			path, err := writeNewDecisionReceipt(out, flags.receiptDir, receipt)
+			if err != nil {
+				// Without its receipt the decision cannot be shown, so the
+				// command does not run, and the exit code says so as a
+				// denial does. An ALLOW receipt already written would stand
+				// for a command that never ran, so it is removed.
+				removeAllowReceipts(written, receipts)
+				_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command: write decision receipt: %v\n", err)
+				return cliui.ExitDenied
+			}
+			written = append(written, path)
+		}
+		if decisive != nil {
+			if flags.jsonOut {
+				data, _ := canonicalize.JCS(decisive)
+				_, _ = fmt.Fprintln(stdout, string(data))
+			} else {
+				printDecisionSummary(stdout, decisive)
+			}
+		}
+	}
+	if denied {
 		return cliui.ExitDenied
 	}
+	if refusal != "" {
+		// Nothing was denied, but nothing decided covers the command either:
+		// an ALLOW for some other effect must not be left on disk for it.
+		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command: %s\n", refusal)
+		return cliui.ExitDenied
+	}
+	remaining := flags.argv
 	if len(remaining) == 0 {
 		return 0
-	}
-	if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
-		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
-		return cliui.ExitDenied
 	}
 	cmd := exec.CommandContext(context.Background(), remaining[0], remaining[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: command failed: %v\n", err)
-		return 1
+	return childExitCode(cmd.Run(), stderr)
+}
+
+// childExitCode is the wrapper's exit code for a command it ran: the
+// command's own code, 128 plus the signal number when a signal ended it, and
+// 127, as a shell gives, when it could not be started.
+func childExitCode(err error, stderr io.Writer) int {
+	if err == nil {
+		return 0
 	}
-	return 0
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		_, _ = fmt.Fprintf(stderr, "Error: command could not be started: %v\n", err)
+		return 127
+	}
+	if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return 128 + int(status.Signal())
+	}
+	return exitErr.ExitCode()
 }
 
 func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) int {
@@ -186,10 +263,12 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 func runWorkstationOperatorCmd(section string, args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation "+section, flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var input string
+	var input, dataDir, trustedPublicKeyFile string
 	var jsonOut bool
 	cmd.StringVar(&input, "input", "", "Comma-separated receipt files or directories")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
@@ -198,7 +277,12 @@ func runWorkstationOperatorCmd(section string, args []string, stdout, stderr io.
 		_, _ = fmt.Fprintln(stderr, "Error: --input is required")
 		return 2
 	}
-	view, err := workstation.BuildOperatorView(paths...)
+	trust, err := receiptTrustAnchor(dataDir, trustedPublicKeyFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
+		return 1
+	}
+	view, err := workstation.BuildOperatorView(trust, paths...)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -314,44 +398,240 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	return receipt, out, receiptDir, jsonOut, nil
 }
 
-func buildEnforceFromFlags(args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, bool, []string, error) {
+type enforceFlags struct {
+	class, target, out, receiptDir         string
+	policyPath, seedHex, seedFile, dataDir string
+	jsonOut                                bool
+	// argv is the command to run after the decision; empty for a decision
+	// about an effect the caller performs itself.
+	argv []string
+}
+
+func parseEnforceFlags(args []string, stderr io.Writer) (enforceFlags, error) {
 	cmd := flag.NewFlagSet("workstation enforce", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var class, target, out, receiptDir, policyPath, seedHex, seedFile, dataDir string
-	var jsonOut bool
-	cmd.StringVar(&class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
-	cmd.StringVar(&target, "target", "", "Effect target")
-	cmd.StringVar(&policyPath, "policy-profile", "", "Policy profile JSON path")
-	cmd.StringVar(&out, "out", "", "Write decision receipt JSON")
-	cmd.StringVar(&receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
-	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
-	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
-	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
-	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	var flags enforceFlags
+	cmd.StringVar(&flags.class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
+	cmd.StringVar(&flags.target, "target", "", "Effect target")
+	cmd.StringVar(&flags.policyPath, "policy-profile", "", "Policy profile JSON path")
+	cmd.StringVar(&flags.out, "out", "", "Write decision receipt JSON")
+	cmd.StringVar(&flags.receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
+	cmd.StringVar(&flags.seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
+	cmd.StringVar(&flags.seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&flags.dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.BoolVar(&flags.jsonOut, "json", false, "Print JSON")
 	if err := cmd.Parse(args); err != nil {
-		return nil, "", false, nil, err
+		return enforceFlags{}, err
 	}
-	remaining := cmd.Args()
-	decisionArgs := []string{"--class", class, "--target", firstNonEmptyString(target, strings.Join(remaining, " ")), "--policy-profile", policyPath, "--out", out, "--receipt-dir", receiptDir, "--data-dir", dataDir}
-	if seedHex != "" {
-		decisionArgs = append(decisionArgs, "--signing-seed-hex", seedHex)
+	flags.argv = cmd.Args()
+	return flags, nil
+}
+
+// enforceEffects lists every effect that must be allowed before the wrapped
+// command runs. With no command it is the declared effect alone. With a
+// command, the effects are read from the argv that will be executed: the
+// declared class and target can add a requirement or name what the command
+// is expected to do, but they never stand in for what the argv shows. refusal
+// is set when the declaration cannot be matched to the command at all.
+func enforceEffects(flags enforceFlags) (effects []hookClassification, refusal string) {
+	declared := hookClassification{ShouldDecide: true, Class: flags.class, Target: flags.target}
+	if len(flags.argv) == 0 {
+		return []hookClassification{declared}, ""
 	}
-	if seedFile != "" {
-		decisionArgs = append(decisionArgs, "--signing-seed-file", seedFile)
+	dataDir := flags.dataDir
+	if abs, err := filepath.Abs(dataDir); err == nil && strings.TrimSpace(dataDir) != "" {
+		dataDir = abs
 	}
-	if jsonOut {
-		decisionArgs = append(decisionArgs, "--json")
+	cwd, _ := os.Getwd()
+	command := strings.Join(flags.argv, " ")
+	// The command runs with this process's environment, so the decision is
+	// made on it too: a proxy set there is a destination, and a variable
+	// that changes how a client connects or what a shell runs first leaves
+	// the destinations undetermined.
+	scan := shellscan.ClassifyArgvAt(flags.argv, cwd,
+		shellscan.WithPathGuard(workstationPathGuard(dataDir, flags.seedFile, flags.policyPath)),
+		shellscan.WithEnvironment(enforceEnvironment(os.Environ())))
+	derived := shellClassifications("workstation.enforce", command, scan)
+	if scan.ProtectedPath != "" {
+		return derived, ""
 	}
-	receipt, receiptOut, decisionReceiptDir, receiptJSON, err := buildDecisionFromFlags("workstation enforce", decisionArgs, io.Discard)
-	if receiptOut == "" && decisionReceiptDir != "" && receipt != nil {
-		receiptOut = filepath.Join(decisionReceiptDir, receipt.DecisionID+".json")
+	effectType, _, _, _ := workstation.EffectDefaults(flags.class)
+	switch effectType {
+	case contracts.EffectTypeWorkstationNetworkEgress:
+		// The destinations come from the argv; --target only says which one
+		// the caller expects to find there.
+		reached := map[string]bool{}
+		for _, effect := range derived {
+			if effect.Class == "network" {
+				reached[effect.Target] = true
+			}
+		}
+		switch {
+		case len(reached) == 0:
+			refusal = "cannot confirm where it connects: its arguments name no network destination"
+		case strings.TrimSpace(flags.target) != "":
+			expected, err := netdest.Parse(strings.TrimSpace(flags.target))
+			if err != nil {
+				refusal = "the declared --target is not a network destination"
+			} else if !reached[expected.String()] {
+				refusal = "cannot confirm that it connects to the declared target " + expected.String()
+			}
+		}
+		return derived, refusal
+	case contracts.EffectTypeWorkstationShellCommand:
+		if strings.TrimSpace(flags.target) != "" && flags.target != command {
+			refusal = "the declared --target does not match the command"
+		}
+		declared.Target = command
+	default:
+		declared.Target = firstNonEmptyString(flags.target, command)
 	}
-	return receipt, receiptOut, receiptJSON, remaining, err
+	effects = []hookClassification{declared}
+	for _, effect := range derived {
+		if effect.Class == "shell-operate" && effect.Target == declared.Target && effectType == contracts.EffectTypeWorkstationShellCommand && strings.Contains(flags.class, "operate") {
+			continue // the declared decision already is this one
+		}
+		effects = append(effects, effect)
+	}
+	return effects, refusal
+}
+
+// enforceEnvironment is the part of the wrapper's environment the decision
+// covers: every entry with a value, except HOME and XDG_CONFIG_HOME. Those
+// locate the user's own configuration, which every command run here reads
+// alike; what that configuration says is a limit of the decision (CTL-036),
+// not a reason to refuse every command.
+func enforceEnvironment(environ []string) []string {
+	kept := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || value == "" || name == "HOME" || name == "XDG_CONFIG_HOME" {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
+}
+
+// bindEnforceReceipts signs again the receipts of one run that are kept:
+// every one when nothing was denied, only the denials when something was.
+// Each kept receipt carries the call binding the hook writes (call_id,
+// call_receipts and call_verdict), so a reader can tell the receipts of one
+// run and its outcome from the receipts alone, and no ALLOW receipt stands
+// for a command that never ran.
+func bindEnforceReceipts(flags enforceFlags, effects []hookClassification, decided []*contracts.WorkstationPolicyDecisionReceipt, denied bool) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
+	var kept []hookClassification
+	var verdicts []string
+	for i, receipt := range decided {
+		if !denied || receipt.Verdict == contracts.WorkstationVerdictDeny {
+			kept = append(kept, effects[i])
+			verdicts = append(verdicts, receipt.Verdict)
+		}
+	}
+	id, err := newHookRandomID("enforcecall_")
+	if err != nil {
+		return nil, fmt.Errorf("generate call ID: %w", err)
+	}
+	verdict := contracts.WorkstationVerdictAllow
+	if denied {
+		verdict = contracts.WorkstationVerdictDeny
+	}
+	bound, err := decideEnforceEffects(flags, kept, hookCallBinding{id: id}.metadata(len(kept), verdict))
+	if err != nil {
+		return nil, err
+	}
+	for i, receipt := range bound {
+		if receipt.Verdict != verdicts[i] {
+			return nil, fmt.Errorf("decision for %s changed between evaluations", kept[i].Class)
+		}
+	}
+	return bound, nil
+}
+
+// removeAllowReceipts removes, as far as removal works, the ALLOW receipts
+// among those written for a command that is not run. A denial stays: it
+// records a refusal that did happen.
+func removeAllowReceipts(written []string, receipts []*contracts.WorkstationPolicyDecisionReceipt) {
+	for i, path := range written {
+		if path != "" && receipts[i].Verdict == contracts.WorkstationVerdictAllow {
+			_ = os.Remove(path)
+		}
+	}
+}
+
+// decideEnforceEffects signs one decision per effect. Every receipt for a
+// wrapped command binds the argv, so a receipt cannot be shown for a command
+// other than the one it was decided for. callBinding, when given, binds each
+// receipt to the run it belongs to and is part of the signed bytes.
+func decideEnforceEffects(flags enforceFlags, effects []hookClassification, callBinding map[string]string) ([]*contracts.WorkstationPolicyDecisionReceipt, error) {
+	if len(effects) == 0 {
+		return nil, nil
+	}
+	profile, err := workstation.LoadPolicyProfileFile(flags.policyPath)
+	if err != nil {
+		return nil, err
+	}
+	seed, err := resolveWorkstationSigningSeed(flags.dataDir, flags.seedHex, flags.seedFile)
+	if err != nil {
+		return nil, err
+	}
+	var argvBinding map[string]string
+	if len(flags.argv) > 0 {
+		canonicalArgv, err := canonicalize.JCS(flags.argv)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize argv: %w", err)
+		}
+		argvBinding = map[string]string{
+			"argv_binding": "jcs-sha256",
+			"argv_sha256":  canonicalize.ComputeArtifactHash(canonicalArgv),
+		}
+	}
+	receipts := make([]*contracts.WorkstationPolicyDecisionReceipt, 0, len(effects))
+	for _, effect := range effects {
+		effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(effect.Class)
+		// Every request is a request of its own, so a later run of the same
+		// command gets receipts, and receipt files, of its own.
+		requestID, err := newHookRandomID("enforce_")
+		if err != nil {
+			return nil, fmt.Errorf("generate request ID: %w", err)
+		}
+		req := contracts.WorkstationDecisionRequest{
+			RequestID:    requestID,
+			RunID:        "workstation-decision",
+			ActorID:      "agent.local",
+			WorkspaceID:  "local-workstation",
+			AgentSurface: "workstation-cli",
+			ToolID:       firstNonEmptyString(effect.ToolID, defaultTool),
+			Action:       firstNonEmptyString(effect.Action, defaultAction),
+			EffectType:   effectType,
+			EffectMode:   effectMode,
+			Target:       effect.Target,
+			OccurredAt:   time.Unix(0, 0).UTC(),
+		}
+		if len(effect.Metadata)+len(argvBinding)+len(callBinding) > 0 {
+			req.Metadata = map[string]string{}
+			for key, value := range effect.Metadata {
+				req.Metadata[key] = value
+			}
+			for key, value := range argvBinding {
+				req.Metadata[key] = value
+			}
+			for key, value := range callBinding {
+				req.Metadata[key] = value
+			}
+		}
+		receipt, err := workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed, TrustMaterial: effect.TrustMaterial})
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, nil
 }
 
 func writeDecisionReceipt(path, receiptDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
 	if path == "" && receiptDir != "" {
-		if err := os.MkdirAll(receiptDir, 0o755); err != nil {
+		if err := os.MkdirAll(receiptDir, 0o700); err != nil {
 			return "", err
 		}
 		path = filepath.Join(receiptDir, receipt.DecisionID+".json")
@@ -360,7 +640,7 @@ func writeDecisionReceipt(path, receiptDir string, receipt *contracts.Workstatio
 		return "", nil
 	}
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", err
 		}
 	}
@@ -369,6 +649,35 @@ func writeDecisionReceipt(path, receiptDir string, receipt *contracts.Workstatio
 		return "", err
 	}
 	return path, os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+// writeNewDecisionReceipt writes a receipt of enforce as writeDecisionReceipt
+// does, except that a receipt it names itself in receiptDir is created new:
+// a file already there, from an earlier run, is never replaced. A receipt
+// written to the --out path replaces what is there, as the caller asked.
+func writeNewDecisionReceipt(path, receiptDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
+	if path != "" || receiptDir == "" {
+		return writeDecisionReceipt(path, receiptDir, receipt)
+	}
+	if err := os.MkdirAll(receiptDir, 0o700); err != nil {
+		return "", err
+	}
+	data, err := canonicalize.JCS(receipt)
+	if err != nil {
+		return "", err
+	}
+	path = filepath.Join(receiptDir, receipt.DecisionID+".json")
+	//nolint:gosec // G304: the receipt directory is the caller's flag; the file is created new.
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, file.Close()
 }
 
 func printDecisionSummary(stdout io.Writer, receipt *contracts.WorkstationPolicyDecisionReceipt) {
@@ -381,47 +690,79 @@ func printDecisionSummary(stdout io.Writer, receipt *contracts.WorkstationPolicy
 	_, _ = fmt.Fprintf(stdout, "  hash:     %s\n", receipt.ReceiptHash)
 }
 
+// printReceiptVerification says, ahead of any figure taken from receipts,
+// which signature checks those receipts went through.
+func printReceiptVerification(stdout io.Writer, verification *workstation.ReceiptVerification) {
+	if verification == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "Signatures: %d input files match the key they name, %d do not and are not counted\n", verification.Counted(), len(verification.NotCounted))
+	for _, input := range verification.NotCounted {
+		_, _ = fmt.Fprintf(stdout, "  not counted: %s (%s)\n", input.SourcePath, input.SignatureStatus)
+	}
+	for _, input := range verification.DuplicateInputs {
+		_, _ = fmt.Fprintf(stdout, "  duplicate, counted once: %s (copy of %s)\n", input.SourcePath, input.DuplicateOf)
+	}
+	if verification.TrustAnchor == "" {
+		_, _ = fmt.Fprintln(stdout, "Signer trust: not checked (no trusted workstation public key; pass --trusted-public-key-file)")
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "Signer trust: checked against %s: %d by that key, %d by another key, %d by the retired built-in key\n",
+		verification.TrustAnchor,
+		verification.Statuses[workstation.SignatureTrustedKey],
+		verification.Statuses[workstation.SignatureUntrustedKey],
+		verification.Statuses[workstation.SignatureRetiredKey])
+}
+
 func printOperatorView(stdout io.Writer, section string, view workstation.OperatorView) {
 	_, _ = fmt.Fprintf(stdout, "%sWorkstation Operator View%s\n", ColorBold, ColorReset)
+	printReceiptVerification(stdout, view.Verification)
 	if section == "all" || section == "runs" {
 		_, _ = fmt.Fprintf(stdout, "Runs: %d\n", len(view.Runs))
 		for _, run := range view.Runs {
-			_, _ = fmt.Fprintf(stdout, "  %s %s denied=%d memory=%d loops=%d\n", firstNonEmptyString(run.RunID, run.DecisionID), run.PolicyProfile, run.DeniedEffects, run.MemoryEffects, run.RecurringLoops)
+			_, _ = fmt.Fprintf(stdout, "  %s %s denied=%d memory=%d loops=%d %s\n", firstNonEmptyString(run.RunID, run.DecisionID), run.PolicyProfile, run.DeniedEffects, run.MemoryEffects, run.RecurringLoops, run.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "denied" {
 		_, _ = fmt.Fprintf(stdout, "Denied timeline: %d\n", len(view.DeniedTimeline))
 		for _, item := range view.DeniedTimeline {
-			_, _ = fmt.Fprintf(stdout, "  %s %s %s %s\n", item.RunID, item.Effect, item.Reason, item.Target)
+			_, _ = fmt.Fprintf(stdout, "  %s %s %s %s %s\n", item.RunID, item.Effect, item.Reason, item.Target, item.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "memory" {
 		_, _ = fmt.Fprintf(stdout, "Memory review queue: %d\n", len(view.MemoryReviewQueue))
 		for _, item := range view.MemoryReviewQueue {
-			_, _ = fmt.Fprintf(stdout, "  %s %s ttl=%d sensitivity=%s verdict=%s\n", item.RunID, item.MemoryClass, item.TTLDays, item.Sensitivity, item.Verdict)
+			_, _ = fmt.Fprintf(stdout, "  %s %s ttl=%d sensitivity=%s verdict=%s %s\n", item.RunID, item.MemoryClass, item.TTLDays, item.Sensitivity, item.Verdict, item.SignatureStatus)
 		}
 	}
 	if section == "all" || section == "loops" {
 		_, _ = fmt.Fprintf(stdout, "Recurring loops: %d\n", len(view.RecurringLoops))
 		for _, item := range view.RecurringLoops {
-			_, _ = fmt.Fprintf(stdout, "  %s %s max=%s verdict=%s\n", item.RunID, item.Schedule, item.MaxRuntime, item.Verdict)
+			_, _ = fmt.Fprintf(stdout, "  %s %s max=%s verdict=%s %s\n", item.RunID, item.Schedule, item.MaxRuntime, item.Verdict, item.SignatureStatus)
 		}
 	}
 }
 
+// sectionValue is the JSON of one operator section: the same envelope as
+// the whole view, the section's items under the key the whole view uses and
+// the signature checks beside them, so one section never reads as more
+// trusted than the view it is part of.
 func sectionValue(section string, view workstation.OperatorView) any {
+	var key string
+	var items any
 	switch section {
 	case "runs":
-		return view.Runs
+		key, items = "runs", view.Runs
 	case "denied":
-		return view.DeniedTimeline
+		key, items = "denied_timeline", view.DeniedTimeline
 	case "memory":
-		return view.MemoryReviewQueue
+		key, items = "memory_review_queue", view.MemoryReviewQueue
 	case "loops":
-		return view.RecurringLoops
+		key, items = "recurring_loops", view.RecurringLoops
 	default:
 		return view
 	}
+	return map[string]any{key: items, "verification": view.Verification}
 }
 
 func splitInputs(input string) []string {

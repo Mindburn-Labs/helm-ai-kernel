@@ -22,6 +22,14 @@ type DecisionOptions struct {
 	SigningSeed       []byte
 	PersistedTarget   string
 	PersistedMetadata map[string]string
+	// TrustMaterial marks a request that reaches HELM's own signing or trust
+	// material, as established by the caller's path guard. The option can
+	// only deny: no profile allows such a request.
+	TrustMaterial bool
+	// InputTooLarge marks a request whose input the caller did not read
+	// because it exceeded the caller's limit, so nothing about it could be
+	// classified. Like TrustMaterial it can only deny.
+	InputTooLarge bool
 }
 
 func LoadPolicyProfileFile(path string) (contracts.WorkstationPolicyProfile, error) {
@@ -233,6 +241,12 @@ func Decide(
 		Metadata:   req.Metadata,
 	}
 	verdict, reasonCode, reason := EvaluateEvent(profile, event)
+	if opts.InputTooLarge {
+		verdict, reasonCode, reason = contracts.WorkstationVerdictDeny, "TOOL_INPUT_TOO_LARGE", "the tool input exceeds what the caller reads, so it was not classified"
+	}
+	if opts.TrustMaterial {
+		verdict, reasonCode, reason = contracts.WorkstationVerdictDeny, "TRUST_MATERIAL_ACCESS_DENIED", "HELM signing and trust material is closed to agent tools"
+	}
 	persistedReq := persistedDecisionRequest(req, opts)
 	receipt := &contracts.WorkstationPolicyDecisionReceipt{
 		ReceiptVersion: contracts.AgentRunReceiptVersion,

@@ -38,8 +38,39 @@ data dir, Kernel URL, draft policy path, and uninstall command.
 ## Verify a Hook Decision
 
 The installed matcher routes `Bash`, `Edit`, `Write`, `MultiEdit`,
-`NotebookEdit`, and `mcp__*` calls to the hook. Every classified PreToolUse
-decision, whether allowed or denied, writes a signed receipt under:
+`NotebookEdit`, `Read`, `Grep`, `Glob`, `WebFetch`, `ReadMcpResourceTool`,
+`ListMcpResourcesTool` and `mcp__*` calls to the hook. An install made by an
+earlier release keeps its narrower matcher until
+`helm-ai-kernel setup claude-code --yes` is run again; `setup status` reports
+such a matcher as outdated (`hook_matcher_outdated`, with the tools no entry
+that holds the HELM hook routes in `hook_matcher_missing_tools`), prints the
+command that upgrades that install (`hook_matcher_upgrade_command`, with its
+`--scope`, `--workspace` and `--data-dir`) and exits non-zero. It reads every
+entry that holds the HELM hook (`hook_matchers`), and reads a matcher as
+Claude Code does: one made only of letters, digits, `_` and `|` is a list of
+exact tool names, so `Edit|Write` does not route `MultiEdit`; any other
+matcher is a regular expression that may match anywhere in the name. When the
+HELM hook shares a hook entry with another hook, setup leaves that entry's
+matcher alone and prints a warning that names the file and the matcher; for
+such an entry `setup status` prints that warning instead of an upgrade
+command, since running setup would not change it.
+
+`Grep` and `Glob` globs are decided in the grammar that
+[workstation governance](../reference/workstation-governance.md) describes. A
+glob outside it (a bracket class, a backslash, a leading `/`, `!`) is refused
+when the search starts at, inside or above `~/.helm-ai-kernel`, and `*.pub` is
+refused wherever the search runs because it names the hook's trusted public
+key; search for a public key by its name instead.
+
+These tools are not routed, so the hook never sees them:
+
+- `WebSearch`: it names no URL, so the hook could only refuse it.
+- `Task`: it starts a subagent; the subagent's own tool calls reach the hook.
+- `TodoWrite`: it edits the client's own task list.
+
+A tool you add to the matcher yourself is decided as an unclassified tool
+call, which the default profile denies. Every classified PreToolUse decision,
+whether allowed or denied, writes a signed receipt under:
 
 ```text
 ~/.helm-ai-kernel/receipts/hooks/

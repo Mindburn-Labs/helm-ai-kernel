@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	resyntax "regexp/syntax"
 	"strconv"
 	"strings"
 
@@ -130,6 +131,23 @@ type setupSummary struct {
 	PlannedActions    []string `json:"planned_actions"`
 	RetainedData      bool     `json:"retained_data,omitempty"`
 	RecoveryRequired  bool     `json:"recovery_required,omitempty"`
+	// HookMatcher is the matcher of the installed hook entry, and
+	// HookMatcherExpected the one this release installs. The matcher is
+	// outdated when it does not route a tool this release routes to the
+	// hook; HookMatcherMissingTools names them.
+	// HookMatchers lists the matcher of every entry that holds the HELM
+	// hook, HookMatcher being the first; a tool reaches the hook when any of
+	// them routes it. HookMatcherUpgradeCommand is the setup command that
+	// upgrades this install.
+	HookMatcher               string   `json:"hook_matcher,omitempty"`
+	HookMatchers              []string `json:"hook_matchers,omitempty"`
+	HookMatcherExpected       string   `json:"hook_matcher_expected,omitempty"`
+	HookMatcherOutdated       bool     `json:"hook_matcher_outdated,omitempty"`
+	HookMatcherMissingTools   []string `json:"hook_matcher_missing_tools,omitempty"`
+	HookMatcherUpgradeCommand string   `json:"hook_matcher_upgrade_command,omitempty"`
+	// Warnings are what setup could not do for the user, such as a shared
+	// hook entry whose matcher it left alone.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type setupRecoveryMarker struct {
@@ -672,6 +690,10 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 	summary.HookInstalled = true
 	summary.ClientDetected = true
 	summary.ClientState = "configured"
+	summary.Warnings = setupSharedHookEntryWarnings(opts, summary.HookConfigPath, summary.BinaryPath)
+	for _, warning := range summary.Warnings {
+		fmt.Fprintf(stderr, "setup: warning: %s\n", warning)
+	}
 	if opts.Target == "codex" && opts.Scope == "project" {
 		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
 		if summary.CodexTrustPending {
@@ -761,6 +783,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
 	observeSetupClientState(opts, &summary)
+	observeSetupHookMatcher(opts, &summary)
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
@@ -916,6 +939,7 @@ func inspectSetupTarget(opts setupOptions, target string) (setupSummary, error) 
 	summary.MCPInstalled = setupMCPInstalled(normalized, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(normalized, summary.HookConfigPath, summary.BinaryPath)
 	observeSetupClientState(normalized, &summary)
+	observeSetupHookMatcher(normalized, &summary)
 	assignSetupLifecycle(&summary)
 	return summary, nil
 }
@@ -1472,15 +1496,21 @@ func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) erro
 			}
 		}
 	}
-	var profilePath string
+	var profilePath, matchedCommand string
 	matched := false
 	for _, command := range commands {
 		if hookCommandKey(command) != expectedKey {
 			continue
 		}
 		if matched {
+			// The same command in another entry names the same profile;
+			// only commands that differ leave the profile in doubt.
+			if command == matchedCommand {
+				continue
+			}
 			return fmt.Errorf("ambiguous matching installed hook commands")
 		}
+		matchedCommand = command
 		profile, _, custom, err := installedHookPolicyProfile(command)
 		if err != nil {
 			return fmt.Errorf("parse matching installed hook command: %w", err)
@@ -1728,7 +1758,7 @@ func setupNextAction(summary setupSummary) string {
 }
 
 func setupStatusHealthy(summary setupSummary) bool {
-	if !summary.HookInstalled || !summary.ClientDetected || !summary.NativeLoaded || summary.CodexTrustPending {
+	if !summary.HookInstalled || !summary.ClientDetected || !summary.NativeLoaded || summary.CodexTrustPending || summary.HookMatcherOutdated {
 		return false
 	}
 	if setupIncludesMCP(summary.Target) && !summary.MCPInstalled {
@@ -2141,6 +2171,33 @@ func setupUninstallCommand(opts setupOptions) string {
 	)
 }
 
+// setupUpgradeCommand is the setup command that installs this release's hook
+// over the install opts describes, with the same scope, workspace, data
+// directory and policy profile.
+func setupUpgradeCommand(opts setupOptions) string {
+	workspace := ""
+	if opts.Scope == "project" {
+		workspace = " --workspace " + shellQuote(opts.Workspace)
+	}
+	signingSeedFile := ""
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
+	return fmt.Sprintf(
+		"helm-ai-kernel setup %s --scope %s%s --yes --data-dir %s%s%s",
+		opts.Target,
+		opts.Scope,
+		workspace,
+		shellQuote(opts.DataDir),
+		signingSeedFile,
+		policyProfile,
+	)
+}
+
 func setupRecoveryCommand(opts setupOptions) string {
 	workspace := ""
 	if opts.Scope == "project" {
@@ -2200,6 +2257,17 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	}
 	if summary.ClientState != "" {
 		fmt.Fprintf(stdout, "  Client state:  %s (lifecycle=%s detected=%v native_loaded=%v)\n", summary.ClientState, summary.Lifecycle, summary.ClientDetected, summary.NativeLoaded)
+	}
+	if summary.HookMatcherOutdated {
+		fix := "Run " + summary.HookMatcherUpgradeCommand + " to upgrade it."
+		if summary.HookMatcherUpgradeCommand == "" {
+			fix = "setup does not rewrite an entry it shares with other hooks; edit it as the warning says."
+		}
+		fmt.Fprintf(stdout, "  Hook matcher:  outdated: %s does not route %s; this release installs %s. %s\n",
+			strings.Join(summary.HookMatchers, " and "), strings.Join(summary.HookMatcherMissingTools, ", "), summary.HookMatcherExpected, fix)
+	}
+	for _, warning := range summary.Warnings {
+		fmt.Fprintf(stdout, "  Warning:       %s\n", warning)
 	}
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
@@ -2441,17 +2509,265 @@ func setupHookConfigPath(opts setupOptions) string {
 	}
 }
 
+// setupHookMatcher lists the tools a client sends to the hook. A tool left out
+// is never seen. The list holds the client's tools that run a command or
+// code, write a file, read one, fetch a URL or call an MCP server, as far as
+// the hook has a class for them. The tools left out are named in CTL-035
+// bypass_assumptions and in docs/INTEGRATIONS/<client>.md:
+//   - Claude Code: WebSearch (it names no URL, so the hook could only refuse
+//     it), Task (a subagent, whose own tool calls reach the hook) and
+//     TodoWrite (the client's own task list).
+//   - Hermes: web_search, skill_manage, memory, cronjob_manage and
+//     process_manage, which the hook has no class for.
 func setupHookMatcher(target string) string {
 	switch target {
 	case "codex":
 		return "^(Bash|apply_patch|mcp__.*)$"
 	case "hermes":
-		return "^(terminal|write_file|patch|mcp_.*)$"
+		return "^(terminal|write_file|patch|read_file|search_files|web_extract|execute_code|browser_navigate|vision_analyze|mcp_.*)$"
 	case "deepseek":
-		return "^(bash|write|edit|mcp_.*)$"
+		return "^(bash|write|edit|read|grep|glob|webfetch|mcp_.*)$"
 	default:
-		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*)$"
+		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool|mcp__.*)$"
 	}
+}
+
+// setupHookMatcherTools lists concrete tools and the MCP family pattern.
+// A single example name cannot establish coverage of that family.
+func setupHookMatcherTools(target string) []string {
+	body := strings.TrimSuffix(strings.TrimPrefix(setupHookMatcher(target), "^("), ")$")
+	return strings.Split(body, "|")
+}
+
+// setupHookMatcherMissing lists the tools this release routes to the hook
+// that matcher does not route.
+func setupHookMatcherMissing(target, matcher string) []string {
+	return setupHookMatchersMissing(target, []string{matcher})
+}
+
+// setupHookMatchersMissing lists the tools this release routes to the hook
+// that none of matchers routes: a tool reaches the hook when any entry that
+// holds it routes the tool.
+func setupHookMatchersMissing(target string, matchers []string) []string {
+	var missing []string
+	for _, tool := range setupHookMatcherTools(target) {
+		routed := false
+		for _, matcher := range matchers {
+			if setupMatcherCoversTool(target, matcher, tool) {
+				routed = true
+				break
+			}
+		}
+		if !routed {
+			missing = append(missing, tool)
+		}
+	}
+	return missing
+}
+
+// setupMatcherCoversTool proves family coverage only for simple unrestricted
+// prefix branches. More complex custom expressions remain unverified; sampling
+// any finite set of MCP names cannot prove that future names reach the hook.
+func setupMatcherCoversTool(target, matcher, tool string) bool {
+	if tool != "mcp__.*" && tool != "mcp_.*" {
+		return setupMatcherRoutes(target, matcher, tool)
+	}
+	if matcher == "" || matcher == "*" {
+		return true
+	}
+	if target == "claude-code" && claudePlainMatcher.MatchString(matcher) {
+		return false
+	}
+	re, err := resyntax.Parse(matcher, resyntax.Perl)
+	return err == nil && setupRegexCoversMCP(re, strings.TrimSuffix(tool, ".*"), false, false)
+}
+
+func setupRegexCoversMCP(re *resyntax.Regexp, prefix string, start, end bool) bool {
+	switch re.Op {
+	case resyntax.OpCapture:
+		return setupRegexCoversMCP(re.Sub[0], prefix, start, end)
+	case resyntax.OpAlternate:
+		for _, branch := range re.Sub {
+			if setupRegexCoversMCP(branch, prefix, start, end) {
+				return true
+			}
+		}
+	case resyntax.OpConcat:
+		parts := re.Sub
+		if parts[0].Op == resyntax.OpBeginText || parts[0].Op == resyntax.OpBeginLine {
+			start, parts = true, parts[1:]
+		}
+		if len(parts) > 0 && (parts[len(parts)-1].Op == resyntax.OpEndText || parts[len(parts)-1].Op == resyntax.OpEndLine) {
+			end, parts = true, parts[:len(parts)-1]
+		}
+		if len(parts) == 1 {
+			return setupRegexCoversMCP(parts[0], prefix, start, end)
+		}
+		if len(parts) == 2 && parts[0].Op == resyntax.OpLiteral && parts[1].Op == resyntax.OpStar {
+			wildcard := parts[1].Sub[0].Op
+			return strings.HasPrefix(prefix, string(parts[0].Rune)) && (wildcard == resyntax.OpAnyChar || wildcard == resyntax.OpAnyCharNotNL)
+		}
+	case resyntax.OpLiteral:
+		literal := string(re.Rune)
+		return !end && ((!start && strings.Contains(prefix, literal)) || strings.HasPrefix(prefix, literal))
+	case resyntax.OpStar:
+		return re.Sub[0].Op == resyntax.OpAnyChar || re.Sub[0].Op == resyntax.OpAnyCharNotNL
+	case resyntax.OpEmptyMatch:
+		return !end
+	}
+	return false
+}
+
+// claudePlainMatcher is the matcher Claude Code reads as tool names rather
+// than as a regular expression: letters, digits, "_" and "|" only.
+var claudePlainMatcher = regexp.MustCompile(`^[A-Za-z0-9_|]+$`)
+
+// setupMatcherRoutes reports whether a client sends tool to a hook entry with
+// this matcher. An empty matcher or "*" routes every tool. Claude Code reads
+// a matcher of plain names as a list of exact names separated by "|" and any
+// other matcher as a regular expression that may match anywhere in the name,
+// and setup reads a Claude Code matcher the same way. The matchers of the
+// other clients are read as regular expressions that may match anywhere in
+// the name; a client that anchors them, or reads a plain name exactly,
+// routes no more than setup reports, and may route less. A matcher that does
+// not compile routes no tool.
+func setupMatcherRoutes(target, matcher, tool string) bool {
+	if matcher == "" || matcher == "*" {
+		return true
+	}
+	if target == "claude-code" && claudePlainMatcher.MatchString(matcher) {
+		for _, name := range strings.Split(matcher, "|") {
+			if name == tool {
+				return true
+			}
+		}
+		return false
+	}
+	compiled, err := regexp.Compile(matcher)
+	return err == nil && compiled.MatchString(tool)
+}
+
+// setupHookEntry is one hook entry that holds the HELM hook: its matcher and
+// whether it also holds other hooks.
+type setupHookEntry struct {
+	matcher string
+	shared  bool
+}
+
+// setupInstalledHookEntries reads the client's hook configuration for the
+// entries that hold the HELM hook.
+func setupInstalledHookEntries(opts setupOptions, path, bin string) []setupHookEntry {
+	readPath := path
+	if root := setupPrivateFileRoot(opts); root != "" {
+		resolved, err := privateFileWritePath(path, root)
+		if err != nil {
+			return nil
+		}
+		readPath = resolved
+	}
+	key := hookCommandKey(setupHookCommand(opts, bin))
+	var entries []setupHookEntry
+	if opts.Target == "hermes" {
+		root, err := readYAMLObject(readPath)
+		if err != nil {
+			return nil
+		}
+		for _, item := range hermesPreToolCallEntries(hermesHooksMap(root)) {
+			if obj, ok := item.(map[string]any); ok && hookCommandKey(yamlString(obj["command"])) == key {
+				entries = append(entries, setupHookEntry{matcher: yamlString(obj["matcher"])})
+			}
+		}
+		return entries
+	}
+	root, err := readJSONObject(readPath)
+	if err != nil {
+		return nil
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range arrayValue(hooks, "PreToolUse") {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hookItems, _ := obj["hooks"].([]any)
+		for _, h := range hookItems {
+			if hookCommandKey(hookCommandFromAny(h)) == key {
+				matcher, _ := obj["matcher"].(string)
+				entries = append(entries, setupHookEntry{matcher: matcher, shared: len(hookItems) > 1})
+				break
+			}
+		}
+	}
+	return entries
+}
+
+// observeSetupHookMatcher reports the matcher of an installed hook and
+// whether it routes every tool this release routes. An outdated matcher
+// leaves calls the hook would decide unseen, so the install is degraded.
+func observeSetupHookMatcher(opts setupOptions, summary *setupSummary) {
+	if !summary.HookInstalled {
+		return
+	}
+	entries := setupInstalledHookEntries(opts, summary.HookConfigPath, summary.BinaryPath)
+	if len(entries) == 0 {
+		return
+	}
+	matchers := setupHookEntryMatchers(entries)
+	summary.HookMatcher = matchers[0]
+	summary.HookMatchers = matchers
+	summary.HookMatcherExpected = setupHookMatcher(opts.Target)
+	summary.HookMatcherMissingTools = setupHookMatchersMissing(opts.Target, matchers)
+	summary.HookMatcherOutdated = len(summary.HookMatcherMissingTools) > 0
+	if !summary.HookMatcherOutdated {
+		return
+	}
+	summary.ClientState = "degraded"
+	summary.Lifecycle = ""
+	// setup rewrites the matcher of an entry that holds only the HELM hook.
+	// An entry it shares with other hooks is the user's own, so for one of
+	// those the fix is an edit, which the warning names.
+	for _, entry := range entries {
+		if !entry.shared {
+			summary.HookMatcherUpgradeCommand = setupUpgradeCommand(opts)
+			return
+		}
+	}
+	summary.Warnings = append(summary.Warnings, setupSharedHookEntryWarnings(opts, summary.HookConfigPath, summary.BinaryPath)...)
+}
+
+func setupHookEntryMatchers(entries []setupHookEntry) []string {
+	matchers := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		matchers = append(matchers, entry.matcher)
+	}
+	return matchers
+}
+
+// setupSharedHookEntryWarnings names each hook entry that holds the HELM
+// hook beside other hooks and does not route every tool this release routes.
+// setup does not rewrite such an entry: its matcher also decides which calls
+// reach the user's other hooks.
+func setupSharedHookEntryWarnings(opts setupOptions, path, bin string) []string {
+	entries := setupInstalledHookEntries(opts, path, bin)
+	// A tool another entry routes to the hook reaches it anyway, so only the
+	// tools no entry routes are named.
+	missing := setupHookMatchersMissing(opts.Target, setupHookEntryMatchers(entries))
+	if len(missing) == 0 {
+		return nil
+	}
+	var warnings []string
+	for _, entry := range entries {
+		if !entry.shared || len(setupHookMatcherMissing(opts.Target, entry.matcher)) == 0 {
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf(
+			"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; coverage of %s is missing or unverified. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
+			path, entry.matcher, strings.Join(missing, ", "), setupHookMatcher(opts.Target)))
+	}
+	return warnings
 }
 
 func setupHookCommand(opts setupOptions, bin string) string {
@@ -2499,6 +2815,12 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 				}
 				if hookCommandKey(hookCommandFromAny(h)) == key {
 					hookObj["command"] = command
+					// An entry that holds only this hook takes the current
+					// matcher too, so a re-install routes the tools a newer
+					// release classifies. A shared entry is the user's own.
+					if len(hookItems) == 1 {
+						obj["matcher"] = matcher
+					}
 				}
 			}
 		}

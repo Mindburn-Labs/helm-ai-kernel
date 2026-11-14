@@ -26,11 +26,12 @@ brew update
 brew upgrade mindburn-labs/tap/helm-ai-kernel
 ```
 
-From the current source checkout:
+From the released source tag:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
+git checkout v0.12.0
 mise trust
 mise install
 mise exec -- make build
@@ -44,9 +45,12 @@ native Go toolchain instead.
 
 ## Get An ALLOW, A DENY And Verifiable Receipts
 
-From the source checkout, with Python 3.10 or newer installed:
+This walkthrough belongs to current source and is not in the released
+`v0.12.0` tag. With Python 3.10 or newer installed, switch the source checkout
+to `main` before running it:
 
 ```bash
+git switch main
 mise exec -- make first-use
 ```
 

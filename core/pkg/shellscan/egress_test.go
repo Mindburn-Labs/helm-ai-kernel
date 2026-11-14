@@ -420,3 +420,26 @@ func TestClassifyPreservesExecutableClientRefusals(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyRefusesCurlEnginesAndWgetFTPSFallback(t *testing.T) {
+	for _, command := range []string{
+		"curl --engine /tmp/engine.so https://allowed.example/",
+		"curl --engine dynamic --engine /tmp/engine.so https://allowed.example/",
+		"curl --engine /tmp/engine.so --help",
+		"wget --max-redirect=0 --no-hsts --ftps-fallback-to-ftp ftps://allowed.example/file",
+		"wget --ftps-fallback-to-ftp --max-redirect=0 --no-hsts ftps://allowed.example/file",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, tc := range []struct{ command, target string }{
+		{"curl https://allowed.example/", "https://allowed.example"},
+		{"wget --max-redirect=0 --no-hsts ftps://allowed.example/file", "ftps://allowed.example"},
+		{"wget --max-redirect=0 --no-hsts ftp://allowed.example/file", "ftp://allowed.example"},
+	} {
+		if got := networkTargets(Classify(tc.command)); !sameTargets(got, []string{tc.target}) {
+			t.Errorf("%s: got %q", tc.command, got)
+		}
+	}
+}

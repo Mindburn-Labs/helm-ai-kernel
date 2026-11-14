@@ -250,6 +250,7 @@ var opaqueReasons = map[string]string{
 	"curl abstract-unix-socket": "--abstract-unix-socket connects through a local socket",
 	"curl dns-servers":          "--dns-servers sends lookups to other resolvers",
 	"curl hsts":                 "--hsts lets cached or learned rules change the protocol",
+	"curl engine":               "--engine can load executable code locally",
 	"curl alt-svc":              "--alt-svc lets a cache file redirect the connection",
 	"curl no-ftp-skip-pasv-ip":  "--no-ftp-skip-pasv-ip accepts a server-selected data destination",
 	"ssh R":                     "-R lets a remote peer trigger additional local connections",
@@ -259,6 +260,7 @@ var opaqueReasons = map[string]string{
 	"wget execute":              "--execute runs a wgetrc command that can set a proxy",
 	"wget input-file":           "--input-file reads URLs from a file",
 	"wget hsts-file":            "--hsts-file lets cached rules change the protocol",
+	"wget ftps-fallback-to-ftp": "--ftps-fallback-to-ftp can downgrade the transfer to plaintext FTP",
 	"wget config":               "--config reads settings from a file",
 	"wget span-hosts":           "--span-hosts follows links to other hosts",
 	"wget input-metalink":       "--input-metalink takes mirrors from a file",
@@ -325,7 +327,7 @@ var curlSpec = cliSpec{
 		"connect-to": roleConnectTo, "resolve": roleResolve,
 		"config": roleOpaque, "unix-socket": roleOpaque, "abstract-unix-socket": roleOpaque,
 		"dns-servers": roleOpaque, "alt-svc": roleOpaque, "hsts": roleOpaque, "ftp-port": roleOpaque,
-		"proto-default": roleOpaque, "variable": roleOpaque,
+		"proto-default": roleOpaque, "variable": roleOpaque, "engine": roleOpaque,
 	}),
 	flag: withRoles(names(`
 		anyauth append basic ca-native cert-status compressed compressed-ssh create-dirs crlf
@@ -545,6 +547,7 @@ var wgetSpec = cliSpec{
 	`), map[string]optRole{
 		"span-hosts": roleOpaque, "metalink-over-http": roleOpaque,
 		"recursive": roleOpaque, "mirror": roleOpaque, "page-requisites": roleOpaque,
+		"ftps-fallback-to-ftp": roleOpaque,
 	}),
 }
 

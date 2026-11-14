@@ -82,7 +82,7 @@ func (p guardedPath) forms() []string {
 // home leaves those spellings to the text match.
 func NewPathGuard(home string) *PathGuard {
 	guard := &PathGuard{}
-	if strings.TrimSpace(home) != "" {
+	if home != "" {
 		guard.home = cleanSlash(home)
 	}
 	return guard
@@ -116,14 +116,13 @@ func (g *PathGuard) ProtectContainer(dir string) {
 // path, for names specific enough that no unrelated file carries them. A bare
 // mention, as in a search for the name, is not a path and is left alone.
 func (g *PathGuard) ProtectName(name string) {
-	if name = strings.ToLower(strings.TrimSpace(name)); name != "" {
+	if name = strings.ToLower(name); name != "" {
 		g.needles = append(g.needles, "/"+name)
 		g.names = append(g.names, name)
 	}
 }
 
 func (g *PathGuard) locate(location string) (guardedPath, bool) {
-	location = strings.TrimSpace(location)
 	if location == "" {
 		return guardedPath{}, false
 	}
@@ -199,10 +198,11 @@ func pathNameByte(b byte) bool {
 }
 
 // Match reports whether target, a path as a tool would receive it, refers to
-// protected material. A relative target is resolved against cwd; with no cwd
+// protected material. Whitespace is part of a filesystem name, so target and
+// cwd are never trimmed. A relative target is resolved against cwd; with no cwd
 // only the text match applies.
 func (g *PathGuard) Match(target, cwd string) (string, bool) {
-	return g.matchPattern(globEscape(slashPath(strings.TrimSpace(target))), -1, cwd, false)
+	return g.matchPattern(globEscape(slashPath(target)), -1, cwd, false)
 }
 
 // matchPattern takes a path in shell glob syntax (a backslash quotes the next
@@ -261,7 +261,7 @@ func (g *PathGuard) absolute(target, cwd string) (string, bool) {
 	if path.IsAbs(target) {
 		return target, true
 	}
-	if cwd = strings.TrimSpace(cwd); cwd == "" || !path.IsAbs(slashPath(cwd)) {
+	if cwd == "" || !path.IsAbs(slashPath(cwd)) {
 		return "", false
 	}
 	return globEscape(strings.TrimSuffix(slashPath(cwd), "/")) + "/" + target, true
@@ -635,7 +635,7 @@ type searchGlob struct {
 // home (~, $HOME). Any other root is unresolvable and taken as "/".
 func NewSearchCall(root, home string) *SearchCall {
 	s := &SearchCall{home: home}
-	s.root = s.resolveRoot(strings.TrimSpace(root))
+	s.root = s.resolveRoot(root)
 	return s
 }
 

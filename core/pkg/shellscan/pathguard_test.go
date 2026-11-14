@@ -1010,3 +1010,65 @@ func TestPathGuardResolvesExtractedOptionPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestPathGuardPreservesFilesystemWhitespace(t *testing.T) {
+	f := newGuardFixture(t)
+	work := filepath.Join(t.TempDir(), "workspace ")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ordinary := filepath.Join(work, "input")
+	if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"input ", " input", "input\t", "input\n", "input\u00a0"} {
+		alias := filepath.Join(work, name)
+		if err := os.Symlink(f.seed, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, target := range []string{alias, name} {
+			if _, ok := f.guard.Match(target, work); !ok {
+				t.Errorf("direct %q missed", target)
+			}
+			for mode, result := range map[string]Result{
+				"shell": ClassifyAt("cat '"+target+"'", work, WithPathGuard(f.guard)),
+				"argv":  ClassifyArgvAt([]string{"cat", target}, work, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" {
+					t.Errorf("%s %q missed", mode, target)
+				}
+			}
+		}
+	}
+	escaped := filepath.ToSlash(work) + "/input\\ "
+	escaped = strings.ReplaceAll(escaped, "workspace ", "workspace\\ ")
+	if result := ClassifyAt("cat "+escaped, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+		t.Errorf("escaped terminal space missed: %q", escaped)
+	}
+	if _, ok := f.guard.Match(ordinary, work); ok {
+		t.Fatal("ordinary trimmed sibling incorrectly protected")
+	}
+	// Registration and search roots must preserve the same filesystem spelling.
+	custom := filepath.Join(work, "configuration ")
+	if err := os.WriteFile(custom, []byte("protected"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guard := NewPathGuard(work)
+	guard.ProtectFile(custom)
+	alias := filepath.Join(work, "configured-alias")
+	if err := os.Symlink(custom, alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := guard.Match(alias, work); !ok {
+		t.Fatal("whitespace in registered file lost")
+	}
+	dirAlias := filepath.Join(work, "search ")
+	if err := os.Symlink(f.keys, dirAlias); err != nil {
+		t.Fatal(err)
+	}
+	search := NewSearchCall(dirAlias, f.home)
+	search.AddPathPattern("signer.seed")
+	if _, _, ok := f.guard.MatchSearch(search); !ok {
+		t.Fatal("whitespace in search root lost")
+	}
+}

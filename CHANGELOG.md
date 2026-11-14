@@ -156,6 +156,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
+- Curl crypto-engine overrides and wget's FTPS-to-FTP fallback are refused as
+  unresolved effects. Trust-material checks preserve significant whitespace in
+  paths, working directories and configured protected paths before resolution.
 - OpenSSL help retains earlier opaque-option refusals, and scp's direct SFTP
   program override is refused. The trust-material guard extracts recognized
   network-client option values before resolving symlinks, including attached

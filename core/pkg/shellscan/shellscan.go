@@ -256,19 +256,18 @@ func Classify(raw string) Result {
 // cwd. Relative paths written and later executed in the same command are
 // normalized against cwd before their generated-source relationship is tested.
 func ClassifyAt(raw, cwd string, opts ...Option) Result {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
+	if strings.TrimSpace(raw) == "" {
 		return Result{ParseOK: true}
 	}
 	c := newCollector(cwd, opts)
 	// Fallback layer: legacy substring needles on the raw text.
-	if needle := legacyNeedleHit(trimmed); needle != "" {
+	if needle := legacyNeedleHit(raw); needle != "" {
 		c.decide(fmt.Sprintf("legacy needle %q", needle))
 	}
 	// dotglob and zsh's globdots let a wildcard match a leading dot.
-	c.dotGlob = strings.Contains(trimmed, "dotglob") || strings.Contains(strings.ToLower(trimmed), "globdots")
-	c.guardText(trimmed)
-	c.classifyString(trimmed, "", 0)
+	c.dotGlob = strings.Contains(raw, "dotglob") || strings.Contains(strings.ToLower(raw), "globdots")
+	c.guardText(raw)
+	c.classifyString(raw, "", 0)
 	return c.result()
 }
 
@@ -298,7 +297,6 @@ func ClassifyArgvAt(argv []string, cwd string, opts ...Option) Result {
 }
 
 func newCollector(cwd string, opts []Option) *collector {
-	cwd = strings.TrimSpace(cwd)
 	if cwd != "" {
 		cwd = path.Clean(cwd)
 	}

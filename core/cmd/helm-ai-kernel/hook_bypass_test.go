@@ -809,3 +809,77 @@ func TestHookGuardsExtractedUploadPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestHookRefusesCurlEnginesAndWgetFTPSFallback(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Operate.Permissions = []string{"network.egress"}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{{Host: "allowed.example", Protocol: "https"}, {Host: "allowed.example", Protocol: "ftps"}}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{"curl --engine /tmp/engine.so https://allowed.example/", true},
+		{"curl --engine /tmp/engine.so --help", true},
+		{"wget --max-redirect=0 --no-hsts --ftps-fallback-to-ftp ftps://allowed.example/file", true},
+		{"curl https://allowed.example/", false},
+		{"wget --max-redirect=0 --no-hsts ftps://allowed.example/file", false},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
+			if denied != tc.denied || len(receipts) == 0 {
+				t.Fatalf("denied=%v receipts=%s want denied=%v", denied, describeReceipts(receipts), tc.denied)
+			}
+			for _, receipt := range receipts {
+				if tc.denied && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "EGRESS_DESTINATION_UNDETERMINED") {
+					t.Errorf("override not refused: %s", describeReceipts(receipts))
+				}
+				if !tc.denied && receipt.Verdict != contracts.WorkstationVerdictAllow {
+					t.Errorf("ordinary counterpart refused: %s", describeReceipts(receipts))
+				}
+			}
+		})
+	}
+}
+
+func TestHookGuardsWhitespacePaths(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	for _, name := range []string{"input ", " input", "input\t", "input\n", "input\u00a0"} {
+		alias := filepath.Join(env.home, name)
+		if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, target := range []string{alias, name} {
+			denied, _, receipts := env.runAt(t, env.home, "Read", map[string]any{"file_path": target})
+			if !denied || len(receipts) == 0 {
+				t.Errorf("Read %q: denied=%v receipts=%s", target, denied, describeReceipts(receipts))
+				continue
+			}
+			for _, receipt := range receipts {
+				if receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "TRUST_MATERIAL_ACCESS_DENIED" {
+					t.Errorf("path guard missed %q: %s", target, describeReceipts(receipts))
+				}
+			}
+		}
+	}
+	for _, name := range []string{"input", "ordinary ", " ordinary"} {
+		target := filepath.Join(env.home, name)
+		if err := os.WriteFile(target, []byte("public"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if denied, _, receipts := env.runAt(t, env.home, "Read", map[string]any{"file_path": target}); denied {
+			t.Errorf("ordinary %q refused: %s", target, describeReceipts(receipts))
+		}
+	}
+}

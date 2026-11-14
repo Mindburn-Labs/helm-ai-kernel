@@ -22,9 +22,15 @@ make quality-list
 make quality-explain CHECK=json-schemas
 ```
 
-CI runs `make check` as four parallel jobs. Each sets `CHECK_SHARD=<i>/4` and
-runs one part of the `merge` profile, balanced by the `seconds` recorded per
-gate in the registry; the required `ci / gate` check needs all four. Locally,
+On a pull request and in the merge queue, CI runs `make check` as four parallel
+jobs. Each sets `CHECK_SHARD=<i>/4` and runs one part of the `merge` profile,
+balanced by the `seconds` recorded per gate in the registry; the required
+`ci / gate` check needs all four. `make check` first runs
+`scripts/ci/gate_base_check.py`, which fails a change that drops a gate the
+base commit's `merge` profile runs unless `scripts/ci/gate-removals.json` names
+it with a reason. A push to `main` is one job: when a successful merge-group
+run gated that exact commit, the job reports that run and does not run the
+profile again; otherwise it runs the whole profile. Locally,
 with `CHECK_SHARD` unset, `make check` runs every gate. To see or reproduce a
 part:
 
@@ -81,8 +87,8 @@ marker; pass `-strict-any-edit` to require one on any modification of the file.
 `concept-gate` exits 2 on an empty range: a range with no commits inspects
 nothing, so it is not a pass. It blocks in CI through the required
 `Quality PR profile` job, which runs it over the pull request's own commits
-(`base..head`) and, on a push to `main`, over the pushed commits
-(`before..after`). The nightly profile re-inspects the last 50 commits on
+(`base..head`) and, on a push to `main` that no merge group gated, over the
+pushed commits (`before..after`). The nightly profile re-inspects the last 50 commits on
 `main` (`CONCEPT_RANGE=HEAD~50..HEAD`).
 
 `inv-check` runs in the `nightly` profile, which is strict: a failure turns

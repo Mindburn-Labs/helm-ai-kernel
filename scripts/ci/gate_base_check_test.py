@@ -47,14 +47,16 @@ class GateBaseCheckTest(unittest.TestCase):
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
-    def run_check(self, event: dict | None = None, event_name: str = "push", ci: bool = False) -> subprocess.CompletedProcess[str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("GITHUB_", "GATE_BASE_CHECK_"))}
+    def run_check(self, event: dict | None = None, event_name: str = "push", ci: bool = False,
+                  extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GITHUB_", "GATE_BASE_CHECK_", "HELM_GATED_"))}
+        env.update(extra or {})
         if ci:
             env["GITHUB_ACTIONS"] = "true"
         if event is not None:
             path = self.tmp.parent / f"{self.tmp.name}-event.json"
             path.write_text(json.dumps(event), encoding="utf-8")
-            self.addCleanup(path.unlink)
+            self.addCleanup(path.unlink, missing_ok=True)
             env["GITHUB_EVENT_NAME"] = event_name
             env["GITHUB_EVENT_PATH"] = str(path)
         return subprocess.run([sys.executable, "scripts/ci/gate_base_check.py"], cwd=self.tmp, env=env,
@@ -108,8 +110,9 @@ class GateBaseCheckTest(unittest.TestCase):
         self.assertIn("merge_group.base_sha", result.stdout)
 
     def test_the_base_copy_of_the_checker_judges_the_change(self) -> None:
-        # The base carries a checker that always fails; a head copy that passes
-        # everything must not replace it.
+        # The base carries a checker that always fails; the real checker in the
+        # change hands over to it. A change that removes the hand-over itself
+        # is the documented limit and is not what this test covers.
         self.write("scripts/ci/gate_base_check.py", "import sys\nprint('base checker ran')\nsys.exit(7)\n")
         strict = self.commit("base checker")
         shutil.copy(SCRIPT, self.tmp / "scripts" / "ci" / "gate_base_check.py")
@@ -138,6 +141,24 @@ class GateBaseCheckTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("running the base commit's copy", result.stdout)
         self.assertIn("merge gate gosec", result.stdout)
+
+    def test_a_push_the_merge_group_gated_is_not_judged_again(self) -> None:
+        # One push can span several queue entries: one drops a gate with an
+        # acknowledgement, the next removes the acknowledgement. Each passed
+        # against its own base; the span must not fail on main.
+        self.write("scripts/ci/quality-gates.json", registry(["go-test", "deadcode"]))
+        head = self.commit("drop gosec")
+        gated = {"GITHUB_SHA": head, "HELM_GATED_SHA": head, "HELM_GATED_BY_RUN": "42"}
+        result = self.run_check({"before": self.base}, ci=True, extra=gated)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("merge_group CI run 42", result.stdout)
+        for other in ({"GITHUB_SHA": head, "HELM_GATED_SHA": "b" * 40, "HELM_GATED_BY_RUN": "42"},
+                      {"GITHUB_SHA": head, "HELM_GATED_SHA": head, "HELM_GATED_BY_RUN": "42; true"},
+                      {"GITHUB_SHA": head}):
+            with self.subTest(env=other):
+                self.assertEqual(self.run_check({"before": self.base}, ci=True, extra=other).returncode, 1)
+        merge_group = self.run_check({"merge_group": {"base_sha": self.base}}, event_name="merge_group", ci=True, extra=gated)
+        self.assertEqual(merge_group.returncode, 1, merge_group.stdout)
 
     def test_a_local_run_without_a_base_reports_not_run(self) -> None:
         result = self.run_check()

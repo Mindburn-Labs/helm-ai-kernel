@@ -9,14 +9,21 @@ fails when a gate the base runs is missing from the change's merge profile,
 unless scripts/ci/gate-removals.json in the change names that gate with a
 reason. The removal then shows in the diff and in the check's output.
 
-It runs its own code from the base commit too: when the base carries this
-script, the base's copy judges the change, so an edit to the checker in the
-same pull request does not change the verdict on that pull request.
+When the base carries this script, the copy in the change hands over to the
+base's copy, so an edit to the rules here (what counts as a removal, how an
+acknowledgement is read) does not change the verdict on the change that makes
+it.
 
-Limit: `make check` itself comes from the change, so a change that edits the
-`check` target can still leave this check out. That edit is visible in the
-diff and carries the tier-2 label; closing it needs the check to run from the
-shared workflow, outside the change.
+Limit: the hand-over is code in the change, and so is the `check` target that
+starts this script. A change that removes either one skips the check. Both
+edits are in the diff and carry the tier-2 label, which does not hold a merge;
+closing this needs the check to run from the shared workflow, outside the
+change. A changed command of a gate that stays in the profile is reported as a
+warning, not held.
+
+A push to main whose commit a merge group already gated is not judged again:
+that run checked each queued change against its own base, and the push may span
+several of them.
 
 Base commit:
   merge_group   merge_group.base_sha from the event payload
@@ -163,7 +170,19 @@ def judge(base_text: str, head_text: str, removals_text: str | None) -> tuple[li
     return failures, notes
 
 
+def gated_by_merge_group() -> str:
+    """The merge_group CI run scripts/ci/ci_setup.sh recorded for this pushed commit, or ""."""
+    run = os.environ.get("HELM_GATED_BY_RUN", "")
+    sha = os.environ.get("HELM_GATED_SHA", "")
+    if os.environ.get("GITHUB_EVENT_NAME") == "push" and sha and sha == os.environ.get("GITHUB_SHA") and run.isdigit():
+        return run
+    return ""
+
+
 def main() -> int:
+    if run := gated_by_merge_group():
+        print(f"gate base check: not run again; merge_group CI run {run} checked this commit against its base")
+        return 0
     base, how = resolve_base()
     if base is not None and git("cat-file", "-e", f"{base}^{{commit}}").returncode != 0:
         # A shallow or partial checkout must not read as "the base has no gate".
@@ -180,7 +199,7 @@ def main() -> int:
         if base_self is not None and base_self != Path(__file__).read_text(encoding="utf-8"):
             print(f"gate base check: running the base commit's copy of {SELF}")
             env = dict(os.environ, **{FROM_BASE_ENV: "1", ROOT_ENV: str(ROOT)})
-            return subprocess.run([sys.executable, "-", *sys.argv[1:]], input=base_self, text=True,
+            return subprocess.run([sys.executable, "-I", "-", *sys.argv[1:]], input=base_self, text=True,
                                   cwd=ROOT, env=env).returncode
 
     base_text = show(base, REGISTRY)

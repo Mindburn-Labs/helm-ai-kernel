@@ -25,7 +25,12 @@ on:
       - 'install.sh'
       - 'Dockerfile*'
       - '**/Dockerfile*'
+      - '**/*.Dockerfile'
       - 'controls.yaml'
+      - 'tools/invcheck/**'
+      - 'tools/tcbcheck/**'
+      - 'tools/verify-presentation.sh'
+      - 'scripts/check_documentation_*.py'
       - '**/auth/**'
       - '**/crypto/**'
 

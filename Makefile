@@ -308,7 +308,9 @@ prepare-version:
 #
 # The merge profile comes from the change under test, so gate_base_check.py
 # first holds it to the base commit's merge profile: a gate the base runs must
-# still run, or scripts/ci/gate-removals.json must name it with a reason.
+# still run, or scripts/ci/gate-removals.json must name it with a reason. This
+# recipe and that script's hand-over to the base copy both come from the change;
+# a change that removes either skips the check and carries the tier-2 label.
 #
 # CI runs it in parallel jobs: each sets CHECK_SHARD=<i>/<N> and runs the i-th
 # part of the profile, and `ci / gate` needs all N. Unset, as it is locally,

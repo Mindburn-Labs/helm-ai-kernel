@@ -44,9 +44,11 @@ surface for the `helm-ai-kernel` project.
   and runs it in full only when there is no such run. Before the profile,
   `scripts/ci/gate_base_check.py` fails the change if it drops a gate the base
   commit's merge profile runs, unless `scripts/ci/gate-removals.json` names the
-  gate with a reason. The base commit's copy of that script judges the change.
-  `make check` itself comes from the change, so a change to the `check` target
-  can still leave the base check out; that edit carries the `tier-2` label. Its `postgres-proofs` gate
+  gate with a reason. The copy in the change hands over to the base commit's copy, so an
+  edit to the check's rules does not change the verdict on that change. The
+  hand-over and the `check` target both come from the change, so a change that
+  removes either skips the check; that edit carries the `tier-2` label, which
+  does not hold a merge. A push the merge group gated is not judged again. Its `postgres-proofs` gate
   (`make postgres-proofs`) starts a disposable PostgreSQL 16 cluster in UTC and
   runs every Postgres-gated proof in `scripts/ci/postgres-proofs.txt`, among
   them the approval lifecycle, connector release-authority and forced-RLS

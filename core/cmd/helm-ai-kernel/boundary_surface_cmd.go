@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -291,19 +293,18 @@ func runAuthzSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel authz <health|check|snapshots|get> [flags]")
 		return 2
 	}
-	if answeredSurfaceHelp("Usage: helm-ai-kernel authz <list|show|grant|revoke> [flags]", args, stdout) {
+	if answeredSurfaceHelp("Usage: helm-ai-kernel authz <health|check|snapshots|get> [flags]", args, stdout) {
 		return 0
 	}
-	registry := newLocalSurfaceRegistry()
 	switch args[0] {
 	case "health":
 		return runAuthzHealth(args[1:], stdout, stderr)
 	case "check":
-		return runAuthzCheck(args[1:], registry, stdout, stderr)
+		return runAuthzCheck(args[1:], nil, stdout, stderr)
 	case "snapshots":
-		return runAuthzSnapshots(args[1:], registry, stdout, stderr)
+		return runAuthzSnapshots(args[1:], newLocalSurfaceRegistry(), stdout, stderr)
 	case "get":
-		return runAuthzGet(args[1:], registry, stdout, stderr)
+		return runAuthzGet(args[1:], newLocalSurfaceRegistry(), stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "Unknown authz subcommand: %s\n", args[0])
 		return 2
@@ -312,28 +313,38 @@ func runAuthzSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 
 func runAuthzHealth(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("authz health", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
+	options := registerSurfaceInspectFlags(cmd, false)
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "authz health", cliui.FormatText); !ok {
+		return code
 	}
-	health := contracts.AuthzHealth{
-		Status:           "ready",
-		Resolver:         "helm-local-rebac",
-		ModelID:          "helm-local-v1",
-		RelationshipHash: relationshipHash("tenant:default", "tool:*", "can_call"),
-		CheckedAt:        time.Now().UTC(),
+	if cmd.NArg() != 0 {
+		return writeAuthzUsageError(stderr, *jsonOutput, "authz health", "unexpected positional argument")
+	}
+	started := time.Now()
+	var health contracts.AuthzHealth
+	if err := options.request(http.MethodGet, "/api/v1/authz/health", nil, nil, false, &health); err != nil {
+		return writeAuthzUnavailable(stdout, *jsonOutput, err.Error())
+	}
+	if health.Status != "ready" || health.Resolver != "helm-rebac" || health.ModelID != "helm-local-v1" ||
+		!surfaceSHA256(health.RelationshipHash) || health.Stale || health.ModelMismatch || !surfaceCheckIsCurrent(health.CheckedAt, started) {
+		return writeAuthzUnavailable(stdout, *jsonOutput, "authorization resolver did not report a current ready state")
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, health)
+		if cliui.WriteJSON(stdout, health) != nil {
+			return 1
+		}
+	} else {
+		fmt.Fprintf(stdout, "Authz health: %s resolver=%s\n", health.Status, health.Resolver)
 	}
-	fmt.Fprintf(stdout, "Authz health: %s resolver=%s\n", health.Status, health.Resolver)
 	return 0
 }
 
-func runAuthzCheck(args []string, registry *boundarypkg.SurfaceRegistry, stdout, stderr io.Writer) int {
+// Keep the registry parameter for callers of the existing command helper;
+// health/check no longer create or seal authorization decisions locally.
+func runAuthzCheck(args []string, _ *boundarypkg.SurfaceRegistry, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("authz check", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
+	options := registerSurfaceInspectFlags(cmd, false)
 	subject := cmd.String("subject", "agent:anonymous-dev", "Subject")
 	object := cmd.String("object", "tool:file_read", "Object")
 	relation := cmd.String("relation", "can_call", "Relation")
@@ -341,36 +352,78 @@ func runAuthzCheck(args []string, registry *boundarypkg.SurfaceRegistry, stdout,
 	stale := cmd.Bool("stale", false, "Mark tuple snapshot stale")
 	modelMismatch := cmd.Bool("model-mismatch", false, "Mark model mismatch")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "authz check", cliui.FormatText); !ok {
+		return code
 	}
-	snapshot := contracts.AuthzSnapshot{
-		SnapshotID:       contracts.SurfaceID("authz", *subject+"-"+*object+"-"+*relation),
-		Resolver:         "helm-local-rebac",
-		ModelID:          *modelID,
-		RelationshipHash: relationshipHash(*subject, *object, *relation),
-		SnapshotToken:    contracts.SurfaceID("tuple", *subject+"-"+*object+"-"+*relation),
-		Subject:          *subject,
-		Object:           *object,
-		Relation:         *relation,
-		Decision:         !*stale && !*modelMismatch,
-		Stale:            *stale,
-		ModelMismatch:    *modelMismatch,
-		CheckedAt:        time.Now().UTC(),
+	if cmd.NArg() != 0 || strings.TrimSpace(*subject) == "" || strings.TrimSpace(*object) == "" || strings.TrimSpace(*relation) == "" || strings.TrimSpace(*modelID) == "" {
+		return writeAuthzUsageError(stderr, *jsonOutput, "authz check", "subject, object, relation and model-id must be nonempty; positional arguments are not accepted")
 	}
-	sealed, err := registry.PutSnapshot(snapshot)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
+	request := map[string]any{
+		"resolver": "helm-rebac", "subject": *subject, "object": *object,
+		"relation": *relation, "model_id": *modelID, "stale": *stale, "model_mismatch": *modelMismatch,
+	}
+	started := time.Now()
+	var response struct {
+		contracts.AuthzSnapshot
+		Decision *bool `json:"decision"`
+	}
+	if err := options.request(http.MethodPost, "/api/v1/authz/check", nil, request, false, &response); err != nil {
+		return writeAuthzUnavailable(stdout, *jsonOutput, err.Error())
+	}
+	if response.Decision == nil {
+		return writeAuthzUnavailable(stdout, *jsonOutput, "authorization response omitted the decision")
+	}
+	snapshot := response.AuthzSnapshot
+	snapshot.Decision = *response.Decision
+	if snapshot.Validate() != nil || snapshot.Subject != *subject || snapshot.Object != *object || snapshot.Relation != *relation ||
+		snapshot.Resolver != "helm-rebac" || snapshot.ModelID != *modelID || !surfaceSHA256(snapshot.RelationshipHash) ||
+		snapshot.Stale || snapshot.ModelMismatch || *stale || *modelMismatch || !surfaceCheckIsCurrent(snapshot.CheckedAt, started) {
+		return writeAuthzUnavailable(stdout, *jsonOutput, "authorization response is incomplete, mismatched or stale")
+	}
+	sealed, err := snapshot.Seal()
+	if err != nil || snapshot.SnapshotHash == "" || sealed.SnapshotHash != snapshot.SnapshotHash {
+		return writeAuthzUnavailable(stdout, *jsonOutput, "authorization snapshot hash does not match its fields")
 	}
 	if *jsonOutput {
-		return writeSurfaceJSONResult(stdout, sealed, sealed.Decision)
+		if cliui.WriteJSON(stdout, snapshot) != nil {
+			return 1
+		}
+	} else {
+		fmt.Fprintf(stdout, "Authz decision=%t snapshot=%s hash=%s\n", snapshot.Decision, snapshot.SnapshotID, snapshot.SnapshotHash)
 	}
-	fmt.Fprintf(stdout, "Authz decision=%t snapshot=%s hash=%s\n", sealed.Decision, sealed.SnapshotID, sealed.SnapshotHash)
-	if !sealed.Decision {
+	if !snapshot.Decision {
 		return 1
 	}
 	return 0
+}
+
+func writeAuthzUnavailable(stdout io.Writer, jsonOutput bool, message string) int {
+	if jsonOutput {
+		_ = cliui.WriteJSON(stdout, struct {
+			Status  string `json:"status"`
+			Checked bool   `json:"checked"`
+			Message string `json:"message"`
+		}{Status: "unavailable", Message: message})
+	} else {
+		fmt.Fprintf(stdout, "Authz unavailable: %s\n", message)
+	}
+	return 1
+}
+
+func writeAuthzUsageError(stderr io.Writer, jsonOutput bool, command, message string) int {
+	format := cliui.FormatText
+	if jsonOutput {
+		format = cliui.FormatJSON
+	}
+	return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf(command, "%s", message), format)
+}
+
+func surfaceSHA256(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
 }
 
 func runAuthzSnapshots(args []string, registry *boundarypkg.SurfaceRegistry, stdout, stderr io.Writer) int {

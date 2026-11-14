@@ -58,30 +58,32 @@ func defaultReceiptsServer() string {
 	return "http://127.0.0.1:7714"
 }
 
+// The TUI uses the same authenticated receipt check as the status command.
 func probeReceiptsEdge() receiptsEdgeReport {
-	server := defaultReceiptsServer()
-	report := receiptsEdgeReport{Server: server, Status: "FAIL", Message: "receipt stream unavailable"}
-	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server, nil)
-	if err != nil {
-		report.Message = "invalid receipts server URL"
-		return report
+	options := &surfaceInspectOptions{
+		server: defaultReceiptsServer(), tenant: os.Getenv(runtimeTenantIDEnv),
+		principal: os.Getenv(runtimePrincipalIDEnv), workspace: os.Getenv(runtimeWorkspaceIDEnv),
 	}
-	resp, err := (&http.Client{Timeout: 800 * time.Millisecond}).Do(req)
+	list := inspectReceiptList(options, 1)
+	return receiptsEdgeReport{Server: list.Server, Status: list.Status, Message: list.Message}
+}
+
+// Retained for the existing NDJSON export path.
+func buildReceiptsListURL(server string, limit int) (string, error) {
+	base, err := url.Parse(server)
 	if err != nil {
-		report.Message = "receipt stream unavailable"
-		return report
+		return "", err
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 2048))
-	report.Status = "PASS"
-	report.Message = fmt.Sprintf("edge answered %d", resp.StatusCode)
-	return report
+	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/receipts"
+	query := base.Query()
+	query.Set("limit", fmt.Sprintf("%d", limit))
+	base.RawQuery = query.Encode()
+	return base.String(), nil
 }
 
 func runReceiptsStatusCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("receipts status", flag.ContinueOnError)
+	options := registerSurfaceInspectFlags(cmd, true)
 	var jsonOut bool
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
@@ -89,14 +91,24 @@ func runReceiptsStatusCmd(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()
-	report := probeReceiptsEdge()
+	if cmd.NArg() != 0 {
+		format := cliui.FormatText
+		if jsonOut {
+			format = cliui.FormatJSON
+		}
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("receipts status", "unexpected positional argument"), format)
+	}
+	// Probe the actual authenticated receipt route with a bounded page. A
+	// responding root path says nothing about receipt availability.
+	list := inspectReceiptList(options, 1)
+	report := receiptsEdgeReport{Server: list.Server, Status: list.Status, Message: list.Message}
 	if jsonOut {
 		if err := cliui.WriteJSON(stdout, report); err != nil {
 			return 1
 		}
-		return 0
+	} else {
+		fmt.Fprintf(stdout, "[%s]  receipts edge  %s  %s\n", report.Status, report.Server, report.Message)
 	}
-	fmt.Fprintf(stdout, "[%s]  receipts edge  %s  %s\n", report.Status, report.Server, report.Message)
 	if report.Status == "PASS" {
 		return 0
 	}
@@ -121,12 +133,11 @@ type receiptsShowReport struct {
 
 func runReceiptsListCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("receipts list", flag.ContinueOnError)
+	options := registerSurfaceInspectFlags(cmd, true)
 	var (
-		server  string
 		jsonOut bool
 		limit   int
 	)
-	cmd.StringVar(&server, "server", "", "HELM server URL")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 	cmd.IntVar(&limit, "limit", 20, "Maximum receipts to fetch")
@@ -139,36 +150,50 @@ func runReceiptsListCmd(args []string, stdout, stderr io.Writer) int {
 		errFormat = cliui.FormatJSON
 	}
 	if cmd.NArg() > 0 {
-		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("receipts list", "unexpected argument: %s", cmd.Arg(0)), errFormat)
-	}
-	if server == "" {
-		server = defaultReceiptsServer()
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("receipts list", "unexpected positional argument"), errFormat)
 	}
 	if limit <= 0 {
 		limit = 20
 	}
-	listURL, err := buildReceiptsListURL(server, limit)
-	if err != nil {
-		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts list", "invalid server URL"), errFormat)
-	}
-	body, status, message := fetchReceiptsDocument(listURL)
-	report := receiptsListReport{Server: server, Status: status, Message: message}
-	if status == "PASS" {
-		var payload struct {
-			Receipts   json.RawMessage `json:"receipts"`
-			Count      int             `json:"count"`
-			NextCursor string          `json:"next_cursor"`
-		}
-		if err := json.Unmarshal(body, &payload); err != nil {
-			report.Status = "FAIL"
-			report.Message = "receipt list was not JSON"
-		} else {
-			report.Receipts = payload.Receipts
-			report.Count = payload.Count
-			report.NextCursor = payload.NextCursor
-		}
-	}
+	report := inspectReceiptList(options, limit)
 	return writeReceiptsInspect(stdout, jsonOut, report, report.Status)
+}
+
+func inspectReceiptList(options *surfaceInspectOptions, limit int) receiptsListReport {
+	report := receiptsListReport{Server: options.displayServer(), Status: "FAIL"}
+	var payload struct {
+		Receipts   json.RawMessage `json:"receipts"`
+		Count      *int            `json:"count"`
+		NextCursor string          `json:"next_cursor"`
+	}
+	query := url.Values{"limit": {fmt.Sprint(limit)}}
+	if err := options.request(http.MethodGet, "/api/v1/receipts", query, nil, true, &payload); err != nil {
+		report.Message = err.Error()
+		return report
+	}
+	var receipts []struct {
+		ReceiptID string `json:"receipt_id"`
+	}
+	// Empty stores may return null; require an explicit receipts member and
+	// count, and check that the count describes the returned page. This only
+	// checks availability/shape: receipt signatures are verified separately.
+	if len(payload.Receipts) == 0 || payload.Count == nil || *payload.Count < 0 ||
+		json.Unmarshal(payload.Receipts, &receipts) != nil || *payload.Count != len(receipts) {
+		report.Message = "receipt list does not match the expected schema"
+		return report
+	}
+	for _, receipt := range receipts {
+		if strings.TrimSpace(receipt.ReceiptID) == "" {
+			report.Message = "receipt list contains an unidentified receipt"
+			return report
+		}
+	}
+	report.Status = "PASS"
+	report.Message = "authenticated receipt list available; receipt signatures not checked"
+	report.Count = *payload.Count
+	report.Receipts = payload.Receipts
+	report.NextCursor = payload.NextCursor
+	return report
 }
 
 func runReceiptsShowCmd(args []string, stdout, stderr io.Writer) int {
@@ -222,18 +247,6 @@ func runReceiptsShowCmd(args []string, stdout, stderr io.Writer) int {
 		report.Receipt = json.RawMessage(body)
 	}
 	return writeReceiptsInspect(stdout, jsonOut, report, report.Status)
-}
-
-func buildReceiptsListURL(server string, limit int) (string, error) {
-	base, err := url.Parse(server)
-	if err != nil {
-		return "", err
-	}
-	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/receipts"
-	query := base.Query()
-	query.Set("limit", fmt.Sprintf("%d", limit))
-	base.RawQuery = query.Encode()
-	return base.String(), nil
 }
 
 func buildReceiptsShowURL(server, id string) (string, error) {

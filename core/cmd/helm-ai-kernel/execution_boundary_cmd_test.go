@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/authz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -442,8 +445,19 @@ func TestRunSandboxConformRefusesWithoutPolicyEvaluator(t *testing.T) {
 }
 
 func TestRunAuthzCheckJSON(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	t.Setenv("HELM_ADMIN_API_KEY", surfaceTruthCredential)
+	svc.Authz = authz.NewEngine()
+	if err := svc.Authz.WriteTuple(t.Context(), authz.RelationTuple{Subject: "agent:a", Object: "tool:b", Relation: "can_call"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	RegisterSubsystemRoutes(mux, svc)
+	server := httptest.NewServer(mux)
+	defer server.Close()
 	var stdout, stderr bytes.Buffer
-	code := runAuthzSurfaceCmd([]string{"check", "--subject", "agent:a", "--object", "tool:b", "--relation", "can_call", "--json"}, &stdout, &stderr)
+	code := runAuthzSurfaceCmd([]string{"check", "--server", server.URL, "--subject", "agent:a", "--object", "tool:b", "--relation", "can_call", "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
 	}
@@ -451,8 +465,8 @@ func TestRunAuthzCheckJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &snapshot); err != nil {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
-	if snapshot["snapshot_hash"] == "" {
-		t.Fatal("snapshot_hash missing")
+	if snapshot["snapshot_hash"] == "" || snapshot["decision"] != true {
+		t.Fatal("checked ALLOW snapshot missing")
 	}
 }
 

@@ -1,5 +1,8 @@
 package evidence
 
+// quantum_posture: local seal fixtures exercise classical Ed25519 verification;
+// these tests establish no post-quantum or external-proof assurance.
+
 import (
 	"context"
 	"encoding/base64"

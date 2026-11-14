@@ -42,7 +42,7 @@ func TestLocalMCPRuntimeAuthorizesExecutionWithPolicyGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := executor.Execute(context.Background(), mcppkg.ToolExecutionRequest{
+	resp, err := executor.Execute(withMCPTransportIdentity(context.Background(), "mcp-test", "trusted-local-test-credential"), mcppkg.ToolExecutionRequest{
 		ToolName:       "file_read",
 		SessionID:      "mcp-test",
 		PrincipalID:    "mcp-test",
@@ -71,7 +71,7 @@ func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := executor.Execute(context.Background(), mcppkg.ToolExecutionRequest{
+	resp, err := executor.Execute(withMCPTransportIdentity(context.Background(), "mcp-test", "trusted-local-test-credential"), mcppkg.ToolExecutionRequest{
 		ToolName:       "file_read",
 		SessionID:      "mcp-test",
 		PrincipalID:    "mcp-test",

@@ -128,7 +128,7 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&transport, "transport", "stdio", "Transport: stdio, http")
 	cmd.IntVar(&port, "port", 9100, "Port for HTTP transport")
 	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none (loopback bind only), static-header, oauth")
-	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP signing state")
+	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP receipts, evidence exports and signing state")
 	cmd.StringVar(&policyPath, "policy", "", "Path to a serve policy file; without it, execution is fail-closed (deny-all)")
 
 	if err := cmd.Parse(args); err != nil {

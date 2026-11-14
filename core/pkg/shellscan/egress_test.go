@@ -472,3 +472,45 @@ func TestClassifyCurlFormSecretReads(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyCurlEncodedFileReads(t *testing.T) {
+	for _, option := range []string{"--data-urlencode", "--url-query"} {
+		result := ClassifyArgvAt([]string{"curl", option, `field@back\slash`, "https://allowed.example/"}, "/tmp")
+		if !sameTargets(networkTargets(result), []string{undetermined}) {
+			t.Errorf("%s admitted unsupported backslash filename", option)
+		}
+		for _, value := range []string{"field@.env", "@.env", "+field@.env", "field=.env", "field@.env=literal"} {
+			want := value == "field@.env" || value == "@.env" || (value == "+field@.env" && option == "--data-urlencode")
+			result := ClassifyArgvAt([]string{"curl", option, value, "https://allowed.example/"}, "/tmp")
+			found := false
+			for _, fact := range result.EffectFacts {
+				if fact.Class == "secret" && fact.Action == "secret_read" {
+					found = true
+				}
+			}
+			if found != want {
+				t.Errorf("%s %q: secret-read=%v want=%v", option, value, found, want)
+			}
+		}
+	}
+}
+
+func TestClassifyPreservesDestinationFreeSFTPRefusals(t *testing.T) {
+	for _, command := range []string{"sftp -D /tmp/helper", "sftp -qD/tmp/helper", "sftp -D '/tmp/helper --argument'", "sftp -D /tmp/helper --", "sftp -D /tmp/helper -h", "sftp -D"} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, tc := range []struct {
+		command string
+		targets []string
+	}{
+		{"sftp", nil},
+		{"sftp -q", nil},
+		{"sftp allowed.example", []string{"ssh://allowed.example"}},
+	} {
+		if got := networkTargets(Classify(tc.command)); !sameTargets(got, tc.targets) {
+			t.Errorf("%s: got %q, want %q", tc.command, got, tc.targets)
+		}
+	}
+}

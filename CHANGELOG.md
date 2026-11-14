@@ -156,6 +156,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
+- Named curl URL-encoded data and query file inputs are checked against
+  protected material and secret-read policy. SFTP direct-server and other
+  opaque-option refusals survive an absent destination.
 - Curl form uploads check decoded filenames, every file in a list and form
   header files against protected material and secret-read policy. Shell double
   quotes decode escapes before command classification. Unsupported form syntax

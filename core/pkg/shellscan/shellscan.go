@@ -428,6 +428,9 @@ func (c *collector) guardOptionPaths(command Command) {
 			check(value)
 			if command.Name == "curl" {
 				check(curlAtPath(value))
+				if name == "data-urlencode" || name == "url-query" {
+					check(curlEncodedFilePath(name, value))
+				}
 				if name == "form" {
 					paths, _ := curlFormPaths(value)
 					for _, path := range paths {
@@ -644,6 +647,9 @@ func curlSecretReadTargets(tokens []string) []string {
 	if len(tokens) > 0 {
 		walkCLI(curlSpec, tokens, cliVisitor{
 			option: func(name string, _ optRole, value string) {
+				if name == "data-urlencode" || name == "url-query" {
+					targets = appendLocalSecretTarget(targets, curlEncodedFilePath(name, value))
+				}
 				if name == "form" {
 					paths, _ := curlFormPaths(value)
 					for _, path := range paths {
@@ -696,6 +702,20 @@ func curlInlineSecretPath(token string) string {
 func curlAtPath(value string) string {
 	if strings.HasPrefix(value, "@") {
 		return strings.TrimPrefix(value, "@")
+	}
+	return ""
+}
+
+// Curl's data_urlencode checks for '=' before '@': any '=' makes this
+// literal content, even if an '@' occurs earlier. Otherwise the first '@'
+// separates the optional field name from a filename, preserved verbatim.
+// --url-query shares that grammar except that a leading '+' is literal.
+func curlEncodedFilePath(option, value string) string {
+	if option == "url-query" && strings.HasPrefix(value, "+") || strings.ContainsRune(value, '=') {
+		return ""
+	}
+	if _, filename, ok := strings.Cut(value, "@"); ok {
+		return filename
 	}
 	return ""
 }

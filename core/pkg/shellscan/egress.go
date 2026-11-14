@@ -372,6 +372,13 @@ func curlEgress(tokens []string) egressScan {
 					scan.refuse("curl form has unsupported file syntax")
 				}
 			}
+			if name == "data-urlencode" || name == "url-query" {
+				// The shared path guard normalizes backslashes; do not admit
+				// a literal POSIX spelling that it cannot resolve faithfully.
+				if strings.Contains(curlEncodedFilePath(name, value), `\`) {
+					scan.refuse("curl encoded input has an unsupported file path")
+				}
+			}
 			switch role {
 			case roleURL:
 				if name == "url" {
@@ -815,7 +822,9 @@ func sftpEgress(tokens []string) egressScan {
 		},
 	})
 	if !seen {
-		return egressScan{}
+		// Direct-server mode can execute its helper without a destination.
+		// Preserve any opaque-option or invalid-input refusal already found.
+		return scan
 	}
 	if netdest.HasScheme(destination) {
 		connection.urlDestination(destination, "the host")

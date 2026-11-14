@@ -1061,6 +1061,44 @@ func TestPathGuardDecodesCurlForms(t *testing.T) {
 	}
 }
 
+func TestPathGuardChecksCurlEncodedFileInputs(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, name := range []string{"upload", "input ", "input@part"} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+		for _, option := range []string{"--data-urlencode", "--url-query"} {
+			for _, prefix := range []string{"field@", "@"} {
+				for _, target := range []string{name, filepath.Join(work, name)} {
+					value := prefix + target
+					argv := []string{"curl", option, value, "https://allowed.example/"}
+					for mode, result := range map[string]Result{
+						"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+						"shell": ClassifyAt("curl "+option+" '"+value+"' https://allowed.example/", work, WithPathGuard(f.guard)),
+					} {
+						if result.ProtectedPath == "" {
+							t.Errorf("%s %q missed protected encoded input", mode, argv)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, option := range []string{"--data-urlencode", "--url-query"} {
+		for _, value := range []string{"field=literal@upload", "field@upload=literal", "=field@upload", "field@ordinary", "literal"} {
+			result := ClassifyArgvAt([]string{"curl", option, value, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+			if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+				t.Errorf("ordinary %s %q refused: %+v", option, value, result)
+			}
+		}
+	}
+	result := ClassifyArgvAt([]string{"curl", "--url-query", "+field@upload", "https://allowed.example/"}, work, WithPathGuard(f.guard))
+	if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+		t.Errorf("literal query refused: %+v", result)
+	}
+}
+
 func TestPathGuardPreservesFilesystemWhitespace(t *testing.T) {
 	f := newGuardFixture(t)
 	work := filepath.Join(t.TempDir(), "workspace ")

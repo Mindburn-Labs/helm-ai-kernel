@@ -35,6 +35,10 @@ var gitNetworkSubcommands = names(`
 	clone fetch pull push ls-remote fetch-pack send-pack http-fetch http-push
 	remote submodule archive config`)
 
+// These programs may run on this machine when the repository is local.
+// Their argument is executable shell text, not a destination-neutral path.
+var gitExecutableOptions = map[string]bool{"upload-pack": true, "receive-pack": true, "exec": true}
+
 func gitSpec(valueLetters, flagLetters, valueNames, flagNames string, roles map[string]optRole) cliSpec {
 	short, value, flag := letters(valueLetters, flagLetters)
 	for name := range names(valueNames) {
@@ -54,6 +58,11 @@ func gitSpec(valueLetters, flagLetters, valueNames, flagNames string, roles map[
 			continue
 		}
 		flag[name] = role
+	}
+	for name := range gitExecutableOptions {
+		if _, ok := value[name]; ok {
+			value[name] = roleOpaque
+		}
 	}
 	return spec
 }
@@ -79,7 +88,7 @@ var gitSpecs = map[string]cliSpec{
 		no-hardlinks shared recursive single-branch no-single-branch no-tags tags
 		shallow-submodules no-shallow-submodules remote-submodules no-remote-submodules
 		sparse also-filter-submodules dissociate reject-shallow no-reject-shallow ipv4 ipv6`,
-		map[string]optRole{"bundle-uri": roleURL, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque}),
+		map[string]optRole{"bundle-uri": roleURL, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque, "u": roleOpaque}),
 	"fetch": gitSpec("jo", "vqafkpPntu46", gitFetchValues, gitFetchFlags,
 		map[string]optRole{"all": roleOpaque, "multiple": roleOpaque}),
 	"pull": gitSpec("josX", "vqafkpPntur46e", gitFetchValues+" strategy strategy-option cleanup", gitFetchFlags+`
@@ -242,6 +251,8 @@ func (g *gitInvocation) subcommand(sub string, args []string) bool {
 					g.config(value)
 				case roleOpaque:
 					switch {
+					case gitExecutableOptions[name] || sub == "clone" && name == "u":
+						g.scan.refuse("git " + optionLabel(name) + " replaces the program used for the connection")
 					case name != "recurse-submodules" && name != "recursive":
 						g.configured = true // --all, --multiple: the configured remotes
 					case value != "no" && value != "false" && value != "off" && value != "check":
@@ -267,6 +278,21 @@ func (g *gitInvocation) subcommand(sub string, args []string) bool {
 			g.configured = true
 		}
 		return true
+	}
+	// Plumbing and archive do not use the ordinary option tables. Refuse
+	// their helper overrides even for local paths, where remoteArguments
+	// would otherwise report no network operation at all.
+	if sub == "fetch-pack" || sub == "send-pack" || sub == "archive" {
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			name, _, _ := strings.Cut(arg, "=")
+			if strings.HasPrefix(name, "--") && gitExecutableOptions[strings.TrimPrefix(name, "--")] {
+				g.scan.refuse("git " + name + " replaces the program used for the connection")
+				return true
+			}
+		}
 	}
 	switch sub {
 	case "fetch-pack", "send-pack", "http-fetch", "http-push":

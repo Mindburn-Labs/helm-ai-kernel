@@ -284,6 +284,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   without `--max-redirect=0` and `git` over HTTP without
   `-c http.followRedirects=false`, because the client follows redirects to
   hosts the hook cannot see.
+- Curl HSTS cache inputs and Git executable transport-helper overrides now
+  deny as undetermined under an egress allowlist. Local Git repositories do
+  not exempt helper overrides from the network decision; ordinary local
+  operations remain supported.
 - SSH reverse forwarding now denies as undetermined under an egress allowlist,
   including `-R` and `-o RemoteForward` SOCKS forms. OpenSSL DTLS destinations
   are checked as UDP, so a TCP allowance cannot authorize them.

@@ -249,6 +249,7 @@ var opaqueReasons = map[string]string{
 	"curl unix-socket":          "--unix-socket connects through a local socket",
 	"curl abstract-unix-socket": "--abstract-unix-socket connects through a local socket",
 	"curl dns-servers":          "--dns-servers sends lookups to other resolvers",
+	"curl hsts":                 "--hsts lets cached or learned rules change the protocol",
 	"curl alt-svc":              "--alt-svc lets a cache file redirect the connection",
 	"curl no-ftp-skip-pasv-ip":  "--no-ftp-skip-pasv-ip accepts a server-selected data destination",
 	"ssh R":                     "-R lets a remote peer trigger additional local connections",
@@ -304,7 +305,7 @@ var curlSpec = cliSpec{
 		data-urlencode delegation dns-interface dns-ipv4-addr dns-ipv6-addr dump-header
 		egd-file engine etag-compare etag-save expect100-timeout form form-string ftp-account
 		ftp-alternative-to-user ftp-method ftp-ssl-ccc-mode happy-eyeballs-timeout-ms
-		haproxy-clientip header hostpubmd5 hostpubsha256 hsts interface json keepalive-time
+		haproxy-clientip header hostpubmd5 hostpubsha256 interface json keepalive-time
 		key key-type krb libcurl limit-rate local-port login-options mail-auth mail-from
 		mail-rcpt max-filesize max-redirs max-time netrc-file noproxy oauth2-bearer output
 		output-dir parallel-max pass pinnedpubkey proto proto-redir proxy-cacert proxy-capath
@@ -321,7 +322,7 @@ var curlSpec = cliSpec{
 		"socks4": roleProxy, "socks4a": roleProxy, "socks5": roleProxy, "socks5-hostname": roleProxy,
 		"connect-to": roleConnectTo, "resolve": roleResolve,
 		"config": roleOpaque, "unix-socket": roleOpaque, "abstract-unix-socket": roleOpaque,
-		"dns-servers": roleOpaque, "alt-svc": roleOpaque, "ftp-port": roleOpaque,
+		"dns-servers": roleOpaque, "alt-svc": roleOpaque, "hsts": roleOpaque, "ftp-port": roleOpaque,
 		"proto-default": roleOpaque, "variable": roleOpaque,
 	}),
 	flag: withRoles(names(`

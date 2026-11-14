@@ -422,3 +422,8 @@ deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --no-ftp-skip-pasv-ip https://api
 # Reverse forwarding lets the peer trigger connections from the local client.
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh -NR9000:other.example:8080 allowed.example
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh -o "RemoteForward=9000" allowed.example
+
+# Cache state and executable Git helpers cannot inherit a URL allowance.
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --hsts /tmp/cache https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git fetch --upload-pack="curl http://other.example/; git-upload-pack" /srv/git/repo
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git push --receive-pack=/tmp/helper /srv/git/repo main

@@ -227,6 +227,10 @@ func TestHookRefusesDestinationOverrides(t *testing.T) {
 		name, command string
 		denied        bool
 	}{
+		{"curl HSTS file", "curl --hsts /tmp/cache http://allowed.example/", true},
+		{"curl HSTS memory", "curl --hsts '' http://allowed.example/", true},
+		{"plain HTTP", "curl http://allowed.example/", false},
+		{"Git local executable helper", "git fetch --upload-pack='curl http://other.example/; git-upload-pack' /srv/git/repo", true},
 		{"Git scoped resolve", "git -c http.followRedirects=false -c http.http://allowed.example/.curloptResolve=allowed.example:80:127.0.0.1 ls-remote http://allowed.example/r.git", true},
 		{"Git clone scoped resolve", "git clone -c http.followRedirects=false --config http.http://allowed.example/.curloptResolve=allowed.example:80:127.0.0.1 http://allowed.example/r.git dir", true},
 		{"Git scoped user agent", "git -c http.followRedirects=false -c http.http://allowed.example/.userAgent=helm ls-remote http://allowed.example/r.git", false},
@@ -289,6 +293,32 @@ func TestHookUsesOpenSSLTransport(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestHookRefusesGitHelpersWithoutOperatePermission(t *testing.T) {
+	env := newHookBypassEnv(t, "")
+	for _, command := range []string{
+		"git fetch --upload-pack='curl http://other.example/; git-upload-pack' /srv/git/repo",
+		"git clone -u/tmp/helper file:///srv/git/repo copy",
+		"git push --receive-pack=/tmp/helper /srv/git/repo main",
+		"git fetch-pack --exec=/tmp/helper /srv/git/repo",
+		"git archive --exec=/tmp/helper --remote=/srv/git/repo HEAD",
+	} {
+		t.Run(command, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": command})
+			if !denied || len(receipts) == 0 {
+				t.Fatalf("helper escaped empty allowances: denied=%v receipts=%s", denied, describeReceipts(receipts))
+			}
+			for _, receipt := range receipts {
+				if receipt.Verdict != contracts.WorkstationVerdictDeny {
+					t.Errorf("refused helper left an ALLOW receipt: %s", describeReceipts(receipts))
+				}
+			}
+		})
+	}
+	if denied, receipts := env.run(t, "Bash", map[string]any{"command": "git fetch /srv/git/repo"}); denied {
+		t.Fatalf("ordinary local fetch refused: %s", describeReceipts(receipts))
 	}
 }
 

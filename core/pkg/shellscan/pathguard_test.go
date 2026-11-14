@@ -1011,6 +1011,56 @@ func TestPathGuardResolvesExtractedOptionPaths(t *testing.T) {
 	}
 }
 
+func TestPathGuardDecodesCurlForms(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	for _, name := range []string{"upload", "semi;comma,", `quote"`, `quote"slash\`, " padded ", "dollar$backtick`"} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+		quoted := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name) + `"`
+		for _, form := range []string{
+			"file=@" + quoted,
+			"file=<" + quoted,
+			"file=@ordinary," + quoted + ";type=text/plain",
+			"file=@" + quoted + `;filename="public;name,";encoder=base64`,
+			"file=literal;headers=@" + quoted,
+			"file=literal;HEADERS=<" + quoted,
+			"file=@ordinary;headers=<" + quoted,
+			"file=@ \t" + quoted + " \t",
+		} {
+			for _, args := range [][]string{{"-F", form}, {"-qF" + form}, {"--form", form}} {
+				argv := append(append([]string{"curl"}, args...), "https://allowed.example/")
+				words := make([]string, len(argv))
+				single := make([]string, len(argv))
+				for i, arg := range argv {
+					words[i] = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`").Replace(arg) + `"`
+					single[i] = "'" + arg + "'"
+				}
+				for mode, result := range map[string]Result{
+					"argv":          ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+					"double-quoted": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+					"single-quoted": ClassifyAt(strings.Join(single, " "), work, WithPathGuard(f.guard)),
+				} {
+					if strings.Contains(name, `\`) {
+						if !sameTargets(networkTargets(result), []string{undetermined}) {
+							t.Errorf("%s %q: backslash path was not refused", mode, argv)
+						}
+					} else if result.ProtectedPath == "" {
+						t.Errorf("%s %q escaped protected path guard", mode, argv)
+					}
+				}
+			}
+		}
+	}
+	for _, form := range []string{`file=@"ordinary"`, `file=<"ordinary;comma,"`, `file=@first,"second";type=text/plain`, `file=literal;headers=@"public-headers"`, `file=@ordinary;filename="public;name,"`} {
+		result := ClassifyArgvAt([]string{"curl", "-F", form, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary form %q refused: %+v", form, result)
+		}
+	}
+}
+
 func TestPathGuardPreservesFilesystemWhitespace(t *testing.T) {
 	f := newGuardFixture(t)
 	work := filepath.Join(t.TempDir(), "workspace ")

@@ -367,6 +367,11 @@ func curlEgress(tokens []string) egressScan {
 		operand: func(token string) { urls = append(urls, token) },
 		invalid: scan.refuse,
 		option: func(name string, role optRole, value string) {
+			if name == "form" {
+				if _, ok := curlFormPaths(value); !ok {
+					scan.refuse("curl form has unsupported file syntax")
+				}
+			}
 			switch role {
 			case roleURL:
 				if name == "url" {

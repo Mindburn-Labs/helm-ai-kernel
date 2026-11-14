@@ -429,7 +429,10 @@ func (c *collector) guardOptionPaths(command Command) {
 			if command.Name == "curl" {
 				check(curlAtPath(value))
 				if name == "form" {
-					check(curlFormPath(value))
+					paths, _ := curlFormPaths(value)
+					for _, path := range paths {
+						check(path)
+					}
 				}
 			}
 		},
@@ -638,6 +641,20 @@ func localFileURLPath(raw string) (string, bool) {
 
 func curlSecretReadTargets(tokens []string) []string {
 	var targets []string
+	if len(tokens) > 0 {
+		walkCLI(curlSpec, tokens, cliVisitor{
+			option: func(name string, _ optRole, value string) {
+				if name == "form" {
+					paths, _ := curlFormPaths(value)
+					for _, path := range paths {
+						targets = appendLocalSecretTarget(targets, path)
+					}
+				}
+			},
+			operand: func(string) {},
+			invalid: func(string) {}, // curlEgress refuses unsupported syntax.
+		})
+	}
 	for index, token := range tokens {
 		// A file: URL makes curl read a local file.
 		if local, ok := localFileURLPath(token); ok {
@@ -650,8 +667,6 @@ func curlSecretReadTargets(tokens []string) []string {
 		switch token {
 		case "-d", "--data", "--data-binary", "--data-ascii":
 			targets = appendLocalSecretTarget(targets, curlAtPath(tokens[index+1]))
-		case "-F", "--form":
-			targets = appendLocalSecretTarget(targets, curlFormPath(tokens[index+1]))
 		case "-T", "--upload-file":
 			targets = appendLocalSecretTarget(targets, tokens[index+1])
 		}
@@ -673,10 +688,6 @@ func curlInlineSecretPath(token string) string {
 		return strings.TrimPrefix(token, "-T")
 	case strings.HasPrefix(token, "--upload-file="):
 		return strings.TrimPrefix(token, "--upload-file=")
-	case strings.HasPrefix(token, "-F") && len(token) > len("-F"):
-		return curlFormPath(strings.TrimPrefix(token, "-F"))
-	case strings.HasPrefix(token, "--form="):
-		return curlFormPath(strings.TrimPrefix(token, "--form="))
 	default:
 		return curlAtPath(token)
 	}
@@ -687,18 +698,6 @@ func curlAtPath(value string) string {
 		return strings.TrimPrefix(value, "@")
 	}
 	return ""
-}
-
-func curlFormPath(value string) string {
-	separator := strings.IndexAny(value, "@<")
-	if separator < 0 {
-		return ""
-	}
-	pathValue := value[separator+1:]
-	if option := strings.IndexByte(pathValue, ';'); option >= 0 {
-		pathValue = pathValue[:option]
-	}
-	return pathValue
 }
 
 func transferSecretReadTargets(tokens []string) []string {
@@ -1448,6 +1447,25 @@ func unescapeLit(s string) string {
 	return b.String()
 }
 
+// Inside shell double quotes, only these escapes lose their backslash.
+// A quoted curl form can itself contain quotes; preserve the argv curl sees.
+func unescapeDoubleQuoted(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case '\n':
+				i++
+				continue
+			case '$', '`', '"', '\\':
+				i++
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
 func resolveCommandWord(w *syntax.Word) wordTok {
 	var b strings.Builder
 	glob := false
@@ -1470,7 +1488,7 @@ func resolveCommandWord(w *syntax.Word) wordTok {
 				if !ok {
 					return wordTok{dynamic: true}
 				}
-				b.WriteString(lit.Value)
+				b.WriteString(unescapeDoubleQuoted(lit.Value))
 			}
 		default:
 			return wordTok{dynamic: true}
@@ -1499,7 +1517,7 @@ func resolveWord(w *syntax.Word) wordTok {
 			dynamic = dynamic || p.Dollar
 			for _, inner := range p.Parts {
 				if lit, ok := inner.(*syntax.Lit); ok {
-					b.WriteString(lit.Value)
+					b.WriteString(unescapeDoubleQuoted(lit.Value))
 				} else {
 					dynamic = true
 				}

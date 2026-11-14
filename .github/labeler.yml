@@ -1,6 +1,10 @@
 # Pull requests that touch these paths get the `tier-2` label: the post-merge
-# human review queue. Labels never block a merge. Keep the paths in step with
-# the `paths` filter in .github/workflows/labeler.yml.
+# human review queue. Labels never block a merge. The gate's own definition
+# (scripts/ci, the Makefile, the control registry and the checkers the merge
+# profile runs from tools/ and scripts/) is on the list, so a change to one of
+# these paths is queued for review. Keep the paths in step with the `paths`
+# filter in .github/workflows/labeler.yml, which GitHub stops evaluating after
+# 300 changed files.
 tier-2:
   - changed-files:
       - any-glob-to-any-file:
@@ -14,5 +18,17 @@ tier-2:
           - 'release/**'
           - 'scripts/release/**'
           - '.goreleaser.yml'
+          - 'scripts/ci/**'
+          - 'Makefile'
+          - '.gitleaks.toml'
+          - 'install.sh'
+          - 'Dockerfile*'
+          - '**/Dockerfile*'
+          - '**/*.Dockerfile'
+          - 'controls.yaml'
+          - 'tools/invcheck/**'
+          - 'tools/tcbcheck/**'
+          - 'tools/verify-presentation.sh'
+          - 'scripts/check_documentation_*.py'
           - '**/auth/**'
           - '**/crypto/**'

@@ -30,22 +30,33 @@ surface for the `helm-ai-kernel` project.
 
 ## Active Quality Workflows
 
-- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2.2.0`. Its `gate`
+- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml`, pinned to the
+  commit of `v2.2.0`. Its `gate`
   job, reported as `ci / gate`, is the only required status check. It runs
   `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
   gate blocking, split over four parallel jobs that the gate needs in full) after `scripts/ci/install_check_tools.sh` installs pinned
   protoc, buf, oasdiff, kind, ripgrep, PostgreSQL 16 and the Python gate
   dependencies, plus a diff-aware dependency scan that fails only on HIGH or
-  CRITICAL advisories a change introduces. It runs on every pull request, merge
-  group and push to `main`, with no path filters. Its `postgres-proofs` gate
+  CRITICAL advisories a change introduces. It runs on every pull request and
+  merge group, with no path filters. On a push to `main`, which is the sha the
+  merge queue just gated, one job confirms that merge-group run through the
+  Actions API (`scripts/ci/ci_setup.sh`) instead of running the profile again,
+  and runs it in full only when there is no such run. Before the profile,
+  `scripts/ci/gate_base_check.py` fails the change if it drops a gate the base
+  commit's merge profile runs, unless `scripts/ci/gate-removals.json` names the
+  gate with a reason. The copy in the change hands over to the base commit's copy, so an
+  edit to the check's rules does not change the verdict on that change. The
+  hand-over and the `check` target both come from the change, so a change that
+  removes either skips the check; that edit carries the `tier-2` label, which
+  does not hold a merge. A push the merge group gated is not judged again. Its `postgres-proofs` gate
   (`make postgres-proofs`) starts a disposable PostgreSQL 16 cluster in UTC and
   runs every Postgres-gated proof in `scripts/ci/postgres-proofs.txt`, among
   them the approval lifecycle, connector release-authority and forced-RLS
   tenant proofs under `NOSUPERUSER NOBYPASSRLS` roles; a skip, a missing
   database or an unlisted gated test fails it. The golden vectors those proofs
   pair with run in the `verify-fixtures` gate.
-- `codeql.yml` is the single CodeQL code-scanning run (Go, JavaScript and
-  TypeScript, Python, Java and Kotlin). It is not required.
+- CodeQL runs as GitHub's default setup (no workflow file). It is not
+  required.
 - `packfs-windows.yml` runs the rooted pack filesystem tests on a Windows
   runner when that package, its Go module files or this workflow changes.
   It checks native path semantics, including rejection of backslash path

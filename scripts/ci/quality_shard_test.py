@@ -99,8 +99,7 @@ class ShardArgumentTest(unittest.TestCase):
 
 class RegistrySelfTest(unittest.TestCase):
     def self_test(self, reg: dict) -> int:
-        with unittest.mock.patch.object(quality, "EXPECTED_GATE_IDS", set()), \
-                unittest.mock.patch.object(quality, "EXPECTED_PROFILES", set()), \
+        with unittest.mock.patch.object(quality, "EXPECTED_PROFILES", set()), \
                 unittest.mock.patch("builtins.print"):
             return quality.self_test(reg)
 

@@ -2,8 +2,15 @@
 # waits for the required `ci / gate` check, and majors are left for review. The
 # shared workflow arms nothing on a branch with no required status check.
 #
-# Not a required check: it only turns auto-merge on, and it never fails a pull
-# request on policy.
+# main merges through a merge queue. Auto-merge armed with GITHUB_TOKEN never
+# enters it: the green, armed PRs #1212-#1235 sat CLEAN for days and every
+# Dependabot merge so far was done by hand. Arming as the mindburn-flux App
+# (Dependabot secrets MINDBURN_FLUX_APP_ID and MINDBURN_FLUX_PRIVATE_KEY) is
+# what lets the queue pick the PR up and run CI on it, so `merge-credential`
+# fails, visibly, while those secrets are missing.
+#
+# Not a required check: it never holds a merge. The reusable workflow is pinned
+# by commit, not by its mutable tag.
 name: Dependabot auto-merge
 
 on:
@@ -13,12 +20,27 @@ permissions:
   contents: read
 
 jobs:
+  merge-credential:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require the credential that lets an armed PR enter the merge queue
+        env:
+          HAS_APP: ${{ secrets.MINDBURN_FLUX_APP_ID != '' && secrets.MINDBURN_FLUX_PRIVATE_KEY != '' }}
+        run: |
+          if [ "${HAS_APP}" != "true" ]; then
+            echo "::error::MINDBURN_FLUX_APP_ID and MINDBURN_FLUX_PRIVATE_KEY are not Dependabot secrets here, so auto-merge is armed with GITHUB_TOKEN and this PR will not enter the merge queue. Add both under Settings > Secrets and variables > Dependabot."
+            exit 1
+          fi
+          echo "auto-merge is armed as the mindburn-flux App"
   dependabot:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     permissions:
       contents: write
       pull-requests: write
-    uses: Mindburn-Labs/platform-actions/.github/workflows/dependabot-auto-merge.yml@v2.0.4
+    uses: Mindburn-Labs/platform-actions/.github/workflows/dependabot-auto-merge.yml@7d397819c6c32b208b8b62c3fe5352058b60e183 # v2.0.4
     secrets:
       MINDBURN_FLUX_APP_ID: ${{ secrets.MINDBURN_FLUX_APP_ID }}
       MINDBURN_FLUX_PRIVATE_KEY: ${{ secrets.MINDBURN_FLUX_PRIVATE_KEY }}

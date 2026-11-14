@@ -14,6 +14,41 @@ The public commands do **not** yet prove a general-purpose upstream MCP proxy.
 Generated client configuration also does not prove that a native client loaded
 HELM or that arbitrary tool calls cross the boundary.
 
+## Standalone Server Decision Receipts
+
+`mcp serve --transport stdio` and `mcp serve --transport http` persist a signed
+`receipt.v5` before a policy ALLOW can dispatch. Policy DENY decisions, including
+the default with no `--policy`, use the same receipt writer. A failure to sign,
+store, or export the receipt blocks dispatch. Protocol, authentication, and
+argument-validation errors that occur before a policy decision do not issue a
+decision receipt.
+
+`--data-dir` selects the local SQLite database (`helm.db`), persistent signing
+key (`root.key`), public trust anchor (`root.pub`), and portable receipt exports.
+Each governed response's `receipt_id` identifies its persisted decision receipt.
+The corresponding JSON is at
+`<data-dir>/receipts/evaluate/<receipt_id>/<receipt_id>.json`.
+Retain `root.pub` separately as your trust anchor, then verify with:
+
+```bash
+helm-ai-kernel verify receipt \
+  --receipt <receipt.json> \
+  --trusted-public-key-file <retained-root.pub>
+```
+
+The verifier reports which receipt members the signature covers. An ALLOW
+receipt records admission; it does not prove that dispatch completed. An export
+failure may leave the database decision row while the call remains blocked.
+
+The standalone listener serves `HELM_RUNTIME_TENANT_ID` (default `default`).
+Stdio takes this scope from trusted process configuration. HTTP binds validated
+credentials to this configured tenant and rejects a conflicting tenant header
+or signed OAuth tenant claim. Client arguments cannot select receipt scope.
+
+This is bounded local storage. Postgres ledger integration, isolated signing-key
+custody, and an upstream MCP proxy remain separate requirements. Back up the
+SQLite database and retain the public trust anchor with the evidence you need.
+
 ## Generate A Wrapper Profile
 
 ```bash

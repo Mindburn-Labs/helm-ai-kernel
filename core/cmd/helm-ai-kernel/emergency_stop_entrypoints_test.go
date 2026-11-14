@@ -141,7 +141,7 @@ func TestEmergencyStopFenceDeniesThroughEveryEntryPoint(t *testing.T) {
 			t.Fatal(err)
 		}
 		readFile := func() mcppkg.ToolExecutionResponse {
-			resp, err := executor.Execute(context.Background(), mcppkg.ToolExecutionRequest{
+			resp, err := executor.Execute(withMCPTransportIdentity(context.Background(), "mcp-fence", "trusted-local-test-credential"), mcppkg.ToolExecutionRequest{
 				ToolName:       "file_read",
 				SessionID:      "mcp-fence",
 				PrincipalID:    "mcp-fence",

@@ -56,23 +56,13 @@ func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.
 }
 
 func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
-	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
+	runtime, err := openLocalMCPRuntime(dataDir, policyGraph)
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, err
 	}
-	// Governed GitHub dispatch arms only from the environment (see
-	// mcp_effects.go); a misconfigured signer seed fails loudly here instead of
-	// degrading to unsigned permits.
-	githubEffects, err := newGitHubEffectsRuntimeFromEnv(dataDir)
-	if err != nil {
-		return nil, mcppkg.GovernedExecutor{}, err
-	}
-	// The fence database stays open for the life of the mcp serve process.
-	fence, err := openStandaloneEmergencyStopFence(context.Background(), dataDir)
-	if err != nil {
-		return nil, mcppkg.GovernedExecutor{}, err
-	}
-	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects, fence.guardianState(dataDir))
+	// Compatibility constructor: callers retain this runtime for their lifetime.
+	// The serving entrypoints use openLocalMCPRuntime and close it explicitly.
+	return runtime.catalog, runtime.executor, nil
 }
 
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
@@ -115,6 +105,12 @@ func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator,
 	if evaluator == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
 	}
+	options := lifecycleFirewallOptions()
+	if receipts, ok := evaluator.(interface {
+		ReceiptIDForDecision(context.Context, *contracts.DecisionRecord) string
+	}); ok {
+		options = append(options, mcppkg.WithDecisionReceiptID(receipts.ReceiptIDForDecision))
+	}
 	evaluator, err := bindEmergencyStopScope(evaluator)
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, err
@@ -129,7 +125,7 @@ func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator,
 			}
 		}
 	}
-	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog, lifecycleFirewallOptions()...)
+	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog, options...)
 
 	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator, githubEffects)), nil
 }
@@ -425,11 +421,12 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 }
 
 func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, dataDir string, policyGraph *prg.Graph) error {
-	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
+	runtime, err := openLocalMCPRuntime(dataDir, policyGraph)
 	if err != nil {
 		return err
 	}
-
+	defer runtime.Close()
+	ctx := withMCPTransportIdentity(context.Background(), "mcp-stdio", "mcp-stdio-transport")
 	reader := bufio.NewReader(stdin)
 	for {
 		req, err := readMCPRequest(reader)
@@ -440,7 +437,7 @@ func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, d
 			return err
 		}
 
-		resp, err := handleMCPRPCRequest(req, catalog, executor.Execute)
+		resp, err := handleMCPRPCRequestWithContext(ctx, req, runtime.catalog, runtime.executor.Execute)
 		if err != nil {
 			return err
 		}
@@ -538,7 +535,7 @@ func writeMCPResponse(stdout io.Writer, resp *mcpRPCResponse) error {
 	return err
 }
 
-func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, executor mcppkg.ToolExecutor) (*mcpRPCResponse, error) {
+func handleMCPRPCRequestWithContext(ctx context.Context, req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, executor mcppkg.ToolExecutor) (*mcpRPCResponse, error) {
 	response := &mcpRPCResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -631,7 +628,7 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 		// HTTP transport headers and is handled by the Gateway's HTTP server.
 		// The stdio transport does not support delegation headers.
 
-		execResp, err := executor(context.Background(), execReq)
+		execResp, err := executor(ctx, execReq)
 		if err != nil {
 			if execResp.IsError && execResp.ProtectedArgsHash != "" {
 				response.Result = mcppkg.ToolResultPayload(execResp)
@@ -670,14 +667,14 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		return nil, err
 	}
 	baseURL := fmt.Sprintf("http://%s:%d", mcpBind, port)
-	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
+	runtime, err := openLocalMCPRuntime(dataDir, policyGraph)
 	if err != nil {
 		return nil, err
 	}
-	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{
+	gateway := mcppkg.NewGateway(runtime.catalog, mcppkg.GatewayConfig{
 		BaseURL:  baseURL,
 		AuthMode: authMode,
-	}, mcppkg.WithGovernedExecutor(executor))
+	}, mcppkg.WithGovernedExecutor(runtime.executor))
 
 	mux := newListenerRouteMux(listenerMCP)
 	registerLocalMCPRoutes(mux, gateway, baseURL)
@@ -686,17 +683,20 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		mux.ServeHTTP(w, r)
 	}), authMode, baseURL)
 	if err != nil {
+		_ = runtime.Close()
 		return nil, err
 	}
 
-	return &http.Server{
+	server := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", mcpBind, port),
 		Handler:           handler,
 		ReadHeaderTimeout: 15 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
-	}, nil
+	}
+	server.RegisterOnShutdown(func() { _ = runtime.Close() })
+	return server, nil
 }
 
 // registerLocalMCPRoutes mounts the mcp serve listener's routes. The gateway
@@ -726,10 +726,21 @@ func registerLocalMCPRoutes(mux routeMux, gateway *mcppkg.Gateway, baseURL strin
 }
 
 func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, error) {
+	// This listener serves one configured tenant. Headers are assertions only;
+	// they never select a tenant. Capture configuration when the listener starts.
+	tenantID := configuredRuntimeTenantID()
+	downstream := next
+	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if asserted := strings.TrimSpace(r.Header.Get(tenantHeader)); asserted != "" && asserted != tenantID {
+			http.Error(w, "MCP tenant mismatch", http.StatusForbidden)
+			return
+		}
+		downstream.ServeHTTP(w, r)
+	})
 	switch authMode {
 	case "none":
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := withMCPTransportIdentity(r.Context(), "mcp-local", "mcp-local:"+baseURL)
+			ctx := withMCPTransportIdentityForTenant(r.Context(), "mcp-local", "mcp-local:"+baseURL, tenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}), nil
 	case "static-header":
@@ -746,7 +757,7 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 				http.Error(w, "missing or invalid MCP API key", http.StatusUnauthorized)
 				return
 			}
-			ctx := withMCPTransportIdentity(r.Context(), "mcp-static", provided)
+			ctx := withMCPTransportIdentityForTenant(r.Context(), "mcp-static", provided, tenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}), nil
 	case "oauth":
@@ -801,7 +812,11 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 					http.Error(w, "OAuth token subject is required", http.StatusUnauthorized)
 					return
 				}
-				ctx := withMCPTransportIdentity(r.Context(), principalID, tokenStr)
+				if claims.TenantID != "" && claims.TenantID != tenantID {
+					http.Error(w, "OAuth token tenant mismatch", http.StatusForbidden)
+					return
+				}
+				ctx := withMCPTransportIdentityForTenant(r.Context(), principalID, tokenStr, tenantID)
 				ctx = mcppkg.WithOAuthAuthorization(ctx, mcppkg.OAuthAuthorization{
 					Scopes:    claims.Scopes,
 					Resources: claims.Resources,
@@ -828,7 +843,7 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 				http.Error(w, "missing or invalid OAuth bearer token", http.StatusUnauthorized)
 				return
 			}
-			ctx := withMCPTransportIdentity(r.Context(), "mcp-oauth-dev", provided)
+			ctx := withMCPTransportIdentityForTenant(r.Context(), "mcp-oauth-dev", provided, tenantID)
 			ctx = mcppkg.WithOAuthAuthorization(ctx, mcppkg.OAuthAuthorization{
 				Scopes:    parseMCPEnvList(os.Getenv("HELM_OAUTH_SCOPES")),
 				Resources: []string{resource},
@@ -841,9 +856,13 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 }
 
 func withMCPTransportIdentity(ctx context.Context, principalID, credential string) context.Context {
+	return withMCPTransportIdentityForTenant(ctx, principalID, credential, configuredRuntimeTenantID())
+}
+
+func withMCPTransportIdentityForTenant(ctx context.Context, principalID, credential, tenantID string) context.Context {
 	ctx = helmauth.WithPrincipal(ctx, &helmauth.BasePrincipal{
 		ID:       principalID,
-		TenantID: helmauth.SystemTenantID,
+		TenantID: tenantID,
 		Roles:    []string{"service"},
 	})
 	return helmauth.WithAuthenticatedCredential(ctx, credential)

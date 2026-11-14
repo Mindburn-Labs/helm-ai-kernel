@@ -88,6 +88,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+- Standalone `mcp serve` persists signed receipt.v5 admission records before allowing tool dispatch or returning policy denials, including its no-policy default. It exposes the stored receipt ID and portable evidence, binds local scope to the configured tenant and refuses dispatch if receipt persistence fails. These local admission records do not establish completed effects or isolated signing-key custody.
+
 ### Upgrade notes
 
 - Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook

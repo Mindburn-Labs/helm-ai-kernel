@@ -79,11 +79,12 @@ type PolicyEvaluator interface {
 
 // GovernanceFirewall intercepts tool calls and enforces Guardian policies.
 type GovernanceFirewall struct {
-	evaluator    PolicyEvaluator
-	catalog      *ToolCatalog
-	publisher    events.Publisher
-	lifecycleEnv string
-	privacy      *privacy.StandardPrivacyManager
+	decisionReceiptID func(context.Context, *contracts.DecisionRecord) string
+	evaluator         PolicyEvaluator
+	catalog           *ToolCatalog
+	publisher         events.Publisher
+	lifecycleEnv      string
+	privacy           *privacy.StandardPrivacyManager
 }
 
 const (
@@ -111,6 +112,28 @@ var (
 
 // GovernanceFirewallOption configures optional runtime seams.
 type GovernanceFirewallOption func(*GovernanceFirewall)
+
+// isCanonicalDecisionReceiptID recognizes only the existing receipt writer's
+// rcpt-<lowercase SHA-256> identifiers. Arbitrary callback and execution fields
+// still go through their normal privacy projection.
+func isCanonicalDecisionReceiptID(id string) bool {
+	if len(id) != len("rcpt-")+64 || !strings.HasPrefix(id, "rcpt-") {
+		return false
+	}
+	for _, c := range id[len("rcpt-"):] {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// WithDecisionReceiptID exposes the durable decision receipt after successful
+// evaluation. The trusted evaluator must persist before returning a decision;
+// this reference is admission evidence, not a completed-dispatch receipt.
+func WithDecisionReceiptID(resolve func(context.Context, *contracts.DecisionRecord) string) GovernanceFirewallOption {
+	return func(f *GovernanceFirewall) { f.decisionReceiptID = resolve }
+}
 
 // WithLifecyclePublisher injects a lifecycle capture/publisher. Publication
 // stays disabled unless the trusted runtime explicitly supplies one.
@@ -323,8 +346,12 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		startedAt := time.Now()
 		ctx, baseMeta := lifecycleContext(ctx, req, f.lifecycleEnv)
 		protectedArgsHash := ""
+		decisionReceiptID := ""
 		anchorResponse := func(response ToolExecutionResponse) ToolExecutionResponse {
 			response.ProtectedArgsHash = protectedArgsHash
+			if response.ReceiptID == "" {
+				response.ReceiptID = decisionReceiptID
+			}
 			return response
 		}
 		sequence := make([]events.LifecycleEvent, 0, len(events.LifecycleEventTypes()))
@@ -426,6 +453,15 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			return anchorResponse(deniedResponse(evalErr)), nil
 		}
 
+		if f.decisionReceiptID != nil {
+			decisionReceiptID = f.decisionReceiptID(ctx, decision)
+			// The trusted writer's opaque digest is already safe to expose and
+			// must remain a resolvable lookup key. Digit runs within a digest can
+			// accidentally match privacy heuristics intended for provider data.
+			if !isCanonicalDecisionReceiptID(decisionReceiptID) {
+				decisionReceiptID = f.protectDispatchString(ctx, decisionReceiptID)
+			}
+		}
 		publicDecision := f.publicDecisionProjection(ctx, *decision)
 		emit(events.NewPolicyApplied(meta(), publicDecision, nil))
 		emit(events.NewDecisionMade(meta(), publicDecision, events.LifecycleEnrichment{
@@ -474,7 +510,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonDataEgressBlocked), "egress")
 			denied := anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked))
-			if resp.ExecutionReceipt != nil {
+			if decisionReceiptID == "" && resp.ExecutionReceipt != nil {
 				receipt := f.protectDispatchReceipt(ctx, *resp.ExecutionReceipt)
 				denied.ReceiptID = receipt.ReceiptID
 				if denied.ReceiptID == "" {
@@ -508,6 +544,9 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			}
 		}
 
+		if decisionReceiptID != "" {
+			resp.ReceiptID = decisionReceiptID
+		}
 		if handlerErr != nil || resp.IsError {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonVerification), "handler")

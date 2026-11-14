@@ -39,6 +39,13 @@ python3 scripts/ci/quality.py shards merge 4   # which gates each part runs
 CHECK_SHARD=2/4 make check                     # run one part
 ```
 
+Core's normal test run is partitioned between `go-test` (`make test`: `pkg`
+and `cmd/receipt_verify`) and `command-tests` (`make test-cli`: every remaining
+core package). The latter discovers packages with `go list`, including gateway
+commands and integration tests, and fails if discovery fails or selects nothing.
+`go-module-tests` tests the other tracked Go modules without rerunning core.
+The separate race, TCB coverage and Postgres proof gates retain their checks.
+
 Use focused gates when working on one surface:
 
 ```bash

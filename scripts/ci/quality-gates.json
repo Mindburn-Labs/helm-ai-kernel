@@ -437,13 +437,15 @@
     {
       "id": "command-tests",
       "seconds": 43,
-      "title": "CLI command tests",
-      "command": "cd core && go test ./cmd/helm-ai-kernel -count=1",
+      "title": "Core command and integration tests",
+      "command": "make test-cli",
       "timeout_seconds": 900,
       "paths": [
-        "core/cmd/**",
-        "core/pkg/**"
-      ]
+        "core/**",
+        "Makefile",
+        "scripts/ci/go_core_command_tests.sh"
+      ],
+      "description": "Tests all core packages outside pkg and receipt_verify, which are covered by go-test. Package discovery failures and an empty selection fail."
     },
     {
       "id": "verify-fixtures",
@@ -1040,14 +1042,16 @@
     {
       "id": "go-module-tests",
       "seconds": 75,
-      "title": "Every Go module tested without the workspace",
+      "title": "Remaining Go modules tested without the workspace",
       "command": "bash scripts/ci/go_module_tests.sh",
       "timeout_seconds": 2400,
       "paths": [
         "**/*.go",
         "**/go.mod",
-        "**/go.sum"
-      ]
+        "**/go.sum",
+        "scripts/ci/go_module_tests.sh"
+      ],
+      "description": "Tests every tracked Go module except core, whose packages are covered by go-test and command-tests."
     },
     {
       "id": "launchpad-promotion",

@@ -26,7 +26,7 @@ test:
 	cd core && go test ./cmd/receipt_verify/... -count=1
 
 test-cli:
-	cd core && go test ./cmd/helm-ai-kernel -count=1
+	bash scripts/ci/go_core_command_tests.sh
 
 test-race:
 	cd core && go test ./pkg/... -count=1 -race

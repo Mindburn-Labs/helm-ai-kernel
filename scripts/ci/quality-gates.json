@@ -14,6 +14,7 @@
         "tracked-file-hygiene",
         "go-lint",
         "build",
+        "first-use",
         "go-test",
         "command-tests",
         "receipt-verifier-wasm",
@@ -62,6 +63,7 @@
         "proofgraph-signature-writes",
         "reason-code-reachability",
         "build",
+        "first-use",
         "go-test",
         "postgres-proofs",
         "tcb-coverage",
@@ -119,6 +121,7 @@
         "tracked-file-hygiene",
         "go-lint",
         "build",
+        "first-use",
         "go-test",
         "command-tests",
         "receipt-verifier-wasm",
@@ -391,6 +394,22 @@
         "core/**",
         "Makefile",
         "VERSION"
+      ]
+    },
+    {
+      "id": "first-use",
+      "seconds": 10,
+      "title": "Public HTTP first-use journey and offline receipts",
+      "command": "make first-use",
+      "timeout_seconds": 900,
+      "paths": [
+        "core/**",
+        "examples/first-use/**",
+        "examples/launch/policies/agent_tool_call_boundary.*",
+        "docs/QUICKSTART.md",
+        "docs/DEVELOPER_JOURNEY.md",
+        "docs/reference/http-api.md",
+        "Makefile"
       ]
     },
     {

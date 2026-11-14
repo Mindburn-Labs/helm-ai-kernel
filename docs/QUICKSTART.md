@@ -26,12 +26,11 @@ brew update
 brew upgrade mindburn-labs/tap/helm-ai-kernel
 ```
 
-From source:
+From the current source checkout:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-git checkout v0.12.0
 mise trust
 mise install
 mise exec -- make build
@@ -42,6 +41,33 @@ The source build uses Go 1.26.11, pinned by `go.work` and `mise.toml`. The
 recipe explicitly trusts the checked-out mise configuration and installs the
 pinned toolchain before building. If mise is unavailable, use a compatible
 native Go toolchain instead.
+
+## Get An ALLOW, A DENY And Verifiable Receipts
+
+From the source checkout, with Python 3.10 or newer installed:
+
+```bash
+mise exec -- make first-use
+```
+
+With a compatible native Go toolchain, use `make first-use` directly. This
+builds `bin/helm-ai-kernel` and `bin/receipt_verify`, starts a loopback server
+with a fresh HOME and a generated local credential, then submits two requests
+under the sample policy: `read-ticket` must return `ALLOW` and
+`dangerous-shell` must return `DENY`. It also checks that requests without
+credentials or with the wrong tenant are refused.
+
+The walkthrough fetches the corresponding `receipt.v5` records, exports
+`root.pub` from its own server's data directory, stops the server, and verifies
+both receipts offline. Changing a verdict or using another public key must
+fail verification. It prints `PASS` only when every check succeeds and prints
+the evidence directory containing the requests' results, receipts, verifier
+output and server log. This demonstrates policy evaluation; it dispatches no
+tools and needs no provider account.
+
+See the [executable walkthrough](../examples/first-use/README.md) to choose an
+output directory or repeat verification. The current source walkthrough is
+separate from the release installation options below.
 
 ## Delivery Surfaces
 
@@ -63,7 +89,7 @@ are client libraries, not executable Kernel installs.
 
 | Surface | Public proof |
 | --- | --- |
-| Install | `brew install mindburn-labs/tap/helm-ai-kernel` or the tagged source build above |
+| Install | `brew install mindburn-labs/tap/helm-ai-kernel` or the source build above |
 | Operator TUI | `helm-ai-kernel` or `helm-ai-kernel tui` (escape: `HELM_NO_TUI=1`, `TERM=dumb`). Catalog ranks Doctor/Watch/Policy/Freeze/Threat first. Ceremony is typed `APPROVE`/`DENY` only. |
 | Setup inspect | `helm-ai-kernel setup status --format json` |
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
@@ -90,6 +116,12 @@ and `--principal` or `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_PRINCIPAL_ID`.
 Unavailable, unauthorized or malformed responses return a failure exit code.
 Receipt availability checks inspect the response; they do not verify receipt
 signatures. Use the verification commands for that proof.
+
+Named `setup status claude-code` and `setup status codex` inspections default
+to the current project; use `--scope user` to inspect a user installation.
+`setup ... --dry-run --json` can preview configuration before the client is
+installed. A real `setup ... --yes` installation still requires that client
+on PATH.
 
 ## Prove The Boundary
 

@@ -48,7 +48,6 @@ type CheckResult struct {
 }
 
 const doctorOnboardingSuggestion = "Run: helm-ai-kernel setup status"
-const doctorRepairSuggestion = "Run: helm-ai-kernel setup repair claude-code --dry-run"
 const doctorMCPScanSuggestion = "Run: helm-ai-kernel mcp scan"
 
 // doctorSummary is the JSON-serializable summary.
@@ -616,23 +615,33 @@ func checkSetupLifecycle(verbose bool) CheckResult {
 		opts.Workspace = workspace
 	}
 	var degraded []string
+	var repairPreviews []string
 	var configured []string
 	for _, target := range supportMatrix().DirectSetup {
-		summary, err := inspectSetupTarget(opts, target)
-		if err != nil {
-			continue
-		}
-		switch summary.Lifecycle {
-		case "degraded", "repairable":
-			degraded = append(degraded, target)
-		case "configured", "pending", "active":
-			configured = append(configured, target)
+		for _, scope := range setupInspectionScopes(target) {
+			inspect := opts
+			inspect.Scope = scope
+			inspect.Target = target
+			summary, err := inspectSetupTarget(inspect, target)
+			if err != nil {
+				continue
+			}
+			label := target + " (" + scope + ")"
+			switch summary.Lifecycle {
+			case "degraded", "repairable":
+				degraded = append(degraded, label)
+				inspect.Workspace = summary.Workspace
+				inspect.DataDir = summary.DataDir
+				repairPreviews = append(repairPreviews, "Run: "+setupRepairCommand(inspect, "--dry-run"))
+			case "configured", "pending", "active":
+				configured = append(configured, label)
+			}
 		}
 	}
 	if len(degraded) > 0 {
 		r.Status = statusFail
 		r.Message = "HELM client integration needs repair: " + strings.Join(degraded, ", ")
-		r.Suggestion = doctorRepairSuggestion
+		r.Suggestion = strings.Join(repairPreviews, "\n")
 		return r
 	}
 	if len(configured) > 0 {

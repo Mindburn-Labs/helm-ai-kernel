@@ -1,5 +1,8 @@
 # Examples
 
+Start with [local HTTP first use](first-use/README.md) for an authenticated
+ALLOW and DENY with offline receipt verification: `make first-use`.
+
 The retained examples are small entry points for the OSS kernel, SDKs,
 OpenAI-compatible proxy, policy fixtures, policy-pack examples, telemetry, and
 provider starter layouts. A path is documented as runnable only when this

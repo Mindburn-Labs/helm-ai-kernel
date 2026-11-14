@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -106,12 +107,6 @@ func TestDoctorSuggestionsAreFailClosed(t *testing.T) {
 	if !strings.Contains(doctorOnboardingSuggestion, "setup status") {
 		t.Fatalf("doctor onboarding should inspect first: %q", doctorOnboardingSuggestion)
 	}
-	if strings.Contains(doctorRepairSuggestion, "--yes") {
-		t.Fatalf("doctor repair still recommends --yes: %q", doctorRepairSuggestion)
-	}
-	if !strings.Contains(doctorRepairSuggestion, "--dry-run") {
-		t.Fatalf("doctor repair should be --dry-run: %q", doctorRepairSuggestion)
-	}
 	if strings.Contains(doctorMCPScanSuggestion, "--yes") {
 		t.Fatalf("doctor mcp scan still recommends --yes: %q", doctorMCPScanSuggestion)
 	}
@@ -135,5 +130,97 @@ func TestCompensateFailedSetupApplyRemovesMCP(t *testing.T) {
 	})
 	if !removed {
 		t.Fatal("MCP+hook failure must compensate by removing MCP")
+	}
+}
+
+func TestDefaultSetupIsVisibleToStatusAndDoctor(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	workspace := filepath.Join(root, "workspace")
+	for _, dir := range []string{home, workspace} {
+		if err := os.Mkdir(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("HELM_DATA_DIR", "")
+	t.Chdir(workspace)
+	stubSetupSideEffects(t)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"helm-ai-kernel", "setup", "codex", "--yes", "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("install failed %d: %s", code, stderr.String())
+	}
+	installed := decodeSingleSetupSummary(t, &stdout)
+	if installed.Scope != "project" {
+		t.Fatalf("unexpected install scope: %s", installed.Scope)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--json"}, &stdout, &stderr)
+	status := decodeSingleSetupSummary(t, &stdout)
+	if status.Scope != "project" || !status.MCPInstalled || !status.HookInstalled || status.ClientConfigPath != installed.ClientConfigPath {
+		t.Fatalf("default status missed default install: %+v; installed %+v", status, installed)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	Run([]string{"helm-ai-kernel", "setup", "status", "--json"}, &stdout, &stderr)
+	var fleet setupFleetStatus
+	if err := json.Unmarshal(stdout.Bytes(), &fleet); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range fleet.Clients {
+		if c.Target == "codex" && c.Scope == "project" && c.MCPInstalled && c.HookInstalled {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("fleet missed default install: %+v", fleet.Clients)
+	}
+	if result := checkSetupLifecycle(false); result.Status != statusPass || !strings.Contains(result.Message, "codex") {
+		t.Fatalf("doctor missed default install: %+v", result)
+	}
+	// Explicit user scope must remain distinct and must not inherit the project install.
+	stdout.Reset()
+	stderr.Reset()
+	Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "user", "--json"}, &stdout, &stderr)
+	user := decodeSingleSetupSummary(t, &stdout)
+	if user.Scope != "user" || user.MCPInstalled || user.HookInstalled {
+		t.Fatalf("project install leaked into user scope: %+v", user)
+	}
+}
+
+func TestDoctorRepairSuggestionUsesFailedProjectScope(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	workspace := filepath.Join(root, "project with spaces")
+	for _, dir := range []string{home, workspace} {
+		if err := os.Mkdir(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("HELM_DATA_DIR", "")
+	t.Chdir(workspace)
+	stubSetupSideEffects(t)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"helm-ai-kernel", "setup", "codex", "--yes", "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("install failed %d: %s", code, stderr.String())
+	}
+	installed := decodeSingleSetupSummary(t, &stdout)
+	if err := os.Remove(installed.HookConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	result := checkSetupLifecycle(false)
+	if result.Status != statusFail {
+		t.Fatalf("broken project not detected: %+v", result)
+	}
+	for _, required := range []string{"setup repair codex --scope project", "--workspace " + shellQuote(installed.Workspace), "--data-dir " + shellQuote(installed.DataDir), "--dry-run"} {
+		if !strings.Contains(result.Suggestion, required) {
+			t.Fatalf("repair suggestion lacks %q: %s", required, result.Suggestion)
+		}
+	}
+	if strings.Contains(result.Suggestion, "--yes") || strings.Contains(result.Suggestion, "claude-code") {
+		t.Fatalf("unsafe or wrong-target repair: %s", result.Suggestion)
 	}
 }

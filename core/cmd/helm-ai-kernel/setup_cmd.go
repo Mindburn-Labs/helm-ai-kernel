@@ -840,15 +840,19 @@ func runSetupStatusFleetCmd(args []string, stdout, stderr io.Writer) int {
 	clients := make([]setupSummary, 0, len(targets))
 	exit := 0
 	for _, target := range targets {
-		summary, err := inspectSetupTarget(opts, target)
-		if err != nil {
-			fmt.Fprintf(stderr, "setup status %s: %v\n", target, err)
-			exit = 1
-			continue
-		}
-		clients = append(clients, summary)
-		if !setupStatusHealthy(summary) && summary.ClientState != "print_config_only" && summary.ClientState != "absent" {
-			exit = 1
+		for _, scope := range setupInspectionScopes(target) {
+			inspect := opts
+			inspect.Scope = scope
+			summary, err := inspectSetupTarget(inspect, target)
+			if err != nil {
+				fmt.Fprintf(stderr, "setup status %s (%s): %v\n", target, scope, err)
+				exit = 1
+				continue
+			}
+			clients = append(clients, summary)
+			if !setupStatusHealthy(summary) && summary.ClientState != "print_config_only" && summary.ClientState != "absent" {
+				exit = 1
+			}
 		}
 	}
 	fleet := setupFleetStatus{Operation: "status", DataDir: opts.DataDir, Clients: clients}
@@ -860,8 +864,8 @@ func runSetupStatusFleetCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "HELM setup status (%s)\n", fleet.DataDir)
 	for _, client := range clients {
-		fmt.Fprintf(stdout, "  %-12s  lifecycle=%-10s  state=%s  loaded=%v  config=%s\n",
-			client.Target, client.Lifecycle, client.ClientState, client.NativeLoaded, client.ClientConfigPath)
+		fmt.Fprintf(stdout, "  %-12s  scope=%-7s  lifecycle=%-10s  state=%s  loaded=%v  config=%s\n",
+			client.Target, client.Scope, client.Lifecycle, client.ClientState, client.NativeLoaded, client.ClientConfigPath)
 	}
 	return exit
 }
@@ -917,6 +921,17 @@ func parseSetupFleetArgs(name string, args []string, stderr io.Writer) (setupOpt
 		opts.Workspace = abs
 	}
 	return opts, 0
+}
+
+// setupInspectionScopes covers every supported installation location. The
+// overview and doctor must include the project scope used by default setup.
+func setupInspectionScopes(target string) []string {
+	switch target {
+	case "claude-code", "codex":
+		return []string{"project", "user"}
+	default:
+		return []string{"user"}
+	}
 }
 
 func inspectSetupTarget(opts setupOptions, target string) (setupSummary, error) {
@@ -1271,14 +1286,18 @@ func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
 	if operation == "status" {
 		fmt.Fprintln(w, "Usage: helm-ai-kernel setup status [<claude-code|codex|hermes|deepseek|cursor|vscode|windsurf>|--all] [options]")
 		fmt.Fprintln(w, "Inspect local HELM integration without changing configuration.")
-		fmt.Fprintln(w, "No target inspects every supported client. Print-config clients never claim native_loaded.")
+		fmt.Fprintln(w, "No target inspects every supported client at both user and project locations where supported. Print-config clients never claim native_loaded.")
 	} else {
 		fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex|hermes|deepseek> [options]\n", operation)
 		fmt.Fprintf(w, "%s HELM-owned local integration configuration.\n", strings.ToUpper(operation[:1])+operation[1:])
 	}
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
-	fmt.Fprintln(w, "  --scope user|project                          Installation scope (default user)")
+	if operation == "status" {
+		fmt.Fprintln(w, "  --scope user|project                          Scope for a named client (default project for Claude Code/Codex; user for Hermes/DeepSeek)")
+	} else {
+		fmt.Fprintln(w, "  --scope user|project                          Installation scope (default user)")
+	}
 	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
 	fmt.Fprintln(w, "  --data-dir DIR | --policy-profile FILE        Inspect explicit local state or policy material")
 	fmt.Fprintln(w, "  --dry-run | --json                            Preview or emit machine-readable output")
@@ -1341,6 +1360,11 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 
 func parseSetupInspectArgs(name string, args []string, stderr io.Writer, includeYes bool) (setupOptions, int) {
 	opts := setupOptions{Scope: "user"}
+	if name == "setup status" && len(args) > 0 {
+		if target, err := normalizeSetupTarget(args[0]); err == nil {
+			opts.Scope = setupInspectionScopes(target)[0]
+		}
+	}
 	if len(args) == 0 {
 		fmt.Fprintf(stderr, "%s: expected <claude-code|codex|hermes|deepseek>\n", name)
 		return opts, 2
@@ -1957,11 +1981,13 @@ func preflightSetup(opts setupOptions, summary *setupSummary) error {
 		return err
 	}
 	client, err := setupFindClient(opts.Target)
-	if err != nil {
+	if err != nil && !opts.DryRun {
 		return fmt.Errorf("%s client is not available on PATH; install %q and retry", opts.Target, setupClientCommand(opts.Target))
 	}
+	// A preview needs no client executable. Keep validating the configuration
+	// and signing material below, and report that the client was not detected.
 	summary.ClientBinaryPath = client
-	summary.ClientDetected = true
+	summary.ClientDetected = err == nil
 	if summary.ClientState == "" {
 		summary.ClientState = "planned"
 	}
@@ -2199,6 +2225,10 @@ func setupUpgradeCommand(opts setupOptions) string {
 }
 
 func setupRecoveryCommand(opts setupOptions) string {
+	return setupRepairCommand(opts, "--yes")
+}
+
+func setupRepairCommand(opts setupOptions, confirmation string) string {
 	workspace := ""
 	if opts.Scope == "project" {
 		workspace = " --workspace " + shellQuote(opts.Workspace)
@@ -2212,10 +2242,11 @@ func setupRecoveryCommand(opts setupOptions) string {
 		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
 	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup repair %s --scope %s%s --yes --data-dir %s%s%s",
+		"helm-ai-kernel setup repair %s --scope %s%s %s --data-dir %s%s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
+		confirmation,
 		shellQuote(opts.DataDir),
 		signingSeedFile,
 		policyProfile,

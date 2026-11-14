@@ -269,6 +269,7 @@ var opaqueReasons = map[string]string{
 	"ssh O":                     "-O drives a control connection to whatever host opened it",
 	"scp F":                     "-F reads hosts from a configuration file",
 	"scp S":                     "-S replaces the program that makes the connection",
+	"scp D":                     "-D replaces the connection with a local command",
 	"sftp F":                    "-F reads hosts from a configuration file",
 	"sftp S":                    "-S replaces the program that makes the connection",
 	"sftp D":                    "-D replaces the connection with a local command",
@@ -595,7 +596,7 @@ var (
 		// after the host is therefore an option, not part of the command.
 	}, 2)
 	scpSpec = sshFamilySpec("cDFiJloPSX", "346ABCOpqRrsTv", map[string]optRole{
-		"P": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque,
+		"P": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "D": roleOpaque,
 	}, 0)
 	sftpSpec = sshFamilySpec("BbcDFiJloPRSsX", "46AaCfNpqrv", map[string]optRole{
 		"P": rolePort, "J": roleJump, "o": roleSSHOption, "F": roleOpaque, "S": roleOpaque, "D": roleOpaque,
@@ -1056,6 +1057,11 @@ func opensslEgress(tokens []string) egressScan {
 		}
 		switch {
 		case name == "help":
+			// Options before help may already load executable providers or
+			// engines. Help cannot erase that uncertainty.
+			if scan.undetermined != "" {
+				return scan
+			}
 			return egressScan{}
 		case name == "connect" || name == "proxy":
 			if target, ok := next(); ok {

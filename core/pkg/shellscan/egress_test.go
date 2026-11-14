@@ -392,3 +392,31 @@ func TestSensitiveWriteTargetCoversNetworkClientConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyPreservesExecutableClientRefusals(t *testing.T) {
+	for _, command := range []string{
+		"openssl s_client -provider /tmp/provider.so -help",
+		"openssl s_client --provider=/tmp/provider.so --help",
+		"openssl s_time -engine /tmp/engine.so -help",
+		"openssl s_client -unknown /tmp/extension -help",
+		"scp -D /tmp/helper /tmp/source allowed.example:/tmp/dest",
+		"scp -qD/tmp/helper /tmp/source allowed.example:/tmp/dest",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: network targets = %q, want undetermined", command, got)
+		}
+	}
+	for _, command := range []string{"openssl s_client -help", "openssl s_client -connect allowed.example:443 -help", "openssl s_client -help -provider /tmp/unused.so"} {
+		if got := networkTargets(Classify(command)); len(got) != 0 {
+			t.Errorf("side-effect-free help %s: %q", command, got)
+		}
+	}
+	for _, tc := range []struct{ command, target string }{
+		{"scp /tmp/source allowed.example:/tmp/dest", "ssh://allowed.example"},
+		{"openssl s_client -connect allowed.example:443", "tcp://allowed.example:443"},
+	} {
+		if got := networkTargets(Classify(tc.command)); !sameTargets(got, []string{tc.target}) {
+			t.Errorf("%s: got %q", tc.command, got)
+		}
+	}
+}

@@ -967,3 +967,46 @@ func TestPathGuardResolvesSymlinksBeforeParentSegments(t *testing.T) {
 		t.Error("missing tail lost its resolved protected parent")
 	}
 }
+
+func TestPathGuardResolvesExtractedOptionPaths(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	alias := filepath.Join(work, "upload")
+	if err := os.Symlink(f.seed, alias); err != nil {
+		t.Fatal(err)
+	}
+	ordinary := filepath.Join(work, "ordinary")
+	if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{alias, "upload", ordinary} {
+		want := target != ordinary
+		for _, argv := range [][]string{
+			{"curl", "-T" + target, "https://allowed.example/file"},
+			{"curl", "-qT" + target, "https://allowed.example/file"},
+			{"curl", "--upload-file", target, "https://allowed.example/file"},
+			{"curl", "-d@" + target, "https://allowed.example/file"},
+			{"curl", "-sd@" + target, "https://allowed.example/file"},
+			{"curl", "--data-binary", "@" + target, "https://allowed.example/file"},
+			{"curl", "-F", "field=@" + target + ";type=text/plain", "https://allowed.example/file"},
+			{"curl", "-Ffield=<" + target, "https://allowed.example/file"},
+			{"curl", "--header", "@" + target, "https://allowed.example/file"},
+			{"curl", "--output", target, "https://allowed.example/file"},
+			{"wget", "--post-file=" + target, "https://allowed.example/file"},
+			{"scp", "-i" + target, "/tmp/source", "allowed.example:/tmp/dest"},
+		} {
+			quoted := make([]string, len(argv))
+			for i, arg := range argv {
+				quoted[i] = fmt.Sprintf("%q", arg)
+			}
+			for mode, result := range map[string]Result{
+				"shell": ClassifyAt(strings.Join(quoted, " "), work, WithPathGuard(f.guard)),
+				"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			} {
+				if (result.ProtectedPath != "") != want {
+					t.Errorf("%s %q: protected=%q, want %v", mode, argv, result.ProtectedPath, want)
+				}
+			}
+		}
+	}
+}

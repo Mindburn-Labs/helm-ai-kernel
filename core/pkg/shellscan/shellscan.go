@@ -389,6 +389,57 @@ func (c *collector) guardWord(word *syntax.Word) {
 	}
 }
 
+// guardOptionPaths extracts values using the same option grammar as egress
+// classification. A whole word such as -T/tmp/upload is not a filesystem
+// path: only /tmp/upload can resolve through a symlink to protected material.
+// This runs when recording a command, so shell, argv and unwrapped calls use
+// the command's effective working directory.
+func (c *collector) guardOptionPaths(command Command) {
+	if c.guard == nil || c.protectedPath != "" || len(command.Tokens) < 2 {
+		return
+	}
+	var spec cliSpec
+	switch command.Name {
+	case "curl":
+		spec = curlSpec
+	case "wget":
+		spec = wgetSpec
+	case "ssh":
+		spec = sshSpec
+	case "scp":
+		spec = scpSpec
+	case "sftp":
+		spec = sftpSpec
+	default:
+		return
+	}
+	cwd := c.cwd
+	if c.cwdUnknown {
+		cwd = ""
+	}
+	check := func(value string) {
+		if c.protectedPath != "" || value == "" {
+			return
+		}
+		if rule, ok := c.guard.Match(value, cwd); ok {
+			c.protectedPath = rule
+		}
+	}
+	walkCLI(spec, command.Tokens[1:], cliVisitor{
+		option: func(name string, _ optRole, value string) {
+			check(value)
+			if command.Name == "curl" {
+				check(curlAtPath(value))
+				if name == "form" {
+					check(curlFormPath(value))
+				}
+			}
+		},
+		operand: func(string) {},
+		invalid: func(string) {}, // The egress classifier owns invalid-option refusal.
+	})
+}
+
 var transferReadCommands = map[string]bool{
 	"cp":    true,
 	"rsync": true,
@@ -641,7 +692,7 @@ func curlAtPath(value string) string {
 }
 
 func curlFormPath(value string) string {
-	separator := strings.IndexByte(value, '@')
+	separator := strings.IndexAny(value, "@<")
 	if separator < 0 {
 		return ""
 	}
@@ -2730,6 +2781,7 @@ func staticTokens(args []wordTok) []string {
 }
 
 func (c *collector) record(cmd Command) {
+	c.guardOptionPaths(cmd)
 	c.commands = append(c.commands, cmd)
 }
 

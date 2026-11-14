@@ -156,6 +156,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
+- OpenSSL help retains earlier opaque-option refusals, and scp's direct SFTP
+  program override is refused. The trust-material guard extracts recognized
+  network-client option values before resolving symlinks, including attached
+  curl upload options and file-input markers.
 - The shell path guard preserves directory spelling when resolving symlinks
   before matching globs. On case-sensitive filesystems, a mixed-case alias
   to protected signing material is now refused; aliases to unrelated

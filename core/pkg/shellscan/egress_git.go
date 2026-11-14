@@ -88,7 +88,7 @@ var gitSpecs = map[string]cliSpec{
 		no-hardlinks shared recursive single-branch no-single-branch no-tags tags
 		shallow-submodules no-shallow-submodules remote-submodules no-remote-submodules
 		sparse also-filter-submodules dissociate reject-shallow no-reject-shallow ipv4 ipv6`,
-		map[string]optRole{"bundle-uri": roleOpaque, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque, "u": roleOpaque}),
+		map[string]optRole{"bundle-uri": roleOpaque, "template": roleOpaque, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque, "u": roleOpaque}),
 	"fetch": gitSpec("jo", "vqafkpPntu46", gitFetchValues, gitFetchFlags,
 		map[string]optRole{"all": roleOpaque, "multiple": roleOpaque}),
 	"pull": gitSpec("josX", "vqafkpPntur46e", gitFetchValues+" strategy strategy-option cleanup", gitFetchFlags+`
@@ -118,8 +118,9 @@ func gitConfigMovesConnection(key string) bool {
 	case "core.sshcommand", "core.gitproxy",
 		// A bundle URI is a second address git downloads from.
 		"fetch.bundleuri", "transfer.bundleuri", "clone.bundleuri",
-		// These name a program git runs while it connects.
-		"core.askpass", "core.hookspath", "core.fsmonitor", "credential.helper":
+		// These name a program git runs while it connects, or a directory
+		// of hooks it copies into a new repository and then runs.
+		"core.askpass", "core.hookspath", "core.fsmonitor", "credential.helper", "init.templatedir":
 		return true
 	}
 	if strings.HasPrefix(key, "credential.") && strings.HasSuffix(key, ".helper") {
@@ -251,6 +252,10 @@ func (g *gitInvocation) subcommand(sub string, args []string) bool {
 					g.config(value)
 				case roleOpaque:
 					switch {
+					case name == "template":
+						// A template's hooks are copied into the clone, and
+						// post-checkout runs before the clone returns.
+						g.scan.refuse("git --template installs hooks that run during the clone")
 					case name == "bundle-uri":
 						// The reply can be a bundle list, and git downloads
 						// every bundle it names, on any host.
@@ -389,10 +394,28 @@ func (g *gitInvocation) configWrite(args []string) bool {
 	return true
 }
 
+// gitLocalSubcommands are git's own commands that open no connection. A
+// word after "git" in neither this set nor the network sets is not git's own
+// as far as this scanner knows: an alias from configuration may stand behind
+// it. Deprecated commands are left out, because git lets an alias hide them.
+var gitLocalSubcommands = names(`
+	add am apply bisect blame branch bundle cat-file check-attr check-ignore
+	check-ref-format checkout cherry cherry-pick clean commit commit-graph commit-tree
+	count-objects describe diff diff-files diff-index diff-tree difftool fast-export
+	fast-import filter-branch for-each-ref format-patch fsck gc grep hash-object help init
+	log ls-files ls-tree maintenance merge merge-base merge-file merge-tree mergetool
+	mktag mktree mv name-rev notes pack-objects pack-refs prune range-diff read-tree
+	rebase reflog repack replace rerere reset restore rev-list rev-parse revert rm
+	shortlog show show-branch show-ref sparse-checkout stash status stripspace switch
+	symbolic-ref tag unpack-objects update-index update-ref var verify-commit verify-pack
+	verify-tag version worktree write-tree`)
+
 // gitEgress reports where a git command connects. configured is true when it
 // uses a remote from git configuration and nothing on the command line names
-// or moves the destination.
-func gitEgress(tokens []string) (scan egressScan, network, configured bool) {
+// or moves the destination. unknown is true when the word after "git" is not
+// one of git's own commands that this scanner knows, so configuration may
+// define it as an alias.
+func gitEgress(tokens []string) (scan egressScan, network, configured, unknown bool) {
 	g := gitInvocation{scan: &scan}
 	var configs []string
 	i := 0
@@ -429,14 +452,38 @@ globals:
 				_, _, scpLike := remoteSpec(rest)
 				_, networkWord := gitNetworkSubcommands[rest]
 				if networkWord || netdest.HasScheme(rest) || scpLike && strings.Contains(rest, "@") {
-					return egressScan{undetermined: "git option " + token + " is not recognized"}, true, false
+					return egressScan{undetermined: "git option " + token + " is not recognized"}, true, false, false
 				}
 			}
-			return egressScan{}, false, false
+			return egressScan{}, false, false, false
+		}
+	}
+	if i < len(tokens) {
+		sub := tokens[i]
+		_, ownNetwork := gitNetworkSubcommands[sub]
+		_, ownSpec := gitSpecs[sub]
+		_, ownLocal := gitLocalSubcommands[sub]
+		if !ownNetwork && !ownSpec && !ownLocal {
+			// Git runs its own command whatever an alias of that name says.
+			// For any other word it looks for a program named git-WORD and
+			// then for an alias, so what runs is not known here.
+			unknown = true
+			for _, config := range configs {
+				key, _, _ := strings.Cut(config, "=")
+				if strings.HasPrefix(config, dynamicToken) || strings.EqualFold(strings.TrimSpace(key), "alias."+sub) {
+					return egressScan{undetermined: "a command-line alias replaces the git subcommand"}, true, false, false
+				}
+			}
+			for _, rest := range tokens[i+1:] {
+				_, _, scpLike := remoteSpec(rest)
+				if netdest.HasScheme(rest) || scpLike && strings.Contains(rest, "@") {
+					return egressScan{undetermined: "git subcommand " + sub + " is not one of git's own; an alias can connect"}, true, false, false
+				}
+			}
 		}
 	}
 	if i >= len(tokens) || !g.subcommand(tokens[i], tokens[i+1:]) {
-		return egressScan{}, false, false
+		return egressScan{}, false, false, unknown
 	}
 	for _, config := range configs {
 		g.config(config)
@@ -444,5 +491,5 @@ globals:
 	if g.http && (!g.noRedirects || g.redirectsByURL) && !g.storesOnly {
 		scan.refuse("git follows a redirect on its first HTTP request; pass -c http.followRedirects=false")
 	}
-	return scan, true, g.configured && len(scan.destinations) == 0 && scan.undetermined == ""
+	return scan, true, g.configured && len(scan.destinations) == 0 && scan.undetermined == "", false
 }

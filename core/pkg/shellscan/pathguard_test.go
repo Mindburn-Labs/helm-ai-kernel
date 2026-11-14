@@ -1375,6 +1375,10 @@ func TestPathGuardChecksAttachedLongOptionValues(t *testing.T) {
 		{"tar", "--create", "--file=input", "notes.txt"},
 		{"sort", "--output=input", "notes.txt"},
 		{"gpg", "--keyring=./input", "--list-keys"},
+		// A value is checked as a path whatever the option means.
+		{"rsync", "-a", "--exclude=input", "src/", "dest/"},
+		// Words after "--" are options of the program a runner starts.
+		{"npm", "run", "build", "--", "--config=input"},
 	} {
 		words := make([]string, len(argv))
 		for i, arg := range argv {
@@ -1389,14 +1393,47 @@ func TestPathGuardChecksAttachedLongOptionValues(t *testing.T) {
 			}
 		}
 	}
+	// In a shell word the value may name the home directory.
+	if err := os.Symlink(f.seed, filepath.Join(f.home, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{
+		"tar --create --file=$HOME/alias notes.txt",
+		`tar --create --file="$HOME/alias" notes.txt`,
+		"sort --output=${HOME}/alias notes.txt",
+		// The shell removes the backslash and passes --file=...
+		`tar --create \--file=$HOME/alias notes.txt`,
+		`tar --create -\-file=$HOME/alias notes.txt`,
+	} {
+		if result := ClassifyAt(command, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+			t.Errorf("%s missed a protected attached option value", command)
+		}
+	}
+	// The shell globs the whole word, not the value: a pattern value that
+	// would match the protected directory by name is passed on as text.
+	for _, command := range []string{"rsync -a --exclude=.* src/ dest/", "rsync -a --exclude=.s* src/ dest/"} {
+		if result := ClassifyAt(command, f.home, WithPathGuard(f.guard)); result.ProtectedPath != "" {
+			t.Errorf("%s refused: %s", command, result.ProtectedPath)
+		}
+	}
 	for _, argv := range [][]string{
 		{"rsync", "--files-from=list.txt", "src/", "dest/"},
-		{"rsync", "-a", "--exclude=input", "src/", "dest/"},
 		{"tar", "--create", "--file=archive.tar", "notes.txt"},
 		{"grep", "--color=always", "input=1", "notes.txt"},
+		{"docker", "run", "--env=input=1", "image"},
+		{"go", "test", "--run=TestInput", "./..."},
 	} {
-		if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath != "" && argv[2] != "--exclude=input" {
-			t.Errorf("ordinary %q refused: %s", argv, result.ProtectedPath)
+		words := make([]string, len(argv))
+		for i, arg := range argv {
+			words[i] = "'" + arg + "'"
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath != "" {
+				t.Errorf("%s ordinary %q refused: %s", mode, argv, result.ProtectedPath)
+			}
 		}
 	}
 }

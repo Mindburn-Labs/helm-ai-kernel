@@ -661,7 +661,12 @@ func TestClassifyAppliesConfigurationOverridesToLocalTransfers(t *testing.T) {
 		"env CURL_HOME=/tmp/cfg curl file:///etc/hostname",
 		"export CURL_HOME=/tmp/cfg; curl file:///etc/hostname",
 		"WGETRC=/tmp/wgetrc wget",
+		"SYSTEM_WGETRC=/tmp/wgetrc wget",
 		"HOME=/tmp/cfg wget --version",
+		// --no-config counts only as an option, not as another option's value.
+		"WGETRC=/tmp/wgetrc wget -O --no-config",
+		// A first argument computed at run time is not known to be -q.
+		"CURL_HOME=/tmp/cfg curl ${X}-q file:///etc/hostname",
 		"GIT_TEMPLATE_DIR=/tmp/template git clone /absolute/local/repo /tmp/copy",
 		"GIT_CONFIG_GLOBAL=/tmp/gitconfig git clone /absolute/local/repo /tmp/copy",
 	} {
@@ -679,7 +684,86 @@ func TestClassifyAppliesConfigurationOverridesToLocalTransfers(t *testing.T) {
 		"GIT_TEMPLATE_DIR=/tmp/template git status",
 		"git clone /absolute/local/repo /tmp/copy",
 		"CURL_HOME=/tmp/cfg ls",
+		"HOME=/tmp/home git commit -m clone",
+		"GIT_CONFIG_GLOBAL=/dev/null git log",
 	} {
+		if got := networkTargets(Classify(command)); len(got) != 0 {
+			t.Errorf("%s: got %q, want no network effect", command, got)
+		}
+	}
+	// A variable only one client reads changes nothing for another.
+	for _, command := range []string{
+		"GIT_TEMPLATE_DIR=/tmp/template curl https://allowed.example/",
+		"SYSTEM_WGETRC=/tmp/wgetrc curl https://allowed.example/",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
+			t.Errorf("%s: got %q", command, got)
+		}
+	}
+}
+
+func TestClassifyRefusesGitCommandLineAliases(t *testing.T) {
+	// For a word that is not git's own, git looks for a program named
+	// git-WORD and then for an alias: the command is undetermined.
+	for _, command := range []string{
+		"git -c http.followRedirects=false -c alias.x=clone x https://other.example/r.git",
+		"git -c alias.x=push x git@other.example:org/repo.git main",
+		"git -c ALIAS.X=fetch x",
+		"git -c alias.x=status -c alias.x=clone x git@other.example:org/repo.git",
+		"git -c alias.x=clone -c alias.x=status x git@other.example:org/repo.git",
+		"git -c alias.x=clone x --template=/tmp/template /absolute/local/repo /tmp/copy",
+		"git -c alias.x=clone -c init.templateDir=/tmp/template x /absolute/local/repo /tmp/copy",
+		"git -c alias.x='!curl https://other.example/' x",
+		"git -c alias.st=status st",
+		"git -c alias.whatchanged=fetch whatchanged",
+		// A word that is not git's own may be an alias from configuration.
+		"git x https://other.example/r.git",
+		"git frobnicate git@other.example:org/repo.git",
+		"GIT_CONFIG_GLOBAL=/tmp/gitconfig git x",
+		"HOME=/tmp/home git x",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	// Git runs its own command whatever an alias of that name says.
+	for _, tc := range []struct{ command, target string }{
+		{"git -c alias.clone=status clone git@other.example:org/repo.git", "ssh://other.example"},
+		{"git -c alias.push=status push git@other.example:org/repo.git main", "ssh://other.example"},
+		{"git -c alias.fetch=status fetch git@other.example:org/repo.git", "ssh://other.example"},
+		{"git -c alias.ls-remote=status ls-remote git@other.example:org/repo.git", "ssh://other.example"},
+	} {
+		if got := networkTargets(Classify(tc.command)); !sameTargets(got, []string{tc.target}) {
+			t.Errorf("%s: got %q, want %q", tc.command, got, tc.target)
+		}
+	}
+	for _, command := range []string{
+		"git status",
+		"git x",
+		"git -c alias.status=clone status https://other.example/r.git",
+		"git -c alias.other=fetch status",
+		"git grep https://example.com/ notes.txt",
+		"git log --grep=https://example.com/",
+		"HOME=/tmp/home git status",
+	} {
+		if got := networkTargets(Classify(command)); len(got) != 0 {
+			t.Errorf("%s: got %q, want no network effect", command, got)
+		}
+	}
+}
+
+func TestClassifyTreatsComputedArgumentsAsPossibleAddresses(t *testing.T) {
+	for _, command := range []string{
+		"curl ${U}-s",
+		`curl "$TARGET"`,
+		"curl -s ${ADDRESS}",
+		"wget --max-redirect=0 --no-hsts ${U}-q",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, command := range []string{"curl --version", "curl -s --help"} {
 		if got := networkTargets(Classify(command)); len(got) != 0 {
 			t.Errorf("%s: got %q, want no network effect", command, got)
 		}

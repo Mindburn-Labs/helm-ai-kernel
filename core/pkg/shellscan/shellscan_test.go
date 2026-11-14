@@ -979,3 +979,26 @@ func TestClassifyReadOnlySubstitutions(t *testing.T) {
 		}
 	}
 }
+
+func TestSensitiveWriteTargetKeepsLiteralBackslashNames(t *testing.T) {
+	if nativePath(`a\b`) != `a\b` {
+		t.Skip("a backslash separates path components on this platform")
+	}
+	for _, tc := range []struct{ target, cwd string }{
+		{`/home/u/.config/systemd/user/unit\..\..\..\..\x.service`, ""},
+		{"x.service", `/home/u/.config/systemd/us\..\..\..\er`},
+		{`C:\Users\u\.ssh\config`, ""},
+	} {
+		if _, ok := SensitiveWriteTarget(tc.target, tc.cwd); !ok {
+			t.Errorf("SensitiveWriteTarget(%q, %q) missed", tc.target, tc.cwd)
+		}
+	}
+	for _, tc := range []struct{ target, cwd string }{
+		{`/home/u/notes\draft.txt`, ""},
+		{"draft.txt", `/home/u/work\space`},
+	} {
+		if rule, ok := SensitiveWriteTarget(tc.target, tc.cwd); ok {
+			t.Errorf("SensitiveWriteTarget(%q, %q) refused an ordinary file: %s", tc.target, tc.cwd, rule)
+		}
+	}
+}

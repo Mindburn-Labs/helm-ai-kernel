@@ -1160,3 +1160,150 @@ func TestPathGuardPreservesFilesystemWhitespace(t *testing.T) {
 		t.Fatal("whitespace in search root lost")
 	}
 }
+
+func TestPathGuardPreservesLiteralBackslashNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a backslash separates path components on Windows")
+	}
+	f := newGuardFixture(t)
+	work := filepath.Join(t.TempDir(), `work\space`)
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{`in\put`, `\input`, `input\`, `a\..\b`} {
+		alias := work + "/" + name
+		if err := os.Symlink(f.seed, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct{ target, cwd string }{{alias, ""}, {name, work}, {"./" + name, work}} {
+			if _, ok := f.guard.Match(tc.target, tc.cwd); !ok {
+				t.Errorf("Match(%q, %q) missed a literal-backslash alias", tc.target, tc.cwd)
+			}
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt([]string{"cat", name}, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt("cat '"+name+"'", work, WithPathGuard(f.guard)),
+			"cd":    ClassifyAt("cd '"+work+"' && cat '"+name+"'", "/", WithPathGuard(f.guard)),
+			"curl":  ClassifyArgvAt([]string{"curl", "-T", name, "https://allowed.example/"}, work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath == "" {
+				t.Errorf("%s %q missed a literal-backslash alias", mode, name)
+			}
+		}
+	}
+	for _, name := range []string{`plain\name`, `notes\`} {
+		ordinary := work + "/" + name
+		if err := os.WriteFile(ordinary, []byte("public"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct{ target, cwd string }{{ordinary, ""}, {name, work}} {
+			if rule, ok := f.guard.Match(tc.target, tc.cwd); ok {
+				t.Errorf("Match(%q, %q) refused an ordinary file: %s", tc.target, tc.cwd, rule)
+			}
+		}
+		if result := ClassifyAt("cat '"+name+"'", work, WithPathGuard(f.guard)); result.ProtectedPath != "" {
+			t.Errorf("ordinary %q refused: %s", name, result.ProtectedPath)
+		}
+	}
+	// A protected location written with backslashes for slashes stays refused.
+	if _, ok := f.guard.Match(strings.ReplaceAll(f.seed, "/", `\`), ""); !ok {
+		t.Error("backslash spelling of a protected file is no longer refused")
+	}
+}
+
+func TestPathGuardChecksCurlWriteOutFiles(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	alias := filepath.Join(work, "output")
+	if err := os.Symlink(f.seed, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{
+		"%output{output}replacement",
+		"%output{>>output}appended",
+		"%{http_code}%output{" + alias + "}",
+		"%output{ordinary.txt}first%output{output}second",
+		"%{stderr}%output{output}",
+	} {
+		for _, argv := range [][]string{
+			{"curl", "-w", format, "file:///etc/hostname"},
+			{"curl", "--write-out", format, "https://allowed.example/"},
+			{"curl", "-w" + format, "https://allowed.example/"},
+			{"curl", "-sw", format, "https://allowed.example/"},
+		} {
+			words := make([]string, len(argv))
+			for i, arg := range argv {
+				words[i] = "'" + arg + "'"
+			}
+			for mode, result := range map[string]Result{
+				"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+				"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" {
+					t.Errorf("%s %q missed a protected write-out file", mode, argv)
+				}
+			}
+		}
+	}
+	for _, format := range []string{`%{http_code}\n`, "%output{ordinary.txt}%{http_code}", "%output{>>ordinary.log}%{url}", "%output{unterminated", "%header{output}"} {
+		result := ClassifyArgvAt([]string{"curl", "-w", format, "https://allowed.example/"}, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary write-out %q refused: %+v", format, result)
+		}
+	}
+}
+
+func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	saved := filepath.Join(work, "saved")
+	if err := os.Mkdir(saved, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"output", "out put", "output?v=1", "index.html", "curl_response", "page.html", filepath.Join("saved", "output")} {
+		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, argv := range [][]string{
+		{"curl", "-O", "https://allowed.example/dir/output"},
+		{"curl", "--remote-name", "https://allowed.example/output?v=1#top"},
+		{"curl", "--remote-name-all", "https://allowed.example/a", "https://allowed.example/output"},
+		{"curl", "-O", "--url", "https://allowed.example/output"},
+		{"curl", "-O", "https://allowed.example/out%20put"},
+		{"curl", "-O", "https://allowed.example/"},
+		{"curl", "-O", "allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-O", "https://allowed.example/output"},
+		{"curl", "--output-dir", saved + "/", "-O", "https://allowed.example/output"},
+		{"curl", "-E", "output:password", "https://allowed.example/"},
+		{"curl", "--proxy-cert", alias(work, "output") + ":pass:word", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/dir/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-N", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-c", "https://allowed.example/out%20put"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/output?v=1"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-E", "https://allowed.example/page"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "--directory-prefix=" + saved, "https://allowed.example/output"},
+	} {
+		if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+			t.Errorf("%q missed a protected derived file name", argv)
+		}
+	}
+	for _, argv := range [][]string{
+		{"curl", "-O", "https://allowed.example/ordinary.txt"},
+		{"curl", "https://allowed.example/output"},
+		{"curl", "-o", "ordinary.txt", "https://allowed.example/output"},
+		{"curl", "-E", "client.pem:password", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/ordinary.txt"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-O", "ordinary.txt", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "elsewhere", "https://allowed.example/output"},
+	} {
+		result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard))
+		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {
+			t.Errorf("ordinary %q refused: protected=%q targets=%q", argv, result.ProtectedPath, networkTargets(result))
+		}
+	}
+}
+
+func alias(dir, name string) string { return filepath.Join(dir, name) }

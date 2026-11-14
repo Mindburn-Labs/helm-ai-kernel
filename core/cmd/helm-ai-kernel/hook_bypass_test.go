@@ -833,8 +833,11 @@ func TestHookRefusesCurlEnginesAndWgetFTPSFallback(t *testing.T) {
 		{"curl --engine /tmp/engine.so https://allowed.example/", true},
 		{"curl --engine /tmp/engine.so --help", true},
 		{"wget --max-redirect=0 --no-hsts --ftps-fallback-to-ftp ftps://allowed.example/file", true},
+		{"wget --max-redirect=0 --no-hsts ftps://allowed.example/file", true},
+		{"wget --max-redirect=0 --no-hsts ftp://allowed.example/file", true},
 		{"curl https://allowed.example/", false},
-		{"wget --max-redirect=0 --no-hsts ftps://allowed.example/file", false},
+		{"curl ftps://allowed.example/file", false},
+		{"wget --max-redirect=0 --no-hsts https://allowed.example/file", false},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
 			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
@@ -956,5 +959,105 @@ func TestHookRefusesDestinationFreeSFTPHelper(t *testing.T) {
 	}
 	if denied, receipts := env.run(t, "Bash", map[string]any{"command": "sftp"}); denied || len(receipts) != 0 {
 		t.Errorf("plain usage refused: %s", describeReceipts(receipts))
+	}
+}
+
+func TestHookGuardsLiteralBackslashPaths(t *testing.T) {
+	if filepath.Separator == '\\' {
+		t.Skip("a backslash separates path components on Windows")
+	}
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	seed := filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed")
+	for _, name := range []string{`in\put`, `\input`, `input\`} {
+		alias := env.home + "/" + name
+		if err := os.Symlink(seed, alias); err != nil {
+			t.Fatal(err)
+		}
+		for tool, input := range map[string]map[string]any{
+			"Read":  {"file_path": alias},
+			"Write": {"file_path": name, "content": "replacement"},
+			"Bash":  {"command": "cat '" + name + "'"},
+		} {
+			denied, _, receipts := env.runAt(t, env.home, tool, input)
+			if !denied || len(receipts) == 0 {
+				t.Errorf("%s %q: denied=%v receipts=%s", tool, name, denied, describeReceipts(receipts))
+				continue
+			}
+			for _, receipt := range receipts {
+				if receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "TRUST_MATERIAL_ACCESS_DENIED" {
+					t.Errorf("%s: path guard missed %q: %s", tool, name, describeReceipts(receipts))
+				}
+			}
+		}
+	}
+	for _, name := range []string{`plain\name`, `notes\`} {
+		target := env.home + "/" + name
+		if err := os.WriteFile(target, []byte("public"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if denied, _, receipts := env.runAt(t, env.home, "Read", map[string]any{"file_path": target}); denied {
+			t.Errorf("ordinary %q refused: %s", target, describeReceipts(receipts))
+		}
+	}
+}
+
+func TestHookGuardsCurlWriteOutFiles(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), filepath.Join(env.home, "output")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ command, reason string }{
+		{"curl -w '%output{output}replacement' https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -w '%output{>>output}appended' https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -w '%{http_code}%output{ordinary.txt}%output{output}' https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -w '%output{output}replacement' file:///etc/hostname", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -w @format.txt https://api.github.com/file", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"curl -w '%{http_code}' https://api.github.com/file", ""},
+		{"curl -w '%output{ordinary.txt}%{http_code}' https://api.github.com/file", ""},
+	} {
+		denied, _, receipts := env.runAt(t, env.home, "Bash", map[string]any{"command": tc.command})
+		if denied != (tc.reason != "") || len(receipts) == 0 {
+			t.Errorf("%s: denied=%v receipts=%s", tc.command, denied, describeReceipts(receipts))
+		}
+		for _, receipt := range receipts {
+			if tc.reason != "" && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != tc.reason) {
+				t.Errorf("%s: wrong denial: %s", tc.command, describeReceipts(receipts))
+			}
+			if tc.reason == "" && receipt.Verdict != contracts.WorkstationVerdictAllow {
+				t.Errorf("ordinary write-out refused: %s", describeReceipts(receipts))
+			}
+		}
+	}
+}
+
+func TestHookGuardsDerivedDownloadNames(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), filepath.Join(env.home, "output")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ command, reason string }{
+		{"curl -O https://api.github.com/dir/output", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl --remote-name-all https://api.github.com/a https://api.github.com/output", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -E output:password https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"wget --max-redirect=0 --no-hsts -N https://api.github.com/output", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -T '{ordinary,output}' https://api.github.com/file", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"curl -o '#1' 'https://api.github.com/{output}'", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"wget --max-redirect=0 --no-hsts --content-disposition https://api.github.com/file", "EGRESS_DESTINATION_UNDETERMINED"},
+		{"curl -O https://api.github.com/ordinary.txt", ""},
+		{"curl -T ordinary https://api.github.com/file", ""},
+		{"wget --max-redirect=0 --no-hsts https://api.github.com/ordinary.txt", ""},
+	} {
+		denied, _, receipts := env.runAt(t, env.home, "Bash", map[string]any{"command": tc.command})
+		if denied != (tc.reason != "") || len(receipts) == 0 {
+			t.Errorf("%s: denied=%v receipts=%s", tc.command, denied, describeReceipts(receipts))
+		}
+		for _, receipt := range receipts {
+			if tc.reason != "" && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != tc.reason) {
+				t.Errorf("%s: wrong denial: %s", tc.command, describeReceipts(receipts))
+			}
+			if tc.reason == "" && receipt.Verdict != contracts.WorkstationVerdictAllow {
+				t.Errorf("ordinary transfer refused: %s", describeReceipts(receipts))
+			}
+		}
 	}
 }

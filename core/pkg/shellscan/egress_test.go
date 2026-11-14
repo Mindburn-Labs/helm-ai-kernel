@@ -435,8 +435,8 @@ func TestClassifyRefusesCurlEnginesAndWgetFTPSFallback(t *testing.T) {
 	}
 	for _, tc := range []struct{ command, target string }{
 		{"curl https://allowed.example/", "https://allowed.example"},
-		{"wget --max-redirect=0 --no-hsts ftps://allowed.example/file", "ftps://allowed.example"},
-		{"wget --max-redirect=0 --no-hsts ftp://allowed.example/file", "ftp://allowed.example"},
+		{"wget --max-redirect=0 --no-hsts https://allowed.example/file", "https://allowed.example"},
+		{"curl ftps://allowed.example/file", "ftps://allowed.example"},
 	} {
 		if got := networkTargets(Classify(tc.command)); !sameTargets(got, []string{tc.target}) {
 			t.Errorf("%s: got %q", tc.command, got)
@@ -511,6 +511,82 @@ func TestClassifyPreservesDestinationFreeSFTPRefusals(t *testing.T) {
 	} {
 		if got := networkTargets(Classify(tc.command)); !sameTargets(got, tc.targets) {
 			t.Errorf("%s: got %q, want %q", tc.command, got, tc.targets)
+		}
+	}
+}
+
+func TestClassifyRefusesCurlWriteOutFormatFiles(t *testing.T) {
+	for _, command := range []string{
+		"curl -w @format.txt https://allowed.example/",
+		"curl -w@format.txt https://allowed.example/",
+		"curl --write-out @- https://allowed.example/",
+		"curl -w @format.txt file:///etc/hostname",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, command := range []string{
+		"curl -w '%{http_code}' https://allowed.example/",
+		"curl -w '%output{report.txt}%{http_code}' https://allowed.example/",
+		"curl -w 'literal @ sign' https://allowed.example/",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
+			t.Errorf("%s: got %q", command, got)
+		}
+	}
+}
+
+func TestClassifyRefusesWgetFTPDataConnections(t *testing.T) {
+	for _, command := range []string{
+		"wget --max-redirect=0 --no-hsts ftp://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts ftps://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts FTP://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts --no-passive-ftp ftp://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts --ftps-implicit ftps://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts https://allowed.example/a ftp://allowed.example/file",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, tc := range []struct{ command, target string }{
+		{"wget --max-redirect=0 --no-hsts https://allowed.example/file", "https://allowed.example"},
+		{"wget --max-redirect=0 --no-hsts http://allowed.example/ftp://file", "http://allowed.example"},
+		{"curl ftp://allowed.example/file", "ftp://allowed.example"},
+		{"curl --ftp-skip-pasv-ip ftps://allowed.example/file", "ftps://allowed.example"},
+	} {
+		if got := networkTargets(Classify(tc.command)); !sameTargets(got, []string{tc.target}) {
+			t.Errorf("%s: got %q, want %q", tc.command, got, tc.target)
+		}
+	}
+}
+
+func TestClassifyRefusesDerivedFileNamesItCannotCheck(t *testing.T) {
+	for _, command := range []string{
+		"curl -T '{first,second}' https://allowed.example/",
+		"curl -T 'part[1-3].bin' https://allowed.example/",
+		"curl --upload-file='{first,second}' https://allowed.example/",
+		"curl -o 'saved-#1.txt' 'https://allowed.example/{a,b}'",
+		"curl -O 'https://allowed.example/{a,b}'",
+		"curl --remote-name-all 'https://allowed.example/file[1-3]'",
+		"wget --max-redirect=0 --no-hsts --content-disposition https://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts -x https://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts --protocol-directories https://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts --warc-file=archive https://allowed.example/file",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, command := range []string{
+		"curl -T report.txt https://allowed.example/",
+		"curl -o 'saved #tag.txt' https://allowed.example/",
+		"curl -O https://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts -N https://allowed.example/file",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
+			t.Errorf("%s: got %q", command, got)
 		}
 	}
 }

@@ -261,6 +261,10 @@ var opaqueReasons = map[string]string{
 	"wget input-file":           "--input-file reads URLs from a file",
 	"wget hsts-file":            "--hsts-file lets cached rules change the protocol",
 	"wget ftps-fallback-to-ftp": "--ftps-fallback-to-ftp can downgrade the transfer to plaintext FTP",
+	"wget content-disposition":  "--content-disposition lets the server name the file that is written",
+	"wget force-directories":    "--force-directories builds the directories it writes to from the URL",
+	"wget protocol-directories": "--protocol-directories builds the directories it writes to from the URL",
+	"wget warc-file":            "--warc-file writes several files named from a prefix",
 	"wget config":               "--config reads settings from a file",
 	"wget span-hosts":           "--span-hosts follows links to other hosts",
 	"wget input-metalink":       "--input-metalink takes mirrors from a file",
@@ -360,9 +364,21 @@ var curlProxySchemes = map[string]string{
 	"socks4": "socks4", "socks4a": "socks4a", "socks5": "socks5", "socks5-hostname": "socks5h",
 }
 
+// curlOutputUsesGlob reports a "#" followed by a digit, which curl replaces
+// in an output name with the text a URL glob matched.
+func curlOutputUsesGlob(value string) bool {
+	for index := 0; index+1 < len(value); index++ {
+		if value[index] == '#' && value[index+1] >= '0' && value[index+1] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
 func curlEgress(tokens []string) egressScan {
 	var scan egressScan
 	var urls, connectTo, resolve []string
+	remoteName := false
 	walkCLI(curlSpec, tokens, cliVisitor{
 		operand: func(token string) { urls = append(urls, token) },
 		invalid: scan.refuse,
@@ -373,11 +389,27 @@ func curlEgress(tokens []string) egressScan {
 				}
 			}
 			if name == "data-urlencode" || name == "url-query" {
-				// The shared path guard normalizes backslashes; do not admit
-				// a literal POSIX spelling that it cannot resolve faithfully.
+				// Curl and the platform each read a backslash in this file
+				// name their own way; the spelling stays unsupported.
 				if strings.Contains(curlEncodedFilePath(name, value), `\`) {
 					scan.refuse("curl encoded input has an unsupported file path")
 				}
+			}
+			if name == "upload-file" && strings.ContainsAny(value, "{[") {
+				// Curl expands {a,b} and [1-3] in an upload name into
+				// several files, which are not each checked here.
+				scan.refuse("--upload-file with a glob names files that are not each checked")
+			}
+			if name == "output" && curlOutputUsesGlob(value) {
+				scan.refuse("--output builds the file name from a URL glob")
+			}
+			if name == "remote-name" || name == "remote-name-all" {
+				remoteName = true
+			}
+			if name == "write-out" && strings.HasPrefix(value, "@") {
+				// The format can send output to any file ("%output{name}"),
+				// and here it is read at run time.
+				scan.refuse("--write-out reads its format, which can name output files, from a file")
 			}
 			switch role {
 			case roleURL:
@@ -400,6 +432,9 @@ func curlEgress(tokens []string) egressScan {
 		},
 	})
 	for _, raw := range urls {
+		if remoteName && strings.ContainsAny(raw, "{[") {
+			scan.refuse("--remote-name with a URL glob writes files that are not each checked")
+		}
 		if strings.HasPrefix(strings.ToLower(raw), "file:") {
 			if _, ok := localFileURLPath(raw); !ok {
 				scan.refuse("file URL has an unsupported local path")
@@ -541,6 +576,7 @@ var wgetSpec = cliSpec{
 		"use-askpass":    roleOpaque, // Executes a local credential handler.
 		"hsts-file":      roleOpaque,
 		"input-metalink": roleOpaque, "dns-servers": roleOpaque,
+		"warc-file": roleOpaque, // Writes several files named from a prefix.
 	}),
 	flag: withRoles(names(`
 		version help background quiet verbose no-verbose debug force-html no-config
@@ -560,6 +596,9 @@ var wgetSpec = cliSpec{
 		"span-hosts": roleOpaque, "metalink-over-http": roleOpaque,
 		"recursive": roleOpaque, "mirror": roleOpaque, "page-requisites": roleOpaque,
 		"ftps-fallback-to-ftp": roleOpaque,
+		// The saved file's name or directory comes from the server or the URL.
+		"content-disposition": roleOpaque, "force-directories": roleOpaque,
+		"protocol-directories": roleOpaque,
 	}),
 }
 
@@ -584,7 +623,15 @@ func wgetEgress(tokens []string) egressScan {
 		if !netdest.HasScheme(raw) {
 			defaultScheme = "http"
 		}
-		scan.addTarget(raw, defaultScheme, "a URL")
+		destination, ok := scan.addTarget(raw, defaultScheme, "a URL")
+		if ok && (destination.Scheme == "ftp" || destination.Scheme == "ftps") {
+			// Passive mode, the default, connects to the address the
+			// server's reply names unless the build validates it (the fix
+			// for CVE-2026-15146); active mode accepts a connection from
+			// the server. Which build runs is not known here, and wget has
+			// no option that pins either to the URL host.
+			scan.refuse("wget FTP data connections can go to an address the server selects")
+		}
 	}
 	if len(urls) > 0 && redirects {
 		scan.refuse("wget follows redirects to hosts the command line does not name; pass --max-redirect=0")

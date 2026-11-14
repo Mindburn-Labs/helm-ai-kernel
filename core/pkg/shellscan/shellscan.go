@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -183,14 +184,29 @@ var sensitivePathRules = []string{
 // at login, on a schedule or with privilege, and returns the matching rule.
 // Matching is case-insensitive and runs on the normalized path: backslashes
 // become slashes and ".", ".." and "//" segments are cleaned, so alternate
-// spellings of one file match alike. Path rules also see the target resolved
-// against cwd, so a relative write made inside a protected directory matches.
+// spellings of one file match alike. Where a backslash is a byte of a file
+// name, the path is also matched with its backslashes kept. Path rules also
+// see the target resolved against cwd, so a relative write made inside a
+// protected directory matches.
 func SensitiveWriteTarget(target, cwd string) (string, bool) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return "", false
 	}
-	cleaned := path.Clean(slashPath(target))
+	cwd = strings.TrimSpace(cwd)
+	if rule, ok := sensitiveWriteSpelling(slashPath(target), slashPath(cwd)); ok {
+		return rule, true
+	}
+	// Where a backslash is a byte of a file name, ".." beside one is not a
+	// parent directory: the path as the filesystem reads it is matched too.
+	if native := nativePath(target); native != slashPath(target) || nativePath(cwd) != slashPath(cwd) {
+		return sensitiveWriteSpelling(native, nativePath(cwd))
+	}
+	return "", false
+}
+
+func sensitiveWriteSpelling(target, cwd string) (string, bool) {
+	cleaned := path.Clean(target)
 	lower := strings.ToLower(cleaned)
 	for _, rule := range sensitiveFileRules {
 		if strings.Contains(lower, rule) {
@@ -198,8 +214,8 @@ func SensitiveWriteTarget(target, cwd string) (string, bool) {
 		}
 	}
 	resolved := cleaned
-	if cwd = strings.TrimSpace(cwd); cwd != "" && !path.IsAbs(cleaned) {
-		resolved = path.Join(slashPath(cwd), cleaned)
+	if cwd != "" && !path.IsAbs(cleaned) {
+		resolved = path.Join(cwd, cleaned)
 	}
 	// Wrapping in slashes lets a directory rule such as ".git/" match the
 	// directory itself as well as anything below it.
@@ -214,6 +230,16 @@ func SensitiveWriteTarget(target, cwd string) (string, bool) {
 
 func slashPath(value string) string {
 	return strings.ReplaceAll(value, `\`, "/")
+}
+
+// nativePath keeps a path as the local filesystem reads it. A backslash
+// separates components only on Windows; elsewhere it is a byte of a file name,
+// and rewriting it would resolve a different file from the one a tool opens.
+func nativePath(value string) string {
+	if filepath.Separator == '\\' {
+		return slashPath(value)
+	}
+	return value
 }
 
 // Option adjusts one classification.
@@ -423,9 +449,32 @@ func (c *collector) guardOptionPaths(command Command) {
 			c.protectedPath = rule
 		}
 	}
+	// A download without a named output file is written under a name the
+	// client takes from the URL, in the directory an option may name.
+	var urls []string
+	var outputDir string
+	impliedNames := command.Name == "wget"
 	walkCLI(spec, command.Tokens[1:], cliVisitor{
 		option: func(name string, _ optRole, value string) {
 			check(value)
+			switch command.Name + " " + name {
+			case "curl remote-name", "curl remote-name-all":
+				impliedNames = true
+			case "curl url":
+				urls = append(urls, value)
+			case "curl output-dir", "wget directory-prefix":
+				outputDir = value
+			case "wget output-document":
+				impliedNames = false
+			case "curl cert", "curl proxy-cert":
+				// file[:password]: the file ends at a colon the value does
+				// not escape, and which one is not known here.
+				for index := 0; index < len(value); index++ {
+					if value[index] == ':' {
+						check(strings.ReplaceAll(value[:index], `\:`, ":"))
+					}
+				}
+			}
 			if command.Name == "curl" {
 				check(curlAtPath(value))
 				if name == "data-urlencode" || name == "url-query" {
@@ -437,11 +486,75 @@ func (c *collector) guardOptionPaths(command Command) {
 						check(path)
 					}
 				}
+				if name == "write-out" {
+					for _, path := range curlWriteOutPaths(value) {
+						check(path)
+					}
+				}
 			}
 		},
-		operand: func(string) {},
+		operand: func(token string) {
+			if command.Name == "curl" || command.Name == "wget" {
+				urls = append(urls, token)
+			}
+		},
 		invalid: func(string) {}, // The egress classifier owns invalid-option refusal.
 	})
+	if !impliedNames {
+		return
+	}
+	for _, raw := range urls {
+		for _, name := range downloadFileNames(command.Name, raw) {
+			if outputDir != "" {
+				name = strings.TrimSuffix(outputDir, "/") + "/" + name
+			}
+			check(name)
+		}
+	}
+}
+
+// downloadFileNames lists the names a client may give the file it saves a
+// URL to when the command line names none: the last segment of the URL path,
+// as written and percent-decoded, and the client's name for an empty one.
+// Wget appends the query. Curl also splits the segment at a backslash.
+func downloadFileNames(tool, raw string) []string {
+	rest := raw
+	if index := strings.Index(rest, "://"); index >= 0 {
+		rest = rest[index+len("://"):]
+	}
+	rest, _, _ = strings.Cut(rest, "#")
+	rest, query, hasQuery := strings.Cut(rest, "?")
+	segment := ""
+	if index := strings.IndexByte(rest, '/'); index >= 0 {
+		segment = rest[index+1:]
+		segment = segment[strings.LastIndexByte(segment, '/')+1:]
+	}
+	names := []string{segment}
+	if decoded, err := url.PathUnescape(segment); err == nil && decoded != segment {
+		names = append(names, decoded)
+	}
+	if tool == "curl" {
+		if index := strings.LastIndexByte(segment, '\\'); index >= 0 {
+			names = append(names, segment[index+1:])
+		}
+		if segment == "" {
+			names = append(names, "curl_response")
+		}
+		return names
+	}
+	if segment == "" {
+		names = []string{"index.html"}
+	}
+	if hasQuery {
+		for _, name := range names {
+			names = append(names, name+"?"+query)
+		}
+	}
+	// --adjust-extension adds the suffix of the type the server reports.
+	for _, name := range names {
+		names = append(names, name+".html", name+".css")
+	}
+	return names
 }
 
 var transferReadCommands = map[string]bool{
@@ -718,6 +831,34 @@ func curlEncodedFilePath(option, value string) string {
 		return filename
 	}
 	return ""
+}
+
+// curlWriteOutPaths lists the files a --write-out format sends its output to.
+// Curl takes the text between "%output{" and the next "}" as the name. Newer
+// releases read a leading ">>" as append and older ones as part of the name,
+// so both are returned. Every marker is read, including one curl would print
+// as text after "%%": a name too many is checked, never one too few.
+func curlWriteOutPaths(format string) []string {
+	const marker = "%output{"
+	var paths []string
+	for offset := 0; ; {
+		index := strings.Index(format[offset:], marker)
+		if index < 0 {
+			return paths
+		}
+		offset += index + len(marker)
+		end := strings.IndexByte(format[offset:], '}')
+		if end < 0 {
+			return paths
+		}
+		name := format[offset : offset+end]
+		if name != "" {
+			paths = append(paths, name)
+		}
+		if appended := strings.TrimPrefix(name, ">>"); appended != name && appended != "" {
+			paths = append(paths, appended)
+		}
+	}
 }
 
 func transferSecretReadTargets(tokens []string) []string {
@@ -1268,7 +1409,7 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	}
 	c.writtenPaths[c.normalizedPath(tok.text)] = true
 	c.recordSensitiveTarget(tok, "write redirect", SignalSensitiveRedirect)
-	if c.cwdUnknown && !path.IsAbs(slashPath(tok.text)) {
+	if c.cwdUnknown && !path.IsAbs(nativePath(tok.text)) {
 		c.decide(source + " relative to an unresolved directory change (fail-closed)")
 	}
 }
@@ -1319,7 +1460,7 @@ func (c *collector) changeDirectory(args []wordTok) {
 			c.cwdUnknown = true
 			return
 		}
-		target := slashPath(tok.text)
+		target := nativePath(tok.text)
 		if c.home != "" && (target == "~" || strings.HasPrefix(target, "~/")) {
 			target = c.home + target[1:]
 		}

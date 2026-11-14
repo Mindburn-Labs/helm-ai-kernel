@@ -156,6 +156,14 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
+- Curl `--write-out` output files (`%output{name}`) are checked against
+  protected material, and a format read from a file is undetermined. Wget FTP
+  and FTPS transfers are undetermined under an allowlist, because a server
+  can select the data connection's address; use curl for FTP. A path keeps its
+  literal backslashes when protected paths and sensitive writes are resolved
+  on platforms where a backslash is part of a file name. Download names that
+  curl and wget take from the URL are checked against protected material, and
+  names they build from a glob or a server reply are undetermined.
 - Named curl URL-encoded data and query file inputs are checked against
   protected material and secret-read policy. SFTP direct-server and other
   opaque-option refusals survive an absent destination.

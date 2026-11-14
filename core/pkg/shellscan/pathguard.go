@@ -202,7 +202,16 @@ func pathNameByte(b byte) bool {
 // cwd are never trimmed. A relative target is resolved against cwd; with no cwd
 // only the text match applies.
 func (g *PathGuard) Match(target, cwd string) (string, bool) {
-	return g.matchPattern(globEscape(slashPath(target)), -1, cwd, false)
+	native := nativePath(target)
+	if rule, ok := g.matchPattern(globEscape(native), -1, cwd, false); ok {
+		return rule, true
+	}
+	// A tool that accepts Windows spellings reads a backslash as a separator,
+	// so a location protected under that reading is refused as well.
+	if converted := slashPath(target); converted != native {
+		return g.matchPattern(globEscape(converted), -1, cwd, false)
+	}
+	return "", false
 }
 
 // matchPattern takes a path in shell glob syntax (a backslash quotes the next
@@ -261,10 +270,10 @@ func (g *PathGuard) absolute(target, cwd string) (string, bool) {
 	if path.IsAbs(target) {
 		return target, true
 	}
-	if cwd == "" || !path.IsAbs(slashPath(cwd)) {
+	if cwd = nativePath(cwd); cwd == "" || !path.IsAbs(cwd) {
 		return "", false
 	}
-	return globEscape(strings.TrimSuffix(slashPath(cwd), "/")) + "/" + target, true
+	return globEscape(strings.TrimSuffix(cwd, "/")) + "/" + target, true
 }
 
 func (g *PathGuard) matchConcrete(absolute string) (string, bool) {

@@ -38,12 +38,27 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = "scripts/ci/quality-gates.json"
 REMOVALS = "scripts/ci/gate-removals.json"
 SELF = "scripts/ci/gate_base_check.py"
 PROFILE = "merge"
 FROM_BASE_ENV = "GATE_BASE_CHECK_FROM_BASE"
+ROOT_ENV = "GATE_BASE_CHECK_ROOT"
+
+
+def repository_root() -> Path:
+    """The checkout this run judges.
+
+    The base commit's copy runs from standard input, where __file__ names no
+    file in the repository, so the copy that starts it hands the root over.
+    """
+    handed = os.environ.get(ROOT_ENV, "")
+    if os.environ.get(FROM_BASE_ENV) == "1" and handed:
+        return Path(handed)
+    return Path(__file__).resolve().parents[2]
+
+
+ROOT = repository_root()
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -164,7 +179,7 @@ def main() -> int:
         base_self = show(base, SELF)
         if base_self is not None and base_self != Path(__file__).read_text(encoding="utf-8"):
             print(f"gate base check: running the base commit's copy of {SELF}")
-            env = dict(os.environ, **{FROM_BASE_ENV: "1"})
+            env = dict(os.environ, **{FROM_BASE_ENV: "1", ROOT_ENV: str(ROOT)})
             return subprocess.run([sys.executable, "-", *sys.argv[1:]], input=base_self, text=True,
                                   cwd=ROOT, env=env).returncode
 

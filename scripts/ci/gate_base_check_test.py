@@ -48,7 +48,7 @@ class GateBaseCheckTest(unittest.TestCase):
         return self.git("rev-parse", "HEAD")
 
     def run_check(self, event: dict | None = None, event_name: str = "push", ci: bool = False) -> subprocess.CompletedProcess[str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GITHUB_") and k != "GATE_BASE_CHECK_FROM_BASE"}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GITHUB_", "GATE_BASE_CHECK_"))}
         if ci:
             env["GITHUB_ACTIONS"] = "true"
         if event is not None:
@@ -117,6 +117,27 @@ class GateBaseCheckTest(unittest.TestCase):
         result = self.run_check({"before": strict})
         self.assertEqual(result.returncode, 7, result.stdout)
         self.assertIn("base checker ran", result.stdout)
+
+    def test_the_real_base_copy_judges_an_edited_checker(self) -> None:
+        # The base copy runs from standard input and must still find the
+        # repository: a comment-only edit passes, a dropped gate fails.
+        checker = self.tmp / "scripts" / "ci" / "gate_base_check.py"
+        checker.write_text(checker.read_text(encoding="utf-8") + "\n# edited in this change\n", encoding="utf-8")
+        self.commit("edit the checker")
+        result = self.run_check({"before": self.base})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("running the base commit's copy", result.stdout)
+        self.assertIn("PASS", result.stdout)
+
+    def test_the_real_base_copy_fails_a_dropped_gate_in_ci(self) -> None:
+        checker = self.tmp / "scripts" / "ci" / "gate_base_check.py"
+        checker.write_text(checker.read_text(encoding="utf-8") + "\n# edited in this change\n", encoding="utf-8")
+        self.write("scripts/ci/quality-gates.json", registry(["go-test", "deadcode"]))
+        self.commit("edit the checker and drop gosec")
+        result = self.run_check({"merge_group": {"base_sha": self.base}}, event_name="merge_group", ci=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("running the base commit's copy", result.stdout)
+        self.assertIn("merge gate gosec", result.stdout)
 
     def test_a_local_run_without_a_base_reports_not_run(self) -> None:
         result = self.run_check()

@@ -125,11 +125,11 @@ func TestHookSearchFromTheWorkingDirectory(t *testing.T) {
 		{"unresolvable start, filter for every file", "", "Grep", map[string]any{"path": "rel", "glob": "*", "pattern": "."}, true},
 		{"unresolvable start, bracket filter", "", "Grep", map[string]any{"path": "rel", "glob": "[a]*.go", "pattern": "."}, true},
 
-		{"root, sources", "/", "Grep", map[string]any{"glob": "src/**/*.go", "pattern": "TODO"}, false},
-		{"home, sources", builtin.home, "Grep", map[string]any{"glob": "src/**/*.go", "pattern": "TODO"}, false},
-		{"home, documents", builtin.home, "Grep", map[string]any{"glob": "docs/*.md", "pattern": "TODO"}, false},
+		{"root, sources", "/", "Grep", map[string]any{"glob": "src/**/*.go", "pattern": "needle"}, false},
+		{"home, sources", builtin.home, "Grep", map[string]any{"glob": "src/**/*.go", "pattern": "needle"}, false},
+		{"home, documents", builtin.home, "Grep", map[string]any{"glob": "docs/*.md", "pattern": "needle"}, false},
 		{"home, braces", builtin.home, "Glob", map[string]any{"pattern": "**/*.{c,h}{,pp}"}, false},
-		{"unresolvable start, sources", "", "Grep", map[string]any{"path": "rel", "glob": "src/**/*.go", "pattern": "TODO"}, false},
+		{"unresolvable start, sources", "", "Grep", map[string]any{"path": "rel", "glob": "src/**/*.go", "pattern": "needle"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			denied, stdout, receipts := builtin.runAt(t, tc.cwd, tc.tool, tc.input)
@@ -176,14 +176,14 @@ func TestHookReadsSearchInputsAsTheirToolDoes(t *testing.T) {
 		input map[string]any
 		want  int
 	}{
-		{"comma-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts,*.tsx", "pattern": "TODO"}, noDecision},
-		{"space-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts *.tsx", "pattern": "TODO"}, noDecision},
-		{"comma-separated filters from home", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.go,*.md", "pattern": "TODO"}, noDecision},
-		{"a brace group keeps its commas", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.{ts,tsx} *.go", "pattern": "TODO"}, noDecision},
+		{"comma-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts,*.tsx", "pattern": "needle"}, noDecision},
+		{"space-separated filters, repository too large to walk", builtin, "Grep", map[string]any{"path": unreadable, "glob": "*.ts *.tsx", "pattern": "needle"}, noDecision},
+		{"comma-separated filters from home", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.go,*.md", "pattern": "needle"}, noDecision},
+		{"a brace group keeps its commas", builtin, "Grep", map[string]any{"path": builtin.home, "glob": "*.{ts,tsx} *.go", "pattern": "needle"}, noDecision},
 		{"a space-separated part names a key file", granted, "Grep", map[string]any{"path": project, "glob": "*.go *.seed", "pattern": "."}, trustDenial},
 		{"a comma-separated part names a key file", granted, "Grep", map[string]any{"path": project, "glob": "*.go,*.seed", "pattern": "."}, trustDenial},
 		{"MCP regex, repository too large to walk", granted, "mcp__fs__search", map[string]any{"path": unreadable, "pattern": "foo|bar"}, noTrustDenial},
-		{"MCP regex with escapes, repository too large to walk", granted, "mcp__fs__search", map[string]any{"path": unreadable, "pattern": `\bTODO\b`}, noTrustDenial},
+		{"MCP regex with escapes, repository too large to walk", granted, "mcp__fs__search", map[string]any{"path": unreadable, "pattern": `\bneedle\b`}, noTrustDenial},
 		{"MCP regex from home", granted, "mcp__fs__search", map[string]any{"path": granted.home, "pattern": "foo|bar"}, trustDenial},
 		{"MCP glob for a key file", granted, "mcp__fs__search", map[string]any{"path": project, "pattern": "**/*.seed"}, trustDenial},
 	} {

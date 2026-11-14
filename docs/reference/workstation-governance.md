@@ -125,7 +125,7 @@ key directory holds as a search tool may anchor it:
   glob.
 - An MCP tool's `pattern` may be a glob or a regular expression. In the
   grammar it is decided as a path pattern; outside it (`foo|bar`,
-  `\bTODO\b`) it is taken as a regular expression, refused only when the
+  `\bneedle\b`) it is taken as a regular expression, refused only when the
   search starts at, inside or above the data directory.
 - A shell word is expanded as the shell does: a wildcard does not match a
   leading dot unless `dotglob` or `globdots` is set. Brace groups are not

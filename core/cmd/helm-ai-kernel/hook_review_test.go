@@ -361,10 +361,10 @@ func TestHookGlobFiltersReachProtectedFiles(t *testing.T) {
 		{"include filter for the key directory at any depth", "mcp__fs__search_files", map[string]any{"path": env.home, "include": "keys/*"}, "TRUST_MATERIAL_ACCESS_DENIED"},
 
 		{"recursive glob for sources", "Glob", map[string]any{"pattern": "**/*.go"}, ""},
-		{"filter for documents", "Grep", map[string]any{"glob": "*.md", "pattern": "TODO"}, ""},
-		{"file_glob for sources", "search_files", map[string]any{"file_glob": "*.py", "pattern": "TODO"}, ""},
+		{"filter for documents", "Grep", map[string]any{"glob": "*.md", "pattern": "needle"}, ""},
+		{"file_glob for sources", "search_files", map[string]any{"file_glob": "*.py", "pattern": "needle"}, ""},
 		{"recursive glob for sources above the data directory", "Glob", map[string]any{"path": env.home, "pattern": "**/*.go"}, ""},
-		{"filter that selects every file", "Grep", map[string]any{"glob": "*", "pattern": "TODO"}, ""},
+		{"filter that selects every file", "Grep", map[string]any{"glob": "*", "pattern": "needle"}, ""},
 		{"example env files by glob", "Grep", map[string]any{"glob": ".env.example", "pattern": "KEY"}, ""},
 	}
 	for _, tc := range cases {

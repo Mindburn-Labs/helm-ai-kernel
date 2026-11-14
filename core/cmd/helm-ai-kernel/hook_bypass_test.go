@@ -287,7 +287,7 @@ func TestHookDefaultProfileClassifiesEveryTool(t *testing.T) {
 		reason string // "" = passes without a decision
 	}{
 		{"read of a source file", "Read", map[string]any{"file_path": "/repo/main.go"}, ""},
-		{"search of the workspace", "Grep", map[string]any{"pattern": "TODO", "path": "/repo"}, ""},
+		{"search of the workspace", "Grep", map[string]any{"pattern": "needle", "path": "/repo"}, ""},
 		{"glob of the workspace", "Glob", map[string]any{"pattern": "**/*.go"}, ""},
 		{"draft write", "Write", map[string]any{"file_path": "/repo/notes.md", "content": "x"}, ""},
 		{"plain shell read", "Bash", map[string]any{"command": "cat README.md"}, ""},

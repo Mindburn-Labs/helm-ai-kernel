@@ -33,7 +33,7 @@ func TestHookDeniesACallItCannotClassifyInTime(t *testing.T) {
 		hookClassificationDeadline, hookClassify = originalDeadline, originalClassify
 	})
 	start := time.Now()
-	denied, stdout, receipts := env.runAt(t, "/repo", "Grep", map[string]any{"glob": "*.go", "pattern": "TODO"})
+	denied, stdout, receipts := env.runAt(t, "/repo", "Grep", map[string]any{"glob": "*.go", "pattern": "needle"})
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("the hook answered after %s, want soon after its deadline", elapsed)
 	}
@@ -69,7 +69,7 @@ func TestHookStopsTheClassifierAtItsDeadline(t *testing.T) {
 		close(quit)
 		hookClassificationDeadline, hookClassify = originalDeadline, originalClassify
 	})
-	denied, stdout, receipts := env.runAt(t, "/repo", "Grep", map[string]any{"glob": "*.go", "pattern": "TODO"})
+	denied, stdout, receipts := env.runAt(t, "/repo", "Grep", map[string]any{"glob": "*.go", "pattern": "needle"})
 	if !denied || !hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED") {
 		t.Fatalf("denied=%v receipts=[%s] stdout=%s, want the call refused at the deadline", denied, describeReceipts(receipts), stdout)
 	}

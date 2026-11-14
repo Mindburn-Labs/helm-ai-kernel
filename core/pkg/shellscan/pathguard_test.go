@@ -788,7 +788,7 @@ func TestSearchCallReadsAPatternOutsideTheGrammarAsARegex(t *testing.T) {
 		{f.home, "**/*.seed", true},
 		{copies, "**/*.seed", true},
 		{unreadable, "foo|bar", false},
-		{unreadable, `\bTODO\b`, false},
+		{unreadable, `\bneedle\b`, false},
 		{copies, "sig.*seed", false},
 	} {
 		search := NewSearchCall(tc.root, f.home)

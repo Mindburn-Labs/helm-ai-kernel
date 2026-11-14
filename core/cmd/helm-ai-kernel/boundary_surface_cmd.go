@@ -1691,11 +1691,6 @@ func splitCSV(value string) []string {
 	return out
 }
 
-func relationshipHash(subject, object, relation string) string {
-	sum := sha256.Sum256([]byte(subject + "|" + object + "|" + relation))
-	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
 func init() {
 	Register(Subcommand{Name: "boundary", Aliases: []string{}, Usage: "Inspect execution-boundary status, records, and checkpoints; compile/attest Boundary Enforcement Profiles", RunFn: runBoundarySurfaceCmd})
 	Register(Subcommand{Name: "identity", Aliases: []string{}, Usage: "Inspect HELM AI Kernel agent identities", RunFn: runIdentityCmd})

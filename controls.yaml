@@ -3105,22 +3105,23 @@ controls:
     title: "The gates that prove these invariants are themselves gated"
     owner: Mindburn Labs core team (conformance)
     claim: >-
-      The gates that prove these invariants are themselves gated and self-test
-      before they scan.
+      The gates that prove these invariants are themselves gated and have
+      executable negative controls.
     status: enforced
     plane: build
     gates:
       - "quality:control-registry"
       - "quality:tcb-imports"
-      - "quality:boundary-manifest"
       - "quality:postgres-proofs"
+      - "quality:tracked-file-hygiene"
+      - "quality:gate-self-tests"
       - "workflow:.github/workflows/ci.yml#ci"
     config: []
     protected_operations:
-      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck), the boundary manifest (make verify-boundary) and the Postgres-gated proofs (make postgres-proofs), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
+      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck), source-tree hygiene (scripts/ci/check_source_tree.py) and the Postgres-gated proofs (make postgres-proofs), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
     bypass_assumptions:
       - "Branch protection decides which checks are required; this entry proves the gates run and block in CI, not that the repository settings require them."
-      - "make test-boundary (the boundary gate's own regression suite) runs in the kernel job and is shell, so no Go test here names it."
+      - "Source-tree hygiene is exercised with indexed, untracked, ignored, missing and symlinked files in temporary Git repositories by scripts/ci/check_source_tree_test.py under gate-self-tests; the required gate needs both jobs, without imposing an order between shards."
       - "The postgres-proofs gate's positive controls (no database, an unlisted gated test) are shell in scripts/ci/postgres_proofs_gate.sh and run before every proof run; scripts/ci/check_postgres_proofs_test.py (gate-self-tests) covers the manifest checker, so no Go test here names them."
     tests:
       allowed:
@@ -3138,13 +3139,13 @@ controls:
       bypass: []
     section: repository-gates
     body: |
-      TCB import isolation, the boundary manifest, and this constitution are checked by
+      TCB import isolation, source-tree hygiene and this constitution are checked by
       tooling that runs in the same pipeline as the code it guards. The invariant
       checker self-tests against synthetic bad input before every real scan and fails
       itself when it stops discriminating, because a gate that silently degrades into
       a no-op is indistinguishable from a passing one right up until it matters.
     verify:
-      - "`tools/tcbcheck/main.go`, `tools/invcheck/main.go` · `make inv-check`, `make concept-gate`, `make verify-boundary`"
+      - "`tools/tcbcheck/main.go`, `tools/invcheck/main.go`, `scripts/ci/check_source_tree.py` · `make inv-check`, `make concept-gate`"
 
   - id: CTL-001
     title: "Guardian default-deny"

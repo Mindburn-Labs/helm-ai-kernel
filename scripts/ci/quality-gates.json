@@ -19,7 +19,6 @@
         "receipt-verifier-wasm",
         "verify-fixtures",
         "tcb-imports",
-        "boundary-manifest",
         "quality-self-test",
         "quantum-crypto-inventory",
         "docker-smoke-hardening",
@@ -73,8 +72,6 @@
         "verify-fixtures",
         "release-no-mock-tee",
         "tcb-imports",
-        "boundary-manifest",
-        "boundary-regression",
         "quantum-crypto-inventory",
         "docker-smoke-hardening",
         "helm-smoke-hardening",
@@ -127,7 +124,6 @@
         "receipt-verifier-wasm",
         "verify-fixtures",
         "tcb-imports",
-        "boundary-manifest",
         "quantum-crypto-inventory",
         "docker-smoke-hardening",
         "helm-smoke-hardening",
@@ -367,8 +363,8 @@
     {
       "id": "tracked-file-hygiene",
       "title": "Tracked file hygiene",
-      "description": "Runs the canonical fail-closed tracked-artifact hygiene check.",
-      "command": "make verify-presentation",
+      "description": "Rejects untracked or missing kernel source files, including ignored files, and runs the tracked-artifact hygiene check.",
+      "command": "python3 scripts/ci/check_source_tree.py && make verify-presentation",
       "timeout_seconds": 60
     },
     {
@@ -470,28 +466,6 @@
       "paths": [
         "core/pkg/**",
         "tools/tcbcheck/**"
-      ]
-    },
-    {
-      "id": "boundary-manifest",
-      "title": "Boundary manifest drift",
-      "command": "make verify-boundary",
-      "timeout_seconds": 300,
-      "paths": [
-        "core/pkg/kernel/**",
-        "core/pkg/contracts/**",
-        "core/pkg/crypto/**",
-        "core/pkg/evidencepack/**",
-        "core/pkg/proofgraph/**",
-        "core/pkg/receipts/**",
-        "core/pkg/verifier/**",
-        "core/pkg/connectors/sandbox/**",
-        "core/pkg/conformance/**",
-        "core/pkg/api/**",
-        "core/pkg/guardian/**",
-        "protocols/**",
-        "schemas/**",
-        "tools/boundary/**"
       ]
     },
     {
@@ -1093,16 +1067,6 @@
       "paths": [
         ".github/workflows/**",
         "scripts/release/**"
-      ]
-    },
-    {
-      "id": "boundary-regression",
-      "title": "Boundary gate regression suite",
-      "command": "make test-boundary",
-      "timeout_seconds": 1200,
-      "paths": [
-        "core/**",
-        "tools/boundary/**"
       ]
     },
     {

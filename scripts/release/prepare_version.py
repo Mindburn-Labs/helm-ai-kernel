@@ -176,28 +176,6 @@ def refresh_public_docs_api_contract() -> bool:
     return True
 
 
-def refresh_boundary_manifest() -> bool:
-    """Regenerate the protected-surface manifest after the version bump.
-
-    protocols/specs/effects/openapi.yaml carries a version string and is a
-    protected-surface file, so bumping it drifts tools/boundary/protected.manifest
-    and fails the blocking boundary-manifest gate. The generator is the only
-    sanctioned way to rewrite that manifest, so this shells out to it rather than
-    editing hashes in place.
-    """
-    generator = ROOT / "tools" / "boundary" / "generate-manifest.sh"
-    manifest = ROOT / "tools" / "boundary" / "protected.manifest"
-    if not generator.is_file():
-        raise SystemExit(f"required boundary manifest generator is missing or not a file: {drift.rel(generator)}")
-    if not manifest.is_file():
-        raise SystemExit(f"required boundary manifest is missing or not a file: {drift.rel(manifest)}")
-    before = manifest.read_bytes()
-    run([str(generator)])
-    if not manifest.is_file():
-        raise SystemExit(f"boundary manifest generator did not produce a file: {drift.rel(manifest)}")
-    return manifest.read_bytes() != before
-
-
 def warn_missing_console_pin(version: str) -> None:
     """Point at the one per-release declaration this script cannot write.
 
@@ -267,13 +245,11 @@ def main() -> int:
         print("repinned generated-file manifests:")
         for manifest_id in rewritten:
             print(f"- {manifest_id}")
-    # Both of these derive from files the bump above rewrote. Refreshing them
-    # here keeps a version bump from failing docs-truth and boundary-manifest,
-    # which is how v0.8.4 discovered each of them from a red gate.
+    # This derives from files the bump above rewrote. Refreshing it here keeps a
+    # version bump from failing docs-truth, which is how v0.8.4 discovered it
+    # from a red gate.
     if refresh_public_docs_api_contract():
         print("repinned docs/public-docs.manifest.json api_contract hashes")
-    if refresh_boundary_manifest():
-        print("regenerated tools/boundary/protected.manifest")
     warn_missing_console_pin(version)
     run(["python3", "scripts/release/check_version_drift.py", "--expected-version", version, "local"])
     return 0

@@ -847,15 +847,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tests/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/tools/boundary/readme",
-      "title": "Boundary",
-      "section": "internal",
-      "source_path": "tools/boundary/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/boundary/readme"
-    },
-    {
       "slug": "internal/helm-ai-kernel/tools/competitive-bakeoff/readme",
       "title": "Competitive Bakeoff Harness",
       "section": "internal",

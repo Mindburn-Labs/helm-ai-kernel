@@ -164,50 +164,6 @@ class PublicDocsApiContractTests(unittest.TestCase):
             prepare_version.refresh_public_docs_api_contract()
 
 
-class BoundaryManifestTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.generator = self.root / "tools" / "boundary" / "generate-manifest.sh"
-        self.manifest = self.root / "tools" / "boundary" / "protected.manifest"
-        self.generator.parent.mkdir(parents=True)
-        self.generator.write_text(
-            "#!/bin/sh\nset -eu\nprintf 'generated manifest\\n' > tools/boundary/protected.manifest\n",
-            encoding="utf-8",
-        )
-        self.generator.chmod(0o755)
-        self.manifest.write_text("stale manifest\n", encoding="utf-8")
-        root_patch = mock.patch.object(prepare_version, "ROOT", self.root)
-        root_patch.start()
-        self.addCleanup(root_patch.stop)
-        drift_root_patch = mock.patch.object(prepare_version.drift, "ROOT", self.root)
-        drift_root_patch.start()
-        self.addCleanup(drift_root_patch.stop)
-
-    def test_refresh_updates_manifest_and_is_idempotent(self) -> None:
-        self.assertTrue(prepare_version.refresh_boundary_manifest())
-        self.assertEqual(self.manifest.read_text(encoding="utf-8"), "generated manifest\n")
-        before = self.manifest.read_bytes()
-        self.assertFalse(prepare_version.refresh_boundary_manifest())
-        self.assertEqual(self.manifest.read_bytes(), before)
-
-    def test_missing_generator_fails_closed(self) -> None:
-        self.generator.unlink()
-        with self.assertRaisesRegex(SystemExit, "required boundary manifest generator"):
-            prepare_version.refresh_boundary_manifest()
-
-    def test_missing_manifest_fails_closed(self) -> None:
-        self.manifest.unlink()
-        with self.assertRaisesRegex(SystemExit, "required boundary manifest is missing"):
-            prepare_version.refresh_boundary_manifest()
-
-    def test_generator_failure_propagates(self) -> None:
-        self.generator.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
-        with self.assertRaises(subprocess.CalledProcessError):
-            prepare_version.refresh_boundary_manifest()
-
-
 class MainOrderTests(unittest.TestCase):
     def test_derived_manifests_refresh_before_drift_check(self) -> None:
         events: list[str] = []
@@ -232,11 +188,6 @@ class MainOrderTests(unittest.TestCase):
             ),
             mock.patch.object(
                 prepare_version,
-                "refresh_boundary_manifest",
-                side_effect=lambda: events.append("boundary") or False,
-            ),
-            mock.patch.object(
-                prepare_version,
                 "warn_missing_console_pin",
                 side_effect=lambda _version: events.append("console-pin"),
             ),
@@ -248,7 +199,6 @@ class MainOrderTests(unittest.TestCase):
             events,
             [
                 "public-docs",
-                "boundary",
                 "console-pin",
                 "run:python3 scripts/release/check_version_drift.py --expected-version 0.8.4 local",
             ],

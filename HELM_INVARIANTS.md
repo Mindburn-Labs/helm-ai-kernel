@@ -496,10 +496,10 @@ verify: review question on any new adapter — name the call path HELM intercept
 
 ### INV-025 — The gates that prove these invariants are themselves gated
 
-TCB import isolation, the boundary manifest, and this constitution are checked by
+TCB import isolation, source-tree hygiene and this constitution are checked by
 tooling that runs in the same pipeline as the code it guards. The invariant
 checker self-tests against synthetic bad input before every real scan and fails
 itself when it stops discriminating, because a gate that silently degrades into
 a no-op is indistinguishable from a passing one right up until it matters.
 
-verify: `tools/tcbcheck/main.go`, `tools/invcheck/main.go` · `make inv-check`, `make concept-gate`, `make verify-boundary`
+verify: `tools/tcbcheck/main.go`, `tools/invcheck/main.go`, `scripts/ci/check_source_tree.py` · `make inv-check`, `make concept-gate`

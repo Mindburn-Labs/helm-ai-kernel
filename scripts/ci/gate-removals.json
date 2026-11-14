@@ -1,3 +1,12 @@
 {
-  "removals": []
+  "removals": [
+    {
+      "gate": "boundary-manifest",
+      "reason": "The kernel-side protected.manifest and its generator are retired under helm-tracker#330. This gate compared kernel files with hashes regenerated in the same repository. No downstream runtime or sync consumes that file: helm-ai-enterprise/tools/sync-oss-kernel.sh generates its own manifest after rewriting imports, using its own protected-path inventory. Its untracked-file and missing-source checks now run in tracked-file-hygiene through scripts/ci/check_source_tree.py."
+    },
+    {
+      "gate": "boundary-regression",
+      "reason": "The manifest-specific cases lose their subject when the kernel digest manifest is retired. The untracked, ignored and missing-source cases are retained in scripts/ci/check_source_tree_test.py under gate-self-tests, with the checker run by tracked-file-hygiene. Enterprise mirror verification and TCB import isolation remain independently owned and active."
+    }
+  ]
 }

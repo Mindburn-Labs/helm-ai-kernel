@@ -49,9 +49,9 @@ import (
 // It runs over all three packages the diff touched — this one,
 // core/pkg/credentials and core/pkg/api — one test function each, because the
 // scanner-rot floors and the tolerated baseline differ per package. The api
-// package is scanned READ-ONLY from here on purpose: it is inside the protected
-// mirror surface (tools/boundary/protected-dirs.sh), so its guard has to live
-// outside it or the boundary manifest goes stale on every test edit.
+// package is scanned READ-ONLY from here on purpose: helm-ai-enterprise mirrors
+// it (its tools/boundary/protected-paths.sh), so a guard kept here stays out of
+// the mirrored copy.
 
 // ctxlogFinding is one contract violation.
 type ctxlogFinding struct {

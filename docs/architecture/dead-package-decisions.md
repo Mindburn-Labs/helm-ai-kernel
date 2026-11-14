@@ -44,9 +44,15 @@ workspace for Go imports of the package. `reference_packs/`, `sdk/` and
 
 ## Decision rules
 
+The kernel keeps no digest manifest. `scripts/ci/check_source_tree.py`, run by
+`tracked-file-hygiene`, rejects untracked files (including ignored files),
+missing indexed files and absent source directories in its declared source
+scope. Its temporary-repository tests run in `gate-self-tests`.
+
 - KEEP: named in a shipped doc, protocol, or policy template; imported by a
   downstream repo; imported by the `tests/conformance` suite; listed in
-  `tools/boundary/protected-dirs.sh`; or a protected `crypto/` or `verifier/`
+  `helm-ai-enterprise/tools/boundary/protected-paths.sh` (the paths enterprise
+  mirrors); or a protected `crypto/` or `verifier/`
   library package exercised by a cross-package test.
 - WIRE: a Linear issue (HELM-658, HELM-674, HELM-682) names the package as
   work to wire into a `cmd/` with a test. None of the three names
@@ -58,10 +64,14 @@ workspace for Go imports of the package. `reference_packs/`, `sdk/` and
 
 A DELETE row under a protected path (`kernel/`, `contracts/`, `crypto/`,
 `evidencepack/`, `proofgraph/`, `receipts`, `verifier/`, `connectors/sandbox`,
-`conformance/`, `api/`, `packs/`) needs the `helm-kernel-reviewer` pass and a
-boundary-manifest regeneration in its deletion PR.
+`conformance/`, `api/`, `packs/`) needs the `helm-kernel-reviewer` pass in its
+deletion PR.
 
 ## Table
+
+References below to the retired kernel `protected-dirs.sh` record the census
+evidence at the cited revision. Current mirror membership is owned by
+`helm-ai-enterprise/tools/boundary/protected-paths.sh`.
 
 LOC counts non-test Go lines. "last commit" is the last commit touching the
 package directory.

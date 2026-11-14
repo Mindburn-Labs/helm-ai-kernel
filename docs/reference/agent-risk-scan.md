@@ -294,8 +294,6 @@ go test ./pkg/shadow ./cmd/helm-ai-kernel
 Then run repository gates:
 
 ```bash
-make verify-boundary
-make docs-coverage
 make docs-truth
 ```
 

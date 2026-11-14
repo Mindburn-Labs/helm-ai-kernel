@@ -4354,6 +4354,7 @@ controls:
         - "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput"
         - "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding"
         - "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
+        - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
       forbidden:
         - "core/cmd/helm-ai-kernel.TestHookPreToolDeniesDestructiveBashAndWritesReceipt"
         - "core/cmd/helm-ai-kernel.TestHookPreToolFailsClosedWhenReceiptCannotPersist"
@@ -4398,6 +4399,7 @@ controls:
       removal: []
       bypass:
         - "core/cmd/helm-ai-kernel.TestHookBypassCorpus"
+        - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         - "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools"
         - "core/cmd/helm-ai-kernel.TestSetupStatusReportsAnOutdatedHookMatcher"
         - "core/cmd/helm-ai-kernel.TestSetupWarnsAboutASharedHookEntryItWillNotRewrite"

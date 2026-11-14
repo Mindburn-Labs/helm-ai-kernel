@@ -2801,7 +2801,8 @@
           "core/cmd/helm-ai-kernel.TestHookLeavesPublicKeysAndExampleEnvFilesAlone",
           "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput",
           "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding",
-          "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
+          "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone",
+          "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         ],
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestHookPreToolDeniesDestructiveBashAndWritesReceipt",
@@ -2848,6 +2849,7 @@
         "removal": [],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs",
           "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools",
           "core/cmd/helm-ai-kernel.TestSetupStatusReportsAnOutdatedHookMatcher",
           "core/cmd/helm-ai-kernel.TestSetupWarnsAboutASharedHookEntryItWillNotRewrite",

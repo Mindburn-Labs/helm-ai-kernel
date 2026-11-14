@@ -150,6 +150,52 @@ func TestPathGuardMatchesPatternsAndText(t *testing.T) {
 	}
 }
 
+func TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs(t *testing.T) {
+	root := t.TempDir()
+	guard := NewPathGuard(root)
+	protected := filepath.Join(root, "Protected")
+	benign := filepath.Join(root, "Public")
+	for _, dir := range []string{protected, benign} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data.bin"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	guard.ProtectTree(protected)
+	for _, tc := range []struct {
+		alias, target string
+		want          bool
+	}{
+		{"KeyAlias", protected, true},
+		{"PublicAlias", benign, false},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			alias := filepath.Join(root, tc.alias)
+			if err := os.Symlink(tc.target, alias); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			for name, glob := range map[string]string{
+				"simple":            "*.bin",
+				"bracket class":     "[a-z]*.bin",
+				"oversized segment": "*" + strings.Repeat("a", maxShellGlobSegment),
+			} {
+				t.Run(name, func(t *testing.T) {
+					pattern := filepath.ToSlash(alias) + "/" + glob
+					if rule, got := shellPattern(guard, pattern, root); got != tc.want {
+						t.Errorf("shellPattern = %q, %v; want %v", rule, got, tc.want)
+					}
+					res := ClassifyAt("cat "+pattern, root, WithPathGuard(guard))
+					if (res.ProtectedPath != "") != tc.want {
+						t.Errorf("ProtectedPath = %q; want protected %v", res.ProtectedPath, tc.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestPathGuardNilAndEmptyAreInert(t *testing.T) {
 	var none *PathGuard
 	if _, ok := none.Match("/etc/passwd", "/"); ok {
@@ -705,13 +751,13 @@ func TestClassifyDecidesALongShellWordInBoundedTime(t *testing.T) {
 		name, command string
 		protected     bool
 	}{
-		{"unclosed brackets elsewhere", "cat /tmp/*" + strings.Repeat("[", 1<<20), false},
+		{"unclosed brackets elsewhere", "cat " + work + "/*" + strings.Repeat("[", 1<<20), false},
 		{"unclosed brackets above protected material", "cat ~/*" + strings.Repeat("[", 1<<20), true},
-		{"a long segment elsewhere", "cat /tmp/*" + strings.Repeat("a", 1<<20), false},
+		{"a long segment elsewhere", "cat " + work + "/*" + strings.Repeat("a", 1<<20), false},
 		{"a long segment inside the data directory", "cat ~/.signer/*" + strings.Repeat("a", 1<<20), true},
-		{"many double stars", "cat /tmp/" + strings.Repeat("**/", 1<<19) + "x", false},
-		{"a long word after a brace sequence", "cat /tmp/{1..256}" + strings.Repeat("a", 1<<20), false},
-		{"a long word after many brace groups", "cat /tmp/" + strings.Repeat("{a,b}", 8) + strings.Repeat("a", 1<<20), false},
+		{"many double stars", "cat " + work + "/" + strings.Repeat("**/", 1<<19) + "x", false},
+		{"a long word after a brace sequence", "cat " + work + "/{1..256}" + strings.Repeat("a", 1<<20), false},
+		{"a long word after many brace groups", "cat " + work + "/" + strings.Repeat("{a,b}", 8) + strings.Repeat("a", 1<<20), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			start := time.Now()

@@ -156,6 +156,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   was, rather than a `TOOL_INPUT_TOO_LARGE` denial.
 - A shell tool call whose `command` is missing or is not a string is decided
   as a shell operation (`shell.operate`) instead of passed.
+- The shell path guard preserves directory spelling when resolving symlinks
+  before matching globs. On case-sensitive filesystems, a mixed-case alias
+  to protected signing material is now refused; aliases to unrelated
+  directories still pass this guard.
 - Under the built-in profile, `ls ~/.helm-ai-kernel` and any other command
   that names the data directory itself is denied with
   `TRUST_MATERIAL_ACCESS_DENIED`, and `Read` or `Grep` of a credential path

@@ -370,24 +370,30 @@ const maxShellGlobSegment = 1024
 // than maxShellGlobSegment is not matched: either matches when the directory
 // the glob starts in reaches protected material (searchGate).
 func (g *PathGuard) matchShellGlob(pattern string, dotGlob bool) (string, bool) {
-	segments := pathParts(strings.ToLower(path.Clean(strings.ReplaceAll(pattern, `\/`, "/"))))
+	segments := pathParts(path.Clean(strings.ReplaceAll(pattern, `\/`, "/")))
 	literal := 0
 	for literal < len(segments) && !hasGlobPattern(segments[literal]) {
 		literal++
 	}
 	start := "/" + unescapeLit(strings.Join(segments[:literal], "/"))
+	// Preserve the filesystem spelling for link resolution; only comparisons
+	// are case-insensitive. Folding first loses aliases on Linux.
+	for i := 0; i < literal; i++ {
+		segments[i] = strings.ToLower(segments[i])
+	}
 	// A run of "**" names what one does.
 	glob := make([]string, 0, len(segments)-literal)
 	for _, segment := range segments[literal:] {
 		if len(segment) > maxShellGlobSegment || bracketClass(segment) {
 			return g.searchGate(start)
 		}
+		segment = strings.ToLower(segment)
 		if segment != "**" || len(glob) == 0 || glob[len(glob)-1] != "**" {
 			glob = append(glob, segment)
 		}
 	}
 	candidates := [][]string{append(segments[:literal:literal], glob...)}
-	if resolved := strings.ToLower(g.resolve(start)); resolved != start {
+	if resolved := strings.ToLower(g.resolve(start)); resolved != strings.ToLower(start) {
 		candidates = append(candidates, append(pathParts(globEscape(resolved)), glob...))
 	}
 	for _, candidate := range candidates {

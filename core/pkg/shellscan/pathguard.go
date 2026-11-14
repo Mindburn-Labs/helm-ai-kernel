@@ -127,9 +127,14 @@ func (g *PathGuard) locate(location string) (guardedPath, bool) {
 	if location == "" {
 		return guardedPath{}, false
 	}
-	absolute, err := filepath.Abs(location)
-	if err != nil {
-		return guardedPath{}, false
+	absolute := filepath.FromSlash(location)
+	if !filepath.IsAbs(absolute) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return guardedPath{}, false
+		}
+		// Abs/Join clean parent segments before following symlinks.
+		absolute = cwd + string(filepath.Separator) + absolute
 	}
 	resolved := resolveExisting(absolute)
 	return guardedPath{
@@ -380,7 +385,7 @@ const maxShellGlobSegment = 1024
 // than maxShellGlobSegment is not matched: either matches when the directory
 // the glob starts in reaches protected material (searchGate).
 func (g *PathGuard) matchShellGlob(pattern string, dotGlob bool) (string, bool) {
-	segments := pathParts(path.Clean(strings.ReplaceAll(pattern, `\/`, "/")))
+	segments := pathParts(strings.ReplaceAll(pattern, `\/`, "/"))
 	literal := 0
 	for literal < len(segments) && !hasGlobPattern(segments[literal]) {
 		literal++
@@ -403,6 +408,12 @@ func (g *PathGuard) matchShellGlob(pattern string, dotGlob bool) (string, bool) 
 		}
 	}
 	candidates := [][]string{append(segments[:literal:literal], glob...)}
+	// Keep lexical coverage for parent segments after a wildcard, while the
+	// resolved literal prefix below also checks the actual symlink traversal.
+	lexical := "/" + strings.Join(candidates[0], "/")
+	if cleaned := path.Clean(lexical); cleaned != lexical {
+		candidates = append(candidates, pathParts(cleaned))
+	}
 	if resolved := strings.ToLower(g.resolve(start)); resolved != strings.ToLower(start) {
 		candidates = append(candidates, append(pathParts(globEscape(resolved)), glob...))
 	}
@@ -633,7 +644,7 @@ func (s *SearchCall) resolveRoot(root string) string {
 		root = expanded
 	}
 	if root = filepath.ToSlash(root); path.IsAbs(root) {
-		return path.Clean(root)
+		return root
 	}
 	return ""
 }
@@ -688,7 +699,7 @@ func (s *SearchCall) AddPathPattern(pattern string) {
 		// "/", whatever root the search was given.
 		head = "/"
 	case !path.IsAbs(head) && s.root != "":
-		head = path.Join(s.root, head)
+		head = strings.TrimSuffix(s.root, "/") + "/" + head
 	}
 	if rest != "" {
 		s.add(rest, climb(s.resolveRoot(head), rest))
@@ -710,6 +721,9 @@ func (s *SearchCall) AddPatternOrRegex(pattern string) {
 
 // climb is the directory as many levels above root as pattern holds "..".
 func climb(root, pattern string) string {
+	if root != "" && strings.Contains(pattern, "..") {
+		root = resolveExisting(root)
+	}
 	for k := strings.Count(pattern, ".."); k > 0 && root != ""; k-- {
 		root = path.Dir(root)
 	}
@@ -1056,12 +1070,13 @@ const (
 	maxCachedResolveDepth = 64
 )
 
-// resolve is resolveExisting with the guard's cache. A path is resolved
+// resolve is resolveExisting with the guard's cache, keyed by the original
+// spelling so a symlink/.. path cannot collide with its lexical cleanup. A path is resolved
 // through its cached parent: one lookup for the last name instead of one for
 // every directory above it, which keeps a command that names many files in
 // one directory cheap.
 func (g *PathGuard) resolve(value string) string {
-	clean := filepath.Clean(filepath.FromSlash(value))
+	clean := filepath.FromSlash(value)
 	g.mu.Lock()
 	cached, ok := g.resolved[clean]
 	g.mu.Unlock()
@@ -1102,7 +1117,9 @@ func (g *PathGuard) resolve(value string) string {
 // square of the path's length, which a caller sending a long path could use
 // to hold the hook past its client's timeout.
 func resolveExisting(value string) string {
-	current := filepath.Clean(filepath.FromSlash(value))
+	current := filepath.FromSlash(value)
+	// EvalSymlinks walks the original components before resolving "..".
+	// Cleaning first changes which parent follows a symlink.
 	if resolved, err := filepath.EvalSymlinks(current); err == nil {
 		return filepath.ToSlash(resolved)
 	}
@@ -1115,25 +1132,23 @@ func resolveExisting(value string) string {
 	}
 	for remaining != "" {
 		name, after, _ := strings.Cut(remaining, separator)
+		// The prefix is resolved already, so Join may now interpret this
+		// component's parent reference. Resolve each link before continuing.
 		next := filepath.Join(existing, name)
-		if _, err := os.Lstat(next); err != nil {
-			break
+		info, err := os.Lstat(next)
+		if err != nil {
+			return filepath.ToSlash(filepath.Join(next, after))
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(next)
+			if err != nil {
+				return filepath.ToSlash(filepath.Join(next, after))
+			}
+			next = resolved
 		}
 		existing, remaining = next, after
 	}
-	// A link at the end of the existing part may point nowhere; step back
-	// over it, which costs at most one step per existing name.
-	for {
-		if resolved, err := filepath.EvalSymlinks(existing); err == nil {
-			return filepath.ToSlash(filepath.Join(resolved, remaining))
-		}
-		parent := filepath.Dir(existing)
-		if parent == existing {
-			return filepath.ToSlash(filepath.Join(existing, remaining))
-		}
-		remaining = filepath.Join(filepath.Base(existing), remaining)
-		existing = parent
-	}
+	return filepath.ToSlash(existing)
 }
 
 // globEscape quotes glob syntax so literal text survives matchPattern.

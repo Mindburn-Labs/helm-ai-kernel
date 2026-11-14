@@ -538,11 +538,12 @@ var wgetSpec = cliSpec{
 		content-on-error auth-no-challenge https-only no-check-certificate no-hsts
 		no-remove-listing no-glob no-passive-ftp preserve-permissions retr-symlinks
 		ftps-implicit ftps-resume-ssl ftps-clear-data-connection ftps-fallback-to-ftp
-		warc-cdx no-warc-compression no-warc-digests no-warc-keep-log recursive delete-after
-		convert-links convert-file-only backup-converted mirror page-requisites
+		warc-cdx no-warc-compression no-warc-digests no-warc-keep-log delete-after
+		convert-links convert-file-only backup-converted
 		strict-comments follow-ftp relative trust-server-names no-parent
 	`), map[string]optRole{
 		"span-hosts": roleOpaque, "metalink-over-http": roleOpaque,
+		"recursive": roleOpaque, "mirror": roleOpaque, "page-requisites": roleOpaque,
 	}),
 }
 
@@ -935,7 +936,7 @@ func rsyncEgress(tokens []string) egressScan {
 var netcatSpec = func() cliSpec {
 	short, value, flag := letters("IiMmOPpqsTVWwXx", "46bCDdFhklNnrStUuvZz")
 	value["x"] = roleProxy
-	flag["l"], flag["U"] = roleOpaque, roleOpaque
+	flag["l"], flag["U"], flag["Z"] = roleOpaque, roleOpaque, roleOpaque
 	return cliSpec{short: short, value: value, flag: flag}
 }()
 

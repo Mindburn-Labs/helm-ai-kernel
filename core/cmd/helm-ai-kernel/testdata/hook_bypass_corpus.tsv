@@ -433,3 +433,9 @@ deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --use-askpass=/t
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --hsts-file=/tmp/cache https://api.github.com/zen
 allow	-	Bash	wget --max-redirect=0 --no-hsts https://api.github.com/zen
 deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	curl 'file://{{HOME}}/.helm-ai-kernel/%6beys/%77orkstation-ed25519%2eseed'
+
+# Recursive page discovery and variant-dependent netcat transports are opaque.
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --no-hsts -r https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --no-hsts --mirror https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --no-hsts --page-requisites https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	nc -Z api.github.com 443

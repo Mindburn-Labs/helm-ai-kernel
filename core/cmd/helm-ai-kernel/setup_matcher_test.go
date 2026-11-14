@@ -317,9 +317,9 @@ func TestSetupReadsAClaudeCodeMatcherAsClaudeCodeDoes(t *testing.T) {
 		matcher string
 		missing string
 	}{
-		{"Bash|Edit|Write|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool", "MultiEdit,NotebookEdit,mcp__server__tool"},
-		{"Edit", "Bash,Write,MultiEdit,NotebookEdit,Read,Grep,Glob,WebFetch,ReadMcpResourceTool,ListMcpResourcesTool,mcp__server__tool"},
-		{"Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool|mcp__github__create_issue", "mcp__server__tool"},
+		{"Bash|Edit|Write|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool", "MultiEdit,NotebookEdit,mcp__.*"},
+		{"Edit", "Bash,Write,MultiEdit,NotebookEdit,Read,Grep,Glob,WebFetch,ReadMcpResourceTool,ListMcpResourcesTool,mcp__.*"},
+		{"Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|ReadMcpResourceTool|ListMcpResourcesTool|mcp__github__create_issue", "mcp__.*"},
 		{"Bash|.*Edit|Write|Read|Grep|Glob|WebFetch|.*McpResource.*|mcp__.*", ""},
 		{"Edit|Write|Bash|Read|Gr.p|Glob|WebFetch|Mcp|mcp__", ""},
 		{"*", ""},
@@ -415,5 +415,40 @@ func TestSetupOutdatedMatcherHintKeepsThePolicyProfile(t *testing.T) {
 	command, _ := summary["hook_matcher_upgrade_command"].(string)
 	if !strings.Contains(command, " --policy-profile "+shellQuote(profile)) {
 		t.Fatalf("upgrade command %q does not keep the policy profile %s:\n%s", command, profile, out)
+	}
+}
+
+func TestSetupDoesNotInferMCPFamilyCoverageFromExamples(t *testing.T) {
+	for _, target := range []string{"claude-code", "codex", "hermes", "deepseek"} {
+		pattern, example := "mcp__.*", "mcp__server__tool"
+		if target == "hermes" || target == "deepseek" {
+			pattern, example = "mcp_.*", "mcp_server_tool"
+		}
+		for _, replacement := range []string{example, example + "|" + example + "_other", "mcp_.*_tool"} {
+			matcher := strings.Replace(setupHookMatcher(target), pattern, replacement, 1)
+			if missing := setupHookMatchersMissing(target, []string{matcher}); len(missing) == 0 {
+				t.Errorf("%s %q claims MCP family coverage", target, matcher)
+			}
+		}
+		if missing := setupHookMatchersMissing(target, []string{setupHookMatcher(target)}); len(missing) != 0 {
+			t.Errorf("%s shipped matcher misses %v", target, missing)
+		}
+	}
+	m := newMatcherTestSetup(t, "claude-code")
+	writeSetupMCPTestConfig(t, "claude-code", m.summary.ClientConfigPath, m.summary.BinaryPath, m.opts.DataDir)
+	narrow := strings.Replace(setupHookMatcher("claude-code"), "mcp__.*", "mcp__server__tool", 1)
+	m.writeClaudeHookEntry(t, narrow, map[string]any{"type": "command", "command": m.command, "timeout": 30}, map[string]any{"type": "command", "command": "other-hook"})
+	_, out, summary := m.status(t, true)
+	if summary["hook_matcher_outdated"] != true || summary["client_state"] != "degraded" {
+		t.Errorf("narrow matcher not degraded: %s", out)
+	}
+	warnings, _ := summary["warnings"].([]any)
+	if len(warnings) == 0 {
+		t.Error("shared narrow MCP matcher emitted no warning")
+	}
+	m.writeClaudeHookEntry(t, setupHookMatcher("claude-code"), map[string]any{"type": "command", "command": m.command, "timeout": 30}, map[string]any{"type": "command", "command": "other-hook"})
+	_, out, summary = m.status(t, true)
+	if summary["hook_matcher_outdated"] == true {
+		t.Errorf("complete shared matcher degraded: %s", out)
 	}
 }

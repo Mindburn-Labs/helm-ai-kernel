@@ -228,6 +228,9 @@ func TestHookRefusesDestinationOverrides(t *testing.T) {
 		denied        bool
 	}{
 		{"wget credential handler", "wget --max-redirect=0 --use-askpass=/tmp/handler http://allowed.example/", true},
+		{"wget recursive protocols", "wget --max-redirect=0 --no-hsts -r http://allowed.example/", true},
+		{"wget mirror protocols", "wget --max-redirect=0 --no-hsts -m http://allowed.example/", true},
+		{"wget requisites protocols", "wget --max-redirect=0 --no-hsts --page-requisites http://allowed.example/", true},
 		{"wget HSTS file", "wget --max-redirect=0 --hsts-file=/tmp/cache http://allowed.example/", true},
 		{"wget ordinary HTTP", "wget --max-redirect=0 --no-hsts http://allowed.example/", false},
 		{"curl HSTS file", "curl --hsts /tmp/cache http://allowed.example/", true},
@@ -650,5 +653,80 @@ func TestSetupHookMatcherRoutesReadAndFetchTools(t *testing.T) {
 				t.Errorf("%s matcher %q does not route %s", target, matcher, tool)
 			}
 		}
+	}
+}
+
+func TestHookRefusesNetcatDCCPUnderTCPAllowance(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{{Host: "allowed.example", Protocol: "tcp"}}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, command := range []string{"nc -Z allowed.example 443", "nc -uZ allowed.example 443", "nc -Zu allowed.example 443"} {
+		denied, receipts := env.run(t, "Bash", map[string]any{"command": command})
+		if !denied || !hasDenial(receipts, "EGRESS_DESTINATION_UNDETERMINED") {
+			t.Errorf("DCCP escaped TCP allowance: %s", describeReceipts(receipts))
+		}
+	}
+	if denied, receipts := env.run(t, "Bash", map[string]any{"command": "nc allowed.example 443"}); denied {
+		t.Fatalf("ordinary TCP refused: %s", describeReceipts(receipts))
+	}
+}
+
+func TestHookProtectsCustomPathsThroughSymlinkParents(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	root := t.TempDir()
+	secretDir := filepath.Join(root, "secrets")
+	if err := os.MkdirAll(filepath.Join(secretDir, "receipts"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	seed := filepath.Join(secretDir, "signing.seed")
+	if err := os.WriteFile(seed, []byte(strings.Repeat("ab", 32)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policy := filepath.Join(secretDir, "settings.json")
+	raw, err := os.ReadFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-3] = policy
+	env.args = append(env.args, "--signing-seed-file", seed)
+	alias := filepath.Join(root, "link")
+	if err := os.Symlink(filepath.Join(secretDir, "receipts"), alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"signing.seed", "settings.json"} {
+		spelling := filepath.ToSlash(alias) + "/../" + name
+		for _, input := range []struct {
+			tool string
+			data map[string]any
+		}{
+			{"Bash", map[string]any{"command": "cat '" + spelling + "'"}},
+			{"Bash", map[string]any{"command": "curl 'file://" + spelling + "'"}},
+			{"Read", map[string]any{"file_path": spelling}},
+		} {
+			denied, receipts := env.run(t, input.tool, input.data)
+			if !denied || !hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED") {
+				t.Errorf("%s %s escaped guard: %s", input.tool, spelling, describeReceipts(receipts))
+			}
+		}
+	}
+	if err := os.WriteFile(filepath.Join(secretDir, "ordinary.txt"), []byte("ordinary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if denied, receipts := env.run(t, "Read", map[string]any{"file_path": filepath.ToSlash(alias) + "/../ordinary.txt"}); denied {
+		t.Fatalf("ordinary path refused: %s", describeReceipts(receipts))
 	}
 }

@@ -884,3 +884,86 @@ func TestSearchCallReadsAPatternOutsideTheGrammarAsARegex(t *testing.T) {
 		}
 	}
 }
+
+func TestPathGuardResolvesSymlinksBeforeParentSegments(t *testing.T) {
+	root := t.TempDir()
+	secretDir, publicDir, work := filepath.Join(root, "secrets"), filepath.Join(root, "public"), filepath.Join(root, "work")
+	for _, dir := range []string{secretDir + "/receipts", publicDir + "/receipts", work} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, dir := range []string{secretDir, publicDir, work} {
+		for _, name := range []string{"signing.seed", "settings.json"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(dir), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	guard := NewPathGuard(root)
+	for _, name := range []string{"signing.seed", "settings.json"} {
+		guard.ProtectFile(filepath.Join(secretDir, name))
+	}
+	for _, tc := range []struct {
+		name, target string
+		want         bool
+	}{
+		{"absolute", secretDir + "/receipts", true}, {"relative", "../secrets/receipts", true}, {"ordinary", publicDir + "/receipts", false},
+	} {
+		alias := filepath.Join(work, tc.name)
+		if err := os.Symlink(tc.target, alias); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"signing.seed", "settings.json"} {
+			spelling := filepath.ToSlash(alias) + "/../" + name
+			contents, err := os.ReadFile(spelling)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want && string(contents) != secretDir {
+				t.Fatal("reference read missed protected file")
+			}
+			guard.Match(filepath.Join(work, name), work)
+			if _, got := guard.Match(spelling, work); got != tc.want {
+				t.Errorf("Match(%q)=%v, want %v", spelling, got, tc.want)
+			}
+			if got := ClassifyAt("cat '"+spelling+"'", work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+				t.Errorf("shell %q: protected=%q", spelling, got.ProtectedPath)
+			}
+		}
+		if got := ClassifyAt("cat "+filepath.ToSlash(alias)+"/../signing.*", work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+			t.Errorf("glob %s: protected=%q", tc.name, got.ProtectedPath)
+		}
+	}
+	for _, search := range []*SearchCall{
+		NewSearchCall(filepath.ToSlash(work)+"/absolute/..", root),
+		NewSearchCall(work, root),
+	} {
+		if search.root == filepath.ToSlash(work) {
+			search.AddPathPattern("absolute/../signing.seed")
+		} else {
+			search.AddFilter("signing.*")
+		}
+		if _, _, ok := guard.MatchSearch(search); !ok {
+			t.Error("search lost symlink parent resolution")
+		}
+	}
+	for _, tc := range []struct {
+		dir  string
+		want bool
+	}{{secretDir, true}, {publicDir, false}} {
+		pattern := filepath.ToSlash(tc.dir) + "/receip*/../signing.seed"
+		if got := ClassifyAt("cat "+pattern, work, WithPathGuard(guard)); (got.ProtectedPath != "") != tc.want {
+			t.Errorf("wildcard parent %q: protected=%q", pattern, got.ProtectedPath)
+		}
+	}
+	configured := NewPathGuard(root)
+	configured.ProtectFile(filepath.ToSlash(work) + "/absolute/../signing.seed")
+	if _, ok := configured.Match(filepath.Join(secretDir, "signing.seed"), work); !ok {
+		t.Error("configured alias did not protect its actual file")
+	}
+	guard.ProtectTree(secretDir)
+	if _, ok := guard.Match(filepath.ToSlash(work)+"/absolute/../future/child.txt", work); !ok {
+		t.Error("missing tail lost its resolved protected parent")
+	}
+}

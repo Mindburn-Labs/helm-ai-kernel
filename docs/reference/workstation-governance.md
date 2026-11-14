@@ -82,8 +82,9 @@ it does not depend on the tool: a shell read, an encoder, a pager, a copy, an
 archive, an input redirect, a write or delete, `Read`, `Grep`, `Glob`, `Write`,
 `Edit`, an MCP tool and a tool the hook does not classify are refused alike.
 A path is compared after `~` and `$HOME` expansion, resolution against the
-working directory and any `cd` inside the command, removal of `.`, `..` and
-repeated slashes, and resolution of symbolic links, ignoring case.
+working directory and any `cd` inside the command, and resolution of symbolic
+links before their following `..` segments. Comparisons ignore case. This also
+applies to custom seed/policy paths, local FILE URLs and search roots.
 
 Globs are read in a small grammar: path segments separated by `/`, each made
 of letters, digits, `.`, `_`, `-`, `+`, `@`, `=`, `%`, `:`, `*` and `?`, a
@@ -231,8 +232,9 @@ A network decision is made per destination. The hook and `enforce` read the dest
 - Git `http.curloptResolve` overrides, including URL-scoped `http.<url>.curloptResolve`, and curl `--no-ftp-skip-pasv-ip` are undetermined because they can connect somewhere other than the URL host. Ordinary scoped Git settings and explicit curl `--ftp-skip-pasv-ip` remain supported. A destination-changing override makes the whole call undetermined, even if another option later resets it.
 - SSH reverse forwarding (`-R` and `-o RemoteForward`) is undetermined, including the destination-free SOCKS form, because the peer can trigger additional connections from the local client. OpenSSL DTLS (`-dtls`, `-dtls1`, `-dtls1_2`) is checked as UDP; ordinary TLS remains TCP. Conflicting TLS/DTLS flags and DTLS combined with a proxy are undetermined.
 - Curl `--hsts` is undetermined for file-backed and memory-only caches: cached or learned rules can change the protocol during the call. Git executable helper overrides (`--upload-pack`, `--receive-pack`, `--exec`, and clone's `-u`) are undetermined, including local and configured repositories and lower-level fetch/send/archive commands. Helpers can execute locally; an ordinary local repository operation without an override remains supported.
+- Recursive wget modes (`-r`/`--recursive`, `-m`/`--mirror`, `-p`/`--page-requisites`) are undetermined because page discovery can introduce another protocol or destination. Netcat `-Z` is undetermined because supported variants can select DCCP rather than TCP. Ordinary wget transfers and TCP/UDP netcat calls remain supported.
 - Wget `--use-askpass` and `--hsts-file` are undetermined: the first executes a local credential handler and the second can upgrade an HTTP URL to HTTPS. Ordinary wget calls with redirects disabled remain supported. Ambient client configuration remains an operator assumption.
-- Local `file:` URL paths are percent-decoded once before trust-material and secret-read checks, including local authorities, encoded separators and symlink paths. Ordinary local files remain readable; malformed or unsupported local FILE URLs are undetermined.
+- Local `file:` URL paths are percent-decoded once before trust-material and secret-read checks, including local authorities, encoded separators and symlink paths. Symlink components resolve before `..`, including operator-supplied protected seed/policy paths and search roots. Ordinary local files remain readable; malformed or unsupported local FILE URLs are undetermined.
 - `curl`, `wget`, `git`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet` and `openssl s_client` are parsed. A bash `/dev/tcp` or `/dev/udp` redirect is a destination. A heredoc or here-string fed to a shell is classified as the script it is, and so is a network client that follows a prefix command the scanner does not know (`watch curl URL`).
 - A command whose destinations cannot all be named is denied with `EGRESS_DESTINATION_UNDETERMINED` under any profile that has an allowlist. That covers an argument computed at run time (a variable, a command substitution, `xargs`), an option the parser does not know, a destination read from a file (`curl --config`, `wget --input-file`, `ssh -F`), a replaced connection program (`ssh -o ProxyCommand`, `rsync -e`, `GIT_SSH_COMMAND`), a `HOME` or configuration override, a client that follows redirects (`curl --location`, `wget` without `--max-redirect=0`, `git` over HTTP without `-c http.followRedirects=false`), a URL that parsers read differently (a backslash, an `@` after the authority, a percent-encoded or numeric host), and a network client that is not parsed (`aria2c`, `ftp`, `lftp`, `socat`, HTTPie, `proxychains`, `torsocks`).
 - `git` with an address on the command line is decided on that address, including `git remote add`, `git remote set-url` and `git config remote.<name>.url`. A remote named in git configuration is the operator's setting: `git push origin main` is not classified, and a `-c` override or connection variable on the same command is.
@@ -350,6 +352,12 @@ cases it recognizes, including anything it cannot evaluate statically. Treat it
 as defense in depth. Enforcement for these clients comes from HELM holding the
 credential or the egress path, for example through HELM-served MCP tools, not
 from the hook.
+
+Setup checks MCP family coverage, not just a sample tool name. The shipped
+matchers, unrestricted wildcard matchers and simple unrestricted MCP-prefix
+branches establish coverage. More complex custom family coverage is unverified
+and leaves status degraded; shared entries receive a warning and are preserved.
+An additional HELM entry with complete coverage satisfies the check.
 
 ## Operator workflow
 

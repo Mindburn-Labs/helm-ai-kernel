@@ -284,6 +284,11 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   without `--max-redirect=0` and `git` over HTTP without
   `-c http.followRedirects=false`, because the client follows redirects to
   hosts the hook cannot see.
+- Recursive wget modes and netcat `-Z` are now undetermined under an egress
+  allowlist. Setup verifies MCP family coverage rather than one sample tool;
+  custom coverage it cannot establish is reported as degraded. Protected paths
+  resolve symlink components before parent segments, including custom signing
+  seed and policy paths, local file URLs and searches.
 - Wget credential-helper and HSTS-file overrides now deny as undetermined
   under an egress allowlist. Local FILE URLs are decoded once before the
   trust-material and secret-read checks, closing encoded-key-path bypasses

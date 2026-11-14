@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	resyntax "regexp/syntax"
 	"strconv"
 	"strings"
 
@@ -2531,20 +2532,11 @@ func setupHookMatcher(target string) string {
 	}
 }
 
-// setupHookMatcherTools lists the tools setupHookMatcher routes for a client,
-// with an MCP name standing for every MCP tool.
+// setupHookMatcherTools lists concrete tools and the MCP family pattern.
+// A single example name cannot establish coverage of that family.
 func setupHookMatcherTools(target string) []string {
 	body := strings.TrimSuffix(strings.TrimPrefix(setupHookMatcher(target), "^("), ")$")
-	tools := strings.Split(body, "|")
-	for i, tool := range tools {
-		switch tool {
-		case "mcp__.*":
-			tools[i] = "mcp__server__tool"
-		case "mcp_.*":
-			tools[i] = "mcp_server_tool"
-		}
-	}
-	return tools
+	return strings.Split(body, "|")
 }
 
 // setupHookMatcherMissing lists the tools this release routes to the hook
@@ -2561,7 +2553,7 @@ func setupHookMatchersMissing(target string, matchers []string) []string {
 	for _, tool := range setupHookMatcherTools(target) {
 		routed := false
 		for _, matcher := range matchers {
-			if setupMatcherRoutes(target, matcher, tool) {
+			if setupMatcherCoversTool(target, matcher, tool) {
 				routed = true
 				break
 			}
@@ -2571,6 +2563,59 @@ func setupHookMatchersMissing(target string, matchers []string) []string {
 		}
 	}
 	return missing
+}
+
+// setupMatcherCoversTool proves family coverage only for simple unrestricted
+// prefix branches. More complex custom expressions remain unverified; sampling
+// any finite set of MCP names cannot prove that future names reach the hook.
+func setupMatcherCoversTool(target, matcher, tool string) bool {
+	if tool != "mcp__.*" && tool != "mcp_.*" {
+		return setupMatcherRoutes(target, matcher, tool)
+	}
+	if matcher == "" || matcher == "*" {
+		return true
+	}
+	if target == "claude-code" && claudePlainMatcher.MatchString(matcher) {
+		return false
+	}
+	re, err := resyntax.Parse(matcher, resyntax.Perl)
+	return err == nil && setupRegexCoversMCP(re, strings.TrimSuffix(tool, ".*"), false, false)
+}
+
+func setupRegexCoversMCP(re *resyntax.Regexp, prefix string, start, end bool) bool {
+	switch re.Op {
+	case resyntax.OpCapture:
+		return setupRegexCoversMCP(re.Sub[0], prefix, start, end)
+	case resyntax.OpAlternate:
+		for _, branch := range re.Sub {
+			if setupRegexCoversMCP(branch, prefix, start, end) {
+				return true
+			}
+		}
+	case resyntax.OpConcat:
+		parts := re.Sub
+		if parts[0].Op == resyntax.OpBeginText || parts[0].Op == resyntax.OpBeginLine {
+			start, parts = true, parts[1:]
+		}
+		if len(parts) > 0 && (parts[len(parts)-1].Op == resyntax.OpEndText || parts[len(parts)-1].Op == resyntax.OpEndLine) {
+			end, parts = true, parts[:len(parts)-1]
+		}
+		if len(parts) == 1 {
+			return setupRegexCoversMCP(parts[0], prefix, start, end)
+		}
+		if len(parts) == 2 && parts[0].Op == resyntax.OpLiteral && parts[1].Op == resyntax.OpStar {
+			wildcard := parts[1].Sub[0].Op
+			return strings.HasPrefix(prefix, string(parts[0].Rune)) && (wildcard == resyntax.OpAnyChar || wildcard == resyntax.OpAnyCharNotNL)
+		}
+	case resyntax.OpLiteral:
+		literal := string(re.Rune)
+		return !end && ((!start && strings.Contains(prefix, literal)) || strings.HasPrefix(prefix, literal))
+	case resyntax.OpStar:
+		return re.Sub[0].Op == resyntax.OpAnyChar || re.Sub[0].Op == resyntax.OpAnyCharNotNL
+	case resyntax.OpEmptyMatch:
+		return !end
+	}
+	return false
 }
 
 // claudePlainMatcher is the matcher Claude Code reads as tool names rather
@@ -2719,7 +2764,7 @@ func setupSharedHookEntryWarnings(opts setupOptions, path, bin string) []string 
 			continue
 		}
 		warnings = append(warnings, fmt.Sprintf(
-			"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; it does not route %s to HELM. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
+			"%s: the hook entry with matcher %s also holds other hooks, so setup left its matcher alone; coverage of %s is missing or unverified. Set its matcher to %s, or move the HELM hook into an entry of its own and run setup again.",
 			path, entry.matcher, strings.Join(missing, ", "), setupHookMatcher(opts.Target)))
 	}
 	return warnings

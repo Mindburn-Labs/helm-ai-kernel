@@ -640,6 +640,12 @@ removal_proofs:
       - "core/pkg/workstation.TestOperatorViewChecksEverySignature"
       - "core/cmd/helm-ai-kernel.TestWorkstationListSaysWhichReceiptsItChecked"
   - control: CTL-037
+    file: core/pkg/workstation/operator.go
+    find: 'verification.TrustAnchor = "caller-provided public key " + ed25519SignerKeyID(trust.PublicKey)'
+    replace: 'verification.TrustAnchor = ""'
+    tests:
+      - "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey"
+  - control: CTL-037
     file: core/pkg/workstation/scope_audit.go
     find: "\t\tcase SignatureUnsigned, SignatureInvalid:\n\t\t\tcontinue\n"
     replace: "\t\tcase \"\":\n\t\t\tcontinue\n"
@@ -4353,6 +4359,7 @@ controls:
         - "core/cmd/helm-ai-kernel.TestHookLeavesPublicKeysAndExampleEnvFilesAlone"
         - "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput"
         - "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding"
+        - "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination"
         - "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
         - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
       forbidden:
@@ -4399,6 +4406,7 @@ controls:
       removal: []
       bypass:
         - "core/cmd/helm-ai-kernel.TestHookBypassCorpus"
+        - "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination"
         - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         - "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools"
         - "core/cmd/helm-ai-kernel.TestSetupStatusReportsAnOutdatedHookMatcher"
@@ -4526,10 +4534,12 @@ controls:
         - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
         - "core/pkg/workstation.TestOperatorViewChecksEverySignature"
         - "core/pkg/workstation.TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds"
+        - "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey"
         - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesALinkedPackSubdirectory"
         - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
       removal:
         - "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey"
+        - "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey"
         - "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey"
         - "core/pkg/workstation.TestOperatorViewChecksEverySignature"
         - "core/cmd/helm-ai-kernel.TestWorkstationListSaysWhichReceiptsItChecked"

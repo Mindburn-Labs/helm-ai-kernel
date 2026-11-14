@@ -6,7 +6,9 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"flag"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -130,10 +132,8 @@ func signerInvocation(commands []shellscan.Command) (string, bool) {
 			continue
 		}
 		var operands []string
-		dryRun := false
 		for _, token := range command.Tokens[1:] {
 			if strings.HasPrefix(token, "-") {
-				dryRun = dryRun || token == "--dry-run" || token == "-dry-run"
 				continue
 			}
 			operands = append(operands, token)
@@ -153,7 +153,8 @@ func signerInvocation(commands []shellscan.Command) (string, bool) {
 		case "hook":
 			return kernelCLIName + " hook", true
 		case "setup":
-			if next != "status" && !dryRun {
+			status := len(command.Tokens) > 2 && command.Tokens[1] == "setup" && command.Tokens[2] == "status"
+			if !status && !setupDryRunInvocation(command.Tokens) {
 				return kernelCLIName + " setup", true
 			}
 		case "workstation":
@@ -164,6 +165,39 @@ func signerInvocation(commands []shellscan.Command) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// setupDryRunInvocation grants the preview exception only when Go's flag
+// parser consumes the whole option list and the effective dry-run value is
+// true. This keeps repeated booleans, option values and "--" consistent with
+// setup without running setup's filesystem normalization. Unknown options
+// get no exception until this bounded grammar is updated with setup.
+func setupDryRunInvocation(tokens []string) bool {
+	if len(tokens) < 3 || tokens[1] != "setup" {
+		return false
+	}
+	args := tokens[2:]
+	switch args[0] {
+	case "remove", "repair":
+		if len(args) < 2 {
+			return false
+		}
+		args = args[2:]
+	default:
+		if !strings.HasPrefix(args[0], "-") {
+			args = args[1:]
+		}
+	}
+	fs := flag.NewFlagSet("setup-preview", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	dryRun := fs.Bool("dry-run", false, "")
+	for _, name := range strings.Fields("yes json no-quickstart quickstart console no-open offline reset print-config") {
+		fs.Bool(name, false, "")
+	}
+	for _, name := range strings.Fields("scope workspace format console-port data-dir signing-seed-file policy-profile client profile") {
+		fs.String(name, "", "")
+	}
+	return fs.Parse(args) == nil && fs.NArg() == 0 && *dryRun
 }
 
 // hookMaxEgressDestinations is the most destinations one call may name and

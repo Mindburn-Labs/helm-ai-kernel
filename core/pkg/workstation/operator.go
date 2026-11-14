@@ -29,7 +29,8 @@ type OperatorView struct {
 // TrustAnchor is the workstation public key the caller trusts and where it
 // came from. The zero value means no anchor: signatures are still checked
 // against the key each receipt names, and signer trust is reported as not
-// checked.
+// checked. Source is an optional descriptive label; an unlabeled valid key
+// is identified by its key ID in reports.
 type TrustAnchor struct {
 	PublicKey ed25519.PublicKey
 	Source    string
@@ -78,6 +79,9 @@ func newReceiptVerification(trust TrustAnchor) *ReceiptVerification {
 	verification := &ReceiptVerification{Statuses: map[string]int{}, NotCounted: []UncountedInput{}, DuplicateInputs: []DuplicateInput{}}
 	if len(trust.PublicKey) == ed25519.PublicKeySize {
 		verification.TrustAnchor = trust.Source
+		if strings.TrimSpace(verification.TrustAnchor) == "" {
+			verification.TrustAnchor = "caller-provided public key " + ed25519SignerKeyID(trust.PublicKey)
+		}
 	}
 	return verification
 }

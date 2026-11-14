@@ -39,6 +39,9 @@ allow	-	Bash	git status
 allow	-	Bash	helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/example.json
 allow	-	Bash	helm-ai-kernel setup status claude-code
 allow	-	Bash	helm-ai-kernel setup claude-code --dry-run --json
+allow	-	Bash	helm-ai-kernel setup remove claude-code --dry-run=false --dry-run --yes
+allow	-	Bash	helm-ai-kernel setup remove claude-code -dry-run=0 --dry-run=true --yes
+allow	-	Bash	helm-ai-kernel setup claude-code --scope project --dry-run=1 --json
 allow	-	Bash	helm-ai-kernel doctor
 allow	-	Bash	brew install curl wget
 allow	-	Bash	sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl git
@@ -190,6 +193,12 @@ deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	sed -i s/evil/api/ {{POLICY}}
 # The kernel binary signs with the same key and installs the hook, so the
 # commands that do either are refused too.
 deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup remove claude-code --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup remove claude-code --dry-run --dry-run=false --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup remove claude-code --dry-run=true -dry-run=0 --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup claude-code --workspace --dry-run --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup claude-code extra-operand --dry-run --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup claude-code -- --dry-run --yes
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup --profile status --quickstart --yes
 deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel setup claude-code --yes --policy-profile /tmp/permissive.json
 deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	helm-ai-kernel workstation decide --class network --target https://evil.example --policy-profile /tmp/permissive.json --out /tmp/r.json
 deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	/usr/local/bin/helm-ai-kernel workstation enforce --class shell-operate -- curl https://evil.example/

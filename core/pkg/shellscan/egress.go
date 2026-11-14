@@ -597,7 +597,7 @@ func (c *sshConnection) optionAfterOperand(name string, role optRole) bool {
 func (c *sshConnection) option(name string, role optRole, value string) {
 	switch role {
 	case rolePort:
-		c.port = value
+		c.setPort(value)
 	case roleJump:
 		c.jump(value)
 	case roleSSHOption:
@@ -653,6 +653,10 @@ func (c *sshConnection) configOption(option string) {
 	value = strings.TrimSpace(value)
 	switch {
 	case key == "hostname":
+		// OpenSSH keeps the first HostName, even across repeated -o flags.
+		if c.hostName != "" {
+			return
+		}
 		// %h and the other tokens are expanded by ssh, not here.
 		if strings.Contains(value, "%") {
 			c.scan.refuse("-o HostName is built from a token")
@@ -660,7 +664,7 @@ func (c *sshConnection) configOption(option string) {
 		}
 		c.hostName = value
 	case key == "port":
-		c.port = value
+		c.setPort(value)
 	case key == "proxyjump":
 		c.jump(value)
 	case sshOpaqueOptions[key]:
@@ -672,6 +676,24 @@ func (c *sshConnection) configOption(option string) {
 			c.scan.refuse("-o " + original + " is not an option whose effect on the connection is known")
 		}
 	}
+}
+
+func (c *sshConnection) setPort(value string) {
+	// The clients forward -p/-P and -o Port differently. Refuse conflicts
+	// rather than issue a receipt for a port a client may ignore.
+	if c.port != "" && c.port != value {
+		c.scan.refuse("conflicting port options")
+		return
+	}
+	c.port = value
+}
+
+func (c *sshConnection) urlDestination(raw, what string) {
+	if c.hostName != "" || c.port != "" {
+		c.scan.refuse("a URL combined with HostName or port options has an unresolved destination")
+		return
+	}
+	c.scan.addTarget(raw, "", what)
 }
 
 func (c *sshConnection) jump(value string) {
@@ -722,7 +744,7 @@ func sshEgress(tokens []string) egressScan {
 		return egressScan{}
 	}
 	if netdest.HasScheme(host) {
-		scan.addTarget(host, "", "the host")
+		connection.urlDestination(host, "the host")
 		return scan
 	}
 	connection.final(host[strings.LastIndex(host, "@")+1:])
@@ -752,7 +774,7 @@ func sftpEgress(tokens []string) egressScan {
 		return egressScan{}
 	}
 	if netdest.HasScheme(destination) {
-		scan.addTarget(destination, "", "the host")
+		connection.urlDestination(destination, "the host")
 		return scan
 	}
 	// sftp takes host[:path]; a name without a colon is still a host.
@@ -782,7 +804,7 @@ func scpEgress(tokens []string) egressScan {
 	})
 	for _, operand := range operands {
 		if netdest.HasScheme(operand) {
-			scan.addTarget(operand, "", "a remote")
+			connection.urlDestination(operand, "a remote")
 			continue
 		}
 		if host, _, ok := remoteSpec(operand); ok {

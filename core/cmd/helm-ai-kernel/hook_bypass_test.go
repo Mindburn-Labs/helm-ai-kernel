@@ -109,6 +109,52 @@ func (env hookBypassEnv) run(t *testing.T, tool string, input map[string]any) (b
 	return strings.Contains(stdout.String(), `"permissionDecision":"deny"`), receipts
 }
 
+func TestHookUsesTheEffectiveSSHDestination(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{{Host: "allowed.example", Protocol: "ssh"}}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, tc := range []struct {
+		name, command, target, reason string
+		denied                        bool
+	}{
+		{"first host denied", "ssh -o HostName=other.example -o HostName=allowed.example allowed.example", "ssh://other.example", "EGRESS_DESTINATION_NOT_ALLOWED", true},
+		{"first host allowed", "ssh -o HostName=allowed.example -o HostName=other.example allowed.example", "ssh://allowed.example", "", false},
+		{"conflicting ports", "ssh -p 2222 -p 22 allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
+		{"URL with override", "ssh -o HostName=other.example ssh://allowed.example", "<undetermined>", "EGRESS_DESTINATION_UNDETERMINED", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
+			if denied != tc.denied {
+				t.Fatalf("denied=%v receipts=%s; want denied=%v", denied, describeReceipts(receipts), tc.denied)
+			}
+			network := 0
+			for _, receipt := range receipts {
+				if receipt.Request.EffectType != contracts.EffectTypeWorkstationNetworkEgress {
+					continue
+				}
+				network++
+				if receipt.Request.Target != fingerprintHookTarget(tc.target) || tc.denied && receipt.ReasonCode != tc.reason {
+					t.Errorf("receipt target=%q reason=%q; want %q %q", receipt.Request.Target, receipt.ReasonCode, tc.target, tc.reason)
+				}
+			}
+			if network != 1 {
+				t.Fatalf("got %d network receipts, want one: %s", network, describeReceipts(receipts))
+			}
+		})
+	}
+}
+
 func describeReceipts(receipts []*contracts.WorkstationPolicyDecisionReceipt) string {
 	parts := make([]string, 0, len(receipts))
 	for _, receipt := range receipts {

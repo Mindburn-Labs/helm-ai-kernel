@@ -5,6 +5,7 @@ package workstation
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,6 +139,25 @@ func TestOperatorViewWithoutAnAnchorSaysTrustWasNotChecked(t *testing.T) {
 	}
 	if statements := strings.Join(view.Verification.Statements(), "\n"); !strings.Contains(statements, "Signer trust was not checked") {
 		t.Fatalf("statements do not say trust was unchecked:\n%s", statements)
+	}
+}
+
+func TestScopeAuditUsesAnUnlabeledTrustKey(t *testing.T) {
+	dir := verificationInputs(t)
+	for _, source := range []string{"", "   "} {
+		t.Run(fmt.Sprintf("source_%q", source), func(t *testing.T) {
+			report, err := BuildScopeAudit(TrustAnchor{PublicKey: workstationTestPublicKey(), Source: source}, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.Summary.DecisionReceipts != 1 || report.Summary.TotalActions != 1 || report.Summary.DeniedActions != 1 || len(report.EvidenceRefs) != 1 || report.Summary.UntrustedSignerReceipts != 2 || report.Summary.UntrustedSignerActions != 2 {
+				t.Fatalf("summary = %+v refs = %d; want only the trusted receipt in ordinary totals", report.Summary, len(report.EvidenceRefs))
+			}
+			limitations := strings.Join(report.Limitations, "\n")
+			if strings.Contains(limitations, "no trusted workstation public key") || !strings.Contains(limitations, "Signer trust was checked against") {
+				t.Fatalf("limitations do not reflect the supplied key: %s", limitations)
+			}
+		})
 	}
 }
 

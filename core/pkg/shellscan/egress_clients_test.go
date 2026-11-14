@@ -29,6 +29,12 @@ func TestClassifyReadsClientOptionsWhereverTheClientDoes(t *testing.T) {
 		{"ssh -o=Key=Value", "ssh -o=HostName=other.example allowed.example", []string{"ssh://other.example"}},
 		{"ssh -o key and tab", "ssh -o 'HostName\tother.example' allowed.example", []string{"ssh://other.example"}},
 		{"ssh -o key and space", "ssh -o 'HostName other.example' allowed.example", []string{"ssh://other.example"}},
+		// OpenSSH's first HostName wins, including across the host operand.
+		{"ssh first HostName denied", "ssh -o HostName=other.example -o HostName=allowed.example allowed.example", []string{"ssh://other.example"}},
+		{"ssh first HostName allowed", "ssh -o HostName=allowed.example -o HostName=other.example allowed.example", []string{"ssh://allowed.example"}},
+		{"ssh repeated HostName after host", "ssh -o HostName=other.example allowed.example -o HostName=allowed.example", []string{"ssh://other.example"}},
+		{"scp repeated HostName", "scp -o HostName=other.example -o HostName=allowed.example ./a allowed.example:/tmp/", []string{"ssh://other.example"}},
+		{"sftp repeated HostName", "sftp -o HostName=other.example -o HostName=allowed.example allowed.example", []string{"ssh://other.example"}},
 		{"ssh plain option keeps host", "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 allowed.example", []string{"ssh://allowed.example"}},
 		{"scp -o=Key=Value", "scp -o=HostName=other.example ./a allowed.example:/tmp/", []string{"ssh://other.example"}},
 
@@ -63,6 +69,15 @@ func TestClassifyRefusesWhatAClientTableDoesNotKnow(t *testing.T) {
 		reason  string
 	}{
 		{"ssh unknown -o key", "ssh -o PKCS11Provider=/tmp/p.so allowed.example", "PKCS11Provider"},
+		{"ssh conflicting config ports", "ssh -o Port=2222 -o Port=22 allowed.example", "conflicting port"},
+		{"ssh conflicting flags", "ssh -p 2222 -p 22 allowed.example", "conflicting port"},
+		{"ssh conflicting mixed ports", "ssh -o Port=2222 -p 22 allowed.example", "conflicting port"},
+		{"scp conflicting ports", "scp -o Port=2222 -P 22 ./a allowed.example:/tmp/", "conflicting port"},
+		{"sftp conflicting ports", "sftp -o Port=2222 -P 22 allowed.example", "conflicting port"},
+		{"ssh URL and HostName", "ssh -o HostName=other.example ssh://allowed.example", "URL"},
+		{"ssh URL and port", "ssh -p 2222 ssh://allowed.example", "URL"},
+		{"scp URL and HostName", "scp -o HostName=other.example ./a scp://allowed.example/x", "URL"},
+		{"sftp URL and HostName", "sftp -o HostName=other.example sftp://allowed.example/x", "URL"},
 		{"ssh unknown -o key after host", "ssh allowed.example -o SecurityKeyProvider=/tmp/p.so", "SecurityKeyProvider"},
 		{"ssh proxy command after host", "ssh allowed.example -o ProxyCommand='nc other.example 22'", "ProxyCommand"},
 		{"scp option after operand", "scp ./a allowed.example:/tmp/ -o HostName=other.example", "after an operand"},

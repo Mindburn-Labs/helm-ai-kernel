@@ -2801,6 +2801,7 @@
           "core/cmd/helm-ai-kernel.TestHookLeavesPublicKeysAndExampleEnvFilesAlone",
           "core/cmd/helm-ai-kernel.TestHookReceiptsBindTheCallAndItsInput",
           "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding",
+          "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination",
           "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone",
           "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         ],
@@ -2849,6 +2850,7 @@
         "removal": [],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestHookBypassCorpus",
+          "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination",
           "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs",
           "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools",
           "core/cmd/helm-ai-kernel.TestSetupStatusReportsAnOutdatedHookMatcher",
@@ -3084,11 +3086,13 @@
           "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty",
           "core/pkg/workstation.TestOperatorViewChecksEverySignature",
           "core/pkg/workstation.TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds",
+          "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey",
           "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesALinkedPackSubdirectory",
           "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
         ],
         "removal": [
           "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey",
+          "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey",
           "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey",
           "core/pkg/workstation.TestOperatorViewChecksEverySignature",
           "core/cmd/helm-ai-kernel.TestWorkstationListSaysWhichReceiptsItChecked",
@@ -3120,6 +3124,12 @@
           "tests": [
             "core/pkg/workstation.TestOperatorViewChecksEverySignature",
             "core/cmd/helm-ai-kernel.TestWorkstationListSaysWhichReceiptsItChecked"
+          ]
+        },
+        {
+          "file": "core/pkg/workstation/operator.go",
+          "tests": [
+            "core/pkg/workstation.TestScopeAuditUsesAnUnlabeledTrustKey"
           ]
         },
         {

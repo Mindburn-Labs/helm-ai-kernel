@@ -414,3 +414,7 @@ deny	TRUST_MATERIAL_ACCESS_DENIED	Grep	{"path":"{{HOME}}/repo","glob":"*.go,*.se
 deny	TRUST_MATERIAL_ACCESS_DENIED	mcp__fs__search	{"path":"{{HOME}}/repo","pattern":"**/*.seed"}
 deny	TRUST_MATERIAL_ACCESS_DENIED	mcp__fs__search	{"path":"{{HOME}}","pattern":"foo|bar"}
 allow	-	mcp__fs__search	{"path":"{{HOME}}/copies","pattern":"foo|bar"}
+
+# Connection overrides must not hide behind an allowed URL.
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git -c http.followRedirects=false -c http.https://api.github.com/.curloptResolve=api.github.com:443:127.0.0.1 ls-remote https://api.github.com/o/r.git
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --no-ftp-skip-pasv-ip https://api.github.com/zen

@@ -198,6 +198,56 @@ func TestHookRefusesMixedProtocolCurlRemappings(t *testing.T) {
 	}
 }
 
+// Destination-changing configuration must deny the whole call before dispatch,
+// even when its URL is allowed. Ordinary scoped settings and explicit PASV
+// address protection remain supported.
+func TestHookRefusesDestinationOverrides(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{
+		{Host: "allowed.example", Protocol: "http"},
+		{Host: "allowed.example", Protocol: "ftp"},
+	}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, tc := range []struct {
+		name, command string
+		denied        bool
+	}{
+		{"Git scoped resolve", "git -c http.followRedirects=false -c http.http://allowed.example/.curloptResolve=allowed.example:80:127.0.0.1 ls-remote http://allowed.example/r.git", true},
+		{"Git clone scoped resolve", "git clone -c http.followRedirects=false --config http.http://allowed.example/.curloptResolve=allowed.example:80:127.0.0.1 http://allowed.example/r.git dir", true},
+		{"Git scoped user agent", "git -c http.followRedirects=false -c http.http://allowed.example/.userAgent=helm ls-remote http://allowed.example/r.git", false},
+		{"curl PASV address override", "curl --disable-epsv --no-ftp-skip-pasv-ip ftp://allowed.example/file", true},
+		{"curl PASV override after protection", "curl --ftp-skip-pasv-ip --no-ftp-skip-pasv-ip ftp://allowed.example/file", true},
+		{"curl PASV override across transfers", "curl --ftp-skip-pasv-ip ftp://allowed.example/file --next --no-ftp-skip-pasv-ip ftp://allowed.example/other", true},
+		{"curl protected PASV", "curl --disable-epsv --ftp-skip-pasv-ip ftp://allowed.example/file", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
+			if denied != tc.denied || len(receipts) == 0 {
+				t.Fatalf("denied=%v receipts=%s; want denied=%v and signed receipts", denied, describeReceipts(receipts), tc.denied)
+			}
+			for _, receipt := range receipts {
+				if tc.denied && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "EGRESS_DESTINATION_UNDETERMINED" || receipt.Request.Target != fingerprintHookTarget("<undetermined>")) {
+					t.Errorf("opaque call left a misleading receipt: %s target=%q", describeReceipts(receipts), receipt.Request.Target)
+				}
+				if !tc.denied && receipt.Verdict != contracts.WorkstationVerdictAllow {
+					t.Errorf("supported call was refused: %s", describeReceipts(receipts))
+				}
+			}
+		})
+	}
+}
+
 func describeReceipts(receipts []*contracts.WorkstationPolicyDecisionReceipt) string {
 	parts := make([]string, 0, len(receipts))
 	for _, receipt := range receipts {

@@ -103,7 +103,8 @@ func walkCLI(spec cliSpec, tokens []string, visit cliVisitor) {
 			role, ok := spec.flag[name]
 			if !ok && spec.negatable {
 				role, ok = spec.flag[strings.TrimPrefix(name, "no-")]
-				// Turning a flag off never opens the destination set.
+				// Destination-changing negations must be explicit flag entries
+				// above, such as curl --no-ftp-skip-pasv-ip.
 				role = rolePlain
 			}
 			if !ok || attached {
@@ -249,6 +250,7 @@ var opaqueReasons = map[string]string{
 	"curl abstract-unix-socket": "--abstract-unix-socket connects through a local socket",
 	"curl dns-servers":          "--dns-servers sends lookups to other resolvers",
 	"curl alt-svc":              "--alt-svc lets a cache file redirect the connection",
+	"curl no-ftp-skip-pasv-ip":  "--no-ftp-skip-pasv-ip accepts a server-selected data destination",
 	"curl ftp-port":             "--ftp-port opens a connection back from the server",
 	"curl proto-default":        "--proto-default changes the protocol of every URL",
 	"curl variable":             "--variable builds arguments at run time",
@@ -342,6 +344,7 @@ var curlSpec = cliSpec{
 		xattr
 	`), map[string]optRole{
 		"location": roleOpaque, "location-trusted": roleOpaque, "metalink": roleOpaque,
+		"no-ftp-skip-pasv-ip": roleOpaque,
 	}),
 }
 

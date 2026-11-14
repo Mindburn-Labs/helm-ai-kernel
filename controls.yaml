@@ -4361,6 +4361,7 @@ controls:
         - "core/cmd/helm-ai-kernel.TestHookNetworkReceiptNamesItsTargetBinding"
         - "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination"
         - "core/cmd/helm-ai-kernel.TestHookRefusesMixedProtocolCurlRemappings"
+        - "core/cmd/helm-ai-kernel.TestHookRefusesDestinationOverrides"
         - "core/pkg/shellscan.TestClassifyStricterTablesLeaveEverydayCommandsAlone"
         - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
       forbidden:
@@ -4408,6 +4409,7 @@ controls:
       bypass:
         - "core/cmd/helm-ai-kernel.TestHookBypassCorpus"
         - "core/cmd/helm-ai-kernel.TestHookRefusesMixedProtocolCurlRemappings"
+        - "core/cmd/helm-ai-kernel.TestHookRefusesDestinationOverrides"
         - "core/cmd/helm-ai-kernel.TestHookUsesTheEffectiveSSHDestination"
         - "core/pkg/shellscan.TestPathGuardResolvesMixedCaseSymlinksBeforeMatchingGlobs"
         - "core/cmd/helm-ai-kernel.TestSetupHookMatcherRoutesCodeBrowserAndResourceTools"

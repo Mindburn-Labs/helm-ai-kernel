@@ -106,7 +106,7 @@ func gitConfigMovesConnection(key string) bool {
 		}
 	}
 	switch key {
-	case "core.sshcommand", "core.gitproxy", "http.curloptresolve",
+	case "core.sshcommand", "core.gitproxy",
 		// A bundle URI is a second address git downloads from.
 		"fetch.bundleuri", "transfer.bundleuri", "clone.bundleuri",
 		// These name a program git runs while it connects.
@@ -114,6 +114,11 @@ func gitConfigMovesConnection(key string) bool {
 		return true
 	}
 	if strings.HasPrefix(key, "credential.") && strings.HasSuffix(key, ".helper") {
+		return true
+	}
+	// URL-scoped HTTP settings override the general value. Resolve entries
+	// can send the request to an address absent from its repository URL.
+	if strings.HasPrefix(key, "http.") && strings.HasSuffix(key, ".curloptresolve") {
 		return true
 	}
 	return (strings.HasPrefix(key, "http.") || strings.HasPrefix(key, "https.")) && strings.HasSuffix(key, "proxy")

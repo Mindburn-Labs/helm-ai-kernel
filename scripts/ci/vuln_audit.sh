@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # npm audit of the TypeScript SDK lockfile.
-# Rust (cargo audit) runs in the `Rust audit` job of codeql.yml on every PR.
+# The Rust SDK has no audit gate.
 # Go (govulncheck, every module) and the Python SDK (pip-audit) are blocking
 # gates in scripts/ci/security_gates.sh.
 set -euo pipefail

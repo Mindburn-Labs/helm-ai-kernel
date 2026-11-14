@@ -53,9 +53,10 @@ canonical bestpractices.dev project badge.
 - **New functionality has tests** — enforced by reviewer expectation in
   `CONTRIBUTING.md` and by `make check`, which `ci.yml` runs as `ci / gate`.
 - **Continuous integration** — `.github/workflows/ci.yml` runs on every
-  pull request and every push to `main`.
+  pull request and merge group; a push to `main` confirms the merge group
+  gated that exact commit.
 - **Static analysis** — `make lint` (`go vet`, `gofmt`), run in CI by
-  `make check`, plus CodeQL in `.github/workflows/codeql.yml`.
+  `make check`, plus GitHub's CodeQL default setup.
 - **Dynamic analysis (fuzzing)** — Go native fuzz tests in
   `core/pkg/canonicalize/jcs_fuzz_test.go`,
   `core/pkg/crypto/keyring_fuzz_test.go`,

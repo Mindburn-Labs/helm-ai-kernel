@@ -5,6 +5,14 @@
 # `make check` runs as four parallel jobs. Each gets CHECK_SHARD=<i>/4 and runs
 # its part of the profile; the gate needs all four, and
 # scripts/ci/quality_shard_test.py proves the parts cover every gate once.
+#
+# A push to main is the sha the merge queue just gated. That run is one job:
+# scripts/ci/ci_setup.sh finds the successful merge_group run of the same sha
+# and `make check` reports it instead of running the profile a second time. The
+# push run still exists because dev-image.yml and receipt-verifier-wasm.yml
+# start from a green CI run on main.
+#
+# The reusable workflow is pinned by commit, not by its mutable tag.
 name: CI
 
 on:
@@ -27,8 +35,8 @@ jobs:
       contents: read
       actions: read
       pull-requests: read
-    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2.2.0
+    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@6b16d4a861d71f63337dd0dd48e959f39e4fb963 # v2.2.0
     with:
-      check-shards: 4
+      check-shards: ${{ github.event_name == 'push' && 1 || 4 }}
       check-timeout-minutes: 90
-      setup-commands: bash scripts/ci/install_check_tools.sh
+      setup-commands: bash scripts/ci/ci_setup.sh

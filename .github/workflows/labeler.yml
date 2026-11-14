@@ -19,6 +19,13 @@ on:
       - 'release/**'
       - 'scripts/release/**'
       - '.goreleaser.yml'
+      - 'scripts/ci/**'
+      - 'Makefile'
+      - '.gitleaks.toml'
+      - 'install.sh'
+      - 'Dockerfile*'
+      - '**/Dockerfile*'
+      - 'controls.yaml'
       - '**/auth/**'
       - '**/crypto/**'
 

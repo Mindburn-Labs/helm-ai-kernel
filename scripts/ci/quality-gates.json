@@ -882,7 +882,7 @@
     {
       "id": "vuln-audit",
       "title": "Dependency vulnerability audits",
-      "description": "npm audit of sdk/ts. Go (govulncheck), Python (pip-audit) and Rust (the Rust audit job in codeql.yml) are audited by blocking gates.",
+      "description": "npm audit of sdk/ts. Go (govulncheck) and Python (pip-audit) are audited by blocking gates; the Rust SDK has no audit gate.",
       "command": "bash scripts/ci/vuln_audit.sh",
       "timeout_seconds": 1800,
       "advisory": true,

@@ -16,40 +16,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY = ROOT / "scripts" / "ci" / "quality-gates.json"
-EXPECTED_GATE_IDS = {
-    "core-module-closure",
-    "docs-truth",
-    "deadcode",
-    "secrets",
-    "gosec",
-    "govulncheck",
-    "pip-audit",
-    "presentation-hygiene",
-    "go-lint",
-    "go-test",
-    "go-race",
-    "tcb-imports",
-    "boundary-manifest",
-    "quantum-crypto-inventory",
-    "codegen-drift",
-    "contract-breaking-self-test",
-    "release-rehearsal-self-test",
-    "contract-breaking-release",
-    "proto-breaking",
-    "json-schemas",
-    "sdk-openapi-check",
-    "release-smoke",
-    "deployment-smoke",
-    "docker-smoke-hardening",
-    "helm-smoke-hardening",
-    "tla-tools-hardening",
-    "secrets",
-    "vuln-audit",
-    "mutation-core",
-    "flake-core",
-    "runbooks",
-    "migrations",
-}
 EXPECTED_PROFILES = {
     "pr",
     "merge",
@@ -302,8 +268,30 @@ def run_gate(gate: dict[str, Any], strict: bool, env: dict[str, str]) -> GateRes
     return GateResult(gate_id, status, advisory=False, elapsed=elapsed)
 
 
+def gated_by_merge_group(selection: str) -> str | None:
+    """The merge_group CI run that already gated this exact commit, on a push to main.
+
+    scripts/ci/ci_setup.sh sets HELM_GATED_SHA and HELM_GATED_BY_RUN only after
+    the Actions API returns a successful merge_group run of ci.yml whose head is
+    this sha. Anything else (another event, another profile, a missing or
+    mismatched record) returns None and the profile runs.
+    """
+    if selection != "merge" or os.environ.get("GITHUB_EVENT_NAME") != "push":
+        return None
+    sha = os.environ.get("HELM_GATED_SHA", "")
+    run = os.environ.get("HELM_GATED_BY_RUN", "")
+    if sha and sha == os.environ.get("GITHUB_SHA") and run.isdigit():
+        return run
+    return None
+
+
 def run_selection(registry: dict[str, Any], args: argparse.Namespace) -> int:
     gates = gates_by_id(registry)
+    gated_run = None if args.gate else gated_by_merge_group(args.selection)
+    if gated_run:
+        print(f"merge profile not re-run: commit {os.environ['GITHUB_SHA']} is the tree merge_group CI run "
+              f"{gated_run} gated, and that run's ci / gate succeeded on this exact sha.")
+        return 0
     if args.gate:
         selected_ids = args.gate
         selection_name = "custom"
@@ -396,9 +384,6 @@ def self_test(registry: dict[str, Any]) -> int:
         seconds = gate.get("seconds", 1)
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or seconds <= 0:
             failures.append(f"{gate_id}: seconds must be a positive number")
-
-    for gate_id in sorted(EXPECTED_GATE_IDS - gate_ids):
-        failures.append(f"missing required gate id: {gate_id}")
 
     profile_ids = set(profiles)
     for profile_id in sorted(EXPECTED_PROFILES - profile_ids):

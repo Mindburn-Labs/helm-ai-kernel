@@ -17,7 +17,7 @@
     "security_model": "docs/EXECUTION_SECURITY_MODEL.md",
     "threat_mapping": "docs/OWASP_MCP_THREAT_MAPPING.md",
     "quality_workflow": ".github/workflows/ci.yml",
-    "code_scanning": ".github/workflows/codeql.yml",
+    "code_scanning": "GitHub CodeQL default setup (Settings > Code security)",
     "scorecard": ".github/workflows/scorecard.yml",
     "slsa_provenance": ".github/workflows/release.yml",
     "release_asset_staging": "scripts/release/stage_release_assets.sh",

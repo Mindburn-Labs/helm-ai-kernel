@@ -437,6 +437,12 @@ func searchRoot(base, cwd string) string {
 		root = base
 	case cwd != "":
 		root = filepath.Join(cwd, base)
+		if filepath.Separator == '/' {
+			// Join cleans "link/.." to the working directory, while this
+			// filesystem follows the link first. Windows resolves ".."
+			// lexically, as Join does.
+			root = strings.TrimSuffix(cwd, "/") + "/" + base
+		}
 	}
 	if expanded := expandSearchHome(root); !filepath.IsAbs(expanded) {
 		return ""

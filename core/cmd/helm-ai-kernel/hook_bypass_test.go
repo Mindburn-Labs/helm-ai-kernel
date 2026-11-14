@@ -729,6 +729,28 @@ func TestHookProtectsCustomPathsThroughSymlinkParents(t *testing.T) {
 	if denied, receipts := env.run(t, "Read", map[string]any{"file_path": filepath.ToSlash(alias) + "/../ordinary.txt"}); denied {
 		t.Fatalf("ordinary path refused: %s", describeReceipts(receipts))
 	}
+	// A search root is followed as the filesystem follows it: through the
+	// link, then to its parent, not to the parent of the working directory.
+	// The repository is a separate tree, so only the link reaches the seed.
+	repo := t.TempDir()
+	if err := os.Symlink(filepath.Join(secretDir, "receipts"), filepath.Join(repo, "link")); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"link/..", "./link/../", "link/../receipts/..", filepath.ToSlash(repo) + "/link/.."} {
+		input := map[string]any{"path": path, "glob": "signing.*", "pattern": "."}
+		denied, _, receipts := env.runAt(t, repo, "Grep", input)
+		if !denied || !hasDenial(receipts, "TRUST_MATERIAL_ACCESS_DENIED") {
+			t.Errorf("Grep from %q escaped guard: %s", path, describeReceipts(receipts))
+		}
+	}
+	for _, input := range []map[string]any{
+		{"path": "link/..", "glob": "ordinary.*", "pattern": "."},
+		{"path": ".", "glob": "signing.*", "pattern": "."},
+	} {
+		if denied, _, receipts := env.runAt(t, repo, "Grep", input); denied {
+			t.Errorf("ordinary search %v refused: %s", input, describeReceipts(receipts))
+		}
+	}
 }
 
 func TestHookRefusesExecutableClientOptions(t *testing.T) {
@@ -1045,6 +1067,9 @@ func TestHookGuardsDerivedDownloadNames(t *testing.T) {
 	for _, tc := range []struct{ command, reason string }{
 		{"curl --output-dir saved -o only file:///etc/hostname", "TRUST_MATERIAL_ACCESS_DENIED"},
 		{"curl -o only --output-dir " + saved + " https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl --output-dir saved -o a https://api.github.com/a --next -O https://api.github.com/output", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"wget --max-redirect=0 --no-hsts -P '' -N https://api.github.com/output", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"wget --max-redirect=0 --no-hsts api.github.com:pub/file", "EGRESS_DESTINATION_UNDETERMINED"},
 		{"curl --output-dir saved -o ordinary.txt https://api.github.com/file", ""},
 		{"curl -o only https://api.github.com/file", ""},
 		{"curl -O https://api.github.com/dir/output", "TRUST_MATERIAL_ACCESS_DENIED"},
@@ -1070,5 +1095,49 @@ func TestHookGuardsDerivedDownloadNames(t *testing.T) {
 				t.Errorf("ordinary transfer refused: %s", describeReceipts(receipts))
 			}
 		}
+	}
+}
+
+func TestHookRefusesBundleListsAndFileURLGlobs(t *testing.T) {
+	env := newHookBypassEnv(t, "observe_draft.v1.allow.json")
+	profile, err := workstation.LoadPolicyProfileFile(env.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.Operate.Permissions = []string{"network.egress"}
+	profile.Egress.Allowlist = []contracts.WorkstationEgressDestination{{Host: "allowed.example", Protocol: "https"}}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env.policy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.args[len(env.args)-1] = hookPolicyProfileDigest(t, env.policy)
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{"git clone -c http.followRedirects=false --bundle-uri=https://allowed.example/list https://allowed.example/r.git", true},
+		{"git -c http.followRedirects=false clone --bundle-uri https://allowed.example/list /absolute/local/repo dest", true},
+		{"curl 'file:///tmp/input[1-2]'", true},
+		{"curl 'file:///tmp/{first,input}'", true},
+		{"git clone -c http.followRedirects=false https://allowed.example/r.git", false},
+		{"curl 'https://allowed.example/file[1-2]'", false},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			denied, receipts := env.run(t, "Bash", map[string]any{"command": tc.command})
+			if denied != tc.denied || len(receipts) == 0 {
+				t.Fatalf("denied=%v receipts=%s want denied=%v", denied, describeReceipts(receipts), tc.denied)
+			}
+			for _, receipt := range receipts {
+				if tc.denied && (receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "EGRESS_DESTINATION_UNDETERMINED") {
+					t.Errorf("not refused as undetermined: %s", describeReceipts(receipts))
+				}
+				if !tc.denied && receipt.Verdict != contracts.WorkstationVerdictAllow {
+					t.Errorf("ordinary counterpart refused: %s", describeReceipts(receipts))
+				}
+			}
+		})
 	}
 }

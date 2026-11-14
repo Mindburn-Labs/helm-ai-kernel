@@ -88,7 +88,7 @@ var gitSpecs = map[string]cliSpec{
 		no-hardlinks shared recursive single-branch no-single-branch no-tags tags
 		shallow-submodules no-shallow-submodules remote-submodules no-remote-submodules
 		sparse also-filter-submodules dissociate reject-shallow no-reject-shallow ipv4 ipv6`,
-		map[string]optRole{"bundle-uri": roleURL, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque, "u": roleOpaque}),
+		map[string]optRole{"bundle-uri": roleOpaque, "config": roleConfig, "c": roleConfig, "recursive": roleOpaque, "u": roleOpaque}),
 	"fetch": gitSpec("jo", "vqafkpPntu46", gitFetchValues, gitFetchFlags,
 		map[string]optRole{"all": roleOpaque, "multiple": roleOpaque}),
 	"pull": gitSpec("josX", "vqafkpPntur46e", gitFetchValues+" strategy strategy-option cleanup", gitFetchFlags+`
@@ -251,6 +251,10 @@ func (g *gitInvocation) subcommand(sub string, args []string) bool {
 					g.config(value)
 				case roleOpaque:
 					switch {
+					case name == "bundle-uri":
+						// The reply can be a bundle list, and git downloads
+						// every bundle it names, on any host.
+						g.scan.refuse("git --bundle-uri downloads from addresses a bundle list can name")
 					case gitExecutableOptions[name] || sub == "clone" && name == "u":
 						g.scan.refuse("git " + optionLabel(name) + " replaces the program used for the connection")
 					case name != "recurse-submodules" && name != "recursive":

@@ -207,9 +207,10 @@ func (g *PathGuard) Match(target, cwd string) (string, bool) {
 		return rule, true
 	}
 	// A tool that accepts Windows spellings reads a backslash as a separator,
-	// so a location protected under that reading is refused as well.
-	if converted := slashPath(target); converted != native {
-		return g.matchPattern(globEscape(converted), -1, cwd, false)
+	// so a location protected under that reading of the target and of the
+	// working directory is refused as well.
+	if converted := slashPath(target); converted != native || slashPath(cwd) != nativePath(cwd) {
+		return g.matchPattern(globEscape(converted), -1, slashPath(cwd), false)
 	}
 	return "", false
 }

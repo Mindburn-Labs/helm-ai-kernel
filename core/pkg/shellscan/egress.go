@@ -265,6 +265,7 @@ var opaqueReasons = map[string]string{
 	"wget force-directories":    "--force-directories builds the directories it writes to from the URL",
 	"wget protocol-directories": "--protocol-directories builds the directories it writes to from the URL",
 	"wget warc-file":            "--warc-file writes several files named from a prefix",
+	"wget restrict-file-names":  "--restrict-file-names changes the name of the file that is written",
 	"wget config":               "--config reads settings from a file",
 	"wget span-hosts":           "--span-hosts follows links to other hosts",
 	"wget input-metalink":       "--input-metalink takes mirrors from a file",
@@ -375,10 +376,24 @@ func curlOutputUsesGlob(value string) bool {
 	return false
 }
 
+// curlURLGlob reports glob syntax in a URL: "{" or "[" anywhere but in a
+// bracketed IPv6 host, which curl does not expand.
+func curlURLGlob(raw string) bool {
+	authority, rest, _ := strings.Cut(urlAfterScheme(raw), "/")
+	if open := strings.IndexByte(authority, '['); open >= 0 {
+		if end := strings.IndexByte(authority[open:], ']'); end > 0 {
+			authority = authority[:open] + authority[open+end+1:]
+		}
+	}
+	return strings.ContainsAny(authority, "{[") || strings.ContainsAny(rest, "{[")
+}
+
 func curlEgress(tokens []string) egressScan {
 	var scan egressScan
 	var urls, connectTo, resolve []string
-	remoteName := false
+	remoteName, uploadGlob := false, false
+	// --globoff applies to one transfer; with --next it is not known which.
+	globoff, transfers := false, 1
 	walkCLI(curlSpec, tokens, cliVisitor{
 		operand: func(token string) { urls = append(urls, token) },
 		invalid: scan.refuse,
@@ -395,10 +410,16 @@ func curlEgress(tokens []string) egressScan {
 					scan.refuse("curl encoded input has an unsupported file path")
 				}
 			}
+			if name == "globoff" {
+				globoff = true
+			}
+			if name == "next" {
+				transfers++
+			}
 			if name == "upload-file" && strings.ContainsAny(value, "{[") {
 				// Curl expands {a,b} and [1-3] in an upload name into
 				// several files, which are not each checked here.
-				scan.refuse("--upload-file with a glob names files that are not each checked")
+				uploadGlob = true
 			}
 			if name == "output" && curlOutputUsesGlob(value) {
 				scan.refuse("--output builds the file name from a URL glob")
@@ -431,13 +452,22 @@ func curlEgress(tokens []string) egressScan {
 			}
 		},
 	})
+	globbing := !globoff || transfers > 1
+	if uploadGlob && globbing {
+		scan.refuse("--upload-file with a glob names files that are not each checked")
+	}
 	for _, raw := range urls {
-		if remoteName && strings.ContainsAny(raw, "{[") {
+		if remoteName && globbing && curlURLGlob(raw) {
 			scan.refuse("--remote-name with a URL glob writes files that are not each checked")
 		}
 		if strings.HasPrefix(strings.ToLower(raw), "file:") {
 			if _, ok := localFileURLPath(raw); !ok {
 				scan.refuse("file URL has an unsupported local path")
+			}
+			if globbing && curlURLGlob(raw) {
+				// Curl expands {a,b} and [1-3] into several local files,
+				// which are not each checked here.
+				scan.refuse("file URL with a glob names files that are not each checked")
 			}
 			continue // a local file, reported as a read by the secret rules
 		}
@@ -576,7 +606,8 @@ var wgetSpec = cliSpec{
 		"use-askpass":    roleOpaque, // Executes a local credential handler.
 		"hsts-file":      roleOpaque,
 		"input-metalink": roleOpaque, "dns-servers": roleOpaque,
-		"warc-file": roleOpaque, // Writes several files named from a prefix.
+		"warc-file":           roleOpaque, // Writes several files named from a prefix.
+		"restrict-file-names": roleOpaque, // Rewrites the saved file's name.
 	}),
 	flag: withRoles(names(`
 		version help background quiet verbose no-verbose debug force-html no-config
@@ -602,6 +633,22 @@ var wgetSpec = cliSpec{
 	}),
 }
 
+// wgetShorthandFTP reports the scheme-less host:path form that wget before
+// 1.25.0 rewrites to ftp://host/path: a colon before any slash, unless
+// digits follow it up to a slash or the end, which is an HTTP port.
+func wgetShorthandFTP(raw string) bool {
+	index := strings.IndexAny(raw, ":/")
+	if index <= 0 || raw[index] != ':' {
+		return false
+	}
+	digits := 0
+	for index+1+digits < len(raw) && raw[index+1+digits] >= '0' && raw[index+1+digits] <= '9' {
+		digits++
+	}
+	end := index + 1 + digits
+	return digits == 0 || end < len(raw) && raw[end] != '/'
+}
+
 func wgetEgress(tokens []string) egressScan {
 	var scan egressScan
 	var urls []string
@@ -622,6 +669,9 @@ func wgetEgress(tokens []string) egressScan {
 		defaultScheme := ""
 		if !netdest.HasScheme(raw) {
 			defaultScheme = "http"
+			if wgetShorthandFTP(raw) {
+				scan.refuse("wget reads host:path without a scheme as FTP in some builds")
+			}
 		}
 		destination, ok := scan.addTarget(raw, defaultScheme, "a URL")
 		if ok && (destination.Scheme == "ftp" || destination.Scheme == "ftps") {

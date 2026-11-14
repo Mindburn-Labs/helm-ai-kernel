@@ -163,8 +163,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   literal backslashes when protected paths and sensitive writes are resolved
   on platforms where a backslash is part of a file name. Download names that
   curl and wget take from the URL, and curl output names below `--output-dir`,
-  are checked against protected material, and
-  names they build from a glob or a server reply are undetermined.
+  are checked against protected material. Names
+  curl builds from a glob, and names wget takes from a server reply or
+  rewrites, are undetermined.
+- Git `clone --bundle-uri` and curl `file:` URLs with a glob are undetermined
+  under an allowlist. A relative search root keeps its symlink and parent
+  components when protected material is checked.
 - Named curl URL-encoded data and query file inputs are checked against
   protected material and secret-read policy. SFTP direct-server and other
   opaque-option refusals survive an absent destination.

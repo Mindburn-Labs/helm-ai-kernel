@@ -94,7 +94,6 @@ func TestClassifyNamesEveryEgressDestination(t *testing.T) {
 		{"git remote set-url", "git remote set-url origin git@other.example:org/repo.git", []string{"ssh://other.example"}},
 		{"git config remote url", "git config remote.origin.url https://other.example/repo.git", []string{"https://other.example"}},
 		{"git push --repo", "git -c http.followRedirects=false push --repo=https://other.example/r.git", []string{"https://other.example"}},
-		{"git bundle uri", "git clone -c http.followRedirects=false --bundle-uri=https://other.example/b https://allowed.example/r.git", []string{"https://allowed.example", "https://other.example"}},
 		{"git proxy for a configured remote", "https_proxy=http://other.example:8080 git push origin main", []string{"http://other.example:8080"}},
 		{"ssh host", "ssh deploy@other.example uptime", []string{"ssh://other.example"}},
 		{"ssh port", "ssh -p 2222 other.example", []string{"ssh://other.example:2222"}},
@@ -545,6 +544,10 @@ func TestClassifyRefusesWgetFTPDataConnections(t *testing.T) {
 		"wget --max-redirect=0 --no-hsts --no-passive-ftp ftp://allowed.example/file",
 		"wget --max-redirect=0 --no-hsts --ftps-implicit ftps://allowed.example/file",
 		"wget --max-redirect=0 --no-hsts https://allowed.example/a ftp://allowed.example/file",
+		// Wget before 1.25.0 reads a scheme-less host:path as FTP.
+		"wget --max-redirect=0 --no-hsts allowed.example:file",
+		"wget --max-redirect=0 --no-hsts allowed.example:/pub/file",
+		"wget --max-redirect=0 --no-hsts allowed.example:8080x/file",
 	} {
 		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
 			t.Errorf("%s: got %q, want undetermined", command, got)
@@ -553,6 +556,8 @@ func TestClassifyRefusesWgetFTPDataConnections(t *testing.T) {
 	for _, tc := range []struct{ command, target string }{
 		{"wget --max-redirect=0 --no-hsts https://allowed.example/file", "https://allowed.example"},
 		{"wget --max-redirect=0 --no-hsts http://allowed.example/ftp://file", "http://allowed.example"},
+		{"wget --max-redirect=0 --no-hsts allowed.example:8080/file", "http://allowed.example:8080"},
+		{"wget --max-redirect=0 --no-hsts allowed.example/a:b", "http://allowed.example"},
 		{"curl ftp://allowed.example/file", "ftp://allowed.example"},
 		{"curl --ftp-skip-pasv-ip ftps://allowed.example/file", "ftps://allowed.example"},
 	} {
@@ -574,6 +579,9 @@ func TestClassifyRefusesDerivedFileNamesItCannotCheck(t *testing.T) {
 		"wget --max-redirect=0 --no-hsts -x https://allowed.example/file",
 		"wget --max-redirect=0 --no-hsts --protocol-directories https://allowed.example/file",
 		"wget --max-redirect=0 --no-hsts --warc-file=archive https://allowed.example/file",
+		"wget --max-redirect=0 --no-hsts --restrict-file-names=windows https://allowed.example/file",
+		// --globoff covers one transfer; with --next the other still globs.
+		"curl -g -T 'part[1].bin' https://allowed.example/ --next -T other https://allowed.example/",
 	} {
 		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
 			t.Errorf("%s: got %q, want undetermined", command, got)
@@ -584,9 +592,62 @@ func TestClassifyRefusesDerivedFileNamesItCannotCheck(t *testing.T) {
 		"curl -o 'saved #tag.txt' https://allowed.example/",
 		"curl -O https://allowed.example/file",
 		"wget --max-redirect=0 --no-hsts -N https://allowed.example/file",
+		"curl -g -T 'report[1].txt' https://allowed.example/",
+		"curl --globoff -O 'https://allowed.example/file[1]'",
+		"curl -O -J https://allowed.example/file",
 	} {
 		if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
 			t.Errorf("%s: got %q", command, got)
 		}
+	}
+}
+
+func TestClassifyRefusesCurlFileURLGlobs(t *testing.T) {
+	for _, argv := range [][]string{
+		{"curl", "file:///tmp/input[1-2]"},
+		{"curl", "file:///tmp/{first,input}"},
+		{"curl", "-o", "saved", "FILE:///tmp/input[a-c].txt"},
+		{"curl", "--url", "file:///tmp/input[1-2]"},
+		{"curl", "https://allowed.example/", "file:///tmp/input[1-2]"},
+	} {
+		words := make([]string, len(argv))
+		for i, arg := range argv {
+			words[i] = "'" + arg + "'"
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt(argv, "/tmp"),
+			"shell": Classify(strings.Join(words, " ")),
+		} {
+			if got := networkTargets(result); !sameTargets(got, []string{undetermined}) {
+				t.Errorf("%s %q: got %q, want undetermined", mode, argv, got)
+			}
+		}
+	}
+	for _, command := range []string{"curl file:///tmp/input1", "curl -g 'file:///tmp/input[1-2]'"} {
+		if got := networkTargets(Classify(command)); len(got) != 0 {
+			t.Errorf("%s: got %q, want no network effect", command, got)
+		}
+	}
+	if got := networkTargets(Classify("curl -O 'https://[2001:db8::1]/file'")); len(got) != 1 || got[0] == undetermined {
+		t.Errorf("IPv6 literal read as a glob: got %q", got)
+	}
+	if got := networkTargets(Classify("curl 'https://allowed.example/file[1-2]'")); !sameTargets(got, []string{"https://allowed.example"}) {
+		t.Errorf("remote URL glob: got %q", got)
+	}
+}
+
+func TestClassifyRefusesGitBundleURIs(t *testing.T) {
+	for _, command := range []string{
+		"git clone -c http.followRedirects=false --bundle-uri=https://allowed.example/list https://allowed.example/r.git",
+		"git clone -c http.followRedirects=false --bundle-uri https://allowed.example/list https://allowed.example/r.git",
+		"git -c http.followRedirects=false clone --bundle-uri=http://allowed.example/list /absolute/local/repo dest",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	command := "git clone -c http.followRedirects=false https://allowed.example/r.git"
+	if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
+		t.Errorf("%s: got %q", command, got)
 	}
 }

@@ -410,6 +410,14 @@ func (c *collector) guardWord(word *syntax.Word) {
 	}
 	if rule, ok := c.guard.matchPattern(pattern, dynamicAt, cwd, c.dotGlob); ok {
 		c.protectedPath = rule
+		return
+	}
+	// A working directory written with backslashes is also read with them
+	// as separators, as it was before they were kept as name bytes.
+	if converted := slashPath(cwd); converted != nativePath(cwd) {
+		if rule, ok := c.guard.matchPattern(pattern, dynamicAt, converted, c.dotGlob); ok {
+			c.protectedPath = rule
+		}
 	}
 }
 
@@ -469,9 +477,13 @@ func (c *collector) guardOptionPaths(command Command) {
 				outputs = append(outputs, value)
 			case "wget output-document":
 				impliedNames = false
+			case "wget default-page":
+				outputs = append(outputs, value) // the name saved for a URL that names none
 			case "curl cert", "curl proxy-cert":
-				// file[:password]: the file ends at a colon the value does
-				// not escape, and which one is not known here.
+				// file[:password]. The file as curl reads it, and, because
+				// its Windows build keeps a drive colon, every prefix that
+				// ends at a colon.
+				check(curlCertFile(value))
 				for index := 0; index < len(value); index++ {
 					if value[index] == ':' {
 						check(strings.ReplaceAll(value[:index], `\:`, ":"))
@@ -507,20 +519,50 @@ func (c *collector) guardOptionPaths(command Command) {
 		for _, raw := range urls {
 			outputs = append(outputs, downloadFileNames(command.Name, raw)...)
 		}
-		if len(outputDirs) == 0 {
-			for _, name := range outputs {
-				check(name)
-			}
+	}
+	// Which directory applies to which transfer is not modelled (curl --next
+	// starts a transfer without one, and an empty directory means none):
+	// every name is checked in the working directory and below every
+	// directory the command gives. Curl joins the two even when the name is
+	// absolute.
+	for _, name := range outputs {
+		check(name)
+		for _, dir := range outputDirs {
+			check(strings.TrimRight(dir, "/") + "/" + name)
 		}
 	}
-	// Which directory applies to which transfer is not modelled: every name
-	// is checked below every directory the command gives. Curl joins the two
-	// even when the name is absolute.
-	for _, dir := range outputDirs {
-		for _, name := range outputs {
-			check(strings.TrimSuffix(dir, "/") + "/" + name)
+}
+
+// curlCertFile is the file part of a curl cert[:password] value as curl
+// parses it outside Windows: `\\` is a backslash, `\:` a colon, any other
+// backslash is kept, and the file ends at the first colon left. A value with
+// neither character, or a pkcs11: URI, is the file as written.
+func curlCertFile(value string) string {
+	if !strings.ContainsAny(value, `:\`) || strings.HasPrefix(value, "pkcs11:") {
+		return value
+	}
+	var file strings.Builder
+	for index := 0; index < len(value); index++ {
+		switch {
+		case value[index] == ':':
+			return file.String()
+		case value[index] == '\\' && index+1 < len(value) && (value[index+1] == '\\' || value[index+1] == ':'):
+			index++
+			file.WriteByte(value[index])
+		default:
+			file.WriteByte(value[index])
 		}
 	}
+	return file.String()
+}
+
+// urlAfterScheme drops "scheme://" from a URL. The separator counts only
+// before the first "/", "?" or "#": later it is part of the path or query.
+func urlAfterScheme(raw string) string {
+	if index := strings.Index(raw, "://"); index >= 0 && !strings.ContainsAny(raw[:index], "/?#") {
+		return raw[index+len("://"):]
+	}
+	return raw
 }
 
 // downloadFileNames lists the names a client may give the file it saves a
@@ -528,11 +570,7 @@ func (c *collector) guardOptionPaths(command Command) {
 // as written and percent-decoded, and the client's name for an empty one.
 // Wget appends the query. Curl also splits the segment at a backslash.
 func downloadFileNames(tool, raw string) []string {
-	rest := raw
-	if index := strings.Index(rest, "://"); index >= 0 {
-		rest = rest[index+len("://"):]
-	}
-	rest, _, _ = strings.Cut(rest, "#")
+	rest, _, _ := strings.Cut(urlAfterScheme(raw), "#")
 	rest, query, hasQuery := strings.Cut(rest, "?")
 	segment := ""
 	if index := strings.IndexByte(rest, '/'); index >= 0 {
@@ -556,8 +594,16 @@ func downloadFileNames(tool, raw string) []string {
 		names = []string{"index.html"}
 	}
 	if hasQuery {
+		// The query follows the name, as written and as wget decodes it
+		// (a decoded "/" stays escaped).
+		queries := []string{query}
+		if decoded, err := url.PathUnescape(query); err == nil && decoded != query {
+			queries = append(queries, strings.ReplaceAll(decoded, "/", "%2F"))
+		}
 		for _, name := range names {
-			names = append(names, name+"?"+query)
+			for _, suffix := range queries {
+				names = append(names, name+"?"+suffix)
+			}
 		}
 	}
 	// --adjust-extension adds the suffix of the type the server reports.

@@ -1205,9 +1205,17 @@ func TestPathGuardPreservesLiteralBackslashNames(t *testing.T) {
 			t.Errorf("ordinary %q refused: %s", name, result.ProtectedPath)
 		}
 	}
-	// A protected location written with backslashes for slashes stays refused.
+	// A protected location written with backslashes for slashes stays refused,
+	// as a target and as a working directory.
 	if _, ok := f.guard.Match(strings.ReplaceAll(f.seed, "/", `\`), ""); !ok {
 		t.Error("backslash spelling of a protected file is no longer refused")
+	}
+	keys := strings.ReplaceAll(f.keys, "/", `\`)
+	if _, ok := f.guard.Match("other", keys); !ok {
+		t.Error("backslash spelling of a protected working directory is no longer refused")
+	}
+	if result := ClassifyAt("cat other", keys, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+		t.Error("shell word under a backslash-spelled protected working directory is no longer refused")
 	}
 }
 
@@ -1289,6 +1297,20 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 		{"wget", "--max-redirect=0", "--no-hsts", "-E", "https://allowed.example/page"},
 		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "https://allowed.example/output"},
 		{"wget", "--max-redirect=0", "--no-hsts", "--directory-prefix=" + saved, "https://allowed.example/output"},
+		// A transfer after --next has no output directory.
+		{"curl", "--output-dir", "saved", "-o", "a", "https://allowed.example/a", "--next", "-O", "https://allowed.example/output"},
+		{"curl", "-O", "https://allowed.example/output", "-:", "--output-dir", "saved", "-o", "x", "https://allowed.example/b"},
+		// "://" in a query or fragment is not the scheme separator.
+		{"curl", "-O", "allowed.example/output?u=http://other.example/y"},
+		{"curl", "-O", "allowed.example/output#http://other.example/y"},
+		{"wget", "--max-redirect=0", "--no-hsts", "allowed.example/output#frag://y/z"},
+		// Wget drops trailing slashes from a prefix; an empty one is the working directory.
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "/", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved//", "https://allowed.example/only"},
+		{"wget", "--max-redirect=0", "--no-hsts", "--default-page=output", "https://allowed.example/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "--default-page", "only", "https://allowed.example/dir/"},
+		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/output?v%3D1"},
 	} {
 		words := make([]string, len(argv))
 		for i, arg := range argv {
@@ -1303,6 +1325,18 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 			}
 		}
 	}
+	if runtime.GOOS != "windows" {
+		// Curl reads "\\\\" in a cert value as one backslash.
+		if err := os.Symlink(f.seed, work+`/ce\rt`); err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range []string{`ce\\rt:password`, `ce\\rt`} {
+			argv := []string{"curl", "--cert", value, "https://allowed.example/"}
+			if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
+				t.Errorf("%q missed a protected certificate file", argv)
+			}
+		}
+	}
 	for _, argv := range [][]string{
 		{"curl", "-O", "https://allowed.example/ordinary.txt"},
 		{"curl", "https://allowed.example/output"},
@@ -1313,7 +1347,9 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 		{"curl", "-E", "client.pem:password", "https://allowed.example/"},
 		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/ordinary.txt"},
 		{"wget", "--max-redirect=0", "--no-hsts", "-O", "ordinary.txt", "https://allowed.example/output"},
-		{"wget", "--max-redirect=0", "--no-hsts", "-P", "elsewhere", "https://allowed.example/output"},
+		{"wget", "--max-redirect=0", "--no-hsts", "-P", "elsewhere", "https://allowed.example/only"},
+		{"curl", "-O", "https://allowed.example/x?u=http://other.example/output"},
+		{"curl", "-E", `client\\cert.pem:pass`, "https://allowed.example/"},
 	} {
 		result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard))
 		if result.ProtectedPath != "" || !sameTargets(networkTargets(result), []string{"https://allowed.example"}) {

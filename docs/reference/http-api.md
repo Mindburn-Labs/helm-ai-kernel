@@ -51,6 +51,24 @@ public docs surface.
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
 
+## Local First Use
+
+From the source checkout, `make first-use` builds the Kernel and standalone
+receipt verifier and runs the [HTTP walkthrough](../../examples/first-use/README.md).
+It uses the existing local credential path: a generated
+`HELM_ADMIN_API_KEY`, `HELM_RUNTIME_TENANT_ID=first-use` and
+`HELM_RUNTIME_PRINCIPAL_ID=first-use-principal` on a loopback listener with
+fresh SQLite state. Each evaluate and receipt request supplies the bearer
+credential and matching `X-Helm-Tenant-ID` / `X-Helm-Principal-ID` headers.
+
+The `agent_tool_call_boundary.toml` sample policy enables `read-ticket` and
+disables `dangerous-shell`. The walkthrough checks both verdicts, fetches
+`GET /api/v1/receipts/{receipt_id}` for each decision, and verifies the returned
+`receipt.v5` records offline against the server's exported `root.pub` after
+stopping the server. It checks that a changed signed verdict and a wrong public key
+are rejected. These are evaluation receipts; no tool dispatch is requested.
+For manual server and curl commands, see [Local Boundary](../DEVELOPER_JOURNEY.md#local-boundary).
+
 ## Native TLS
 
 `serve` terminates TLS on its API listener when both of these are set:

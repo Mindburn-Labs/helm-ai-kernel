@@ -88,6 +88,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+- `make first-use` builds the kernel and standalone verifier, exercises authenticated local HTTP ALLOW/DENY decisions and fetches their receipts, then verifies them offline and rejects tampered receipts and the wrong key. Source quickstart instructions include the required credentials and an allow-capable sample policy.
+- Setup dry runs can preview configuration before the client is installed. Real installation still requires the client and validates existing signing material and configuration. Named Claude Code/Codex status defaults to project scope; fleet status and doctor inspect both supported scopes. Repair and removal retain their existing defaults.
+
 ### Upgrade notes
 
 - Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook

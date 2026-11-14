@@ -560,7 +560,7 @@ func TestSetupStatusRequiresExactCustomPolicyDigest(t *testing.T) {
 		t.Fatalf("write stale hook config: %v", err)
 	}
 
-	statusArgs := []string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir}
+	statusArgs := []string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "user", "--no-quickstart", "--json", "--data-dir", opts.DataDir}
 	assertHookInstalled := func(want bool) {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
@@ -615,7 +615,7 @@ func TestSetupStatusCustomPolicyDiscoveryFailsClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			var stdout, stderr bytes.Buffer
-			code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir}, &stdout, &stderr)
+			code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "user", "--no-quickstart", "--json", "--data-dir", opts.DataDir}, &stdout, &stderr)
 			if code != 2 || !strings.Contains(stderr.String(), "policy profile") {
 				t.Fatalf("status code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 			}
@@ -734,6 +734,58 @@ func TestSetupDryRunJSONSummary(t *testing.T) {
 	}
 	if _, err := os.Stat(summary.DataDir); !os.IsNotExist(err) {
 		t.Fatalf("dry-run should not create data dir, stat err = %v", err)
+	}
+}
+
+func TestSetupPreviewWithoutClientKeepsPreflightAndWritesNothing(t *testing.T) {
+	for _, target := range []string{"claude-code", "codex", "hermes", "deepseek"} {
+		t.Run(target, func(t *testing.T) {
+			root := t.TempDir()
+			home := filepath.Join(root, "home")
+			workspace := filepath.Join(root, "workspace")
+			for _, dir := range []string{home, workspace} {
+				if err := os.Mkdir(dir, 0o750); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("HOME", home)
+			t.Setenv("PATH", filepath.Join(root, "no-clients"))
+			t.Chdir(workspace)
+			dataDir := filepath.Join(root, "state")
+			args := []string{"helm-ai-kernel", "setup", target, "--dry-run", "--json", "--data-dir", dataDir}
+			if target == "hermes" || target == "deepseek" {
+				args = append(args, "--scope", "user")
+			}
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, &stdout, &stderr); code != 0 {
+				t.Fatalf("preview without client exited %d: %s", code, stderr.String())
+			}
+			var summary setupSummary
+			if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+				t.Fatal(err)
+			}
+			if summary.Operation != "preview" || summary.ClientDetected || summary.NativeLoaded || summary.HookInstalled || summary.MCPInstalled {
+				t.Fatalf("preview claimed installed client: %+v", summary)
+			}
+			for _, path := range []string{dataDir, summary.ClientConfigPath, summary.HookConfigPath} {
+				if path == "" {
+					continue
+				}
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Fatalf("preview wrote %s: %v", path, err)
+				}
+			}
+			// A missing client must not skip validation of existing signing material.
+			seed := filepath.Join(root, "invalid-seed")
+			if err := os.WriteFile(seed, []byte("invalid"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			stdout.Reset()
+			stderr.Reset()
+			if code := Run(append(args, "--signing-seed-file", seed), &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "validate local receipt signing key") {
+				t.Fatalf("invalid signing material accepted: %d %s", code, stderr.String())
+			}
+		})
 	}
 }
 
@@ -1392,7 +1444,7 @@ func TestSetupRequiresExplicitDataDirWithoutHome(t *testing.T) {
 func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
 	commands := [][]string{
 		{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--yes"},
-		{"helm-ai-kernel", "setup", "status", "codex"},
+		{"helm-ai-kernel", "setup", "status", "codex", "--scope", "user"},
 		{"helm-ai-kernel", "setup", "remove", "codex", "--yes"},
 	}
 	for _, home := range []string{"", "relative-home"} {

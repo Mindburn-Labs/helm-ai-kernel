@@ -1,7 +1,7 @@
 .PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
 .PHONY: contract-breaking-release test-contract-breaking release-rehearsal test-release-rehearsal
-.PHONY: check
+.PHONY: check first-use
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -18,6 +18,11 @@ PYTHON ?= python3
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
 	cp bin/helm-ai-kernel bin/helm
+	cd core && go build -o ../bin/receipt_verify ./cmd/receipt_verify/
+
+# Real authenticated HTTP decisions, receipt fetches and offline verification.
+first-use: build
+	$(PYTHON) examples/first-use/run.py
 
 # test also enforces the 40% statement-coverage floor on core/pkg.
 test:

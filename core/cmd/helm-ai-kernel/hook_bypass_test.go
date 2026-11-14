@@ -1035,7 +1035,18 @@ func TestHookGuardsDerivedDownloadNames(t *testing.T) {
 	if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), filepath.Join(env.home, "output")); err != nil {
 		t.Fatal(err)
 	}
+	saved := filepath.Join(env.home, "saved")
+	if err := os.Mkdir(saved, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(env.dataDir, "keys", "workstation-ed25519.seed"), filepath.Join(saved, "only")); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct{ command, reason string }{
+		{"curl --output-dir saved -o only file:///etc/hostname", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl -o only --output-dir " + saved + " https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},
+		{"curl --output-dir saved -o ordinary.txt https://api.github.com/file", ""},
+		{"curl -o only https://api.github.com/file", ""},
 		{"curl -O https://api.github.com/dir/output", "TRUST_MATERIAL_ACCESS_DENIED"},
 		{"curl --remote-name-all https://api.github.com/a https://api.github.com/output", "TRUST_MATERIAL_ACCESS_DENIED"},
 		{"curl -E output:password https://api.github.com/file", "TRUST_MATERIAL_ACCESS_DENIED"},

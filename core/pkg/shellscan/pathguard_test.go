@@ -1260,7 +1260,7 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 	if err := os.Mkdir(saved, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"output", "out put", "output?v=1", "index.html", "curl_response", "page.html", filepath.Join("saved", "output")} {
+	for _, name := range []string{"output", "out put", "output?v=1", "index.html", "curl_response", "page.html", filepath.Join("saved", "output"), filepath.Join("saved", "only")} {
 		if err := os.Symlink(f.seed, filepath.Join(work, name)); err != nil {
 			t.Fatal(err)
 		}
@@ -1275,6 +1275,10 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 		{"curl", "-O", "allowed.example/output"},
 		{"curl", "--output-dir", "saved", "-O", "https://allowed.example/output"},
 		{"curl", "--output-dir", saved + "/", "-O", "https://allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-o", "only", "file:///etc/hostname"},
+		{"curl", "-o", "only", "--output-dir", saved, "https://allowed.example/"},
+		{"curl", "--output-dir", "elsewhere", "--output-dir", "saved", "-oonly", "https://allowed.example/"},
+		{"curl", "--output-dir", work, "--output", "saved/only", "https://allowed.example/"},
 		{"curl", "-E", "output:password", "https://allowed.example/"},
 		{"curl", "--proxy-cert", alias(work, "output") + ":pass:word", "https://allowed.example/"},
 		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/dir/output"},
@@ -1286,14 +1290,26 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 		{"wget", "--max-redirect=0", "--no-hsts", "-P", "saved", "https://allowed.example/output"},
 		{"wget", "--max-redirect=0", "--no-hsts", "--directory-prefix=" + saved, "https://allowed.example/output"},
 	} {
-		if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath == "" {
-			t.Errorf("%q missed a protected derived file name", argv)
+		words := make([]string, len(argv))
+		for i, arg := range argv {
+			words[i] = "'" + arg + "'"
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath == "" {
+				t.Errorf("%s %q missed a protected derived file name", mode, argv)
+			}
 		}
 	}
 	for _, argv := range [][]string{
 		{"curl", "-O", "https://allowed.example/ordinary.txt"},
 		{"curl", "https://allowed.example/output"},
 		{"curl", "-o", "ordinary.txt", "https://allowed.example/output"},
+		{"curl", "--output-dir", "saved", "-o", "ordinary.txt", "https://allowed.example/"},
+		{"curl", "--output-dir", "elsewhere", "-o", "only", "https://allowed.example/"},
+		{"curl", "-o", "only", "https://allowed.example/"},
 		{"curl", "-E", "client.pem:password", "https://allowed.example/"},
 		{"wget", "--max-redirect=0", "--no-hsts", "https://allowed.example/ordinary.txt"},
 		{"wget", "--max-redirect=0", "--no-hsts", "-O", "ordinary.txt", "https://allowed.example/output"},

@@ -450,9 +450,10 @@ func (c *collector) guardOptionPaths(command Command) {
 		}
 	}
 	// A download without a named output file is written under a name the
-	// client takes from the URL, in the directory an option may name.
-	var urls []string
-	var outputDir string
+	// client takes from the URL. Curl saves that file, and one --output
+	// names, below the directory --output-dir gives; wget saves the file it
+	// names itself below --directory-prefix.
+	var urls, outputs, outputDirs []string
 	impliedNames := command.Name == "wget"
 	walkCLI(spec, command.Tokens[1:], cliVisitor{
 		option: func(name string, _ optRole, value string) {
@@ -463,7 +464,9 @@ func (c *collector) guardOptionPaths(command Command) {
 			case "curl url":
 				urls = append(urls, value)
 			case "curl output-dir", "wget directory-prefix":
-				outputDir = value
+				outputDirs = append(outputDirs, value)
+			case "curl output":
+				outputs = append(outputs, value)
 			case "wget output-document":
 				impliedNames = false
 			case "curl cert", "curl proxy-cert":
@@ -500,15 +503,22 @@ func (c *collector) guardOptionPaths(command Command) {
 		},
 		invalid: func(string) {}, // The egress classifier owns invalid-option refusal.
 	})
-	if !impliedNames {
-		return
-	}
-	for _, raw := range urls {
-		for _, name := range downloadFileNames(command.Name, raw) {
-			if outputDir != "" {
-				name = strings.TrimSuffix(outputDir, "/") + "/" + name
+	if impliedNames {
+		for _, raw := range urls {
+			outputs = append(outputs, downloadFileNames(command.Name, raw)...)
+		}
+		if len(outputDirs) == 0 {
+			for _, name := range outputs {
+				check(name)
 			}
-			check(name)
+		}
+	}
+	// Which directory applies to which transfer is not modelled: every name
+	// is checked below every directory the command gives. Curl joins the two
+	// even when the name is absolute.
+	for _, dir := range outputDirs {
+		for _, name := range outputs {
+			check(strings.TrimSuffix(dir, "/") + "/" + name)
 		}
 	}
 }

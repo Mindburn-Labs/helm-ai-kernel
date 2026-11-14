@@ -631,7 +631,7 @@ func decideEnforceEffects(flags enforceFlags, effects []hookClassification, call
 
 func writeDecisionReceipt(path, receiptDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
 	if path == "" && receiptDir != "" {
-		if err := os.MkdirAll(receiptDir, 0o755); err != nil {
+		if err := os.MkdirAll(receiptDir, 0o700); err != nil {
 			return "", err
 		}
 		path = filepath.Join(receiptDir, receipt.DecisionID+".json")
@@ -640,7 +640,7 @@ func writeDecisionReceipt(path, receiptDir string, receipt *contracts.Workstatio
 		return "", nil
 	}
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", err
 		}
 	}
@@ -659,7 +659,7 @@ func writeNewDecisionReceipt(path, receiptDir string, receipt *contracts.Worksta
 	if path != "" || receiptDir == "" {
 		return writeDecisionReceipt(path, receiptDir, receipt)
 	}
-	if err := os.MkdirAll(receiptDir, 0o755); err != nil {
+	if err := os.MkdirAll(receiptDir, 0o700); err != nil {
 		return "", err
 	}
 	data, err := canonicalize.JCS(receipt)

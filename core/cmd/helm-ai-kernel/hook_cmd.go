@@ -1152,14 +1152,6 @@ const (
 	hookTargetBindingDestination = "sha256:utf-8:network-destination"
 )
 
-func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {
-	decider, err := newHookDecider(opts)
-	if err != nil {
-		return nil, err
-	}
-	return decider.decide(payload, classification, nil)
-}
-
 // decide signs one decision. callMetadata, when given, binds the receipt to
 // its call and is part of the signed bytes.
 func (d *hookDecider) decide(payload preToolPayload, classification hookClassification, callMetadata map[string]string) (*contracts.WorkstationPolicyDecisionReceipt, error) {

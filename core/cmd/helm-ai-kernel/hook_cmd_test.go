@@ -1664,3 +1664,12 @@ func TestHookPreToolTreatsReadOnlySubstitutionLikeItsLiteral(t *testing.T) {
 		t.Fatalf("read-only substitutions wrote receipts: %v", receipts)
 	}
 }
+
+// buildHookDecisionReceipt constructs isolated decisions for receipt tests.
+func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+	decider, err := newHookDecider(opts)
+	if err != nil {
+		return nil, err
+	}
+	return decider.decide(payload, classification, nil)
+}

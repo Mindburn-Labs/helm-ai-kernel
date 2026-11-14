@@ -676,13 +676,8 @@ removal_proofs:
     replace: "\t} else if !empty && false {\n\t\t_ = root.Close()\n"
     tests:
       - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty"
+      - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
       - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
-  - control: CTL-037
-    file: core/pkg/workstation/scope_audit.go
-    find: "\troot, err := openEmptyOutputDir(outDir, \"scope audit evidence pack\")\n"
-    replace: "\t_ = os.MkdirAll(outDir, 0o750)\n\troot, err := os.OpenRoot(outDir)\n"
-    tests:
-      - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
   - control: CTL-037
     file: core/pkg/workstation/evidence.go
     find: "os.O_WRONLY|os.O_CREATE|os.O_EXCL"
@@ -4529,8 +4524,8 @@ controls:
         - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
         - "core/pkg/workstation.TestOperatorViewChecksEverySignature"
         - "core/pkg/workstation.TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds"
-        - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesALinkedSubdirectory"
-        - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
+        - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesALinkedPackSubdirectory"
+        - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
       removal:
         - "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey"
         - "core/cmd/helm-ai-kernel.TestWorkstationVerifyDecisionNeverTrustsTheRetiredKey"
@@ -4542,7 +4537,7 @@ controls:
         - "core/pkg/workstation.TestScopeAuditCountsReceiptsOfAnotherSignerSeparately"
         - "core/pkg/workstation.TestScopeAuditCountsEveryActionOfAnotherSigner"
         - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty"
-        - "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
+        - "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
         - "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
         - "core/pkg/workstation.TestPackWriterCreatesEveryFileNew"
       bypass:

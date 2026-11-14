@@ -338,11 +338,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   properties.
 - `workstation evidence` refuses an output directory that is not empty; export
   into a new or empty one. So does `audit scope --out`, with or without
-  `--evidence-pack`, and the Go functions `workstation.WriteScopeAuditArtifacts`
-  and `workstation.ExportScopeAuditEvidencePack`: running an audit into the
+  `--evidence-pack`, and the Go function `workstation.WriteScopeAuditArtifacts`:
+  running an audit into the
   directory of an earlier one now fails, so write each into a directory of
   its own. Every file is created new through the opened directory, so a file
   or directory linked to one elsewhere is not written through.
+- The unused Go export wrapper `workstation.ExportScopeAuditEvidencePack` is
+  removed. Use `workstation.WriteScopeAuditArtifacts(report, outDir, true)`;
+  the pack is written under `scope-audit-evidencepack` and its path is returned
+  in `EvidencePackDir`. The CLI export path is unchanged.
+- New workstation decision-receipt directories are owner-only (`0700`), as
+  the receipt files already are (`0600`). Existing directories keep their mode.
 - `shellscan` network facts carry the canonical destination in `Target`, and
   a command with several destinations yields several facts.
 
@@ -1078,7 +1084,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   given as a list, are refused instead of forwarded; `anthropic-beta` no
   longer reaches an upstream on the OpenAI APIs; a start verifies the
   signatures of the lines that debit or free a hold (r2).
-- `core` requires the published `sdk/go` `v0.12.0` instead of a pseudo-version.
+- Standalone `core` builds resolve the Go SDK from merged revision `33742a8a`,
+  which contains the owner-assertion types. The previous branch-only revision
+  could not be fetched from origin.
 - `helm-ai-kernel spend-proxy` refuses to start on a non-loopback `--addr`. The
   proxy has no caller credential and spends the upstream provider key for any
   caller that reaches it; `proxy` and `mcp serve` already refused an

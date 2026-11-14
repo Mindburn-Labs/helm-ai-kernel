@@ -3082,8 +3082,8 @@
           "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty",
           "core/pkg/workstation.TestOperatorViewChecksEverySignature",
           "core/pkg/workstation.TestScopeAuditCountsOnlyReceiptsWhoseSignatureHolds",
-          "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesALinkedSubdirectory",
-          "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
+          "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesALinkedPackSubdirectory",
+          "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory"
         ],
         "removal": [
           "core/pkg/workstation.TestReceiptSigningRequiresExplicitSeedAndTrustedKey",
@@ -3096,7 +3096,7 @@
           "core/pkg/workstation.TestScopeAuditCountsReceiptsOfAnotherSignerSeparately",
           "core/pkg/workstation.TestScopeAuditCountsEveryActionOfAnotherSigner",
           "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty",
-          "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty",
+          "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory",
           "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty",
           "core/pkg/workstation.TestPackWriterCreatesEveryFileNew"
         ],
@@ -3155,13 +3155,8 @@
           "file": "core/pkg/workstation/scope_audit.go",
           "tests": [
             "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty",
+            "core/pkg/workstation.TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory",
             "core/cmd/helm-ai-kernel.TestAuditScopeRefusesAnOutputDirectoryThatIsNotEmpty"
-          ]
-        },
-        {
-          "file": "core/pkg/workstation/scope_audit.go",
-          "tests": [
-            "core/pkg/workstation.TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty"
           ]
         },
         {

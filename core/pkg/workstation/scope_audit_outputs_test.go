@@ -58,9 +58,10 @@ func TestWriteScopeAuditArtifactsRefusesADirectoryThatIsNotEmpty(t *testing.T) {
 
 // The evidence pack is exported only into a new or empty directory, so a file
 // left there by an earlier export cannot pass for part of this one.
-func TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty(t *testing.T) {
+func TestWriteScopeAuditArtifactsRefusesAStalePackSubdirectory(t *testing.T) {
 	report := scopeAuditReportForTest(t)
-	pack := filepath.Join(t.TempDir(), "pack")
+	out := filepath.Join(t.TempDir(), "audit")
+	pack := filepath.Join(out, "scope-audit-evidencepack")
 	if err := os.MkdirAll(pack, 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -68,8 +69,11 @@ func TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty(t *testing.
 	if err := os.WriteFile(stale, []byte("earlier"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ExportScopeAuditEvidencePack(report, pack); err == nil || !strings.Contains(err.Error(), "not empty") {
+	if _, err := WriteScopeAuditArtifacts(report, out, true); err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("export into a directory that is not empty = %v, want a refusal", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "scope-audit.json")); !os.IsNotExist(err) {
+		t.Fatalf("the refused export created a report: %v", err)
 	}
 	if entries, _ := os.ReadDir(pack); len(entries) != 1 {
 		t.Fatalf("the refused export wrote into the directory: %v", entries)
@@ -78,17 +82,18 @@ func TestExportScopeAuditEvidencePackRefusesADirectoryThatIsNotEmpty(t *testing.
 
 // A pack directory that holds a link to a directory elsewhere is refused, and
 // nothing is written there.
-func TestExportScopeAuditEvidencePackRefusesALinkedSubdirectory(t *testing.T) {
+func TestWriteScopeAuditArtifactsRefusesALinkedPackSubdirectory(t *testing.T) {
 	report := scopeAuditReportForTest(t)
 	elsewhere := t.TempDir()
-	pack := filepath.Join(t.TempDir(), "pack")
+	out := filepath.Join(t.TempDir(), "audit")
+	pack := filepath.Join(out, "scope-audit-evidencepack")
 	if err := os.MkdirAll(pack, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(elsewhere, filepath.Join(pack, "99_EXT")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := ExportScopeAuditEvidencePack(report, pack); err == nil {
+	if _, err := WriteScopeAuditArtifacts(report, out, true); err == nil {
 		t.Fatal("export into a pack directory with a linked subdirectory succeeded")
 	}
 	entries, err := os.ReadDir(elsewhere)

@@ -329,20 +329,6 @@ type ScopeAuditEvidencePackExport struct {
 	FileHashes map[string]string `json:"file_hashes"`
 }
 
-// ExportScopeAuditEvidencePack writes the evidence pack of a scope audit into
-// outDir, which must be new or empty; see WriteScopeAuditArtifacts.
-func ExportScopeAuditEvidencePack(report ScopeAuditReport, outDir string) (ScopeAuditEvidencePackExport, error) {
-	if outDir == "" {
-		return ScopeAuditEvidencePackExport{}, errors.New("output directory is required")
-	}
-	root, err := openEmptyOutputDir(outDir, "scope audit evidence pack")
-	if err != nil {
-		return ScopeAuditEvidencePackExport{}, err
-	}
-	defer root.Close()
-	return writeScopeAuditEvidencePack(report, root, outDir)
-}
-
 // writeScopeAuditEvidencePack writes the pack through an opened, empty
 // directory: its subdirectories are created there, so none can be a link
 // planted ahead of the export, and each file is created new.

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -170,6 +171,44 @@ func TestAuditScopeRefusesAnInputWithNothingToCount(t *testing.T) {
 			code := Run([]string{"helm-ai-kernel", "audit", "scope", "--input", tc.input, "--data-dir", dataDir, "--json"}, &stdout, &stderr)
 			if code != 1 || !strings.Contains(stderr.String(), tc.stderr) || stdout.Len() != 0 {
 				t.Fatalf("exit = %d stdout = %s stderr = %s, want 1, no report and %q", code, stdout.String(), stderr.String(), tc.stderr)
+			}
+		})
+	}
+}
+
+// Receipt metadata belongs to the local user even when the caller's umask
+// permits group or other access. Exercise all paths that create directories.
+func TestWorkstationReceiptOutputsAreOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses ACLs instead of POSIX directory permission bits")
+	}
+	for _, tc := range []struct {
+		name     string
+		write    func(string, string, *contracts.WorkstationPolicyDecisionReceipt) (string, error)
+		explicit bool
+	}{
+		{"decision directory", writeDecisionReceipt, false},
+		{"explicit output parent", writeDecisionReceipt, true},
+		{"enforce directory", writeNewDecisionReceipt, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "private")
+			out := ""
+			if tc.explicit {
+				out = filepath.Join(dir, "receipt.json")
+			}
+			path, err := tc.write(out, dir, &contracts.WorkstationPolicyDecisionReceipt{DecisionID: "test-decision"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{dir, path} {
+				info, err := os.Stat(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm()&0o077 != 0 {
+					t.Fatalf("%s permissions = %o, want owner-only", name, info.Mode().Perm())
+				}
 			}
 		})
 	}

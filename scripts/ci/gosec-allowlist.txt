@@ -127,8 +127,6 @@ G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/conform.go f4d15dcd5d79
 G301 core/cmd/helm-ai-kernel/import_cmd.go e0decfd79b94
-G301 core/cmd/helm-ai-kernel/workstation_m3_cmd.go 43a3be5abf81
-G301 core/cmd/helm-ai-kernel/workstation_m3_cmd.go 9e78d8cfa2aa
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go 0182c9d01a95
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go 028fec76d18e
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go a818d82d6a6a
@@ -337,7 +335,6 @@ G304 core/pkg/workstation/importer.go dbfffc239169
 G304 core/pkg/workstation/importer.go dbfffc239169
 G304 core/pkg/workstation/importer.go eab592a5a322
 G304 core/pkg/workstation/operator.go dbfffc239169
-G304 core/pkg/workstation/scope_audit.go dbfffc239169
 G306 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 141b6a650def
 G306 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 30d729396b91
 G306 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 61eff8a80cf2

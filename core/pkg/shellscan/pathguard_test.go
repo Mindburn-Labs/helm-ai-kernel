@@ -1359,3 +1359,44 @@ func TestPathGuardChecksDerivedDownloadNames(t *testing.T) {
 }
 
 func alias(dir, name string) string { return filepath.Join(dir, name) }
+
+func TestPathGuardChecksAttachedLongOptionValues(t *testing.T) {
+	f := newGuardFixture(t)
+	work := t.TempDir()
+	if err := os.Symlink(f.seed, filepath.Join(work, "input")); err != nil {
+		t.Fatal(err)
+	}
+	for _, argv := range [][]string{
+		{"rsync", "--files-from=input", "src/", "dest/"},
+		{"rsync", "--files-from=" + filepath.Join(work, "input"), "src/", "dest/"},
+		{"rsync", "-a", "--exclude-from=input", "src/", "dest/"},
+		{"rsync", "--password-file=input", "src/", "dest/"},
+		{"rsync", "--log-file=input", "src/", "dest/"},
+		{"tar", "--create", "--file=input", "notes.txt"},
+		{"sort", "--output=input", "notes.txt"},
+		{"gpg", "--keyring=./input", "--list-keys"},
+	} {
+		words := make([]string, len(argv))
+		for i, arg := range argv {
+			words[i] = "'" + arg + "'"
+		}
+		for mode, result := range map[string]Result{
+			"argv":  ClassifyArgvAt(argv, work, WithPathGuard(f.guard)),
+			"shell": ClassifyAt(strings.Join(words, " "), work, WithPathGuard(f.guard)),
+		} {
+			if result.ProtectedPath == "" {
+				t.Errorf("%s %q missed a protected attached option value", mode, argv)
+			}
+		}
+	}
+	for _, argv := range [][]string{
+		{"rsync", "--files-from=list.txt", "src/", "dest/"},
+		{"rsync", "-a", "--exclude=input", "src/", "dest/"},
+		{"tar", "--create", "--file=archive.tar", "notes.txt"},
+		{"grep", "--color=always", "input=1", "notes.txt"},
+	} {
+		if result := ClassifyArgvAt(argv, work, WithPathGuard(f.guard)); result.ProtectedPath != "" && argv[2] != "--exclude=input" {
+			t.Errorf("ordinary %q refused: %s", argv, result.ProtectedPath)
+		}
+	}
+}

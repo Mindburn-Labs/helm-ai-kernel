@@ -651,3 +651,59 @@ func TestClassifyRefusesGitBundleURIs(t *testing.T) {
 		t.Errorf("%s: got %q", command, got)
 	}
 }
+
+func TestClassifyAppliesConfigurationOverridesToLocalTransfers(t *testing.T) {
+	for _, command := range []string{
+		"CURL_HOME=/tmp/cfg curl file:///etc/hostname",
+		"HOME=/tmp/cfg curl file:///etc/hostname",
+		"XDG_CONFIG_HOME=/tmp/cfg curl file:///etc/hostname",
+		"CURL_HOME=/tmp/cfg curl --version",
+		"env CURL_HOME=/tmp/cfg curl file:///etc/hostname",
+		"export CURL_HOME=/tmp/cfg; curl file:///etc/hostname",
+		"WGETRC=/tmp/wgetrc wget",
+		"HOME=/tmp/cfg wget --version",
+		"GIT_TEMPLATE_DIR=/tmp/template git clone /absolute/local/repo /tmp/copy",
+		"GIT_CONFIG_GLOBAL=/tmp/gitconfig git clone /absolute/local/repo /tmp/copy",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	for _, command := range []string{
+		"curl file:///etc/hostname",
+		"CURL_HOME=/tmp/cfg curl -q file:///etc/hostname",
+		"CURL_HOME=/tmp/cfg curl --disable file:///etc/hostname",
+		"https_proxy=http://proxy.example:8080 curl file:///etc/hostname",
+		"WGETRC=/tmp/wgetrc wget --no-config --version",
+		"GIT_SSH_COMMAND='ssh -i key' git status",
+		"GIT_TEMPLATE_DIR=/tmp/template git status",
+		"git clone /absolute/local/repo /tmp/copy",
+		"CURL_HOME=/tmp/cfg ls",
+	} {
+		if got := networkTargets(Classify(command)); len(got) != 0 {
+			t.Errorf("%s: got %q, want no network effect", command, got)
+		}
+	}
+}
+
+func TestClassifyRefusesGitCloneTemplates(t *testing.T) {
+	for _, command := range []string{
+		"git clone --template=/tmp/template /absolute/local/repo /tmp/copy",
+		"git clone --template /tmp/template /absolute/local/repo /tmp/copy",
+		"git -c init.templateDir=/tmp/template clone /absolute/local/repo /tmp/copy",
+		"git -c INIT.TEMPLATEDIR=/tmp/template clone /absolute/local/repo /tmp/copy",
+		"git clone -c init.templatedir=/tmp/template /absolute/local/repo /tmp/copy",
+		"git clone -c http.followRedirects=false --template=/tmp/template https://allowed.example/r.git",
+	} {
+		if got := networkTargets(Classify(command)); !sameTargets(got, []string{undetermined}) {
+			t.Errorf("%s: got %q, want undetermined", command, got)
+		}
+	}
+	if got := networkTargets(Classify("git clone /absolute/local/repo /tmp/copy")); len(got) != 0 {
+		t.Errorf("ordinary local clone: got %q, want no network effect", got)
+	}
+	command := "git clone -c http.followRedirects=false https://allowed.example/r.git"
+	if got := networkTargets(Classify(command)); !sameTargets(got, []string{"https://allowed.example"}) {
+		t.Errorf("%s: got %q", command, got)
+	}
+}

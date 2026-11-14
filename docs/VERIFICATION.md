@@ -49,6 +49,14 @@ helm-ai-kernel verify receipt \
 Exit 0 only when integrity and signer trust both hold against the
 caller-supplied key. Hop fixtures are labeled DENY / no permit.
 
+Integrity here is the `receipt.v5` signature over its 13 signed members, not
+the whole file. The report lists those as `signed_members` and the file's
+other members (`tool_name`, `timestamp`, `key_id` among them) as
+`unsigned_members`: no signature covers them, and rewriting them changes
+neither `integrity_valid` nor the exit status. The file is read by the parser
+`receipt_verify` uses, so the rules under
+[Verify A Receipt Chain Offline](#verify-a-receipt-chain-offline) apply.
+
 For a single workstation receipt:
 
 ```bash
@@ -97,6 +105,195 @@ who signed it. A pack whose content does not match its seal is `FAILED`.
 carries; that shows internal consistency only, so use it only for packs you
 produced yourself.
 
+### What The Result Covers
+
+Every check in the report ends in one of four states:
+
+| Status | Meaning |
+| --- | --- |
+| `VERIFIED` | The check read its input and the property held. |
+| `FAILED` | The property did not hold, or evidence the pack is required to carry is missing. |
+| `UNVERIFIABLE` | The material is intact, but no trust root you configured vouches for the signer. |
+| `NOT_RUN` | The pack carries nothing for this check to read, and nothing requires it. |
+
+A `NOT_RUN` check is never counted as passed. The result states the passed,
+failed and not-run counts separately, names each check that did not run with
+the reason, and says when a `VERIFIED` result covers only part of the checks:
+
+```text
+envelope ep_2eaf090b3964 · seal valid · sig 1/1 · trust dev-local
+VERIFIED · sealed <sealed-at> · anchor local-only · storage local-only
+checks: 5 passed, 0 failed, 8 not run; this result covers only the checks that ran
+  not run: file_hashes: pack has no manifest.json, so there are no manifest hashes to compare
+  not run: chain_integrity: 1 receipts carry no prev_hash: this pack asserts no chain of custody, so there is no chain to check
+  ...
+```
+
+| Check | What a `VERIFIED` result establishes | `NOT_RUN` when |
+| --- | --- | --- |
+| `structure` | The pack is a directory that holds `00_INDEX.json` or `manifest.json`. | Never; a missing pack fails. |
+| `index_integrity` | Every file listed in `00_INDEX.json` is present and matches its SHA-256. | The pack has no `00_INDEX.json`, or it lists no entries. |
+| `roots` | The manifest root hash and Merkle root were derived from the entries `00_INDEX.json` lists. The seal check compares them. | The pack has no `00_INDEX.json`, or it lists no entries. |
+| `evidence_pack_seal` | The seal signature verifies under your trust root (with `--allow-self-attested`, under the key the seal carries), the seal matches the pack inventory with no unindexed file, and the anchor and storage rules of the trust profile hold. | Never; a missing seal fails. |
+| `file_hashes` (reported as `hash:<file>`) | Every file named in `manifest.json` `file_hashes` is inside the pack and matches its SHA-256. | The pack has no `manifest.json`, or it declares no `file_hashes`. |
+| `eu_ai_act_profile` | Each embedded `eu_ai_act_profile` carries the fields its role and risk category require. The referenced records are not resolved. | No `.json` file in the pack carries one. Every `.json` file is read up to 64 MiB, and up to 256 MiB for the whole pack; a file over either limit fails the check by name. At most 1024 profiles are validated per pack, and the file that holds the 1025th fails the check by name. A failed reason lists the first 10 issues and counts the rest. The reason counts the files that do not parse as JSON. |
+| `connector_evidence` | Each connector evidence record declares the required `sha256:` hashes and references. The hashes are not recomputed. | The pack has no `connector_evidence.json`. |
+| `chain_integrity` | Receipts link from genesis to head through `prev_hash` with no fork, gap or cycle. | No receipt carries a `prev_hash`: the pack asserts no chain. |
+| `lamport_monotonicity` | Along each chain the Lamport clock starts at 1 and increases by one. | No receipt carries a `prev_hash`. |
+| `policy_decision_hashes` | Every MCP policy receipt carries `output_hash`, `args_hash` and `signature`, or, in a pack without such receipts, at least one receipt carries a `decision_hash`; the detail gives the count. Presence only; the hashes are not recomputed. | Never; a pack in which no receipt carries a binding fails. |
+| `replay_determinism` | The replay evidence the pack declares or carries is consistent with itself: `02_PROOFGRAPH/determinism_manifest.json` states equal `live_hash` and `replay_hash`, and `08_TAPES/tape_manifest.json` parses; a tape that carries entries is replayed by the code `helm-ai-kernel replay` runs and holds; under gate `G2` both manifests must be present, the tape must hold entries, and `05_DIFFS` must hold nothing but empty placeholder files whose names start with `.`. The run is not re-executed, and the two hashes are the pack's own statements. The detail names which files were read. | `00_INDEX.json` `gates` does not declare `G2` and the pack carries no `determinism_manifest.json`. A tape states no replay result: it is replayed and named in the reason, and fails if it does not parse or does not replay. |
+| `host_evidence` (reported per chain file as `<file>:external_host:<check>`) | Host receipt chains parse, hash, link and verify under `--external-host-public-key`. | The pack has no chain file under `host_evidence/` or `11_HOST_EVIDENCE/`. The reason names report files it did not read as chains. |
+| `embedded_signature_trust` | Signatures declared on receipts and attestations verify against configured trust roots, or, under `dev-local`, against keys the sealed pack carries, which the result names as self-attested. Witness signatures are checked only against witness keys the caller configures. | No receipt or attestation declares a signature. |
+
+Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
+
+- The pack format: an index or manifest, the seal, a proof graph, receipts and
+  a policy decision binding on at least one of them. Missing any of these is
+  `FAILED`.
+- What the pack declares about itself: `G2` in `00_INDEX.json` `gates`
+  requires the replay evidence; a receipt with a `prev_hash` claims a chain,
+  and then every receipt must link.
+- What the pack carries: evidence that is present must validate, whether or
+  not anything requires it. A check is `NOT_RUN` only when the pack holds
+  nothing for it to compare, and its reason says what was looked for and what
+  was found:
+  - Replay material is validated without `G2`. A
+    `determinism_manifest.json` is the replay result: one whose hashes differ,
+    that leaves a hash out or that does not parse fails, and one whose hashes
+    are equal is `VERIFIED`. A `tape_manifest.json` that does not parse fails.
+    A tape that carries entries (rows in the manifest or `entry_*.json`
+    files) is replayed with the code `helm-ai-kernel replay` runs, under `G2`
+    or not, and every replay issue fails the check: a row without an entry, a
+    missing field, a value that does not match its hash, an unknown entry
+    type, entries out of order. Entry files without a `tape_manifest.json`
+    fail. The entry files of one tape are read up to 256 MiB in all: they are
+    sized before any is read, and a tape past that fails by the name of the
+    entry file that passes it, with no entry read. Under `G2` a tape with no
+    entries fails: it replays nothing, which `replay` reports as `NOT_RUN`.
+    A tape that replays, in a pack with no determinism manifest, states
+    no replay result, so the check stays `NOT_RUN` and its reason says the
+    tape replayed. Without `G2` the files in `05_DIFFS` are not read:
+    producers keep placeholders and other artifacts there, and only `G2`
+    makes them replay differences; under `G2` an empty file whose name starts
+    with `.` (the `.keep` the launchpad writer creates) is a placeholder and
+    anything else is a difference. A `gates` value that is not a list of
+    gate names is malformed and fails.
+  - An `eu_ai_act_profile` is found in every `.json` file, in every document
+    of a line-delimited file, in each repeat of the key, in any letter case
+    and under an escaped spelling of it, after a UTF-8 byte order mark. The
+    name is matched the way `encoding/json` matches a member to a struct
+    field (`strings.EqualFold`), so `EU_AI_ACT_PROFILE` is a profile, as it
+    is to the Go readers of a pack. Nesting deeper than 10000
+    levels, the limit `encoding/json` keeps, makes a file one that does not
+    parse; it never stops the verifier. A file that does not parse fails when
+    it names the profile, as plain text anywhere in it (in any letter case)
+    or as a member the scan finds before or after the damage; otherwise it is
+    counted in the reason. A file over 64 MiB, a file past the first 256 MiB
+    the scan reads in one pack, a file that is refused (see below) and the
+    file that holds the 1025th profile in the pack fail the check by name.
+  - Under `host_evidence/` and `11_HOST_EVIDENCE/`, a `.json` file named like
+    a correlation or verification report is left out of chain verification
+    only when it parses as one JSON object or array. If it holds receipts it
+    is verified as a chain; if it holds anything else it fails.
+  - Every check `verify` and `evidence inspect` run, except `roots` and
+    `evidence_pack_seal`, reads the pack only through an `os.Root` opened on
+    the pack directory: the library checks above, the conformance signature
+    check, and the `--require-eidas` and `--require-tee` checks. A path that
+    leaves the pack (an absolute path, a `..` segment, a symbolic link whose
+    target is outside the pack) and a
+    symbolic link with an absolute target, even one that points back into
+    the pack, are refused, and so is a file that is not a regular file: a
+    named pipe, a device or a socket. The check that wanted the file fails
+    and names it, and nothing is read from outside the pack whether the pack
+    path you pass is relative or absolute. A symbolic link that stays inside
+    the pack is followed. Directory opens acquire a directory handle and
+    check that it is the object described by the preliminary stat. Replacing
+    a child directory with a named pipe cannot make `ReadDir` or directory
+    `Open` wait for a writer; replacing it with another directory is refused.
+    A returned directory handle remains bound to that object if its name is
+    later replaced. This does not snapshot the contents of the directory.
+    Filesystem API names use slash separators: Windows rejects backslashes,
+    while Unix can use a backslash as a literal character in a name.
+    A path named by `00_INDEX.json` or by
+    `manifest.json` `file_hashes` must also be spelled as the pack directory
+    lists it, letter case included, so a pack fails the same way on a file
+    system that ignores case. A file read whole is read up to 64 MiB; one
+    that is larger fails the check that needed it. A host evidence directory
+    that is refused fails `external_host:evidence_dir`. These reads skip
+    what they cannot read instead of failing on it:
+    `embedded_signature_trust` skips a receipt or attestation file or
+    directory it cannot read, and reads no receipts when the receipts
+    directory is refused (the receipt checks fail that pack), and
+    `host_evidence` skips `host_evidence/`, `11_HOST_EVIDENCE/` or a
+    directory under them that it cannot list. The directory walks of
+    `eu_ai_act_profile`, `host_evidence` and `embedded_signature_trust` do
+    not follow a symbolic link: a link whose name ends in a suffix the check
+    reads (`.json`, and `.jsonl` or `.ndjson` for host chains) is opened
+    through the `os.Root` like a file, and any other link, including one to a
+    directory inside or outside the pack, is passed over without being named.
+  - `roots` and `evidence_pack_seal` read the pack by path through the seal
+    code, under its own rules: a symbolic link on the path of `00_INDEX.json`,
+    of the seal file or of an indexed file is refused, so is a file there that
+    is not a regular file, before it is opened, and any file the index does
+    not list fails the seal. The seal code looks at a file and then opens it
+    by name, so a file swapped in between those two steps is not caught
+    there. The layout check `verify` and `evidence inspect` add for a pack in
+    the canonical layout tests whether the mandatory files and directories
+    exist, lists the pack directory and `99_EXT`, and reads `00_INDEX.json`,
+    all through the `os.Root`: a mandatory name or `99_EXT` that is a
+    symbolic link out of the pack is reported as not read and is never
+    listed. Whether the pack is in the canonical layout (it holds
+    `00_INDEX.json` or `02_PROOFGRAPH`) and whether it carries a conformance
+    signature are tested with `os.Stat` by path, which follows symbolic links;
+    nothing is opened or listed there.
+  - Each check opens the pack directory by path when it starts, so a pack
+    directory replaced while it is being verified is not covered.
+- The trust profile: `customer` and `high-assurance` require anchor and
+  storage receipts, checked inside `evidence_pack_seal`.
+- What you require: `--require-check <names>` turns a named check that would
+  be `NOT_RUN` into `FAILED`; `--require-eidas` and `--require-tee` add their
+  own checks. Repeat `--require-check` or separate names with commas: every
+  named check is required. A name that is not a check, or a value that names
+  none, stops the command with exit code `2`.
+
+Everything else is optional, and a pack without it leaves the check `NOT_RUN`.
+
+```bash
+helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml> \
+  --require-check chain_integrity,connector_evidence
+
+helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml> \
+  --require-check chain_integrity --require-check file_hashes
+```
+
+Exit code `0` means `VERIFIED`: no check failed and every required check ran
+and held. It does not mean every check ran; read the counts. Exit code `1`
+means `FAILED` or `UNVERIFIABLE`, and `2` means no verdict was reached (a
+missing path, an unreadable archive, an unknown flag or check name).
+
+`--json` reports the same result as `outcome`, `check_counts` and a `status`
+on every entry of `checks`. `pass` is `true` only for a `VERIFIED` check, so
+read `status` to tell a failure from a check that did not run. The schema is
+`protocols/json-schemas/cli/helm_cli_schema.json`; it requires those three
+fields.
+
+Text output prints strings the pack controls, such as the envelope id, file
+names and check reasons. Line breaks, control characters and terminal escapes
+in them are shown as visible escapes (`\n`, `\x1b`), so a pack cannot add a
+line that reads like the verdict. A backslash is shown as `\\`, so a written
+`\n` and a real line break print differently. Characters that print as blank
+space (space separators other than the ASCII space, the Hangul fillers, the
+blank Braille pattern), runs of three or more spaces and combining marks past
+the second on one letter are escaped too. `--json` keeps each value as the
+pack states it.
+
+`helm-ai-kernel evidence inspect <pack>` reaches its verdict through the same
+code as `verify`: the same checks, the same statuses and the same exit codes
+(`0` `VERIFIED`, `1` `FAILED` or `UNVERIFIABLE`, `2` no verdict), in text and
+`--json` mode. It adds the launchpad manifest and evidence graph summary. A
+`manifest.json` at the top of a pack is part of the layout: `file_hashes`
+reads it.
+
 Offline verification is the default. If a pack has no public anchor, HELM
 reports that directly; it does not invent one. Under the `customer` and
 `high-assurance` profiles an anchor receipt must name this pack's root: a
@@ -127,14 +324,73 @@ Use an EvidencePack when you need to move proof material between machines or
 review it later:
 
 ```bash
-helm-ai-kernel evidence export \
-  --receipts ~/.helm-ai-kernel/receipts \
+helm-ai-kernel export \
+  --evidence <evidence-pack-dir> \
   --out evidence-pack.tar
 
 helm-ai-kernel verify evidence-pack.tar --config <trust-config.yaml>
 ```
 
-EvidencePacks are portable proof bundles for local review and offline replay.
+`export` copies an existing EvidencePack directory into a deterministic tar;
+it does not build a pack from loose receipt files. `mcp proof` writes such a
+directory under `<out>/<run-id>/evidencepacks/<run-id>`.
+
+EvidencePacks are portable proof bundles for local review and offline
+verification.
+
+### Replay A Recorded Tape
+
+```bash
+helm-ai-kernel replay --evidence <evidence-pack-dir>
+```
+
+`replay` reads `08_TAPES/tape_manifest.json` and the `entry_*.json` files
+beside it, and serves the recorded entries back through the tape replayer in
+sequence. It reports `COMPLETE` (exit 0) only when all of this holds:
+
+- `08_TAPES`, the manifest and every entry file are real files, not symbolic
+  links, and are read from inside the pack directory. A symbolic link is
+  refused with exit code `2`.
+- The entry files, in the order of the number in their name (`entry_2.json`
+  before `entry_12.json`), carry strictly increasing sequence numbers.
+- Every entry was served in sequence from 1 with no tape miss, each served
+  value matches the `value_hash` recorded on its entry, and each entry has a
+  type the recorder writes (`TIME`, `RNG_SEED`, `NETWORK`, `TOOL_OUTPUT`,
+  `DB_READ`, `ENV_VAR`, `FILE_READ`).
+- The manifest lists every entry exactly once, every row carries `seq`,
+  `type`, `key`, `sha256` and `size_bytes`, and every field it carries for
+  an entry equals that entry: those five and any other field such as
+  `component_id`. A manifest field the entry has no counterpart for cannot be
+  compared and is reported.
+
+Anything else is `DIVERGED` (exit 1) with the issues listed. A tape with no
+entries is `NOT_RUN` (exit 1): nothing was replayed. A tape that cannot be
+read (a symbolic link, a missing manifest, a file that does not parse, entry
+files past 256 MiB in all) exits `2`; with `--json` the command still prints
+a result, with `replay_status` `NOT_RUN`, `entries_replayed` `0` and the
+reason in `error`. The entry files are sized before any is read, so a tape
+past 256 MiB is refused by the name of the entry file that passes it without
+any entry being read. `--verify` also requires `data_class` on every entry.
+
+`verify` replays the same tape with the same code in its `replay_determinism`
+check, so the two commands do not disagree on a tape: a tape `replay` reports
+`DIVERGED` fails `verify` too, and so does a tape `replay` cannot read
+because a file in it is a symbolic link or does not parse, or because its
+entry files hold more than 256 MiB. A tape with no entries, which `replay`
+reports as `NOT_RUN`, fails `verify` in a pack that declares gate `G2`; in
+one that does not, `verify` names it as not replayed. The
+`data_class` requirement `--verify` adds is the one rule `verify` does not
+apply.
+
+`COMPLETE` says the tape agrees with itself and with its manifest. It does not
+say who wrote the tape: `replay` does not check the pack seal, so a tape and
+manifest that were rewritten together replay as `COMPLETE`, and `--json`
+carries `"seal_checked": false`. Run `helm-ai-kernel verify` on the pack to
+check the seal and the hashes of the tape files the pack indexes.
+
+This replays recorded inputs only. The command has the tape, not the code and
+policy that consumed it, so it does not re-execute the run or compare
+decisions.
 
 ## Release Evidence
 
@@ -156,7 +412,7 @@ Download the release assets into one directory, then check their keyless
 signatures against the exact release identity:
 
 ```bash
-KERNEL_RELEASE_TAG=v0.8.5 make verify-cosign COSIGN_ARTIFACT_DIR=<download-dir>
+KERNEL_RELEASE_TAG=v0.12.0 make verify-cosign COSIGN_ARTIFACT_DIR=<download-dir>
 ```
 
 `make verify-cosign` runs `scripts/release/verify_cosign.sh`. It accepts only
@@ -192,6 +448,56 @@ chmod +x receipt_verify-linux-amd64
 It opens no sockets and reads no configuration. Exit code `0` means the chain
 verified under the supplied key, `1` means it did not, and `2` means no verdict
 was reported: a missing or unknown flag, no key supplied, a receipt file or
-`--key-file` that cannot be read, or a receipt file that does not parse as a
-receipt, receipt array or bundle. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
+`--key-file` that cannot be read, a receipt file that does not parse as a
+receipt, receipt array or bundle, or a legacy receipt without
+`--allow-legacy-v4`. See [LLM audit receipts](use-cases/llm-audit-receipts.md) for what a verified
 result does and does not establish.
+
+These rules decide whether a file is checked at all:
+
+- **Member names are matched exactly.** A file in which a receipt, bundle,
+  permit or binding member is spelled in another letter case (`"Verdict"` for
+  `verdict`) does not parse (exit `2`). Go's JSON decoder would bind
+  `"Verdict"` to the verdict; `jq` and JavaScript would not, so the same file
+  would say one thing to the verifier and another to its reader. Keys of
+  `metadata`, `public_key_set`, `subject` and other free-form values are
+  compared exactly: `a` and `A` there are two keys to every reader. A member
+  written twice is refused wherever it is.
+- **A bundle holds receipts only inside `receipts`.** In the bundle form (an
+  object with a `receipts` array) the verifier checks the receipts in that
+  array. A receipt member beside it, such as `verdict`, `status` or
+  `tool_name`, is checked by nothing and is what `jq .verdict` returns, so a
+  file that carries one does not parse (exit `2`). The bundle's own members
+  (`key_id`, `public_key_hex`, `permits`, `gateway_bindings`) and names that
+  are not receipt members, such as a `comment`, are accepted.
+- **Nesting is limited to 64 levels.** A file nested deeper is refused before
+  it is read further (exit `2`).
+- **A legacy receipt needs `--allow-legacy-v4`.** A receipt with no
+  `signature_version` was signed before `receipt.v5`, over eight fields joined
+  with `:` and no escaping. That signature does not cover `verdict`,
+  `tool_name` or `timestamp`, and the signature of a `receipt.v5` receipt can
+  be replayed as a legacy receipt that says something else. Such a file is not
+  checked (exit `2`) unless you pass the flag:
+
+  ```bash
+  ./receipt_verify-linux-amd64 --receipt old-chain.json --key-file signer-public-key.hex --allow-legacy-v4
+  ```
+
+  The output then counts the legacy receipts (`legacy_receipts` in `--json`)
+  and says that their signature does not cover `verdict`, `tool_name` or
+  `timestamp`. Pass the flag only for receipts you know were issued before
+  `receipt.v5`. The replay itself still fails under the flag (exit `1`): the
+  legacy preimage begins with `receipt_id`, and the replayed bytes begin with
+  `{`, which no receipt id does. For a chain that mixes the two kinds,
+  `preimage_version` is `mixed` and `preimage_versions` lists each preimage
+  with its receipt count.
+
+A `receipt.v5` signature covers 13 members, not the whole receipt. The
+`integrity` check is always `not_applicable`: it recomputes each receipt's
+chain hash and compares it with nothing, and it names the receipt whose other
+members (`timestamp`, `tool_name`, `executor_id`, `metadata`, `key_id` among
+them) nothing covers. That is a single receipt, or the last receipt of a
+chain. The `closure` check compares each earlier receipt with its successor's
+signed `prev_hash`. `key_id` in the `--json` verdict is such a member: it is
+the first receipt's own claim, not the key a signature verified under, and
+`key_id_note` says so.

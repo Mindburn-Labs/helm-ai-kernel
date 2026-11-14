@@ -11,7 +11,13 @@ import (
 )
 
 type guardianTransportBinding struct {
-	EffectClass               string
+	EffectClass string
+	// EffectClassSource is who asserted EffectClass, one of the
+	// guardian.EffectClassSource values. It is bound with the class so the
+	// signed effect never presents a caller's declaration as attested.
+	EffectClassSource string
+	// EffectClassDeclared is the caller's own value when EffectClass is not it.
+	EffectClassDeclared       string
 	Destination               string
 	EgressDestinationRequired bool
 	SessionID                 string
@@ -39,6 +45,12 @@ func bindAuthenticatedGuardianContext(ctx context.Context, values map[string]any
 	values[guardian.ContextCredentialHash] = credentialHash
 	if value := strings.TrimSpace(binding.EffectClass); value != "" {
 		values[guardian.ContextEffectClass] = value
+		if binding.EffectClassSource != "" {
+			values[guardian.ContextEffectClassSource] = binding.EffectClassSource
+		}
+		if declared := strings.TrimSpace(binding.EffectClassDeclared); declared != "" && declared != value {
+			values[guardian.ContextEffectClassDeclared] = declared
+		}
 	}
 	if value := strings.TrimSpace(binding.Destination); value != "" {
 		values[guardian.ContextDestination] = value
@@ -56,4 +68,53 @@ func bindAuthenticatedGuardianContext(ctx context.Context, values map[string]any
 		values[guardian.ContextTrustLevel] = string(binding.TrustLevel)
 	}
 	return nil
+}
+
+// resolveEffectClass returns the effect class to bind for an evaluated
+// request, who asserted it, and the caller's own value when that is not what
+// was bound.
+//
+// The request's value is a declaration. It is bound as it is (the public
+// contract lets it carry a policy label that is not E0..E4, and policy rules
+// may match one) and marked caller_declared, unless the kernel's effect type
+// catalog knows the evaluated action: then the bound class is never below the
+// catalog's and is marked effect_catalog, so a caller cannot talk a catalogued
+// effect under a policy ceiling by declaring a lower class or a label.
+//
+// The evaluated action is the request's action. For EXECUTE_TOOL it is also
+// the resource, because Guardian evaluates that resource as the tool. The
+// resource of any other action is the caller's description of what the action
+// touches and proves nothing about the action, so it does not change the
+// class. If it set the class, a caller would choose the class of any action by
+// naming an effect beside it, and the signed effect would call that choice the
+// kernel's. If it only raised a declared class, it would restrict nothing: a
+// caller who sent a label in place of the class, or named another resource,
+// would skip the raise, and only an honest declaration would pay it.
+//
+// The replaced declaration is returned so a rule that restricts on it still
+// sees it.
+func resolveEffectClass(action, resource, declared string) (class, source, replaced string) {
+	declared = strings.TrimSpace(declared)
+	class = declared
+	// E0..E4 order as strings. An id the catalog does not know leaves floor
+	// empty.
+	floor, _ := contracts.CataloguedEffectClass(strings.TrimSpace(action))
+	// The exact comparison Guardian binds the tool by.
+	if action == "EXECUTE_TOOL" {
+		if named, ok := contracts.CataloguedEffectClass(strings.TrimSpace(resource)); ok && named > floor {
+			floor = named
+		}
+	}
+	switch {
+	case floor != "" && (!contracts.ValidEffectClass(class) || class <= floor):
+		class, source = floor, guardian.EffectClassSourceEffectCatalog
+	case class != "":
+		source = guardian.EffectClassSourceCallerDeclared
+	default:
+		return "", "", ""
+	}
+	if declared != class {
+		replaced = declared
+	}
+	return class, source, replaced
 }

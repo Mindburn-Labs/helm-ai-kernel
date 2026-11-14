@@ -34,7 +34,7 @@ func legacyModelInsert(ctx context.Context, e *env, caller admission.Caller, c *
 	if err != nil {
 		return err
 	}
-	amount, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	amount, err := c.Route.Quote(c.inputBound(c.Body), c.MaxOutputTokens, c.MayWriteCache)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func TestPostgresDefaultRetryRecognizesLegacyInFlightAndSettledKeys(t *testing.T
 	args, err := json.Marshal(modelArgs{Schema: "model.inference.v1", API: c.API, Route: c.Route.ID,
 		RequestSHA256: forwardDigest, InputBytes: int64(len(c.Body)), MaxOutputTokens: c.MaxOutputTokens, Stream: c.Stream})
 	must(t, err)
-	quote, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	quote, err := c.Route.Quote(c.inputBound(c.Body), c.MaxOutputTokens, c.MayWriteCache)
 	must(t, err)
 	caller := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agt:seat-1", ActorID: cpActor,
 		Episode: &admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-1"}}
@@ -278,7 +278,9 @@ func budgetMessage(name string, maxTokens int64) string {
 	if maxTokens > 0 {
 		cap = fmt.Sprintf(`,"max_tokens":%d`, maxTokens)
 	}
-	return fmt.Sprintf(`{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":%q}]%s}`, name, cap)
+	// The body names the standard tier, which the gateway would otherwise
+	// set, so the quote of the forwarded request is the quote of this body.
+	return fmt.Sprintf(`{"model":"claude-sonnet-5-5","service_tier":"standard_only","messages":[{"role":"user","content":%q}]%s}`, name, cap)
 }
 
 func budgetUsage(outputTokens int64) string {
@@ -438,6 +440,9 @@ func TestPostgresParentAndChildRaceForOneModelQuote(t *testing.T) {
 	q, err := route.Quote(int64(len(parentBody)), 64_000, false)
 	must(t, err)
 	fillTeam(t, e, teamLimit, limit-q)
+	// Independent admission services must serialize through Postgres, not a
+	// process-local mutex or cached envelope balance.
+	peer := freshWorker(t, e)
 	entered, release := make(chan struct{}, 2), make(chan struct{})
 	e.anthropic.on(func(w http.ResponseWriter, r *http.Request) {
 		entered <- struct{}{}
@@ -447,11 +452,11 @@ func TestPostgresParentAndChildRaceForOneModelQuote(t *testing.T) {
 	before := e.anthropic.calls.Load()
 	start := make(chan struct{})
 	results := make(chan reply, 2)
-	for _, x := range []struct{ token, body string }{{tokenBudgetParent, parentBody}, {tokenBudgetChild, childBody}} {
-		go func(token, body string) {
+	for _, x := range []struct{ url, token, body string }{{e.worker.URL, tokenBudgetParent, parentBody}, {peer.URL, tokenBudgetChild, childBody}} {
+		go func(url, token, body string) {
 			<-start
-			results <- post(t, e.worker.URL, "/v1/messages", workerHeaders(token), body)
-		}(x.token, x.body)
+			results <- post(t, url, "/v1/messages", workerHeaders(token), body)
+		}(x.url, x.token, x.body)
 	}
 	close(start)
 	select {

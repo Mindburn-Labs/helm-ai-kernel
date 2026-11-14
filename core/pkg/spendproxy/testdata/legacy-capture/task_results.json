@@ -1,0 +1,110 @@
+{
+  "schema_version": "helm-savings-task-results.v1",
+  "run_id": "run-e2e",
+  "results": [
+    {
+      "task_id": "sel-A",
+      "phase": "parity",
+      "envelope_id": "env-direct",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-parity-env-direct-sel-A",
+      "spend_intent_id": "si-2ce4ae59380bb85ab94b8ccd",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.34314Z"
+    },
+    {
+      "task_id": "sel-A",
+      "phase": "parity",
+      "envelope_id": "env-sub",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-parity-env-sub-sel-A",
+      "spend_intent_id": "si-c8431f8b936102a9a2bbb634",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.361092Z"
+    },
+    {
+      "task_id": "sel-B",
+      "phase": "parity",
+      "envelope_id": "env-direct",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-parity-env-direct-sel-B",
+      "spend_intent_id": "si-fa11347fc84ceb2349d7f13d",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.381798Z"
+    },
+    {
+      "task_id": "sel-B",
+      "phase": "parity",
+      "envelope_id": "env-sub",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-parity-env-sub-sel-B",
+      "spend_intent_id": "si-f7cfe41e2498f0a81e7c4966",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.404906Z"
+    },
+    {
+      "task_id": "hold-A",
+      "phase": "holdout",
+      "envelope_id": "env-direct",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-holdout-env-direct-hold-A",
+      "spend_intent_id": "si-e16c3813df90d9362247c203",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.440443Z"
+    },
+    {
+      "task_id": "hold-A",
+      "phase": "holdout",
+      "envelope_id": "env-sub",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-holdout-env-sub-hold-A",
+      "spend_intent_id": "si-17633b1d63a56c4f4db08dff",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.46085Z"
+    },
+    {
+      "task_id": "hold-B",
+      "phase": "holdout",
+      "envelope_id": "env-direct",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-holdout-env-direct-hold-B",
+      "spend_intent_id": "si-40286f89782d738b6b92be28",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.481577Z"
+    },
+    {
+      "task_id": "hold-B",
+      "phase": "holdout",
+      "envelope_id": "env-sub",
+      "requested_model_id": "base-model",
+      "idempotency_key": "run-e2e-holdout-env-sub-hold-B",
+      "spend_intent_id": "si-ca01b39f5f8815ee0bfbc015",
+      "passed": true,
+      "http_status": 200,
+      "finish_reason": "stop",
+      "response_sha256": "sha256:e2e",
+      "completed_at": "2026-11-13T21:05:01.501477Z"
+    }
+  ]
+}

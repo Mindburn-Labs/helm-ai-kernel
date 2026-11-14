@@ -88,7 +88,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		case unverifiable:
 			status = "UNVERIFIABLE"
 		}
-		fmt.Fprintf(stdout, "%s  %s  (%d receipt(s))  classification=%s\n", status, report.FormatID, report.ReceiptCount, report.Classification)
+		writeText(stdout, "%s  %s  (%d receipt(s))  classification=%s\n", status, report.FormatID, report.ReceiptCount, report.Classification)
 		if report.Classification == contracts.ClassCryptoCompatibleNonConformant {
 			fmt.Fprintln(stdout, "  note: decision-level proof only — NOT HELM execution proof")
 		}
@@ -99,7 +99,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 				mark = "FAIL"
 				detail = c.Reason
 			}
-			fmt.Fprintf(stdout, "  [%s] %s  %s\n", mark, c.Name, detail)
+			writeText(stdout, "  [%s] %s  %s\n", mark, c.Name, detail)
 		}
 	}
 

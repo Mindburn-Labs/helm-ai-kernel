@@ -109,9 +109,15 @@ func TestPostgresTenantsAreSeparateAndTheTenantComesFromTheToken(t *testing.T) {
 		}
 	}
 	// A request body cannot name a tenant, a principal or a case: only the token does.
-	spoofed := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), strings.Replace(messagesRequest, `"stream":true`, `"stream":true,"tenant_id":"tenant-b","principal_id":"human-a","metadata":{"user_id":"human-a"}`, 1))
+	spoofed := post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), strings.Replace(messagesRequest, `"stream":true`, `"stream":true,"metadata":{"user_id":"human-a"}`, 1))
 	if spoofed.Status != 200 || e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts WHERE tenant_id = $1`, tenantA) != 2 || e.count(tenantB, `SELECT count(*) FROM authority_effect_attempts WHERE tenant_id = $1`, tenantB) != 1 {
 		t.Fatalf("request-body tenant spoof: %s", spoofed)
+	}
+	// Members the quote does not understand, tenant_id and principal_id among
+	// them, are refused before any attempt exists (helm-tracker#313).
+	spoofed = post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), strings.Replace(messagesRequest, `"stream":true`, `"stream":true,"tenant_id":"tenant-b","principal_id":"human-a"`, 1))
+	if spoofed.Status != 400 || e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts WHERE tenant_id = $1`, tenantA) != 2 || e.count(tenantB, `SELECT count(*) FROM authority_effect_attempts WHERE tenant_id = $1`, tenantB) != 1 {
+		t.Fatalf("request-body tenant spoof with unknown members: %s", spoofed)
 	}
 	for _, a := range e.attempts() {
 		if a.RequesterPrincipalID != "agt:seat-1" || a.CaseID != "work-ep-1" {

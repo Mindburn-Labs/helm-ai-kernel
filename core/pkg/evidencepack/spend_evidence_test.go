@@ -18,7 +18,7 @@ func buildSpendReceiptSet(t *testing.T) SpendReceiptSet {
 	now := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 
 	decision := economicAllow(50_000, "sha256:env")
-	quote := economic.NewRouteQuote(
+	quote := fixtureNewRouteQuote(
 		"rq-1", "tenant-1", "intent-1", "env-1", "agent-1",
 		economic.ModelRoute{ProviderID: "openai", ModelID: "gpt-6-sol", PriceSnapshotHash: "sha256:price"},
 		1_500, 3_000, "USD", "sha256:route-policy", now.Add(time.Hour), decision,
@@ -26,12 +26,12 @@ func buildSpendReceiptSet(t *testing.T) SpendReceiptSet {
 	quote.PrincipalID = "user:alice"
 	quote.Reseal()
 
-	budget := economic.NewBudgetVerdictReceipt(
+	budget := fixtureNewBudgetVerdictReceipt(
 		"bv-1", "tenant-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol",
 		1_500, 3_000, "USD", "sha256:price", "sha256:route-policy", "evidence://pack-1", decision,
 	)
 
-	usage := economic.NewUsageReceipt(
+	usage := fixtureNewUsageReceipt(
 		"ur-1", "tenant-1", "rq-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol",
 		1_500, 1_000, 100, "USD", "sha256:policy", "evidence://pack-1",
 	)
@@ -42,7 +42,7 @@ func buildSpendReceiptSet(t *testing.T) SpendReceiptSet {
 		{ID: "sle-ur-1-debit", AccountID: "balance-1", Direction: economic.SettlementDebit, AmountCents: usage.BalanceDebitCents, Currency: "USD", Reference: "balance:balance-1"},
 		{ID: "sle-ur-1-credit", AccountID: "treasury-1", Direction: economic.SettlementCredit, AmountCents: usage.BalanceDebitCents, Currency: "USD", Reference: "treasury:treasury-1"},
 	}
-	settlement := economic.NewSettlementReceipt("settle-ur-1", "tenant-1", "ur-1", "rq-1", "treasury-1", usage.ContentHash, "USD", "evidence://pack-1", entries)
+	settlement := fixtureNewSettlementReceipt("settle-ur-1", "tenant-1", "ur-1", "rq-1", "treasury-1", usage.ContentHash, "USD", "evidence://pack-1", entries)
 
 	// Mirror the engine's mutual binding order.
 	usage.LedgerEntryIDs = []string{entries[0].ID, entries[1].ID}

@@ -79,7 +79,7 @@ func gatewayUnsignedSpendReceipt(provider ProviderType, model string, decision *
 	if decision == nil {
 		return nil
 	}
-	return economic.NewBudgetVerdictReceipt(
+	return fixtureNewBudgetVerdictReceipt(
 		"verdict-1",
 		"tenant-1",
 		"spend-1",

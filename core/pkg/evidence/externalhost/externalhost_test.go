@@ -1,5 +1,8 @@
 package externalhost
 
+// quantum_posture: these tests sign host receipts with classical Ed25519 and
+// ECDSA-P256 test keys; they assert nothing about post-quantum resistance.
+
 import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -10,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,14 +216,92 @@ func testReceipt(id, prev string, ts time.Time) contracts.ExternalHostReceipt {
 	}
 }
 
+// assertFailedCheck requires a check that ran and failed. A check that did not
+// run also has pass=false, so the status is what tells them apart.
 func assertFailedCheck(t *testing.T, report *VerificationReport, name string) {
 	t.Helper()
 	for _, check := range report.Checks {
-		if check.Name == name && !check.Pass {
+		if check.Name == name && !check.Pass && checkStatus(t, check) == "FAILED" {
 			return
 		}
 	}
 	t.Fatalf("missing failed check %s in %+v", name, report.Checks)
+}
+
+// checkStatus reads the status as a JSON consumer sees it.
+func checkStatus(t *testing.T, check CheckResult) string {
+	t.Helper()
+	data, err := json.Marshal(check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	status, _ := doc["status"].(string)
+	return status
+}
+
+// A native receipt with no hardware root claim, in a chain that declares no
+// chain hash, gives three checks nothing to read. They used to be reported as
+// passes ("no hardware root claim"); they are NOT_RUN with a reason, and the
+// chain still verifies on the checks that ran.
+func TestVerifyChain_ChecksWithoutInputAreNotRun(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := signedTestChain(t, priv)
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("expected the chain to verify on the checks that ran: %+v", report.Checks)
+	}
+	notRun := map[string]int{}
+	for _, check := range report.Checks {
+		status := checkStatus(t, check)
+		switch status {
+		case "VERIFIED":
+			if !check.Pass {
+				t.Errorf("%s is VERIFIED with pass=false", check.Name)
+			}
+		case "NOT_RUN":
+			notRun[check.Name]++
+			if check.Pass {
+				t.Errorf("%s did not run and is counted as passed", check.Name)
+			}
+			if check.Reason == "" {
+				t.Errorf("%s did not run and gives no reason", check.Name)
+			}
+		default:
+			t.Errorf("%s status = %q on a valid chain", check.Name, status)
+		}
+	}
+	want := map[string]int{
+		"external_host:hardware_root": 2,
+		"external_host:binding":       2,
+		"external_host:chain_hash":    1,
+	}
+	if fmt.Sprint(notRun) != fmt.Sprint(want) {
+		t.Fatalf("not-run checks = %v, want %v", notRun, want)
+	}
+}
+
+// A chain in which no check held is not verified, even when nothing failed.
+func TestVerificationReportWithOnlyNotRunChecksIsNotVerified(t *testing.T) {
+	report := &VerificationReport{}
+	report.add(CheckResult{Name: "external_host:hardware_root", Status: "NOT_RUN", Pass: true, Reason: "no claim"})
+	report.finalize()
+	if report.Verified {
+		t.Fatal("a report whose only check did not run verified")
+	}
+	if report.Checks[0].Pass {
+		t.Fatal("a NOT_RUN check kept pass=true")
+	}
 }
 
 func TestVerifyChain_ActionEffectReceiptVerifies(t *testing.T) {
@@ -726,4 +808,80 @@ func computeHashOnly(r contracts.ExternalHostReceipt) (contracts.ExternalHostRec
 	}
 	r.ReceiptHash = hash
 	return r, nil
+}
+
+// An unsigned receipt, with no key supplied and none required, has no
+// signature to check. That is NOT_RUN: reporting it as a pass would count a
+// signature check on a receipt nobody signed.
+func TestVerifyChain_UnsignedReceiptWithoutARequiredKeyIsNotRun(t *testing.T) {
+	// Any fixed instant: the receipt hash covers it, nothing compares it.
+	ts := time.Unix(1_700_000_000, 0).UTC()
+	receipt, err := computeHashOnly(testReceipt("host-unsigned", "", ts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.SignatureAlgorithm = ""
+	receipt.SigningKeyID = ""
+	receipt, err = computeHashOnly(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "chain-unsigned",
+		Receipts:      []contracts.ExternalHostReceipt{receipt},
+	}
+
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, check := range report.Checks {
+		if check.Name != "external_host:signature" {
+			continue
+		}
+		found = true
+		if status := checkStatus(t, check); status != "NOT_RUN" {
+			t.Fatalf("signature status = %s, want NOT_RUN for an unsigned receipt with no key required", status)
+		}
+		if check.Pass {
+			t.Fatal("an unsigned receipt is counted as a passed signature check")
+		}
+		if !strings.Contains(check.Reason, "unsigned") {
+			t.Fatalf("reason does not say the receipt is unsigned: %q", check.Reason)
+		}
+	}
+	if !found {
+		t.Fatalf("no signature check reported: %+v", report.Checks)
+	}
+
+	// The same receipt under a required key is a failure, not a skipped check.
+	required, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: strings.Repeat("0", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFailedCheck(t, required, "external_host:signature")
+}
+
+// N10: an object whose receipts list is empty is a chain with no receipts,
+// and the chain fails on that. It was read as one JSONL receipt line.
+func TestParse_ChainWithAnEmptyReceiptsListHoldsNoReceipts(t *testing.T) {
+	chain, err := Parse([]byte(`{"receipts":[],"results":[]}`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(chain.Receipts) != 0 {
+		t.Fatalf("receipts = %d, want 0", len(chain.Receipts))
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified || len(report.Checks) != 1 || report.Checks[0].Reason != "chain contains no receipts" {
+		t.Fatalf("report = %+v, want one failed check: chain contains no receipts", report)
+	}
+	if _, err := Parse([]byte(`{"receipts":"not a list"}`)); err == nil || !strings.Contains(err.Error(), "parse host receipt chain") {
+		t.Fatalf("Parse of a receipts member that is not a list = %v, want a parse error", err)
+	}
 }

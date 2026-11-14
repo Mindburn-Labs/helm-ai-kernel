@@ -1,7 +1,13 @@
+// quantum_posture: test-only coverage of the receipt.v5 and legacy signing
+// preimages under the existing Ed25519, ML-DSA-65 and hybrid signers; it adds
+// no signature scheme.
 package crypto
 
 import (
 	"bytes"
+	"errors"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -198,7 +204,9 @@ func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
 }
 
 // Receipts signed before HELM-303 (no signature_version) keep verifying under
-// the legacy V4 preimage: dual-verify, no re-signing of history.
+// the legacy V4 preimage, for a caller that opts in: dual-verify, no
+// re-signing of history. Without the opt-in they are refused, not checked
+// (helm-tracker#305).
 func TestReceiptLegacyV4StillVerifies(t *testing.T) {
 	signer, err := NewEd25519Signer("legacy-key")
 	if err != nil {
@@ -219,15 +227,71 @@ func TestReceiptLegacyV4StillVerifies(t *testing.T) {
 	r.Signature = sig
 	r.SignatureVersion = ""
 
-	if ok, err := verifier.VerifyReceipt(r); err != nil || !ok {
-		t.Fatalf("legacy receipt must keep verifying (ok=%v err=%v)", ok, err)
+	if ok, err := verifier.VerifyReceipt(r); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("legacy receipt was checked without the opt-in (ok=%v err=%v)", ok, err)
+	}
+	if ok, err := signer.VerifyReceipt(r); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("legacy receipt was checked by its signer without the opt-in (ok=%v err=%v)", ok, err)
+	}
+	verifyLegacy := func() (bool, error) {
+		_, ok, err := VerifyReceiptProfile(signer.PublicKey(), "", r, AllowLegacyReceiptPreimages)
+		return ok, err
+	}
+	if ok, err := verifyLegacy(); err != nil || !ok {
+		t.Fatalf("legacy receipt must keep verifying under the opt-in (ok=%v err=%v)", ok, err)
+	}
+	if ok, version, err := VerifyReceiptSignature(signer.PublicKey(), r, AllowLegacyReceiptPreimages); err != nil || !ok || version != ReceiptPreimageLegacy {
+		t.Fatalf("legacy receipt must verify as %q under the opt-in (ok=%v version=%q err=%v)", ReceiptPreimageLegacy, ok, version, err)
+	}
+	if payload, err := ReceiptVerifyPayload(r, AllowLegacyReceiptPreimages); err != nil || string(payload) != legacyPayload {
+		t.Fatalf("ReceiptVerifyPayload under the opt-in = %q, %v; want the legacy preimage", payload, err)
+	}
+	if _, err := ReceiptVerifyPayload(r); !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("ReceiptVerifyPayload without the opt-in = %v, want ErrLegacyReceiptRefused", err)
 	}
 	// And the documented legacy hole stays visible: verdict mutation on a
 	// legacy receipt does NOT break its signature (it breaks the chain hash
 	// instead) — that asymmetry is exactly what V5 closes.
 	r.Verdict = "DENY"
-	if ok, _ := verifier.VerifyReceipt(r); !ok {
+	if ok, _ := verifyLegacy(); !ok {
 		t.Fatal("legacy preimage does not bind Verdict; verification should still pass")
+	}
+	// A member the legacy preimage does cover still fails under the opt-in.
+	r.Status = "DENIED"
+	if ok, err := verifyLegacy(); ok || err != nil {
+		t.Fatalf("a legacy receipt with a rewritten signed member verified under the opt-in (ok=%v err=%v)", ok, err)
+	}
+}
+
+// TestOnlyTheLegacyOptionOpensTheLegacyPreimage: AllowLegacyReceiptPreimages
+// is the one option that checks a receipt with no signature_version. The zero
+// value and any value this package does not define, such as one a newer
+// caller hands an older kernel, leave the receipt refused (helm-tracker#305
+// round 2, mutant M14).
+func TestOnlyTheLegacyOptionOpensTheLegacyPreimage(t *testing.T) {
+	signer, err := NewEd25519Signer("legacy-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := v5TestReceipt()
+	sig, err := signer.Sign([]byte(CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Signature, r.SignatureVersion = sig, ""
+	if ok, _, err := VerifyReceiptSignature(signer.PublicKey(), r, AllowLegacyReceiptPreimages); err != nil || !ok {
+		t.Fatalf("the legacy receipt does not verify under the opt-in; the cases prove nothing (ok=%v err=%v)", ok, err)
+	}
+	for _, opt := range []ReceiptVerifyOption{0, AllowLegacyReceiptPreimages + 1, -1} {
+		if _, err := ReceiptVerifyPayload(r, opt); !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("ReceiptVerifyPayload with option %d = %v, want ErrLegacyReceiptRefused", opt, err)
+		}
+		if ok, _, err := VerifyReceiptSignature(signer.PublicKey(), r, opt); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("VerifyReceiptSignature with option %d: ok=%v err=%v, want ErrLegacyReceiptRefused", opt, ok, err)
+		}
+		if _, ok, err := VerifyReceiptProfile(signer.PublicKey(), "", r, opt); ok || !errors.Is(err, ErrLegacyReceiptRefused) {
+			t.Fatalf("VerifyReceiptProfile with option %d: ok=%v err=%v, want ErrLegacyReceiptRefused", opt, ok, err)
+		}
 	}
 }
 
@@ -247,5 +311,227 @@ func TestReceiptUnknownVersionRejected(t *testing.T) {
 	r.SignatureVersion = "receipt.v99"
 	if ok, err := verifier.VerifyReceipt(r); err == nil || ok {
 		t.Fatalf("unknown preimage version must be rejected (ok=%v err=%v)", ok, err)
+	}
+}
+
+// replayV5AsLegacy re-splits the bytes a receipt.v5 signature covers into the
+// eight colon-joined fields of the legacy preimage and returns an unversioned
+// receipt that carries the same signature and claims ALLOW. It needs a
+// colon-delimited integer in the signed bytes to stand in for lamport_clock; a
+// gateway session_id has one.
+func replayV5AsLegacy(t *testing.T, signed *contracts.Receipt) *contracts.Receipt {
+	t.Helper()
+	payload, err := CanonicalizeReceiptV5(signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(string(payload), SigSeparator)
+	for i := 6; i < len(parts)-1; i++ {
+		clock, err := strconv.ParseUint(parts[i], 10, 64)
+		if err != nil || strconv.FormatUint(clock, 10) != parts[i] {
+			continue
+		}
+		forged := &contracts.Receipt{
+			ReceiptID:    parts[0],
+			DecisionID:   parts[1],
+			EffectID:     parts[2],
+			Status:       parts[3],
+			OutputHash:   parts[4],
+			PrevHash:     strings.Join(parts[5:i], SigSeparator),
+			LamportClock: clock,
+			ArgsHash:     strings.Join(parts[i+1:], SigSeparator),
+			Verdict:      "ALLOW",
+			ToolName:     "payments.transfer",
+			Signature:    signed.Signature,
+			// Profile metadata is outside both preimages, so the forger
+			// copies whatever routes the signature to its own algorithm.
+			SignatureProfile:   signed.SignatureProfile,
+			SignatureAlgorithm: signed.SignatureAlgorithm,
+		}
+		if !bytes.Equal(ReceiptPreimageV4(forged), payload) {
+			t.Fatal("the planted receipt is not a legacy reading of the signed receipt.v5 bytes; the case proves nothing")
+		}
+		return forged
+	}
+	t.Fatal("the signed receipt.v5 bytes hold no colon-delimited integer to stand in for lamport_clock; the case proves nothing")
+	return nil
+}
+
+// legacyRefused asserts a verifier's answer to an unversioned receipt it was
+// not asked to accept: not valid, with an error that says the receipt is
+// legacy and names the member it lacks.
+func legacyRefused(t *testing.T, path string, valid bool, err error) {
+	t.Helper()
+	if valid {
+		t.Fatalf("%s: a receipt with no signature_version verified without an opt-in", path)
+	}
+	if err == nil || !strings.Contains(err.Error(), "legacy") || !strings.Contains(err.Error(), "signature_version") {
+		t.Fatalf("%s: the refusal must say the receipt is legacy and has no signature_version, got: %v", path, err)
+	}
+	if !errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("%s: the refusal must be ErrLegacyReceiptRefused, so a caller can report \"not checked\": %v", path, err)
+	}
+}
+
+// TestReceiptV5SignatureDoesNotReplayAsLegacy is helm-tracker#305 defect B in
+// this package. The legacy preimage is eight fields joined with ":" with no
+// escaping and no domain separation, so the JCS bytes of a signed receipt.v5
+// DENY can be read back as those eight fields: the same signature then
+// verifies for an unversioned receipt that says ALLOW. No key is needed. Every
+// receipt verifier here must refuse the unversioned receipt by default, under
+// each signature profile.
+func TestReceiptV5SignatureDoesNotReplayAsLegacy(t *testing.T) {
+	denial := func() *contracts.Receipt {
+		r := v5TestReceipt()
+		r.Status, r.Verdict, r.ReasonCode = "DENIED", "DENY", "MANDATE_LIMIT_EXCEEDED"
+		r.SessionID = "helm-gateway:8:tenant-a:4:ws-a"
+		return r
+	}
+	ed, err := NewEd25519Signer("replay-ed25519")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mldsa, err := NewMLDSASigner("replay-mldsa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hybrid, err := NewHybridSignerFromSigners(ed, mldsa, "replay-hybrid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edVerifier, err := NewEd25519Verifier(ed.PublicKeyBytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mldsaVerifier, err := NewMLDSAVerifier(mldsa.PublicKeyBytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hybridVerifier, err := NewHybridVerifier(ed.PublicKeyBytes(), mldsa.PublicKeyBytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring := NewKeyRing()
+	ring.AddKey(ed)
+	ring.AddKey(mldsa)
+	ring.AddKey(hybrid)
+
+	for name, tc := range map[string]struct {
+		signer    Signer
+		edPub     string
+		mldsaPub  string
+		verifiers map[string]func(*contracts.Receipt) (bool, error)
+	}{
+		"classical": {ed, ed.PublicKey(), "", map[string]func(*contracts.Receipt) (bool, error){
+			"Ed25519Signer.VerifyReceipt":   ed.VerifyReceipt,
+			"Ed25519Verifier.VerifyReceipt": edVerifier.VerifyReceipt,
+			"VerifyReceiptSignature": func(r *contracts.Receipt) (bool, error) {
+				ok, _, err := VerifyReceiptSignature(ed.PublicKey(), r)
+				return ok, err
+			},
+		}},
+		"pqc": {mldsa, "", mldsa.PublicKey(), map[string]func(*contracts.Receipt) (bool, error){
+			"MLDSASigner.VerifyReceipt":   mldsa.VerifyReceipt,
+			"MLDSAVerifier.VerifyReceipt": mldsaVerifier.VerifyReceipt,
+		}},
+		"hybrid": {hybrid, ed.PublicKey(), mldsa.PublicKey(), map[string]func(*contracts.Receipt) (bool, error){
+			"HybridVerifier.VerifyReceipt": hybridVerifier.VerifyReceipt,
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			genuine := denial()
+			if err := tc.signer.SignReceipt(genuine); err != nil {
+				t.Fatal(err)
+			}
+			if _, valid, err := VerifyReceiptProfile(tc.edPub, tc.mldsaPub, genuine); err != nil || !valid {
+				t.Fatalf("the genuine receipt.v5 DENY does not verify; the case proves nothing (valid=%v err=%v)", valid, err)
+			}
+			forged := replayV5AsLegacy(t, genuine)
+
+			_, valid, err := VerifyReceiptProfile(tc.edPub, tc.mldsaPub, forged)
+			legacyRefused(t, "VerifyReceiptProfile", valid, err)
+			_, valid, err = VerifyReceiptRequiredProfile(tc.edPub, tc.mldsaPub, forged, "")
+			legacyRefused(t, "VerifyReceiptRequiredProfile", valid, err)
+			// The keyring answers as its members do: "not checked", not
+			// "no key verified", which reads as a signature that did not match.
+			valid, err = ring.VerifyReceipt(forged)
+			legacyRefused(t, "KeyRing.VerifyReceipt", valid, err)
+			for path, verify := range tc.verifiers {
+				valid, err := verify(forged)
+				legacyRefused(t, path, valid, err)
+			}
+
+			// The opt-in is for receipts issued before receipt.v5. It does not
+			// accept the replay either: the legacy preimage begins with
+			// receipt_id, and the signed bytes being replayed begin with "{".
+			if !strings.HasPrefix(forged.ReceiptID, `{"args_hash"`) {
+				t.Fatalf("the replay's receipt_id is %q; the rule under test would not apply", forged.ReceiptID)
+			}
+			_, valid, err = VerifyReceiptProfile(tc.edPub, tc.mldsaPub, forged, AllowLegacyReceiptPreimages)
+			replayRefused(t, "VerifyReceiptProfile under the opt-in", valid, err)
+			_, valid, err = VerifyReceiptRequiredProfile(tc.edPub, tc.mldsaPub, forged, "", AllowLegacyReceiptPreimages)
+			replayRefused(t, "VerifyReceiptRequiredProfile under the opt-in", valid, err)
+			_, err = ReceiptVerifyPayload(forged, AllowLegacyReceiptPreimages)
+			replayRefused(t, "ReceiptVerifyPayload under the opt-in", false, err)
+			if tc.edPub != "" && tc.mldsaPub == "" {
+				valid, _, err = VerifyReceiptSignature(tc.edPub, forged, AllowLegacyReceiptPreimages)
+				replayRefused(t, "VerifyReceiptSignature under the opt-in", valid, err)
+			}
+		})
+	}
+}
+
+// replayRefused asserts the answer of a verifier that was given
+// AllowLegacyReceiptPreimages and an unversioned receipt whose receipt_id
+// begins with "{": not valid, and refused for being a replay.
+func replayRefused(t *testing.T, path string, valid bool, err error) {
+	t.Helper()
+	if valid {
+		t.Fatalf("%s: the signature of a receipt.v5 DENY verified for an unversioned receipt that says ALLOW", path)
+	}
+	if err == nil || !strings.Contains(err.Error(), "receipt_id") || !strings.Contains(err.Error(), "replay") {
+		t.Fatalf("%s: the refusal must name the receipt_id and the replay, got: %v", path, err)
+	}
+	if !errors.Is(err, ErrLegacyReceiptReplay) || errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("%s: the refusal must be ErrLegacyReceiptReplay, a failed check and not an unchecked receipt: %v", path, err)
+	}
+}
+
+// TestKeyRingReportsALegacyReceiptAsNotChecked: a keyring that holds the
+// signing key of a genuine legacy receipt still does not check it, and says
+// so with ErrLegacyReceiptRefused. It used to answer "no key verified the
+// receipt", which its callers report as a signature that failed.
+func TestKeyRingReportsALegacyReceiptAsNotChecked(t *testing.T) {
+	signer, err := NewEd25519Signer("keyring-legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring := NewKeyRing()
+	ring.AddKey(signer)
+
+	legacy := v5TestReceipt()
+	if legacy.Signature, err = signer.Sign(ReceiptPreimageV4(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _, err := VerifyReceiptSignature(signer.PublicKey(), legacy, AllowLegacyReceiptPreimages); err != nil || !ok {
+		t.Fatalf("the legacy receipt is not validly signed; the case proves nothing (ok=%v err=%v)", ok, err)
+	}
+	valid, err := ring.VerifyReceipt(legacy)
+	legacyRefused(t, "KeyRing.VerifyReceipt", valid, err)
+	// An empty keyring refuses it the same way: nothing was checked.
+	valid, err = NewKeyRing().VerifyReceipt(legacy)
+	legacyRefused(t, "empty KeyRing.VerifyReceipt", valid, err)
+
+	// A receipt.v5 receipt is checked as before: verified by its key, and
+	// "no key verified" when the keyring does not hold it.
+	current := v5TestReceipt()
+	if err := signer.SignReceipt(current); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := ring.VerifyReceipt(current); err != nil || !ok {
+		t.Fatalf("a receipt.v5 receipt no longer verifies through the keyring (ok=%v err=%v)", ok, err)
+	}
+	if ok, err := NewKeyRing().VerifyReceipt(current); ok || err == nil || errors.Is(err, ErrLegacyReceiptRefused) {
+		t.Fatalf("a receipt.v5 receipt no key verifies must stay a plain failure (ok=%v err=%v)", ok, err)
 	}
 }

@@ -7,6 +7,7 @@ package effectargs
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -29,6 +30,24 @@ const (
 	AuthorityProvision = "helm.authority.provision.v1"
 	AuthorityNarrow    = "helm.authority.narrow.v1"
 )
+
+// The stages of a plan, lowest first (helm-tracker#334). The stage is a ceiling
+// the gateway enforces on what the plan's mandates grant
+// (provision.CheckStage): draft grants no write but an internal one,
+// approval-required puts every granted write behind an approval, and
+// constrained-live and certified-live grant by mandate terms only; certified-
+// live grants nothing constrained-live does not. Raising the stage is a
+// provision plan, never a narrowing one.
+const (
+	StageDraft            = "draft"
+	StageApprovalRequired = "approval-required"
+	StageConstrainedLive  = "constrained-live"
+	StageCertifiedLive    = "certified-live"
+)
+
+// StageRank is the stage's place in the ladder, 0 for draft, and -1 for a
+// string that is not a stage.
+func StageRank(stage string) int { return slices.Index(stages, stage) }
 
 // MaxPlanBytes bounds a plan: the effect API's 64 KiB argument cap is for
 // every other effect.
@@ -86,6 +105,10 @@ type PlanPrincipal struct {
 	Kind       string
 	EnsureOnly bool
 	External   *PlanExternal
+	// Credentials are passkeys the plan enrolls for a human (helm-tracker#334):
+	// after the owner's genesis passkey, a passkey is enrolled only by a
+	// provision plan a distinct human approved. A narrowing plan enrolls none.
+	Credentials []Credential
 }
 
 // PlanExternal is a principal's external subject.
@@ -134,7 +157,7 @@ var (
 	unitPattern       = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 	systemPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{0,63}$`)
 
-	stages  = []string{"draft", "approval-required", "constrained-live", "certified-live"}
+	stages  = []string{StageDraft, StageApprovalRequired, StageConstrainedLive, StageCertifiedLive}
 	kinds   = []string{"human", "agent", "service"}
 	risks   = []string{"low", "medium", "high", "irreversible"}
 	measure = []string{"sum", "count", "distinct"}
@@ -302,13 +325,14 @@ func (p *Plan) parsePrincipals(top object) error {
 		return err
 	}
 	seen := map[string]bool{}
+	credentialIDs := map[string]bool{}
 	for i, item := range items {
 		path := fmt.Sprintf("principals[%d]", i)
 		o, err := asObject(item, path)
 		if err != nil {
 			return err
 		}
-		if err := o.only("id", "kind", "ensure_only", "external_subject"); err != nil {
+		if err := o.only("id", "kind", "ensure_only", "external_subject", "credentials"); err != nil {
 			return err
 		}
 		var pr PlanPrincipal
@@ -343,6 +367,17 @@ func (p *Plan) parsePrincipals(top object) error {
 			}
 			pr.External = pe
 		}
+		if raw, ok := o.fields["credentials"]; ok {
+			if p.Schema == AuthorityNarrow {
+				return invalid("%s.credentials: a narrowing plan enrolls no passkey", path)
+			}
+			if pr.Kind != "human" {
+				return invalid("%s.credentials: only a human has passkeys", path)
+			}
+			if pr.Credentials, err = parseCredentials(raw, path+".credentials", credentialIDs); err != nil {
+				return err
+			}
+		}
 		if pr.Kind == "human" && pr.External == nil && !pr.EnsureOnly {
 			return invalid("%s: a human the plan may create carries an external_subject; one that must already be registered is ensure_only", path)
 		}
@@ -374,6 +409,77 @@ func (p *Plan) parsePrincipals(top object) error {
 		}
 	}
 	return nil
+}
+
+// parseCredentials reads a human's passkeys: 1 to MaxPrincipalCredentials
+// objects of credential_id and public_key_spki (unpadded base64url), alg (-7
+// or -8) and rp_id, each checked by CheckCredential. A credential id is listed
+// once in the whole plan.
+func parseCredentials(raw json.RawMessage, path string, ids map[string]bool) ([]Credential, error) {
+	items, err := arrayOf(raw, path, MaxPrincipalCredentials)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, invalid("%s lists at least one passkey, or is absent", path)
+	}
+	out := make([]Credential, 0, len(items))
+	for i, item := range items {
+		at := fmt.Sprintf("%s[%d]", path, i)
+		o, err := asObject(item, at)
+		if err != nil {
+			return nil, err
+		}
+		if err := o.only("credential_id", "alg", "public_key_spki", "rp_id"); err != nil {
+			return nil, err
+		}
+		for _, key := range []string{"credential_id", "alg", "public_key_spki", "rp_id"} {
+			if _, ok := o.fields[key]; !ok {
+				return nil, invalid("%s.%s is required", at, key)
+			}
+		}
+		var c Credential
+		if c.ID, err = base64URL(o.fields["credential_id"], at+".credential_id"); err != nil {
+			return nil, err
+		}
+		if c.PublicKeySPKI, err = base64URL(o.fields["public_key_spki"], at+".public_key_spki"); err != nil {
+			return nil, err
+		}
+		switch string(bytes.TrimSpace(o.fields["alg"])) {
+		case "-7":
+			c.Alg = AlgES256
+		case "-8":
+			c.Alg = AlgEdDSA
+		default:
+			return nil, invalid("%s.alg is -7 (ES256) or -8 (EdDSA)", at)
+		}
+		if c.RPID, err = stringOf(o.fields["rp_id"], at+".rp_id"); err != nil {
+			return nil, err
+		}
+		if err := CheckCredential(c); err != nil {
+			return nil, invalid("%s: %v", at, err)
+		}
+		if ids[string(c.ID)] {
+			return nil, invalid("%s: credential id is listed twice in the plan", at)
+		}
+		ids[string(c.ID)] = true
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// base64URL reads a string of unpadded base64url (RFC 4648 §5), as WebAuthn
+// encodes credential ids.
+func base64URL(raw json.RawMessage, path string) ([]byte, error) {
+	s, err := stringOf(raw, path)
+	if err != nil {
+		return nil, err
+	}
+	b, err := base64.RawURLEncoding.Strict().DecodeString(s)
+	if err != nil || len(b) == 0 {
+		return nil, invalid("%s is unpadded base64url of at least one byte", path)
+	}
+	return b, nil
 }
 
 func (p *Plan) parseMandates(top object) error {

@@ -13,14 +13,21 @@ import (
 
 const cursorInstallStatusPending = "pending_install"
 
+// Install projects a pack into the repository only when the scan allows it and
+// the pack's files are the ones the first-party manifest compiled into this
+// binary pins. Every other pack is blocked and nothing is written.
 func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
+	return installPack(pack, req, loadKernelFirstPartyTrust())
+}
+
+func installPack(pack SkillPack, req InstallRequest, trust *firstPartyTrust) (InstallResult, error) {
 	if req.Scope == "" {
 		req.Scope = ScopeRepo
 	}
 	if req.Agent == "" {
 		req.Agent = "codex"
 	}
-	scan, err := Scan(pack)
+	scan, err := scanPack(pack, trust)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -35,6 +42,14 @@ func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 	if scan.Verdict != VerdictAllow {
 		result.Status = "blocked"
 		result.ReasonCode = scan.ReasonCode
+		return result, nil
+	}
+	// The verdict already requires this. Install states it again so no later
+	// change to the verdict rules can let an unverified pack reach the writes.
+	if scan.PublisherVerification.State != PublisherFirstParty {
+		result.Status = "blocked"
+		result.Verdict = VerdictEscalate
+		result.ReasonCode = "ERR_SKILL_SIGNATURE_UNVERIFIED"
 		return result, nil
 	}
 	root := req.RepoRoot
@@ -72,15 +87,17 @@ func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 			}
 		}
 	}
-	installReceipt := NewReceipt("SKILL_INSTALL_RECEIPT", pack.Manifest.ID, VerdictAllow, "", scan.SkillContentHash, pack.Manifest.PolicyRef, projections)
-	projectionReceipt := NewReceipt("SKILL_PROJECTION_RECEIPT", pack.Manifest.ID, VerdictAllow, "", scan.SkillContentHash, pack.Manifest.PolicyRef, projections)
+	// policy_hash names the kernel policy the scan ran under, never the
+	// policy_ref the pack declares.
+	installReceipt := NewReceipt("SKILL_INSTALL_RECEIPT", pack.Manifest.ID, VerdictAllow, "", scan.SkillContentHash, scan.Policy.Hash, projections)
+	projectionReceipt := NewReceipt("SKILL_PROJECTION_RECEIPT", pack.Manifest.ID, VerdictAllow, "", scan.SkillContentHash, scan.Policy.Hash, projections)
 	if _, err := WriteReceipt(root, installReceipt); err != nil {
 		return InstallResult{}, err
 	}
 	if _, err := WriteReceipt(root, projectionReceipt); err != nil {
 		return InstallResult{}, err
 	}
-	if err := updateInstallStore(root, pack.Manifest, req, projections, installReceipt.ID, projectionReceipt.ID); err != nil {
+	if err := updateInstallStore(root, pack.Manifest, req, projections, installReceipt.ID, projectionReceipt.ID, scan.PublisherVerification); err != nil {
 		return InstallResult{}, err
 	}
 	result.Status = "active"
@@ -818,9 +835,13 @@ type installedSkill struct {
 	ProjectionPaths         []Projection `json:"projection_paths"`
 	UpdatedAt               string       `json:"updated_at"`
 	Manifest                Manifest     `json:"manifest"`
+	// PublisherVerification is what the install scan established. Manifest
+	// holds what the pack declares, and a record written before this field
+	// existed has none: its install was not publisher-verified.
+	PublisherVerification *PublisherVerification `json:"publisher_verification,omitempty"`
 }
 
-func updateInstallStore(root string, manifest Manifest, req InstallRequest, paths []Projection, installReceipt, projectionReceipt string) error {
+func updateInstallStore(root string, manifest Manifest, req InstallRequest, paths []Projection, installReceipt, projectionReceipt string, publisher PublisherVerification) error {
 	store, err := readInstallStore(root)
 	if err != nil {
 		return err
@@ -839,6 +860,7 @@ func updateInstallStore(root string, manifest Manifest, req InstallRequest, path
 			store.Installs[i].ProjectionPaths = paths
 			store.Installs[i].UpdatedAt = now
 			store.Installs[i].Manifest = manifest
+			store.Installs[i].PublisherVerification = &publisher
 			return writeInstallStore(root, store)
 		}
 	}
@@ -846,6 +868,7 @@ func updateInstallStore(root string, manifest Manifest, req InstallRequest, path
 		SkillID: manifest.ID, Agent: req.Agent, Scope: req.Scope, Status: "active",
 		ContentHash: manifest.ContentHash, InstallReceiptID: installReceipt,
 		ProjectionReceiptID: projectionReceipt, ProjectionPaths: paths, UpdatedAt: now, Manifest: manifest,
+		PublisherVerification: &publisher,
 	})
 	return writeInstallStore(root, store)
 }

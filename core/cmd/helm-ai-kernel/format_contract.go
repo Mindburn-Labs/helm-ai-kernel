@@ -24,7 +24,7 @@ var operatorFormatDocumentExempt = map[string]string{
 	"server":      "listener; bind is not an inspect document",
 	"serve":       "listener; bind is not an inspect document",
 	"proxy":       "listener; bind is not an inspect document",
-	"spend-proxy": "listener; bind is not an inspect document",
+	"spend-proxy": "offline export and verification; live listener is retired",
 	"dev":         "listener; bind is not an inspect document",
 	"connect":     "listener; bind is not an inspect document",
 	"login":       "listener; bind is not an inspect document",

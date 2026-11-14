@@ -52,9 +52,9 @@ no second, administrative path that widens authority.
 
 | Step | Who | What the gateway does |
 |---|---|---|
-| 0 | the Control Plane (`helm.gateway.provision`) | `EnsurePrincipals`: the tenant, the organization's service principal and the owner (a human) exist. Once per tenant. |
-| 1 | the organization's service principal, carried by the Control Plane (`helm.gateway.propose`) | `Propose` with `effect_type` `helm.authority.provision.v1`, `target` the `org_ref`, `arguments` the plan. It is `ESCALATED` and shows the plan to the approver through `GetAttemptContent`. |
-| 2 | a distinct human (`helm.gateway.decide`) | `Approve` with the approval digest and a step-up proof. The approver is an active human principal of the tenant, not the requester. Approval re-admits the attempt: `ADMITTED`, with a permit. |
+| 0 | the Control Plane (`helm.gateway.provision`) | `EnsurePrincipals`: the tenant, the organization's service principal and the owner (a human, with its passkey and a genesis assertion) exist. Once per tenant: no human joins afterwards except through a plan (below). |
+| 1 | the organization's service principal, carried by the Control Plane (`helm.gateway.propose`) | `Propose` with `effect_type` `helm.authority.provision.v1`, `target` the `org_ref`, `arguments` the plan. The plan is held to its stage first. It is `ESCALATED` and shows the plan to the approver through `GetAttemptContent`; `pending_approval.owner_challenge` is the challenge the approver's passkey signs. |
+| 2 | a distinct human (`helm.gateway.decide`) | `Approve` with the approval digest and the approver's own `owner_assertion` (or, while `HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` is off, a step-up proof). The approver is an active human principal of the tenant, not the requester. Approval re-admits the attempt: `ADMITTED`, with a permit. |
 | 3 | the requester's workload (`helm.gateway.execute`) | `Dispatch` claims the permit once and calls the authority adapter, which applies the plan in one transaction. |
 | 4 | the same workload | `Observe` reads the applied plan back: `OBSERVED(SUCCEEDED)` when the organization's applied digest is this plan's. |
 
@@ -106,7 +106,8 @@ key at any depth. The fields:
 |---|---|
 | `schema` | `helm.authority.provision.v1` or `helm.authority.narrow.v1`, matching the effect type. |
 | `org_ref` | `org:<id>`. The effect's target, and the key of the provisioning the plan updates. |
-| `version_ref`, `stage` | Recorded and returned by `GetProvisioning`; never interpreted. |
+| `version_ref` | Recorded and returned by `GetProvisioning`; never interpreted. |
+| `stage` | `draft`, `approval-required`, `constrained-live` or `certified-live`: a ceiling on what the plan's mandates grant ([The stage](#the-stage)). Returned by `GetProvisioning`. |
 | `base_plan_digest` | The applied plan's digest, or empty when the organization has none. |
 | `valid_from`, `valid_until` | The validity window of every mandate of the plan. It is part of a mandate's terms: an earlier `valid_from` or a later `valid_until` widens. |
 | `effect_types` | `{effect_type, risk_class}`: registered in the tenant. |
@@ -146,6 +147,97 @@ approver is never asked for a plan that cannot apply (`failed_precondition`,
 - `disable_principals` lists only principals the applied plan lists, never the
   requester, and in a `narrow` plan no human;
 - a `narrow` plan has an applied plan to narrow, and lists only nodes it has.
+
+### The stage
+
+The stage is a ceiling the gateway enforces on what a plan's mandates grant
+(helm-tracker#334), judged from the effect-type declarations of the adapters
+the gateway composes (`adapters.Declaration`), never from the plan or a catalog
+copy. A **write** is an effect type whose declaration's `Reversible` is not
+`not applicable`; an effect type no adapter of the gateway declares cannot be
+shown to be a read and counts as a write.
+
+| Stage | What the mandates may grant |
+|---|---|
+| `draft` | No write, except one whose declaration sets `Internal`: it changes only the composing Control Plane's own rows (its `helm.work.*` effects). |
+| `approval-required` | Every write a mandate grants is in that mandate's `approval_required`, and that mandate sets no `approval_threshold`: each call waits for a distinct human. |
+| `constrained-live` | By mandate terms only. |
+| `certified-live` | By mandate terms only: nothing `constrained-live` does not. Certification is the Control Plane's evidence; the gateway does not claim it. |
+
+A plan that grants more than its stage allows is refused at Propose
+(`failed_precondition`, `STAGE_CEILING_EXCEEDED`), and again by the authority
+adapter on the locked applied row (`FAILED`, `STAGE_CEILING_EXCEEDED`), so a
+plan admitted by a gateway that did not check it applies nothing. A narrowing
+plan needs no approval, so it never ranks above the applied plan's stage
+(`STAGE_RAISE_REQUIRES_PROVISION`): raising a rung is a provision plan, which
+the owner approves. Lowering the stage is a narrowing like any other, once the
+mandates fit the lower stage.
+
+### Humans and passkeys
+
+The owner's passkey is the root of authority (helm-tracker#334):
+
+- **Genesis.** `EnsurePrincipals` on a tenant it creates enrols the owner's
+  passkey: exactly one human in the request, carrying exactly one
+  `PrincipalCredential` (credential id, COSE `alg` -7 for ES256 or -8 for
+  EdDSA, the public key as DER SubjectPublicKeyInfo, and the WebAuthn `rp_id`),
+  and `genesis_assertion`, a WebAuthn assertion by that passkey whose challenge
+  is the genesis challenge. It must verify, or nothing is created.
+- **After genesis.** On a tenant that exists, `EnsurePrincipals` registers no
+  new human and enrols no passkey, whatever the configuration
+  (`permission_denied`, `INSUFFICIENT_PRIVILEGE`); what exists, presented as it
+  is, is answered unchanged, so a repeated request is safe. Later humans and
+  their passkeys come only through a `helm.authority.provision.v1` plan, whose
+  principal entries take an optional `credentials` member (unpadded base64url
+  `credential_id` and `public_key_spki`, `alg`, `rp_id`; only on a human, never
+  in a narrowing plan). The plan is approved by a human who already has one.
+- **Approval.** `ApproveRequest.owner_assertion` is verified by the gateway in
+  the approval's transaction against the approver's own enrolled passkey:
+  clientDataJSON `type` `webauthn.get` (read by exact key, no duplicate key, not
+  in a cross-origin frame), `challenge` the unpadded base64url of the owner
+  challenge, the exact configured browser origin, rpIdHash `SHA-256(rp_id)`, the user-present and user-verified
+  flags, the signature over `authenticatorData || SHA-256(clientDataJSON)`, a
+  signature counter that never goes backwards, and the signed payload accepted
+  once. A present assertion that does not verify is `permission_denied`
+  (`OWNER_ASSERTION_REQUIRED`) and the attempt stays `ESCALATED` with nothing
+  used up. A verified one satisfies step-up, and the approval record keeps it
+  with its challenge and counter.
+- **Challenges.** Each is SHA-256 over its fields in order, each prefixed with
+  its length as a big-endian uint64, as the approval digest is:
+
+  | Challenge | Fields | Vector |
+  |---|---|---|
+  | owner (`pending_approval.owner_challenge`) | `helm.gateway.v1.owner-assertion.v1`, tenant, approver principal, attempt id, approval digest | tenant `tenant-a`, approver `usr_owner`, attempt `attempt-1`, digest 32 bytes of `0x07`: `d2e4e465b01baf195c7c40b8a6e204934a4ab7c4ebda7b231503dbc300714859` |
+  | genesis | `helm.gateway.v1.genesis.v1`, tenant, owner principal, credential id | tenant `tenant-a`, owner `usr_owner`, credential id `0x010203`: `830fd3d75a171a0829096b3fb2e10b844df3146b35efecbceb3c1945993dbb23` |
+
+  `owner_challenge` is computed for the principal of the token that read the
+  attempt: the approver reads it with its own read token, or computes it.
+
+`HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` (chart value
+`gateway.ownerAssertionRequired`) is off by default until the Control Plane
+sends owner assertions:
+
+| | off (default) | on |
+|---|---|---|
+| Step-up of a `helm.authority.*` widening (provision plan, lift, reassignment grant) | a verified owner assertion or a step-up proof | a verified owner assertion only (`OWNER_ASSERTION_REQUIRED`) |
+| Step-up of a high or irreversible effect that is not an authority change | either | a verified owner assertion only (`OWNER_ASSERTION_REQUIRED`) |
+| An owner assertion that is present | verified | verified |
+| A new tenant's genesis | with a passkey owner, or legacy humans without passkeys | a passkey owner (`OWNER_ASSERTION_REQUIRED`) |
+| A human on a tenant that exists | refused unless registered and presented as it is | refused, except the owner's repeated genesis request |
+
+`HELM_GATEWAY_OWNER_ORIGINS` (chart `gateway.ownerOrigins`) configures the exact
+browser origins accepted for genesis and approval. When unset, only
+`https://<credential rp_id>` is accepted. A configured list replaces that default;
+subdomains and ports are never inferred. Set every served Console origin
+explicitly, for example `https://console.example.org`. Development HTTP requires
+an explicit loopback origin such as `http://localhost:5173`. Wildcards, URL paths,
+credentials, queries and fragments are rejected at startup. The same allowlist
+applies to genesis and subsequent approvals.
+
+The receipt binding is unchanged: binding v1 names the approver principal and
+any step-up proof's issuer and jti, and names no step-up proof when an owner
+assertion alone satisfied it. A later binding version carries the assertion the
+approval row keeps.
 
 ### The digest and compare-and-set
 
@@ -315,24 +407,26 @@ They meet on one identifier only:
 
 Registering grants no authority: authority comes from mandates. It does make a
 human **eligible to approve**, because the gateway takes an approver's kind from
-these rows and never from a token. The Control Plane is trusted to register only
-people, exactly once each: it calls `EnsurePrincipals`, and it mints the decide
-tokens and the step-up proofs those people present. A compromised Control Plane
-issuer could register a human it controls and approve with it. The external
-subject rule stops a person from being two principals; it does not stop the
-issuer from inventing a person. Closing that gap needs the gateway to verify the
-approver's passkey itself, against a credential registry it holds (§10.1 of the
-target architecture); the step-up proof of this contract is the issuer's
-attestation of that check, and says so.
+these rows and never from a token. The Control Plane registers people only at a
+tenant's genesis; afterwards a person joins only through an approved plan
+([Humans and passkeys](#humans-and-passkeys)). The gateway verifies the
+approver's passkey itself against the credentials it holds
+(`authority_principal_credentials`); the step-up proof is the issuer's
+attestation of that check, which a compromised issuer can mint, so with
+`HELM_GATEWAY_OWNER_ASSERTION_REQUIRED` on it no longer approves an authority
+widening. Genesis is trust on first use: the registrar chooses the passkey it
+enrols for the owner, and the genesis assertion proves possession of it, not
+who holds it.
 
 ## Bootstrapping a tenant
 
 1. `EnsurePrincipals`: the organization's service principal (kind `service`,
    the requester of every plan), the workload principal that dispatches, and the
-   owner and other humans (kind `human`, each with the Control Plane's user id as
-   external subject).
+   owner (kind `human`, with the Control Plane's user id as external subject,
+   its one passkey and the genesis assertion). Other humans come through a plan.
 2. `Propose` `helm.authority.provision.v1` with `base_plan_digest` empty. The
-   owner approves with step-up. The Control Plane dispatches and observes.
+   owner approves with its owner assertion over `owner_challenge`. The Control
+   Plane dispatches and observes.
 3. Later plans carry the applied digest as `base_plan_digest`. A plan that only
    narrows goes as `helm.authority.narrow.v1` and needs no approval.
 4. `GetProvisioning` shows the applied digest and the mandate of each node; the
@@ -349,17 +443,21 @@ carry:
 | Propose (`invalid_argument`) | `SCHEMA_VIOLATION` | the arguments break their closed schema or one of the rules above |
 | Propose (`permission_denied`) | `INSUFFICIENT_PRIVILEGE` | a `narrow` plan from a principal that is not the organization's provisioner |
 | Propose (`failed_precondition`) | `PRECONDITION_FAILED` | `base_plan_digest` is not the applied plan's digest; a `narrow` plan with nothing applied; `disable_principals` names a principal the applied plan does not list, the requester, or in a `narrow` plan a human |
+| Propose (`failed_precondition`), Dispatch outcome (`FAILED`) | `STAGE_CEILING_EXCEEDED` | the mandates grant more than the plan's stage allows |
+| Propose (`failed_precondition`), Dispatch outcome (`FAILED`) | `STAGE_RAISE_REQUIRES_PROVISION` | a `narrow` plan ranks above the applied stage |
 | Propose (`DENIED`) | `INSUFFICIENT_PRIVILEGE`, `PRINCIPAL_INACTIVE`, `EMERGENCY_STOP_FENCED` | the requester is not an active service principal; a stop covers it or the tenant |
-| Approve | `APPROVER_NOT_DISTINCT`, `INSUFFICIENT_PRIVILEGE`, `STEP_UP_REQUIRED` | the effect API's rules for approval |
+| Approve | `APPROVER_NOT_DISTINCT`, `INSUFFICIENT_PRIVILEGE`, `STEP_UP_REQUIRED`, `OWNER_ASSERTION_REQUIRED` | the effect API's rules for approval; an owner assertion that does not verify, or, with the flag on, a widening without one |
 | Dispatch outcome (`FAILED`) | `PRECONDITION_FAILED` | the base moved after Propose; a holder is not registered; the plan does not fit the organization |
 | Dispatch outcome (`FAILED`) | `PRINCIPAL_INACTIVE` | a holder or a listed principal is disabled |
 | Dispatch outcome (`FAILED`) | `DELEGATION_SCOPE_VIOLATION` | a child mandate is wider than its parent, or a narrow plan would widen |
 | Dispatch outcome (`FAILED`) | `EMERGENCY_STOP_FENCED` | delegation under an active stop; a plan that would re-create a mandate under an active mandate stop |
-| Dispatch outcome (`FAILED`) | `IDENTITY_ISOLATION_VIOLATION` | a plan re-types a principal or gives a human's subject to another |
+| Dispatch outcome (`FAILED`) | `IDENTITY_ISOLATION_VIOLATION` | a plan re-types a principal or gives a human's subject to another; a plan enrols a credential id the tenant has for another principal or key |
 
 `AuthorityAdminService` errors carry the codes in the service comment of the
 proto; an `EnsurePrincipals` conflict is `already_exists`
-(`IDENTITY_ISOLATION_VIOLATION`).
+(`IDENTITY_ISOLATION_VIOLATION`), a new human or passkey on a tenant that exists
+is `permission_denied` (`INSUFFICIENT_PRIVILEGE`), and a genesis assertion that
+does not verify is `permission_denied` (`OWNER_ASSERTION_REQUIRED`).
 
 ## Limits and trust
 
@@ -369,9 +467,10 @@ proto; an `EnsurePrincipals` conflict is `already_exists`
   that narrows it in bulk. `Stop` (an operator's single-use token) and `Lift`
   are unchanged, and `helm.authority.lift` remains the one way to end a stop.
 - What the approval establishes: the approver approved the plan bytes whose
-  digest the approval digest names, and presented a step-up proof for it. It does
-  not establish that the approver's client rendered those bytes truthfully
-  (§10.1 of the target architecture).
+  digest the approval digest names, and presented its own passkey assertion
+  over them, which the gateway verified (or, with the flag off, a step-up proof
+  the issuer signed). It does not establish that the approver's client rendered
+  those bytes truthfully (§10.1 of the target architecture).
 - Who may approve is the Control Plane's decision: any active human principal of
   the tenant other than the requester can decide any attempt (ApprovalRule
   approvers are gap K5), so "a distinct human" is distinct from the requester

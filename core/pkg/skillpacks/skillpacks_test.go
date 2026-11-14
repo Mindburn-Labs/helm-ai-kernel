@@ -73,7 +73,7 @@ func TestRepoScopedCodexInstallWritesProjectionAndReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	repoRoot := t.TempDir()
-	result, err := Install(pack, InstallRequest{Agent: "codex", Scope: ScopeRepo, RepoRoot: repoRoot})
+	result, err := installPinned(t, pack, InstallRequest{Agent: "codex", Scope: ScopeRepo, RepoRoot: repoRoot})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,36 +174,6 @@ func TestMarketplaceRejectsPluginOutsideRepo(t *testing.T) {
 	}
 }
 
-func TestVerifiedFirstPartySkillRejectsMismatchedSignature(t *testing.T) {
-	root := writeTestSkill(t, Manifest{
-		SchemaVersion:              "helm.skillpack.v1",
-		ID:                         "helm/repo-auditor",
-		Name:                       "Repo Auditor",
-		Version:                    "0.1.0",
-		Description:                "verified skill",
-		Publisher:                  "Mindburn-Labs",
-		Status:                     StatusVerified,
-		ScopeDefault:               ScopeRepo,
-		Risk:                       "LOW",
-		LicenseSPDX:                "Apache-2.0",
-		SignatureRef:               "helm-first-party://skills/wrong/0.1.0",
-		PublisherKeyRef:            "helm-first-party-keyring-v1",
-		PolicyRef:                  "policies/skills/first-party.safe.toml",
-		PermissionsDoNotGrantTools: true,
-	}, "This skill does not grant tool permissions.")
-	pack, err := LoadDir(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := Scan(pack)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Verdict != VerdictDeny || result.ReasonCode != "ERR_SKILL_SIGNATURE_INVALID" {
-		t.Fatalf("Scan = %+v, want signature DENY", result)
-	}
-}
-
 func TestProjectionPathsCoverSupportedAgents(t *testing.T) {
 	root := t.TempDir()
 	cases := []string{"codex", "claude-code", "cursor", "opencode", "generic"}
@@ -267,7 +237,7 @@ func TestCursorFirstInstallIntentRecoversAfterReceiptFailure(t *testing.T) {
 	if err := os.Remove(receiptBlocker); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root})
+	result, err := installPinned(t, pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +303,7 @@ func TestCursorFirstInstallIntentRejectsNonExactRetry(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := Install(retry, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); !errors.Is(err, tt.wantErr) {
+			if _, err := installPinned(t, retry, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); !errors.Is(err, tt.wantErr) {
 				t.Fatalf("non-exact retry error = %v, want %v", err, tt.wantErr)
 			}
 			storeAfter, err := os.ReadFile(storePath)
@@ -354,7 +324,7 @@ func TestCursorRepositoryRootSymlinkAliases(t *testing.T) {
 		first := newCursorInstallTestPack(t, "1.0.0", "first alias prompt")
 		second := newCursorInstallTestPack(t, "2.0.0", "upgraded alias prompt")
 
-		result, err := Install(first, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot})
+		result, err := installPinned(t, first, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -371,7 +341,7 @@ func TestCursorRepositoryRootSymlinkAliases(t *testing.T) {
 			t.Fatalf("alias install store = %+v err=%v", store, err)
 		}
 
-		if _, err := Install(second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
+		if _, err := installPinned(t, second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Revoke(aliasRoot, second.Manifest.ID); err != nil {
@@ -406,7 +376,7 @@ func TestCursorRepositoryRootSymlinkAliases(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := Install(second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
+		if _, err := installPinned(t, second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Revoke(realRoot, second.Manifest.ID); err != nil {
@@ -424,7 +394,7 @@ func TestCursorRepositoryRootSymlinkAliases(t *testing.T) {
 			t.Skipf("symlinks unavailable: %v", err)
 		}
 		pack := newCursorInstallTestPack(t, "1.0.0", "must remain inside root")
-		if _, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot}); !errors.Is(err, ErrProjectionPathUnsafe) {
+		if _, err := installPinned(t, pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot}); !errors.Is(err, ErrProjectionPathUnsafe) {
 			t.Fatalf("managed path symlink error = %v", err)
 		}
 		outsideRule := filepath.Join(outside, "rules", "test", "good.md")
@@ -453,7 +423,7 @@ func TestCursorLegacyInstallMigrationResumesAndRevokes(t *testing.T) {
 			newPack := newCursorInstallTestPack(t, "2.0.0", "nested Cursor prompt")
 			legacyPath, canonicalPath := seedCursorInstallTransition(t, root, oldPack, newPack, tt.transitionStore, tt.writeCanonical, tt.removeLegacy)
 
-			result, err := Install(newPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root})
+			result, err := installPinned(t, newPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -521,7 +491,7 @@ func TestCursorLegacyInstallMigrationRejectsDriftWithoutMutation(t *testing.T) {
 			}
 			canonicalBefore, canonicalErr := os.ReadFile(canonicalPath)
 
-			if result, err := Install(newPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err == nil {
+			if result, err := installPinned(t, newPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err == nil {
 				t.Fatalf("drift migration result=%+v err=%v", result, err)
 			}
 			storeAfter, err := os.ReadFile(storePath)
@@ -598,7 +568,7 @@ func TestCursorLegacyPathOwnershipCollisionFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Install(next, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); !errors.Is(err, ErrProjectionDrift) {
+	if _, err := installPinned(t, next, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); !errors.Is(err, ErrProjectionDrift) {
 		t.Fatalf("colliding migration error = %v", err)
 	}
 	if _, err := Revoke(root, owner.Manifest.ID); !errors.Is(err, ErrProjectionDrift) {
@@ -622,7 +592,7 @@ func TestCursorCollapsedStoreRecoversLegacyPathFromReceipt(t *testing.T) {
 		nextPack := newCursorInstallTestPack(t, "3.0.0", "next nested prompt")
 		legacyPath, canonicalPath := seedCollapsedCursorStore(t, root, oldPack, currentPack, true)
 
-		if _, err := Install(nextPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err != nil {
+		if _, err := installPinned(t, nextPack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
@@ -784,7 +754,8 @@ func TestGitHubSkillRefRequiresPinnedDigestAndImmutableRef(t *testing.T) {
 }
 
 // writeTestSkill writes the pack into the registry of a minimal repository,
-// with the policy file its manifest names, where Scan resolves that policy.
+// with a policy file where its manifest's policy_ref points. The scan reads no
+// policy from there; the file shows that its presence changes nothing.
 func writeTestSkill(t *testing.T, manifest Manifest, skill string) string {
 	t.Helper()
 	repo := t.TempDir()
@@ -826,7 +797,7 @@ func interruptCursorFirstInstallAfterPublish(t *testing.T, root string, pack Ski
 	if err := os.WriteFile(receiptBlocker, []byte("block receipt directory"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err == nil {
+	if _, err := installPinned(t, pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err == nil {
 		t.Fatal("expected receipt failure after Cursor projection publish")
 	}
 	canonical, err := projectionRelativePath(pack.Manifest.ID, "cursor")

@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-87 controls: 50 enforced (1 of them by CI gates), 23 observed-only, 14 unmanaged (13 of them retired invariants).
+93 controls: 57 enforced (1 of them by CI gates), 22 observed-only, 14 unmanaged (13 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -113,7 +113,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
 | CTL-015 | Effect reservation before dispatch | observed-only | Retired (helm-tracker#266): the effect reservation admitter and the generic api.IdempotencyMiddleware had no shipped caller and were deleted, with the Postgres tests that proved only the library. No code in this tree holds the rule. |
-| CTL-016 | Spend proxy quotes before dispatch | enforced | — |
+| CTL-016 | Historical spend receipt evidence verification | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 | CTL-018 | Tainted-data egress deny | enforced | — |
 | CTL-019 | Guardian threat-scan gate | enforced | — |
@@ -123,7 +123,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-023 | Untenanted stores serve only the configured tenant | enforced | — |
 | CTL-024 | Policy reconciliation fails closed | enforced | — |
 | CTL-025 | MCP authorize-call quarantine firewall | enforced | — |
-| CTL-026 | Non-loopback listeners require auth | observed-only | Reachable and tested, but deleting the check makes the listener start and block, so the refusal tests hang rather than fail. A removal proof needs a test that asserts the refusal without serving; none exists yet. |
+| CTL-026 | Non-loopback listeners require auth | enforced | — |
 | CTL-027 | Offline update-bundle verification | enforced | — |
 | CTL-028 | External host receipt-chain verification | enforced | — |
 | CTL-029 | Operator TUI typed ceremony | enforced | — |
@@ -160,6 +160,12 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-060 | Gateway receipts verify offline with their bindings | enforced | — |
 | CTL-061 | TON Acton runs local, fork and testnet only, and never tenant code beside a key | enforced | — |
 | CTL-062 | Gateway sandbox effects stay in their tenant and hold no provider key | enforced | — |
+| CTL-067 | An authority plan's stage is a ceiling on what it grants | enforced | — |
+| CTL-068 | Authority comes from the owner's passkey | enforced | — |
+| CTL-063 | The evaluated action and its effect class come from the request tuple and the catalog | enforced | — |
+| CTL-064 | Receipt verifiers match member names exactly and do not check unversioned receipts | enforced | — |
+| CTL-065 | A Skill Pack is first party only by a digest compiled into the binary | enforced | — |
+| CTL-066 | A model call's hold bounds what the provider can bill | enforced | — |
 
 ---
 

@@ -82,6 +82,19 @@ assert_not_contains() {
     fi
 }
 
+# Helm versions report JSON-schema locations either as dotted keys or JSON
+# pointers. Both must identify the exact field in the failed render.
+assert_schema_path() {
+    file="$1"
+    path="$2"
+    pointer="/${path//./\/}"
+    if ! grep -qF -- "$path" "$file" && ! grep -qF -- "$pointer" "$file"; then
+        echo "::error::schema refusal did not identify $path"
+        cat "$file"
+        exit 1
+    fi
+}
+
 PRODUCTION_NETWORK_POLICY_VALUES="scripts/ci/helm_production_network_policy_values.yaml"
 
 production_helm_runner() {
@@ -189,7 +202,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::chart render with an unpinned authority init image unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$runtime_init_fail_log" "runtimeInit.image"
+assert_schema_path "$runtime_init_fail_log" "runtimeInit.image"
 
 synthetic_telemetry_rendered="$RENDER_DIR/rendered-synthetic-telemetry.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -333,7 +346,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::emergency-stop render without command authority unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$emergency_stop_missing_authority_log" "helm.emergencyStop.commandPublicKeys"
+assert_schema_path "$emergency_stop_missing_authority_log" "helm.emergencyStop.commandPublicKeys"
 
 openclaw_rendered="$RENDER_DIR/rendered-openclaw.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -371,7 +384,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::OpenClaw render with a provider outside the OpenRouter egress boundary unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$openclaw_provider_fail_log" "launchpadApps.openclaw.model"
+assert_schema_path "$openclaw_provider_fail_log" "launchpadApps.openclaw.model"
 
 hermes_job_rendered="$RENDER_DIR/rendered-hermes-job.yaml"
 helm_runner template "$RELEASE" "$CHART" \
@@ -419,7 +432,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::Hermes render with invalid mode unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
+assert_schema_path "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
 
 fail_log="$RENDER_DIR/production-missing-key.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -457,7 +470,7 @@ if helm_runner template "$RELEASE" "$CHART" \
     echo "::error::render with a malformed Kernel image digest unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$image_digest_invalid_log" "image.digest"
+assert_schema_path "$image_digest_invalid_log" "image.digest"
 
 network_policy_disabled_log="$RENDER_DIR/production-network-policy-disabled.log"
 if helm_runner template "$RELEASE" "$CHART" \
@@ -503,7 +516,7 @@ if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     echo "::error::production render without runtime tenant unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$tenant_fail_log" "helm.auth.tenantID"
+assert_schema_path "$tenant_fail_log" "helm.auth.tenantID"
 
 principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -516,7 +529,7 @@ if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     echo "::error::production render without runtime principal unexpectedly succeeded"
     exit 1
 fi
-assert_contains "$principal_fail_log" "helm.auth.principalID"
+assert_schema_path "$principal_fail_log" "helm.auth.principalID"
 
 postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
@@ -995,6 +1008,16 @@ assert_contains "$gateway_rendered" "name: HELM_GATEWAY_ACTIVITY_SOURCES_FILE"
 assert_contains "$gateway_rendered" 'value: "45s"'
 assert_contains "$gateway_rendered" "path: activity-webhook-secret"
 assert_contains "$gateway_rendered" 'value: "90s"'
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_OWNER_ORIGINS"
+gateway_owner_rendered="$RENDER_DIR/rendered-gateway-owner.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.ownerAssertionRequired=true \
+    --set-string 'gateway.ownerOrigins[0]=https://console.helm.example' \
+    --set-string 'gateway.ownerOrigins[1]=http://localhost:5173' >"$gateway_owner_rendered"
+assert_contains "$gateway_owner_rendered" "name: HELM_GATEWAY_OWNER_ASSERTION_REQUIRED"
+assert_contains "$gateway_owner_rendered" "name: HELM_GATEWAY_OWNER_ORIGINS"
+assert_contains "$gateway_owner_rendered" 'value: "https://console.helm.example,http://localhost:5173"'
 assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"example/repo\"]'
 # Secret file modes (s3a review L2): the GitHub App Secret, the TLS key and
 # the bootstrap password are mounted 0400 (defaultMode 256). The Pod's
@@ -1220,7 +1243,17 @@ expect_gateway_render_failure() {
         echo "::error::gateway render ${name} unexpectedly succeeded"
         exit 1
     fi
-    assert_contains "$log" "$message"
+    if [ "$message" = 'is required' ]; then
+        if ! grep -qF 'is required' "$log" && ! grep -qF 'missing property' "$log"; then
+            echo "::error::gateway render $name did not reject the missing property"
+            cat "$log"
+            exit 1
+        fi
+    elif [[ "$message" =~ ^[[:alnum:]_]+(\.[[:alnum:]_]+)+$ ]]; then
+        assert_schema_path "$log" "$message"
+    else
+        assert_contains "$log" "$message"
+    fi
 }
 for required in \
     "gateway.tls.existingSecret|requires gateway.tls.existingSecret" \
@@ -1362,8 +1395,8 @@ assert len(profiles)==2 and len(set(profiles))==2, profiles
 assert any(n.endswith('-worker') for n in profiles)
 assert any(n.endswith('-executor') for n in profiles)
 PYNAMES
-expect_gateway_render_failure executor-too-long '900' "${episode_args[@]}" --set gateway.executor.maxTTLSeconds=901
-expect_gateway_render_failure worker-too-long '3600' "${episode_args[@]}" --set gateway.worker.maxTTLSeconds=3601
+expect_gateway_render_failure executor-too-long 'gateway.executor.maxTTLSeconds' "${episode_args[@]}" --set gateway.executor.maxTTLSeconds=901
+expect_gateway_render_failure worker-too-long 'gateway.worker.maxTTLSeconds' "${episode_args[@]}" --set gateway.worker.maxTTLSeconds=3601
 expect_gateway_render_failure executor-audience-only 'requires that listener' "${GATEWAY_ARGS[@]}" --set gateway.executor.audience=helm-gateway-executor:smoke
 expect_gateway_render_failure model-routes-no-listener 'requires a worker or executor listener' "${GATEWAY_ARGS[@]}" --set gateway.models.routesConfigMap=gw-model-routes
 expect_gateway_render_failure model-secret-no-routes 'requires gateway.models.routesConfigMap' "${GATEWAY_ARGS[@]}" --set gateway.models.credentialsSecret=gw-model-providers
@@ -1465,10 +1498,10 @@ done
 for null_field in serving serving.image serving.image.repository serving.image.tag serving.image.digest serving.executable; do
     expect_gateway_render_failure "serving-null-${null_field##*.}" 'is required' "${GATEWAY_ARGS[@]}" --set-json "gateway.$null_field=null"
 done
-expect_gateway_render_failure serving-command-array 'Expected: string' "${GATEWAY_ARGS[@]}" \
+expect_gateway_render_failure serving-command-array 'gateway.serving.executable' "${GATEWAY_ARGS[@]}" \
     --set-json 'gateway.serving.executable=["/app/helm-model-gateway"]'
-expect_gateway_render_failure serving-unknown-field 'Additional property' "${GATEWAY_ARGS[@]}" --set gateway.serving.command=ignored
-expect_gateway_render_failure serving-unknown-image-field 'Additional property' "${GATEWAY_ARGS[@]}" --set gateway.serving.image.pullPolicy=Always
+expect_gateway_render_failure serving-unknown-field 'command' "${GATEWAY_ARGS[@]}" --set gateway.serving.command=ignored
+expect_gateway_render_failure serving-unknown-image-field 'pullPolicy' "${GATEWAY_ARGS[@]}" --set gateway.serving.image.pullPolicy=Always
 serving_production_tag_log="$RENDER_DIR/gateway-serving-production-tag.log"
 if production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
     "${gateway_production_args[@]}" "${gateway_serving_args[@]}" "${gateway_serving_selection[@]}" \

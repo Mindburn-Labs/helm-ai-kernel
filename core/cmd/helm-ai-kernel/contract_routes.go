@@ -35,6 +35,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 const (
@@ -1790,33 +1791,16 @@ func (v *evidenceVerification) add(name string, status receiptverify.Verdict, de
 // fails the bundle; otherwise any UNVERIFIABLE check, or a required check that
 // did not run, leaves it UNVERIFIABLE; only a full set of VERIFIED checks
 // verifies it. No checks at all is FAILED, never a pass.
+//
+// The rule itself is verifier.Conclude, the same one `helm-ai-kernel verify`
+// reports with, so the route and the CLI cannot drift apart on what a missing
+// or unverifiable check means.
 func (v *evidenceVerification) conclude() {
-	v.Outcome = receiptverify.VerdictFailed
-	if len(v.ChecksRun) == 0 {
-		return
-	}
-	ran := make(map[string]bool, len(v.ChecksRun))
-	unverifiable := false
+	outcomes := make([]verifier.CheckOutcome, 0, len(v.ChecksRun))
 	for _, check := range v.ChecksRun {
-		ran[check.Name] = true
-		switch check.Status {
-		case receiptverify.VerdictVerified:
-		case receiptverify.VerdictUnverifiable:
-			unverifiable = true
-		default:
-			return
-		}
+		outcomes = append(outcomes, verifier.CheckOutcome{Name: check.Name, Status: verifier.CheckStatus(check.Status)})
 	}
-	for _, name := range evidenceChecksRequiredForVerified {
-		if !ran[name] {
-			unverifiable = true
-		}
-	}
-	if unverifiable {
-		v.Outcome = receiptverify.VerdictUnverifiable
-		return
-	}
-	v.Outcome = receiptverify.VerdictVerified
+	v.Outcome = verifier.Conclude(outcomes, evidenceChecksRequiredForVerified).Outcome
 }
 
 func verifyEvidenceRequest(r *http.Request, svc *Services) evidenceVerification {
@@ -1850,6 +1834,16 @@ func verifyEvidenceRequest(r *http.Request, svc *Services) evidenceVerification 
 
 // readEvidenceVerificationInput reads the uploaded bundle and its receipts,
 // sorted by session and Lamport clock.
+//
+// Each receipt file is read by receiptverify.ParseReceipt, the parser
+// receipt_verify uses, so one rule decides what a receipt document is. The
+// signature profile is left to verifyTrustedEvidenceReceipt, which checks the
+// hybrid and ML-DSA profiles that parser's own verifier does not know. A file
+// that writes a member twice, or spells a receipt member in another letter
+// case, says one thing to encoding/json and another to a reader that matches
+// names exactly; the bundle seal cannot vouch for it, because whoever holds
+// the bundle seals it. Such a file makes the bundle unreadable (bundle_format
+// FAILED) before any receipt check runs.
 func readEvidenceVerificationInput(r *http.Request) ([]byte, *evidenceBundle, []*contracts.Receipt, error) {
 	raw, err := readEvidenceBundleRequest(r)
 	if err != nil {
@@ -1864,11 +1858,11 @@ func readEvidenceVerificationInput(r *http.Request) ([]byte, *evidenceBundle, []
 		if !strings.HasPrefix(name, "receipts/") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		var receipt contracts.Receipt
-		if err := json.Unmarshal(data, &receipt); err != nil {
+		receipt, err := receiptverify.ParseReceipt(data, receiptverify.AnySignatureProfile)
+		if err != nil {
 			return nil, nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
-		receipts = append(receipts, &receipt)
+		receipts = append(receipts, receipt)
 	}
 	if len(receipts) == 0 {
 		return nil, nil, nil, errors.New("no receipts in evidence bundle")
@@ -2170,6 +2164,12 @@ func receiptRequiresEvidenceArtifact(receipt *contracts.Receipt) bool {
 // trust anchor. A receipt that fails there but verifies under the key it
 // carries itself is UNVERIFIABLE: intact, but not signed by this runtime. The
 // carried key never makes a receipt VERIFIED.
+//
+// A receipt with no signature_version is not checked, and so is UNVERIFIABLE
+// too. This route does not opt in to the legacy preimage
+// (helmcrypto.AllowLegacyReceiptPreimages): the signature of a receipt.v5
+// receipt this runtime issued verifies under it for an unversioned receipt
+// that says something else.
 func checkEvidenceReceiptSignatures(result *evidenceVerification, receipts []*contracts.Receipt, svc *Services) {
 	var failed, unverifiable []string
 	for _, receipt := range receipts {
@@ -2180,7 +2180,7 @@ func checkEvidenceReceiptSignatures(result *evidenceVerification, receipts []*co
 			err := verifyTrustedEvidenceReceipt(svc, receipt)
 			switch {
 			case err == nil:
-			case errors.Is(err, errNoTrustedReceiptVerifier):
+			case errors.Is(err, errNoTrustedReceiptVerifier), errors.Is(err, helmcrypto.ErrLegacyReceiptRefused):
 				unverifiable = append(unverifiable, fmt.Sprintf("%s not checked: %v", receipt.ReceiptID, err))
 			case receiptVerifiesUnderCarriedKey(receipt):
 				unverifiable = append(unverifiable, fmt.Sprintf("%s is signed by a key it carries, not by the runtime trust anchor: %v", receipt.ReceiptID, err))
@@ -2196,7 +2196,7 @@ func checkEvidenceReceiptSignatures(result *evidenceVerification, receipts []*co
 			append(failed, unverifiable...)...)
 	case len(unverifiable) > 0:
 		result.add(evidenceCheckReceiptSignatures, receiptverify.VerdictUnverifiable,
-			fmt.Sprintf("%d of %d receipts could not be checked against the runtime trust anchor", len(unverifiable), len(receipts)),
+			fmt.Sprintf("%d of %d receipts were not checked or do not verify under the runtime trust anchor", len(unverifiable), len(receipts)),
 			unverifiable...)
 	default:
 		result.add(evidenceCheckReceiptSignatures, receiptverify.VerdictVerified,
@@ -2260,7 +2260,11 @@ var errNoTrustedReceiptVerifier = errors.New("trusted receipt signer unavailable
 
 // verifyTrustedEvidenceReceipt verifies against the runtime trust anchor, not
 // receipt-provided public keys. A self-signed uploaded bundle is consistency
-// evidence only and must not become its own authority.
+// evidence only and must not become its own authority. A receipt with no
+// signature_version is refused with helmcrypto.ErrLegacyReceiptRefused by
+// every branch below, the KeyRing included: none passes
+// AllowLegacyReceiptPreimages. A signer of another type that exposes
+// VerifyReceipt answers for itself.
 func verifyTrustedEvidenceReceipt(svc *Services, receipt *contracts.Receipt) error {
 	if svc == nil || svc.ReceiptSigner == nil {
 		return errNoTrustedReceiptVerifier

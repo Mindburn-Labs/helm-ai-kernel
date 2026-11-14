@@ -289,11 +289,11 @@ func (p *pending) input(n int) admission.ProposeInput {
 	}
 }
 
-// price fixes the call's arguments and its worst-case quote in usd_micros, with
-// a zero amount for every other unit the chain sums (a sum limit needs an
-// amount for its unit), and the mandate that covers the route.
+// price fixes the call's arguments and the quote that bounds its bill, in
+// usd_micros, with a zero amount for every other unit the chain sums (a sum
+// limit needs an amount for its unit), and the mandate that covers the route.
 func (p *pending) price(grants admission.Grants) *apiError {
-	held, err := p.route.Quote(int64(len(p.call.Body)), p.call.MaxOutputTokens, p.call.MayWriteCache)
+	held, err := p.route.Quote(p.call.inputBound(p.call.Body), p.call.MaxOutputTokens, p.call.MayWriteCache)
 	if err != nil {
 		e := refuse(http.StatusBadRequest, kindInvalidRequest, "price_overflow", "the worst-case price of this call does not fit: "+err.Error())
 		e.Reason = contracts.ReasonArithmeticOverflow
@@ -332,6 +332,9 @@ func (h *handler) call(api string) http.HandlerFunc {
 			return
 		}
 		c, aerr := inspect(h.g.Config, api, body)
+		if aerr == nil {
+			aerr = anthropicBetaRefusal(api, r.Header)
+		}
 		if aerr != nil {
 			fail(aerr)
 			return

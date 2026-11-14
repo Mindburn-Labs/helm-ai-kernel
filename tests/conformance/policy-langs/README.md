@@ -88,5 +88,4 @@ reproducible counter-example printed inline in the failure message.
 
 The acceptance bar for the proposed Tier-2 conformance axis "policy
 language equivalence" (Profile v1.1) is exactly this suite plus the
-documented gap list. See `docs/architecture/formal-soundness.md` and
-`tests/conformance/profile-v1/checklist.yaml`.
+documented gap list. See `tests/conformance/profile-v1/checklist.yaml`.

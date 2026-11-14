@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -1057,6 +1058,46 @@ func TestProjectionLifecycleRejectsRetainedArtifactInstallWithoutRollbackPermit(
 	}
 	if len(state.Generations) != 2 {
 		t.Fatalf("retained artifact reinstall appended generation: %+v", state.Generations)
+	}
+}
+
+// helm-tracker#311: the lifecycle's verifier signs a decision that carries
+// manifest_status onward. A manifest that declares itself verified by copying
+// what a first-party manifest declares must not get that far.
+func TestProjectionLifecycleRejectsVerifiedStatusThePackOnlyDeclares(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		status string
+		reject bool
+	}{
+		{name: "verified claim with copied first-party strings", status: StatusVerified, reject: true},
+		{name: "same pack without the claim", status: StatusExperimental},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle := newProjectionLifecycleForTest(t, root, now)
+			fixture := newProjectionFixtureWithManifest(t, "0.2.0", "governed prompt", 1, "codex", now, func(manifest *Manifest) {
+				manifest.Publisher = "Mindburn-Labs"
+				manifest.Status = tc.status
+				manifest.LicenseSPDX = "Apache-2.0"
+				manifest.SignatureRef = "helm-first-party://skills/repo-auditor/0.2.0"
+				manifest.PublisherKeyRef = "helm-first-party-keyring-v1"
+			})
+			_, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+			if !tc.reject {
+				if err != nil {
+					t.Fatalf("the pack without the claim was refused: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrProjectionTrustRejected) || !strings.Contains(err.Error(), "declares status verified") {
+				t.Fatalf("Apply error = %v, want the verified claim rejected", err)
+			}
+			if _, statErr := os.Lstat(projectionLivePath(root, fixture.effect)); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("a rejected projection was published: %v", statErr)
+			}
+		})
 	}
 }
 
@@ -3457,6 +3498,12 @@ func newProjectionFixture(t *testing.T, version, content string, generation uint
 }
 
 func newProjectionFixtureForAgent(t *testing.T, version, content string, generation uint64, agent string, now time.Time) projectionFixture {
+	return newProjectionFixtureWithManifest(t, version, content, generation, agent, now, func(*Manifest) {})
+}
+
+// newProjectionFixtureWithManifest builds the fixture around a manifest the
+// caller adjusts before it is hashed into the effect.
+func newProjectionFixtureWithManifest(t *testing.T, version, content string, generation uint64, agent string, now time.Time, adjust func(*Manifest)) projectionFixture {
 	t.Helper()
 	contentBytes := []byte(content)
 	manifest := Manifest{
@@ -3469,11 +3516,15 @@ func newProjectionFixtureForAgent(t *testing.T, version, content string, generat
 		AgentTargets:  []string{agent}, PermissionsDoNotGrantTools: true,
 		ContentHash: HashBytes(contentBytes),
 	}
+	adjust(&manifest)
 	manifestBytes, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	manifestHash := HashBytes(manifestBytes)
+	// The effect requires its refs sorted, whatever the adjusted manifest names.
+	certificationRefs := []string{manifest.ProvenanceRef, manifest.SignatureRef}
+	sort.Strings(certificationRefs)
 	artifactHash, err := contracts.ComputeSkillProjectionArtifactHash(manifestHash, manifest.ContentHash)
 	if err != nil {
 		t.Fatal(err)
@@ -3485,7 +3536,7 @@ func newProjectionFixtureForAgent(t *testing.T, version, content string, generat
 		SkillVersion: version, AgentTarget: agent,
 		ArtifactHash: artifactHash, ContentHash: manifest.ContentHash, ManifestHash: manifestHash,
 		PolicyHash: HashBytes([]byte(manifest.PolicyRef)), SchemaHash: contracts.SkillProjectionArtifactSchemaHashV1,
-		CertificationRefs: []string{manifest.ProvenanceRef, manifest.SignatureRef},
+		CertificationRefs: certificationRefs,
 		ConsumedPermitRef: testHash(string(rune('a' + generation))),
 		IdempotencyKey:    "install-" + version, AttemptID: "attempt-install-" + version, Generation: generation,
 		ExpiresAt: now.Add(time.Hour), Nonce: strings.Repeat(string(rune('0'+generation)), 64),

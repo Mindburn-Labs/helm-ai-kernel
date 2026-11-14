@@ -111,7 +111,10 @@ Example-only means the repository contains a starter layout and smoke script. It
 
 ## Policy Languages
 
-HELM AI Kernel supports CEL, Rego, and Cedar policy bundle examples.
+HELM AI Kernel keeps CEL, Rego, and Cedar policy examples. Runtime decisions
+use CEL expressions in a serve policy pack; `bundle build` compiles the Rego
+and Cedar examples and rejects the CEL one, and no shipped command evaluates a
+Rego or Cedar bundle.
 
 | Language | Source example | Notes |
 | --- | --- | --- |

@@ -25,6 +25,9 @@ import (
 //     requester, and a narrowing plan never a human: a disabled principal is
 //     never re-enabled, so one plan cannot lock out another organization's
 //     principals or a person.
+//   - A narrowing plan never raises the stage (STAGE_RAISE_REQUIRES_PROVISION):
+//     a rung is raised only by a provision plan, which a distinct human
+//     approves. What a stage lets the mandates grant is CheckStage.
 func Precheck(c *Compiled, applied *Applied, requester string) *adapters.Refusal {
 	plan := c.Plan
 	narrow := plan.Schema == effectargs.AuthorityNarrow
@@ -40,6 +43,11 @@ func Precheck(c *Compiled, applied *Applied, requester string) *adapters.Refusal
 	}
 	if applied != nil && applied.Digest == plan.Digest {
 		return nil
+	}
+	if narrow {
+		if r := checkStageRaise(plan, applied); r != nil {
+			return r
+		}
 	}
 	base := ""
 	if applied != nil {

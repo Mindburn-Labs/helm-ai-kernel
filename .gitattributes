@@ -12,3 +12,12 @@
 # Install the driver once with `make install-merge-drivers`. Without it git
 # falls back to a normal conflict, which is safe — just noisier.
 tools/boundary/protected.manifest merge=helm-derived
+
+# core/pkg/skillpacks/first_party_manifest.json pins these files by SHA-256. A
+# checkout that rewrote their line endings would no longer hold the pinned
+# bytes, and the shipped packs would stop verifying as first party.
+registry/skills/** text eol=lf
+policies/skills/** text eol=lf
+
+# The embedded manifest is compared byte for byte with what the test generates.
+core/pkg/skillpacks/first_party_manifest.json text eol=lf

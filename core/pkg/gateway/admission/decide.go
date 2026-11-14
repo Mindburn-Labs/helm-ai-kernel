@@ -109,10 +109,19 @@ type ApprovalState struct {
 	// transaction (§10.1). Re-admission accepts an approval of an effect that
 	// needs step-up only with it.
 	StepUpVerified bool
+	// OwnerAssertionVerified: the approval carried the approver's own
+	// WebAuthn assertion, which the gateway verified in this transaction
+	// against the approver's enrolled passkey (helm-tracker#334). It satisfies
+	// step-up.
+	OwnerAssertionVerified bool
 
 	// proof is the proof Approve was given. Re-admission uses it up when the
 	// risk it recomputes needs step-up and the stored one did not.
 	proof *StepUp
+	// proofUsed: the proof was used up, so the record and the receipt name it.
+	proofUsed bool
+	// owner is the verified assertion, for the approval record.
+	owner *verifiedAssertion
 }
 
 // Decision is decide's output. Reason is a registry code (§11.1).

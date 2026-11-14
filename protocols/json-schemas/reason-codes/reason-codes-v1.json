@@ -938,6 +938,28 @@
       "domain": "operations",
       "description": "The permit expired before the dispatch claim; it is voided and the effect must be proposed again",
       "since": "1.8.0"
+    },
+    {
+      "code": "STAGE_CEILING_EXCEEDED",
+      "applies_to": ["DENY"],
+      "domain": "privilege",
+      "description": "An authority plan's mandates grant more than its stage allows: a draft plan grants no write but an internal one, and an approval-required plan puts every write behind an approval",
+      "since": "1.9.0"
+    },
+    {
+      "code": "STAGE_RAISE_REQUIRES_PROVISION",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "A narrowing plan cannot raise an organization's stage; a higher stage is a provision plan, which a distinct human approves",
+      "since": "1.9.0"
+    },
+    {
+      "code": "OWNER_ASSERTION_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "Granting or widening authority needs the approver's own passkey assertion, verified by the gateway against a credential enrolled at the tenant's genesis or by an approved plan; the request carried none, or one that did not verify",
+      "since": "1.9.0",
+      "finality": "ungranted"
     }
   ]
 }

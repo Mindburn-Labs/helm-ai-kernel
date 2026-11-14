@@ -1,75 +1,12 @@
+// quantum_posture: offline CLI tests reject malformed classical public-key inputs.
+
 package main
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/spendproxy"
 )
-
-func TestSpendProxyRequiresConfig(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	if code := runSpendProxyCmd([]string{}, &stdout, &stderr); code != 2 {
-		t.Fatalf("exit = %d, want 2", code)
-	}
-	if !strings.Contains(stderr.String(), "--config is required") {
-		t.Fatalf("stderr = %q, want config requirement", stderr.String())
-	}
-}
-
-func TestSpendProxyRequiresAPIKey(t *testing.T) {
-	dir := t.TempDir()
-	config := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(config, []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	t.Setenv("OPENROUTER_API_KEY", "")
-	var stdout, stderr bytes.Buffer
-	if code := runSpendProxyCmd([]string{"--config", config}, &stdout, &stderr); code != 2 {
-		t.Fatalf("exit = %d, want 2", code)
-	}
-	if !strings.Contains(stderr.String(), "API key is required") {
-		t.Fatalf("stderr = %q, want api key requirement", stderr.String())
-	}
-}
-
-func TestSpendProxyRejectsInvalidConfig(t *testing.T) {
-	dir := t.TempDir()
-	config := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(config, []byte(`{"tenant_id":"t"}`), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	t.Setenv("OPENROUTER_API_KEY", "test-key")
-	var stdout, stderr bytes.Buffer
-	if code := runSpendProxyCmd([]string{"--config", config}, &stdout, &stderr); code != 2 {
-		t.Fatalf("exit = %d, want 2", code)
-	}
-	if !strings.Contains(stderr.String(), "treasury_id") {
-		t.Fatalf("stderr = %q, want config validation error", stderr.String())
-	}
-}
-
-func TestSpendProxyExampleConfigLoads(t *testing.T) {
-	// The checked-in dogfood config must stay loadable: it is the price-book
-	// source of record for the HELM-615 capture window.
-	path := filepath.Join("..", "..", "..", "examples", "spend-proxy", "dogfood.config.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("example config not present in this checkout: %v", err)
-	}
-	cfg, sourceHash, err := spendproxy.LoadConfig(path)
-	if err != nil {
-		t.Fatalf("dogfood config failed to load: %v", err)
-	}
-	if !strings.HasPrefix(sourceHash, "sha256:") {
-		t.Fatalf("source hash = %q, want sha256 prefix", sourceHash)
-	}
-	if len(cfg.Envelopes) < 2 {
-		t.Fatalf("dogfood config must declare baseline and substitute envelopes, got %d", len(cfg.Envelopes))
-	}
-}
 
 func TestSpendProxyExportEmptyLogFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
@@ -110,86 +47,10 @@ func TestSpendProxySavingsVerifyRequiresPack(t *testing.T) {
 	}
 }
 
-func TestSpendProxyGenericUpstreamKeyEnv(t *testing.T) {
-	dir := t.TempDir()
-	config := filepath.Join(dir, "config.json")
-	// Invalid config on purpose: with the generic key env set, the command must
-	// get PAST the key check and fail on config parsing instead.
-	if err := os.WriteFile(config, []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	t.Setenv("OPENROUTER_API_KEY", "")
-	t.Setenv("HELM_SPEND_PROXY_SIGNING_SEED", "")
-	t.Setenv("HELM_SPEND_PROXY_UPSTREAM_KEY", "generic-key")
+func TestSpendProxyExportRefusesAMalformedPublicKey(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := runSpendProxyCmd([]string{"--config", config}, &stdout, &stderr); code != 2 {
-		t.Fatalf("exit = %d, want 2", code)
-	}
-	if strings.Contains(stderr.String(), "upstream API key is required") {
-		t.Fatalf("generic env var was not honored: %q", stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "tenant_id is required") {
-		t.Fatalf("expected config validation failure, got: %q", stderr.String())
-	}
-}
-
-func TestSpendProxyDOGradientExampleConfigLoads(t *testing.T) {
-	// The checked-in DigitalOcean Gradient config must stay loadable: it is the
-	// price-book source of record for the HELM-618 savings capture window.
-	path := filepath.Join("..", "..", "..", "examples", "spend-proxy", "dogfood.do-gradient.config.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("example config not present in this checkout: %v", err)
-	}
-	cfg, sourceHash, err := spendproxy.LoadConfig(path)
-	if err != nil {
-		t.Fatalf("DO Gradient config failed to load: %v", err)
-	}
-	if !strings.HasPrefix(sourceHash, "sha256:") {
-		t.Fatalf("source hash = %q, want sha256 prefix", sourceHash)
-	}
-	if len(cfg.Envelopes) < 4 {
-		t.Fatalf("DO Gradient config must declare the baseline and three candidate envelopes, got %d", len(cfg.Envelopes))
-	}
-	var baseline bool
-	for _, env := range cfg.Envelopes {
-		if env.ID == "env-baseline" && !env.AllowModelSubstitution {
-			baseline = true
-		}
-		if env.ID != "env-baseline" && !env.AllowModelSubstitution {
-			t.Fatalf("candidate envelope %s must allow substitution", env.ID)
-		}
-	}
-	if !baseline {
-		t.Fatal("env-baseline with substitution disabled is required")
-	}
-}
-
-func TestSpendProxyInferenceNetExampleConfigLoads(t *testing.T) {
-	// The checked-in Inference.net config is the price-book source of record
-	// for the HELM-618 savings capture window.
-	path := filepath.Join("..", "..", "..", "examples", "spend-proxy", "dogfood.inference-net.config.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("example config not present in this checkout: %v", err)
-	}
-	cfg, sourceHash, err := spendproxy.LoadConfig(path)
-	if err != nil {
-		t.Fatalf("Inference.net config failed to load: %v", err)
-	}
-	if !strings.HasPrefix(sourceHash, "sha256:") {
-		t.Fatalf("source hash = %q, want sha256 prefix", sourceHash)
-	}
-	if len(cfg.Envelopes) < 4 {
-		t.Fatalf("config must declare the baseline and three candidate envelopes, got %d", len(cfg.Envelopes))
-	}
-	if cfg.Balance.OpeningCents > 2000 {
-		t.Fatalf("opening balance %d exceeds the $20 capture ceiling", cfg.Balance.OpeningCents)
-	}
-	for _, env := range cfg.Envelopes {
-		if env.PerRequestMaxCents > 50 {
-			t.Fatalf("envelope %s per-request cap %d exceeds 50 cents", env.ID, env.PerRequestMaxCents)
-		}
-		if (env.ID == "env-baseline") == env.AllowModelSubstitution {
-			t.Fatalf("envelope %s has the wrong substitution posture", env.ID)
-		}
+	code := runSpendProxyExport([]string{"--receipts-dir", t.TempDir(), "--out", t.TempDir(), "--public-key", "ed25519:abcd"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--public-key") {
+		t.Fatalf("exit = %d, stderr = %q; want 2 naming --public-key", code, stderr.String())
 	}
 }

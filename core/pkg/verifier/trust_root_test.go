@@ -129,7 +129,7 @@ func TestEmbeddedSignatureTrustNamesSelfAttestedReceipts(t *testing.T) {
 		},
 	})
 	sealVerifierFixture(t, dir, "test-session-001")
-	report, err := VerifyBundle(dir)
+	report, err := verifyLegacyDevLocalBundle(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -485,6 +485,22 @@ const AuthorityChanged = "AUTHORITY_CHANGED"
 // voided and the effect must be proposed again
 const PermitExpired = "PERMIT_EXPIRED"
 
+// StageCeilingExceeded DENY: An authority plan's mandates grant more than its
+// stage allows: a draft plan grants no write but an internal one, and an
+// approval-required plan puts every write behind an approval
+const StageCeilingExceeded = "STAGE_CEILING_EXCEEDED"
+
+// StageRaiseRequiresProvision DENY: A narrowing plan cannot raise an
+// organization's stage; a higher stage is a provision plan, which a distinct
+// human approves
+const StageRaiseRequiresProvision = "STAGE_RAISE_REQUIRES_PROVISION"
+
+// OwnerAssertionRequired DENY: Granting or widening authority needs the
+// approver's own passkey assertion, verified by the gateway against a
+// credential enrolled at the tenant's genesis or by an approved plan; the
+// request carried none, or one that did not verify
+const OwnerAssertionRequired = "OWNER_ASSERTION_REQUIRED"
+
 var all = [...]string{
 	PolicyViolation,
 	NoPolicyDefined,
@@ -610,6 +626,9 @@ var all = [...]string{
 	StepUpRequired,
 	AuthorityChanged,
 	PermitExpired,
+	StageCeilingExceeded,
+	StageRaiseRequiresProvision,
+	OwnerAssertionRequired,
 }
 
 // All returns every registered reason code, in registry order.

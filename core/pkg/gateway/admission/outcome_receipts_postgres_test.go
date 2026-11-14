@@ -607,7 +607,7 @@ func TestPostgresOutcomeReceiptSchemaUpgradesFrom15(t *testing.T) {
 	must(t, Migrate(ctx, f.owner))
 	version, err := SchemaVersion(ctx, f.owner)
 	must(t, err)
-	if version != HeadVersion() || HeadVersion() != 16 {
+	if version != HeadVersion() || HeadVersion() != 17 {
 		t.Fatalf("schema at %d after migrating, head %d", version, HeadVersion())
 	}
 	countFences()

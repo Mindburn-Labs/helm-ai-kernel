@@ -47,8 +47,8 @@ published drift evidence for that exact version.
   resolved. The live `main protection` ruleset (`16024605`) is the enforcement
   source; this train does not duplicate its mutable configuration. The
   distinct-provider exact-head machine interlock remains an R&D track, not a
-  current merge requirement. Release tags and package publishes require an
-  explicit maintainer action.
+  current merge requirement. A release is cut by pushing its `v<version>` tag;
+  the Release workflow then publishes without a manual approval step.
 - One release has one theme. Do not mix EvidencePack, RiskEnvelope, release
   infrastructure, and product-scope work in the same tag unless the prior tag
   failed and the fix is required to publish correctly.

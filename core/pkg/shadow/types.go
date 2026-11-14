@@ -80,6 +80,11 @@ type Report struct {
 	// FilesSkipped counts files skipped (size limit, binary, etc.).
 	FilesSkipped int `json:"files_skipped"`
 
+	// PathsUnreadable counts entries below the scan root that could not be
+	// traversed, inspected or read. They were skipped: the findings and the
+	// grade describe only what was read.
+	PathsUnreadable int `json:"paths_unreadable"`
+
 	// Findings is the list of signals detected.
 	Findings []Finding `json:"findings"`
 

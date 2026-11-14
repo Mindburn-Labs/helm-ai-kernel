@@ -117,12 +117,23 @@ func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.App
 	}
 	attempt, existing, err := s.Admission.Approve(ctx, id.Caller, id.token(), admission.DecideInput{
 		AttemptID: req.Msg.GetAttemptId(), ApprovalDigest: req.Msg.GetApprovalDigest(), Reason: req.Msg.GetReason(),
-		StepUp: s.Auth.stepUp(ctx, id, req.Msg.GetAttemptId(), req.Msg.GetApprovalDigest(), req.Msg.GetStepUpProof()),
+		StepUp:         s.Auth.stepUp(ctx, id, req.Msg.GetAttemptId(), req.Msg.GetApprovalDigest(), req.Msg.GetStepUpProof()),
+		OwnerAssertion: ownerAssertion(req.Msg.GetOwnerAssertion()),
 	})
 	if err != nil {
 		return nil, toRPCError(ctx, "Approve", err)
 	}
 	return connect.NewResponse(&gatewayv1.ApproveResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
+// ownerAssertion is the wire assertion as admission verifies it; nil when the
+// request carries none. Admission checks its shape and verifies it.
+func ownerAssertion(m *gatewayv1.OwnerAssertion) *admission.OwnerAssertion {
+	if m == nil {
+		return nil
+	}
+	return &admission.OwnerAssertion{CredentialID: m.GetCredentialId(), AuthenticatorData: m.GetAuthenticatorData(),
+		ClientDataJSON: m.GetClientDataJson(), Signature: m.GetSignature()}
 }
 
 // Reject rejects an ESCALATED attempt (token scope helm.gateway.decide,

@@ -28,16 +28,26 @@ been run.
 ## Usage
 
 ```python
+import os
+
 from helm_sdk import EvaluateRequest, HelmClient
 
-client = HelmClient(base_url="http://127.0.0.1:7714")
+client = HelmClient(
+    base_url="http://127.0.0.1:7714",
+    api_key=os.environ["HELM_ADMIN_API_KEY"],
+    tenant_id="tenant-a",
+    principal_id="operator-a",
+)
 decision = client.evaluate_decision_v5(EvaluateRequest(
     tool="read-ticket",
     effect_level="ticket:123",
     session_id="example-session",
 ))
-print(decision.verdict)  # ALLOW or DENY
+print(decision.verdict)  # ALLOW, DENY or ESCALATE
 ```
+
+`/api/v1/evaluate` needs the API key and the tenant and principal the server is
+configured for; without them the call raises `HelmApiError` with status 401.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/python_sdk/`.

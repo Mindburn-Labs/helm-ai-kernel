@@ -108,6 +108,22 @@ type AuthorityAdminServiceClient interface {
 	// principal_bindings registry (ADR-0005 §3) is not consulted or written. The
 	// principal_id is the sub of the tokens minted for the principal.
 	//
+	// Humans come from the tenant's owner (helm-tracker#334). On a tenant this
+	// call creates, the owner is registered with exactly one passkey
+	// (PrincipalSpec.credentials) and a genesis_assertion that passkey signed
+	// over the genesis challenge; it is then the only human of the request. On
+	// a tenant that exists, a human that is not registered, or that carries
+	// credentials, is permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]:
+	// later humans and passkeys come only through an approved provision plan.
+	// A human already registered, presented exactly as it is, is answered as it
+	// is. Credentials or a genesis_assertion that do not verify are refused
+	// whatever the configuration. With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+	// on, a new tenant needs its passkey owner
+	// [reason_code: OWNER_ASSERTION_REQUIRED], and a tenant that exists takes
+	// no human at all; with it off, a new tenant may still register humans
+	// without passkeys, which then cannot satisfy step-up with an owner
+	// assertion.
+	//
 	// Token scope: helm.gateway.provision.
 	EnsurePrincipals(context.Context, *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error)
 	// GetProvisioning returns what the latest helm.authority.provision.v1 or
@@ -257,6 +273,22 @@ type AuthorityAdminServiceHandler interface {
 	// The gateway reads authority_principals and nothing else: the kernel's
 	// principal_bindings registry (ADR-0005 §3) is not consulted or written. The
 	// principal_id is the sub of the tokens minted for the principal.
+	//
+	// Humans come from the tenant's owner (helm-tracker#334). On a tenant this
+	// call creates, the owner is registered with exactly one passkey
+	// (PrincipalSpec.credentials) and a genesis_assertion that passkey signed
+	// over the genesis challenge; it is then the only human of the request. On
+	// a tenant that exists, a human that is not registered, or that carries
+	// credentials, is permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]:
+	// later humans and passkeys come only through an approved provision plan.
+	// A human already registered, presented exactly as it is, is answered as it
+	// is. Credentials or a genesis_assertion that do not verify are refused
+	// whatever the configuration. With HELM_GATEWAY_OWNER_ASSERTION_REQUIRED
+	// on, a new tenant needs its passkey owner
+	// [reason_code: OWNER_ASSERTION_REQUIRED], and a tenant that exists takes
+	// no human at all; with it off, a new tenant may still register humans
+	// without passkeys, which then cannot satisfy step-up with an owner
+	// assertion.
 	//
 	// Token scope: helm.gateway.provision.
 	EnsurePrincipals(context.Context, *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error)

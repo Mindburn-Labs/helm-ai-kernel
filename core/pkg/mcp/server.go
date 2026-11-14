@@ -867,7 +867,7 @@ func classifyTool(catalog *ToolCatalog, name string) (ToolRef, error) {
 	if !ok {
 		return ToolRef{}, fmt.Errorf("tool %q is not classified in the PEP catalog", name)
 	}
-	if !validEffectClass(ref.EffectClass) {
+	if !contracts.ValidEffectClass(ref.EffectClass) {
 		return ToolRef{}, fmt.Errorf("tool %q has invalid PEP effect classification", name)
 	}
 	if !validRiskTier(ref.RiskTier) {
@@ -885,6 +885,7 @@ func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx m
 		return ToolRef{}, err
 	}
 	decisionCtx[guardian.ContextEffectClass] = ref.EffectClass
+	decisionCtx[guardian.ContextEffectClassSource] = guardian.EffectClassSourceToolCatalog
 	if ref.EgressDestinationRequired {
 		decisionCtx[guardian.ContextEgressDestinationRequired] = true
 	}
@@ -892,15 +893,6 @@ func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx m
 		decisionCtx[guardian.ContextDestination] = destination
 	}
 	return ref, nil
-}
-
-func validEffectClass(effectClass string) bool {
-	switch effectClass {
-	case "E0", "E1", "E2", "E3", "E4":
-		return true
-	default:
-		return false
-	}
 }
 
 func validRiskTier(riskTier contracts.RiskTier) bool {

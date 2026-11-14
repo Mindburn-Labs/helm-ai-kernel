@@ -1,8 +1,10 @@
 package guardian
 
 import (
+	"encoding"
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 )
@@ -71,17 +73,38 @@ func (w *threatInputWalk) visit(value reflect.Value, depth int) error {
 	if !value.IsValid() {
 		return nil
 	}
-	// A marshaler can emit different JSON from its Go representation (notably
-	// RawMessage). Require adapters to pass decoded JSON so no string is hidden.
-	if _, custom := value.Interface().(json.Marshaler); custom {
+	// Custom JSON or text methods can hide a different wire value. encoding/json
+	// also invokes pointer methods on addressable elements. Reject these types
+	// without calling their methods; adapters must supply decoded JSON values.
+	jsonMarshaler := reflect.TypeFor[json.Marshaler]()
+	textMarshaler := reflect.TypeFor[encoding.TextMarshaler]()
+	valueType := value.Type()
+	if valueType.Implements(jsonMarshaler) || valueType.Implements(textMarshaler) ||
+		(value.CanAddr() && (value.Addr().Type().Implements(jsonMarshaler) || value.Addr().Type().Implements(textMarshaler))) {
 		return fmt.Errorf("arguments require decoded JSON values")
 	}
 	switch value.Kind() {
 	case reflect.String:
+		// json.Number has a string representation but encodes as a number.
+		// Bound validation work and require a finite, syntactically valid value.
+		if number, ok := value.Interface().(json.Number); ok {
+			if err := w.chargeBytes(len(number)); err != nil {
+				return err
+			}
+			parsed, err := number.Float64()
+			if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) || !json.Valid([]byte(number)) {
+				return fmt.Errorf("arguments require finite JSON numbers")
+			}
+			return nil
+		}
 		return w.addText(value.String())
 	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return nil
+	case reflect.Float32, reflect.Float64:
+		if number := value.Float(); math.IsNaN(number) || math.IsInf(number, 0) {
+			return fmt.Errorf("arguments require finite JSON numbers")
+		}
 		return nil
 	case reflect.Map, reflect.Slice, reflect.Array:
 		if depth >= threatInputMaxDepth {

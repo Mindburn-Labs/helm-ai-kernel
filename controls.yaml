@@ -462,6 +462,8 @@ removal_proofs:
     replace: "\tif args, exists := input[\"args\"]; false && exists {\n"
     tests:
       - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
+      - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+      - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
   - control: CTL-019
     file: core/pkg/guardian/interceptor.go
     find: "\t\tinputs, err = collectThreatInputs(evalCtx.Request.Context)\n\t\tif err != nil {\n"
@@ -3845,27 +3847,33 @@ controls:
     bypass_assumptions:
       - "Only the three top-level text fields and context.args are scanned; proxy payloads must bind their text into these fields."
       - "Only tainted (untrusted) input with high-risk findings is denied; trusted input is scanned and recorded, not denied."
-      - "Incomplete or unsupported argument traversal is denied with SCHEMA_VIOLATION; opaque native values must be decoded into JSON values."
+      - "Incomplete or unsupported argument traversal is denied with SCHEMA_VIOLATION; custom JSON/text serializers must be decoded first, and native numbers must be finite valid JSON."
     tests:
       allowed:
         - "core/pkg/threatscan.TestPromptArmorDoesNotFlagBenignDiscussion"
         - "core/pkg/threatscan.TestThreat_CleanInput"
         - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianScansNestedToolArguments"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
       forbidden:
         - "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields"
         - "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
         - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
         - "core/pkg/conformance/scenarios.TestGuardianInputBoundaryConformance"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
       removal:
         - "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields"
         - "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
         - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
       bypass:
         - "core/pkg/guardian.TestThreatInputsDeterministicAndBounded"
         - "core/pkg/guardian.TestGuardianToolArgumentsMissingSemanticScannerEscalates"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
 
   - id: CTL-020
     title: "Context-fingerprint gate"

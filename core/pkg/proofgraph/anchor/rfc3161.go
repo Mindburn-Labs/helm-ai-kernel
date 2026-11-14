@@ -144,7 +144,8 @@ func (r *RFC3161Backend) Anchor(ctx context.Context, req AnchorRequest) (*Anchor
 // the digest Anchor submitted for receipt.Request.MerkleRoot.
 //
 // It does not validate the TSA's CMS signature or certificate chain, so it
-// shows which root a token names, not that a trusted TSA issued it.
+// returns ErrVerificationUnavailable after those consistency checks pass.
+// A matching imprint alone never establishes that a trusted TSA issued it.
 func (r *RFC3161Backend) Verify(_ context.Context, receipt *AnchorReceipt) error {
 	if receipt.Backend != rfc3161BackendName {
 		return fmt.Errorf("rfc3161: receipt backend mismatch: got %s", receipt.Backend)
@@ -170,7 +171,7 @@ func (r *RFC3161Backend) Verify(_ context.Context, receipt *AnchorReceipt) error
 	if !imprint.HashAlgorithm.Algorithm.Equal(oidSHA256) || !bytes.Equal(imprint.HashedMessage, want[:]) {
 		return fmt.Errorf("rfc3161: timestamp token does not bind merkle root %s", receipt.Request.MerkleRoot)
 	}
-	return nil
+	return fmt.Errorf("%w: rfc3161 TSA CMS signature and certificate chain NOT CHECKED", ErrVerificationUnavailable)
 }
 
 var (

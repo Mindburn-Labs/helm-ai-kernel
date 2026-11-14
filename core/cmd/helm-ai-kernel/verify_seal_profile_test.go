@@ -126,7 +126,7 @@ func TestTrustInitTopLevelWritesHelmYAMLConfig(t *testing.T) {
 	}
 }
 
-func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
+func TestVerifyProfileCustomerRejectsUnverifiedAnchorAndStorageReceipt(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("HELM_DATA_DIR", dataDir)
 	packDir := writeCLISealedPack(t, dataDir)
@@ -206,11 +206,14 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := runVerifyCmd([]string{"--allow-self-attested", "--profile", "customer", "--storage-receipt", receiptPath, packDir, "--json"}, &stdout, &stderr)
-	if code != 0 {
+	if code != 1 {
 		t.Fatalf("customer verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stdout.String(), `"storage_status": "immutable-off-host"`) || !strings.Contains(stdout.String(), `"anchor_status": "verified-externally"`) {
-		t.Fatalf("customer verify missing receipt statuses: %s", stdout.String())
+	if !strings.Contains(stdout.String(), `"storage_status": "unverifiable"`) || !strings.Contains(stdout.String(), `"anchor_status": "unverifiable"`) {
+		t.Fatalf("customer verify must expose unverified external receipts: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "NOT CHECKED") {
+		t.Fatalf("customer verify omitted unavailable checks: %s", stdout.String())
 	}
 }
 

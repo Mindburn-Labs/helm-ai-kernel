@@ -1,8 +1,8 @@
 // Package anchor provides transparency log anchoring for HELM's ProofGraph.
 //
 // Anchoring periodically submits Merkle roots from the ProofGraph to external
-// transparency logs (Sigstore Rekor, RFC 3161 TSA), creating externally verifiable
-// trust anchors that prove the integrity of the proof chain without trusting HELM.
+// transparency logs (Sigstore Rekor, RFC 3161 TSA). Receipts record the returned
+// evidence; external trust is established only when signature and trust checks run.
 //
 // This implements the P4 ProofGraph anchoring strategy from HELM UCS v1.2.
 package anchor
@@ -12,9 +12,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrVerificationUnavailable means the backend cannot establish external trust.
+// Structural consistency alone must not be treated as a successful verification.
+var ErrVerificationUnavailable = errors.New("external proof verification unavailable")
 
 // AnchorBackend defines the interface for transparency log backends.
 // Implementations include Sigstore Rekor v2 and RFC 3161 timestamping authorities.
@@ -23,10 +28,12 @@ type AnchorBackend interface {
 	Name() string
 
 	// Anchor submits a Merkle root to the transparency log and returns an AnchorReceipt.
-	// The receipt contains all information necessary to independently verify the anchoring.
+	// The receipt preserves evidence for verification against separately configured trust.
 	Anchor(ctx context.Context, req AnchorRequest) (*AnchorReceipt, error)
 
-	// Verify checks that an AnchorReceipt is valid against the transparency log.
+	// Verify checks an AnchorReceipt against the backend. RFC3161Backend and
+	// RekorBackend return ErrVerificationUnavailable when signature or trust
+	// checks are unavailable.
 	Verify(ctx context.Context, receipt *AnchorReceipt) error
 }
 

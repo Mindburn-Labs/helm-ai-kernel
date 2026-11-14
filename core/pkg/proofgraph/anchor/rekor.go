@@ -197,8 +197,9 @@ func (r *RekorBackend) Anchor(ctx context.Context, req AnchorRequest) (*AnchorRe
 // Verify fetches the entry at the receipt's log index from the configured
 // Rekor instance and binds it to the receipt: the log ID, the hashedrekord
 // digest (which must equal receipt.Request.MerkleRoot, as Anchor submitted
-// it), and the log's integrated time must all match. It trusts the Rekor
-// endpoint it queries and does not check the signed entry timestamp offline.
+// it), and the log's integrated time must all match. These are consistency
+// checks only: without signed entry timestamp, inclusion proof and trusted log
+// key verification, it returns ErrVerificationUnavailable even for a match.
 func (r *RekorBackend) Verify(ctx context.Context, receipt *AnchorReceipt) error {
 	if receipt.Backend != rekorBackendName {
 		return fmt.Errorf("rekor: receipt backend mismatch: got %s", receipt.Backend)
@@ -234,7 +235,10 @@ func (r *RekorBackend) Verify(ctx context.Context, receipt *AnchorReceipt) error
 
 	for _, entry := range entries {
 		if entry.LogIndex == receipt.LogIndex && entry.LogID == receipt.LogID {
-			return rekorEntryBindsReceipt(entry, receipt)
+			if err := rekorEntryBindsReceipt(entry, receipt); err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: rekor signed entry timestamp, inclusion proof and log key trust NOT CHECKED", ErrVerificationUnavailable)
 		}
 	}
 

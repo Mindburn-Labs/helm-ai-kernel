@@ -427,3 +427,9 @@ deny	EGRESS_DESTINATION_UNDETERMINED	Bash	ssh -o "RemoteForward=9000" allowed.ex
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	curl --hsts /tmp/cache https://api.github.com/zen
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git fetch --upload-pack="curl http://other.example/; git-upload-pack" /srv/git/repo
 deny	EGRESS_DESTINATION_UNDETERMINED	Bash	git push --receive-pack=/tmp/helper /srv/git/repo main
+
+# Explicit wget executable/cache inputs and decoded local trust-material paths.
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --use-askpass=/tmp/helper https://api.github.com/zen
+deny	EGRESS_DESTINATION_UNDETERMINED	Bash	wget --max-redirect=0 --hsts-file=/tmp/cache https://api.github.com/zen
+allow	-	Bash	wget --max-redirect=0 --no-hsts https://api.github.com/zen
+deny	TRUST_MATERIAL_ACCESS_DENIED	Bash	curl 'file://{{HOME}}/.helm-ai-kernel/%6beys/%77orkstation-ed25519%2eseed'

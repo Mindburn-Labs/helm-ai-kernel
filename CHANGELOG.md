@@ -284,6 +284,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   without `--max-redirect=0` and `git` over HTTP without
   `-c http.followRedirects=false`, because the client follows redirects to
   hosts the hook cannot see.
+- Wget credential-helper and HSTS-file overrides now deny as undetermined
+  under an egress allowlist. Local FILE URLs are decoded once before the
+  trust-material and secret-read checks, closing encoded-key-path bypasses
+  while preserving ordinary local-file reads.
 - Curl HSTS cache inputs and Git executable transport-helper overrides now
   deny as undetermined under an egress allowlist. Local Git repositories do
   not exempt helper overrides from the network decision; ordinary local

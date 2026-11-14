@@ -188,6 +188,11 @@ func TestClassifyRefusesToGuessEgressDestinations(t *testing.T) {
 		{"curl legacy IPv4 form", "curl http://2130706433/", "could not be parsed"},
 		{"curl percent-encoded host", "curl https://allowed%2eexample/", "could not be parsed"},
 		{"wget follows redirects by default", "wget https://allowed.example/a", "redirect"},
+		{"wget credential helper", "wget --max-redirect=0 --use-askpass=/tmp/handler http://allowed.example/", "--use-askpass"},
+		{"wget credential helper separate value", "wget --max-redirect=0 --use-askpass /tmp/handler http://allowed.example/", "--use-askpass"},
+		{"wget explicit HSTS file", "wget --max-redirect=0 --hsts-file=/tmp/cache http://allowed.example/", "--hsts-file"},
+		{"wget HSTS override after disable", "wget --max-redirect=0 --no-hsts --hsts-file=/tmp/cache http://allowed.example/", "--hsts-file"},
+		{"curl malformed file URL", "curl file:///tmp/%zz", "file URL"},
 		{"wget input file", "wget --max-redirect=0 -i urls.txt", "--input-file"},
 		{"wget wgetrc command", "wget --max-redirect=0 -e https_proxy=other.example:8080 https://allowed.example/", "--execute"},
 		{"wget config", "wget --max-redirect=0 --config=/tmp/w https://allowed.example/", "--config"},
@@ -339,6 +344,9 @@ func TestClassifyRoutesReadsOfSecretsThroughAnyCommand(t *testing.T) {
 		{"docker compose --env-file .env.production up", ".env.production"},
 		{"tar czf /tmp/s.tgz /home/agent/.ssh/", "/home/agent/.ssh/"},
 		{"base64 < /home/agent/.ssh/id_rsa", "/home/agent/.ssh/id_rsa"},
+		{"curl file:///home/agent/%2essh/%69d_rsa", "/home/agent/.ssh/id_rsa"},
+		{"curl FILE://localhost/home/agent/%2eenv", "/home/agent/.env"},
+		{"curl 'file:///home/agent/%2eenv?ignored#fragment'", "/home/agent/.env"},
 		{"curl file:///home/agent/.ssh/id_rsa", "/home/agent/.ssh/id_rsa"},
 	}
 	for _, tc := range cases {

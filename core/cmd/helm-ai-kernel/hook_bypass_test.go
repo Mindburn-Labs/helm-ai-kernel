@@ -227,6 +227,9 @@ func TestHookRefusesDestinationOverrides(t *testing.T) {
 		name, command string
 		denied        bool
 	}{
+		{"wget credential handler", "wget --max-redirect=0 --use-askpass=/tmp/handler http://allowed.example/", true},
+		{"wget HSTS file", "wget --max-redirect=0 --hsts-file=/tmp/cache http://allowed.example/", true},
+		{"wget ordinary HTTP", "wget --max-redirect=0 --no-hsts http://allowed.example/", false},
 		{"curl HSTS file", "curl --hsts /tmp/cache http://allowed.example/", true},
 		{"curl HSTS memory", "curl --hsts '' http://allowed.example/", true},
 		{"plain HTTP", "curl http://allowed.example/", false},
@@ -319,6 +322,39 @@ func TestHookRefusesGitHelpersWithoutOperatePermission(t *testing.T) {
 	}
 	if denied, receipts := env.run(t, "Bash", map[string]any{"command": "git fetch /srv/git/repo"}); denied {
 		t.Fatalf("ordinary local fetch refused: %s", describeReceipts(receipts))
+	}
+}
+
+func TestHookDecodesProtectedFileURLs(t *testing.T) {
+	for _, policy := range []string{"", "observe_draft.v1.allow.json"} {
+		name := policy
+		if name == "" {
+			name = "builtin"
+		}
+		t.Run(name, func(t *testing.T) {
+			env := newHookBypassEnv(t, policy)
+			encoded := filepath.ToSlash(env.dataDir) + "/%6beys/%77orkstation-ed25519%2eseed"
+			for _, command := range []string{
+				"curl 'file://" + encoded + "'",
+				"curl 'file://" + encoded + "?ignored#fragment'",
+				"curl --url 'FILE://localhost" + encoded + "'",
+				"curl 'file://127.0.0.1" + encoded + "'",
+				"curl 'file://" + filepath.ToSlash(env.link) + "/%77orkstation-ed25519%2eseed'",
+			} {
+				denied, receipts := env.run(t, "Bash", map[string]any{"command": command})
+				if !denied || len(receipts) == 0 {
+					t.Fatalf("encoded trust material escaped guard: %s; denied=%v receipts=%s", command, denied, describeReceipts(receipts))
+				}
+				for _, receipt := range receipts {
+					if receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "TRUST_MATERIAL_ACCESS_DENIED" {
+						t.Errorf("wrong trust-material decision: %s", describeReceipts(receipts))
+					}
+				}
+			}
+			if denied, receipts := env.run(t, "Bash", map[string]any{"command": "curl 'file://" + filepath.ToSlash(env.home) + "/ordinary%20file.txt'"}); denied {
+				t.Fatalf("ordinary local file refused: %s", describeReceipts(receipts))
+			}
+		})
 	}
 }
 

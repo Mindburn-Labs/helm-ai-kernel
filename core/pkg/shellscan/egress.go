@@ -258,6 +258,7 @@ var opaqueReasons = map[string]string{
 	"curl variable":             "--variable builds arguments at run time",
 	"wget execute":              "--execute runs a wgetrc command that can set a proxy",
 	"wget input-file":           "--input-file reads URLs from a file",
+	"wget hsts-file":            "--hsts-file lets cached rules change the protocol",
 	"wget config":               "--config reads settings from a file",
 	"wget span-hosts":           "--span-hosts follows links to other hosts",
 	"wget input-metalink":       "--input-metalink takes mirrors from a file",
@@ -385,6 +386,9 @@ func curlEgress(tokens []string) egressScan {
 	})
 	for _, raw := range urls {
 		if strings.HasPrefix(strings.ToLower(raw), "file:") {
+			if _, ok := localFileURLPath(raw); !ok {
+				scan.refuse("file URL has an unsupported local path")
+			}
 			continue // a local file, reported as a read by the secret rules
 		}
 		defaultScheme := ""
@@ -509,16 +513,18 @@ var wgetSpec = cliSpec{
 		output-file append-output report-speed base rejected-log tries retry-on-http-error
 		output-document start-pos progress timeout dns-timeout connect-timeout read-timeout
 		wait waitretry quota bind-address limit-rate restrict-file-names prefer-family user
-		password use-askpass local-encoding remote-encoding directory-prefix cut-dirs
+		password local-encoding remote-encoding directory-prefix cut-dirs
 		http-user http-password default-page header compression max-redirect proxy-user
 		proxy-password referer user-agent load-cookies save-cookies post-data post-file
 		method body-data body-file secure-protocol certificate certificate-type private-key
 		private-key-type ca-certificate ca-directory crl-file pinnedpubkey random-file ciphers
-		hsts-file ftp-user ftp-password warc-file warc-header warc-max-size warc-dedup
+		ftp-user ftp-password warc-file warc-header warc-max-size warc-dedup
 		warc-tempdir level backups accept reject accept-regex reject-regex regex-type domains
 		exclude-domains follow-tags ignore-tags include-directories exclude-directories
 	`), map[string]optRole{
 		"execute": roleOpaque, "input-file": roleOpaque, "config": roleOpaque,
+		"use-askpass":    roleOpaque, // Executes a local credential handler.
+		"hsts-file":      roleOpaque,
 		"input-metalink": roleOpaque, "dns-servers": roleOpaque,
 	}),
 	flag: withRoles(names(`

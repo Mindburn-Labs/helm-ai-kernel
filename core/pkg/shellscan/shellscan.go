@@ -3,6 +3,7 @@ package shellscan
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -563,11 +564,34 @@ func secretReaderTargets(tokens []string) []string {
 	return targets
 }
 
+// localFileURLPath decodes a local FILE URL exactly once. URL.Path is already
+// percent-decoded; decoding it again would turn a literal percent escape in a
+// filename into a different path. Curl ignores query and fragment suffixes for
+// FILE reads; URL.Path excludes them and preserves a literal +.
+func localFileURLPath(raw string) (string, bool) {
+	if !strings.HasPrefix(strings.ToLower(raw), "file:") {
+		return "", false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Opaque != "" || u.User != nil {
+		return "", false
+	}
+	switch strings.ToLower(u.Host) {
+	case "", "localhost", "127.0.0.1":
+	default:
+		return "", false
+	}
+	if !path.IsAbs(u.Path) || strings.ContainsRune(u.Path, 0) {
+		return "", false
+	}
+	return u.Path, true
+}
+
 func curlSecretReadTargets(tokens []string) []string {
 	var targets []string
 	for index, token := range tokens {
 		// A file: URL makes curl read a local file.
-		if local, ok := strings.CutPrefix(token, "file://"); ok {
+		if local, ok := localFileURLPath(token); ok {
 			targets = appendLocalSecretTarget(targets, local)
 		}
 		targets = appendLocalSecretTarget(targets, curlInlineSecretPath(token))

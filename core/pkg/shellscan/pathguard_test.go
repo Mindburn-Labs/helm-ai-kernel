@@ -50,6 +50,44 @@ func newGuardFixture(t *testing.T) guardFixture {
 	return f
 }
 
+func TestPathGuardDecodesLocalFileURLs(t *testing.T) {
+	f := newGuardFixture(t)
+	encoded := strings.ReplaceAll(filepath.ToSlash(f.seed), "/keys/", "/%6beys/")
+	encoded = strings.ReplaceAll(encoded, "signer.seed", "%73igner%2eseed")
+	for _, target := range []string{
+		"file://" + encoded,
+		"file://" + encoded + "?ignored#fragment",
+		"FILE://localhost" + encoded,
+		"file://127.0.0.1" + encoded,
+		"file:" + encoded,
+		"file://" + strings.ReplaceAll(encoded, "/%6beys/", "/%6beys%2f"),
+		"file://" + filepath.ToSlash(f.link) + "/%73igner%2eseed",
+		"file://" + filepath.ToSlash(f.link) + "/%6fther.txt",
+	} {
+		t.Run(target, func(t *testing.T) {
+			if _, ok := f.guard.Match(target, f.home); !ok {
+				t.Errorf("direct path guard missed %q", target)
+			}
+			for _, result := range []Result{
+				ClassifyAt("curl '"+target+"'", f.home, WithPathGuard(f.guard)),
+				ClassifyArgvAt([]string{"curl", "--url", target}, f.home, WithPathGuard(f.guard)),
+			} {
+				if result.ProtectedPath == "" || !result.Decide {
+					t.Errorf("classifier missed protected file URL: %+v", result)
+				}
+			}
+		})
+	}
+	for _, target := range []string{
+		"file://" + filepath.ToSlash(f.home) + "/ordinary%20file.txt",
+		"file://" + filepath.ToSlash(f.home) + "/%256beys/%2573igner%252eseed",
+	} {
+		if result := ClassifyAt("curl '"+target+"'", f.home, WithPathGuard(f.guard)); result.ProtectedPath != "" {
+			t.Errorf("unprotected or double-encoded path refused: %q -> %q", target, result.ProtectedPath)
+		}
+	}
+}
+
 func TestPathGuardMatchesEverySpellingOfAProtectedPath(t *testing.T) {
 	f := newGuardFixture(t)
 	work := t.TempDir()

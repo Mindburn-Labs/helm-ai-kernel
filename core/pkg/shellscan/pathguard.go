@@ -211,6 +211,16 @@ func (g *PathGuard) matchPattern(pattern string, dynamicAt int, cwd string, dotG
 	if g.stopped() {
 		return stoppedRule, true
 	}
+	if dynamicAt < 0 {
+		if local, ok := localFileURLPath(unescapeLit(pattern)); ok {
+			// URL decoding precedes the same literal-path, symlink and name
+			// checks as a filesystem argument. Escaping preserves literal glob
+			// characters that were percent-encoded in the URL.
+			if rule, protected := g.Match(local, cwd); protected {
+				return rule, true
+			}
+		}
+	}
 	if needle, ok := g.MatchText(unescapeLit(pattern)); ok {
 		return needle, true
 	}

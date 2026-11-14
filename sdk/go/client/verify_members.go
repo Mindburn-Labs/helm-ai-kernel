@@ -1,0 +1,64 @@
+package client
+
+import (
+	"encoding/json"
+	"strings"
+)
+
+// Pinned to contracts.Receipt by core/pkg/receiptverify/sdk_vectors_test.go.
+const receiptMemberShapeJSON = `{"fields":{"action":null,"args_hash":null,"blob_hash":null,"bundled_artifacts":{"element":{"fields":{"artifact_id":null,"hash":null,"inline_digest":null,"type":null,"uri_ref":null},"kind":"object"},"kind":"array"},"content_hash":null,"correlation_id":null,"counterparty":null,"created_at":null,"decision_hash":null,"decision_id":null,"direction":null,"effect_graph_node_id":null,"effect_id":null,"effect_type":null,"emergency_activation_id":null,"emergency_delegation_session_id":null,"emergency_scope_hash":null,"evidence":null,"executor_id":null,"external_reference_id":null,"gateway_id":null,"hash":null,"id":null,"idempotency_key":null,"installed_at":null,"installed_by":null,"issued_at":null,"key_id":null,"lamport_clock":null,"launch_id":null,"leaf_index":null,"log_id":null,"merkle_root":null,"metadata":null,"model_hash":null,"network_log_ref":null,"organization_runtime_decision_attestation":{"fields":{"activation_identity_kind":null,"activation_record_hash":null,"activation_record_ref":null,"autonomy_level":null,"company_id":null,"contract_version":null,"decision_id":null,"domain":null,"effect_class":null,"environment_id":null,"executor_principal_id":null,"originator_assertion_source":null,"originator_principal_id":null,"output_hash":null,"presented_activation_identity_hash":null,"reason":null,"reason_code":null,"receipt_id":null,"schema_version":null,"signature":null,"signature_algorithm":null,"signing_key_id":null,"tenant_id":null,"timestamp":null,"verdict":null,"workspace_id":null},"kind":"object"},"output_hash":null,"pack_hash":null,"pack_id":null,"pack_name":null,"pack_version":null,"policy_hash":null,"port_exposures":{"element":{"fields":{"allowed_peers":null,"closed_at":null,"direction":null,"port":null,"protocol":null,"started_at":null},"kind":"object"},"kind":"array"},"prev_hash":null,"prev_receipt_id":null,"projection_paths":{"element":{"fields":{"agent":null,"path":null},"kind":"object"},"kind":"array"},"provenance":{"fields":{"context":null,"generated_at":null,"generated_by":null,"parents":null},"kind":"object"},"public_key_set":null,"reason_code":null,"receipt_id":null,"replay_script":{"fields":{"engine":null,"entrypoint":null,"script_hash":null,"script_id":null},"kind":"object"},"retry_count":null,"risk_tier":null,"runtime_type":null,"runtime_version":null,"safe_dep_reason_code":null,"safe_dep_state":null,"sandbox_lease_id":null,"scope_hash":null,"secret_events_ref":null,"session_id":null,"signature":null,"signature_algorithm":null,"signature_profile":null,"signature_version":null,"skill_content_hash":null,"skill_id":null,"status":null,"subject":null,"timestamp":null,"tool_fingerprint":null,"tool_name":null,"transparency":{"fields":{"backend":null,"checkpoint_hash":null,"deferred":null,"deferred_until":null,"inclusion_proof_hash":null,"log_id":null},"kind":"object"},"type":null,"verdict":null,"witness_signatures":{"element":{"fields":{"signature":null,"witness_id":null},"kind":"object"},"kind":"array"}},"kind":"object"}`
+
+type receiptShape struct {
+	Kind    string                   `json:"kind"`
+	Fields  map[string]*receiptShape `json:"fields"`
+	Element *receiptShape            `json:"element"`
+}
+
+var receiptMemberShape = func() *receiptShape {
+	var shape receiptShape
+	if err := json.Unmarshal([]byte(receiptMemberShapeJSON), &shape); err != nil {
+		panic(err)
+	}
+	return &shape
+}()
+
+func checkReceiptMemberNames(value any, shape *receiptShape) error {
+	if shape == nil {
+		return nil
+	}
+	switch shape.Kind {
+	case "object":
+		if object, ok := value.(map[string]any); ok {
+			for key, child := range object {
+				target, exact := shape.Fields[key]
+				if !exact {
+					for field := range shape.Fields {
+						if strings.EqualFold(key, field) {
+							return refuse("shadow_member", "member %q differs from typed member %q only in letter case", key, field)
+						}
+					}
+				}
+				if err := checkReceiptMemberNames(child, target); err != nil {
+					return err
+				}
+			}
+		}
+	case "array":
+		if array, ok := value.([]any); ok {
+			for _, child := range array {
+				if err := checkReceiptMemberNames(child, shape.Element); err != nil {
+					return err
+				}
+			}
+		}
+	case "map":
+		if object, ok := value.(map[string]any); ok {
+			for _, child := range object {
+				if err := checkReceiptMemberNames(child, shape.Element); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}

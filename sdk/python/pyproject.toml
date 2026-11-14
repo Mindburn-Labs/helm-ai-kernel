@@ -3,10 +3,10 @@ name = "helm-sdk"
 version = "0.12.0"
 description = "Python SDK for HELM — fail-closed tool calling for AI agents"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9.2"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Mindburn Labs", email = "oss@mindburn.org" }]
-dependencies = ["httpx>=0.25.0", "pydantic>=2.0,<3"]
+dependencies = ["httpx>=0.25.0", "pydantic>=2.0,<3", "cryptography>=50.0.2,<51"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

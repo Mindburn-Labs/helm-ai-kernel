@@ -64,14 +64,47 @@ const (
 )
 
 // IsReservedSecurityContextKey identifies context keys whose values must be
-// bound by a trusted transport or adapter boundary, never by caller arguments.
+// bound by a trusted transport, adapter, or Guardian itself, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
 	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextEffectClassSource, ContextEffectClassDeclared, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
+		return isGuardianDerivedContextKey(key) || strings.TrimSpace(key) == contextKeyCapabilityToken
+	}
+}
+
+// isGuardianDerivedContextKey identifies outputs that only this evaluation may
+// supply. Even a trusted transport must not replay an earlier evaluation's
+// evidence as authority for the current request. Taint labels and declared
+// assumptions remain inputs: they restrict authority and are rechecked.
+func isGuardianDerivedContextKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case ContextThreatScan,
+		"trust_score", "trust_tier",
+		"session_history", "session_action_count", "session_deny_count",
+		"delegation_validated", "delegation_delegator", "delegation_delegate",
+		"safe_deprecation_state", "safe_deprecation_reason_code",
+		"emergency_stop_scope_hash", "emergency_stop_reason_code",
+		"emergency_stop_command_id", "emergency_stop_epoch", "emergency_stop_receipt_hash",
+		"assumption_hash", "assumption_id":
+		return true
+	default:
 		return false
 	}
+}
+
+// evaluationInputContext retains the existing in-place request sanitization.
+// Transport-bound credentials, scope, and provenance survive; Guardian outputs
+// are recomputed even when an optional enricher is absent. Nested arguments
+// remain read only.
+func evaluationInputContext(values map[string]any) map[string]any {
+	for key := range values {
+		if isGuardianDerivedContextKey(key) || strings.TrimSpace(key) == contextKeyCapabilityToken {
+			delete(values, key)
+		}
+	}
+	return values
 }
 
 // EvaluationContext encapsulates all parameter inputs and transient state
@@ -440,12 +473,17 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	// Gate 4: Threat signal scan — scan untrusted textual inputs. A configured
 	// semantic escalation without a scanner emits explicit unavailable evidence
 	// instead of silently treating the missing scanner as a clean scan.
+	var inputs []string
+	if p.g.threatScanner != nil || p.g.semanticEscalationThresholdBP > 0 {
+		var err error
+		inputs, err = collectThreatInputs(evalCtx.Request.Context)
+		if err != nil {
+			return p.deny(evalCtx, contracts.ReasonSchemaViolation,
+				fmt.Sprintf("%s: threat scan input coverage: %v", contracts.ReasonSchemaViolation, err))
+		}
+	}
 	if p.g.threatScanner == nil && p.g.semanticEscalationThresholdBP > 0 {
-		for _, key := range []string{"user_input", "text", "content"} {
-			textToScan, ok := evalCtx.Request.Context[key].(string)
-			if !ok || textToScan == "" {
-				continue
-			}
+		for _, textToScan := range inputs {
 			sum := sha256.Sum256([]byte(textToScan))
 			inputHash := "sha256:" + hex.EncodeToString(sum[:])
 			evalCtx.ThreatScanResult = &contracts.ThreatScanResult{
@@ -470,11 +508,7 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	if p.g.threatScanner != nil {
 		// Every scannable text field must be inspected: first-match-only
 		// scanning lets a payload in a secondary field bypass the gate.
-		for _, key := range []string{"user_input", "text", "content"} {
-			textToScan, ok := evalCtx.Request.Context[key].(string)
-			if !ok || textToScan == "" {
-				continue
-			}
+		for _, textToScan := range inputs {
 			scanResult := p.g.threatScanner.ScanInput(textToScan, channel, trustLevel)
 			evalCtx.ThreatScanResult = preferredThreatScanResult(evalCtx.ThreatScanResult, scanResult)
 			selectedScan := evalCtx.ThreatScanResult

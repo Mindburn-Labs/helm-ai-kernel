@@ -456,6 +456,20 @@ removal_proofs:
     tests:
       - "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields"
       - "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
+  - control: CTL-019
+    file: core/pkg/guardian/threat_inputs.go
+    find: "\tif args, exists := input[\"args\"]; exists {\n"
+    replace: "\tif args, exists := input[\"args\"]; false && exists {\n"
+    tests:
+      - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
+      - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+      - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
+  - control: CTL-019
+    file: core/pkg/guardian/interceptor.go
+    find: "\t\tinputs, err = collectThreatInputs(evalCtx.Request.Context)\n\t\tif err != nil {\n"
+    replace: "\t\tinputs, err = collectThreatInputs(evalCtx.Request.Context)\n\t\tif false && err != nil {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
   - control: CTL-020
     file: core/pkg/guardian/interceptor.go
     find: "\t\tif err := f.g.contextGuard.ValidateCurrent(); err != nil {\n"
@@ -474,6 +488,12 @@ removal_proofs:
     replace: "\t\tif false && guardian.IsReservedSecurityContextKey(key) {\n\t\t\tdelete(values, key)\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext"
+  - control: CTL-022
+    file: core/pkg/guardian/guardian.go
+    find: "\treq.Context = evaluationInputContext(req.Context)\n"
+    replace: "\t// Guardian evidence sanitization removed by negative control.\n"
+    tests:
+      - "core/pkg/guardian.TestGuardianDerivedContextCannotBeSuppliedByCaller"
   - control: CTL-023
     file: core/cmd/helm-ai-kernel/contract_routes.go
     find: "\t\tif err != nil || tenantID != configuredRuntimeTenantID() {\n"
@@ -3819,24 +3839,41 @@ controls:
     entry_points:
       - "core/pkg/guardian.PDPInterceptor.Evaluate"
       - "core/pkg/threatscan.Scanner.ScanInput"
-    config: []
+    config:
+      - "Threat scanner or semantic escalation configured on Guardian"
+      - "Argument traversal: 64 container levels, 4096 nodes, 1 MiB of text and keys"
     protected_operations:
-      - "Guardian evaluations that carry user_input, text or content from an untrusted source."
+      - "Guardian evaluations that carry user_input, text, content or decoded string leaves under context.args."
     bypass_assumptions:
-      - "Only the user_input, text and content context keys are scanned."
+      - "Only the three top-level text fields and context.args are scanned; proxy payloads must bind their text into these fields."
       - "Only tainted (untrusted) input with high-risk findings is denied; trusted input is scanned and recorded, not denied."
+      - "Incomplete or unsupported argument traversal is denied with SCHEMA_VIOLATION; custom JSON/text serializers must be decoded first, and native numbers must be finite valid JSON."
     tests:
       allowed:
         - "core/pkg/threatscan.TestPromptArmorDoesNotFlagBenignDiscussion"
         - "core/pkg/threatscan.TestThreat_CleanInput"
+        - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianScansNestedToolArguments"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
       forbidden:
         - "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields"
         - "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
         - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
+        - "core/pkg/conformance/scenarios.TestGuardianInputBoundaryConformance"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
       removal:
         - "core/pkg/guardian.TestGuardianThreatScanCoversAllTextFields"
         - "core/pkg/guardian.TestGuardianPreToolCallDeniesPromptArmorToolHijack"
-      bypass: []
+        - "core/pkg/guardian.TestGuardianToolArgumentsThreatScan"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianBoundsContextArguments"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
+        - "core/pkg/guardian.TestGuardianNativeNumbersRequireFiniteJSON"
+      bypass:
+        - "core/pkg/guardian.TestThreatInputsDeterministicAndBounded"
+        - "core/pkg/guardian.TestGuardianToolArgumentsMissingSemanticScannerEscalates"
+        - "core/pkg/guardian.TestGuardianNativeArgumentSerializersCannotAuthorizeDifferentWireText"
 
   - id: CTL-020
     title: "Context-fingerprint gate"
@@ -3891,26 +3928,32 @@ controls:
     owner: Mindburn Labs core team (kernel)
     claim: >-
       Reserved security context keys supplied by a caller are stripped before
-      the Guardian sees them; trusted values come only from the authenticated
-      transport.
+      the Guardian sees them. Guardian-produced evidence is removed and
+      recomputed at evaluation; transport metadata comes from authenticated
+      transport binding.
     status: enforced
     entry_points:
       - "core/cmd/helm-ai-kernel.bindAuthenticatedGuardianContext"
       - "core/pkg/guardian.IsReservedSecurityContextKey"
+      - "core/pkg/guardian.Guardian.EvaluateDecision"
     config: []
     protected_operations:
       - "Evaluate, proxy and MCP requests bound through bindAuthenticatedGuardianContext."
+      - "Direct Guardian evaluations remove caller-authored trust, session, delegation, threat, stop and assumption output claims."
     bypass_assumptions:
       - "Tenant and principal headers are still caller assertions checked against configuration (CTL-007)."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal"
+        - "core/pkg/guardian.TestGuardianDerivedContextRecomputesConfiguredEnrichment"
       forbidden:
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext"
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteRejectsConflictingAliasesBeforeReceiptIssuance"
         - "core/cmd/helm-ai-kernel.TestConfiguredTenantRuntimeAuthRejectsCallerIdentityOverride"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteGuardianClaimsCannotGrantAuthority"
       removal:
         - "core/cmd/helm-ai-kernel.TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext"
+        - "core/pkg/guardian.TestGuardianDerivedContextCannotBeSuppliedByCaller"
       bypass:
         - "core/pkg/guardian.TestPDPInterceptorIgnoresUntrustedSecurityContextOverrides"
 

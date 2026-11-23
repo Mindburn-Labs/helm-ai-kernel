@@ -33,8 +33,7 @@ type Prober struct {
 
 // Absolute binary paths: probes exec argv directly (no shell, no PATH
 // lookup). If a binary is missing the probe errors and attestation fails
-// closed. ponytail: fixed paths; make them configurable when a real target
-// needs it.
+// closed. These paths are fixed for the supported systems.
 const (
 	systemctlBin = "/usr/bin/systemctl"
 	nftBin       = "/usr/sbin/nft"

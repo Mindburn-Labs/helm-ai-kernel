@@ -337,8 +337,8 @@ func validatePostureAttestationShape(attestation PostureAttestation, sealed bool
 // normalizeObservedSystemdValue reconciles systemd's reported forms with the
 // compiled expectations. Single-address IPAddressAllow/Deny values come back
 // with explicit /32 (v4) or /128 (v6) prefixes on some systemd versions.
-// ponytail: suffix-strip normalization; extend from recorded fixtures if a
-// target systemd renders differently.
+// Normalize those suffixes before comparing addresses. Extend this handling
+// with a fixture if a supported systemd version renders them differently.
 func normalizeObservedSystemdValue(property, value string) string {
 	value = strings.TrimSpace(value)
 	if property != "IPAddressAllow" && property != "IPAddressDeny" {

@@ -76,7 +76,7 @@ func ConfigFromEnv(getenv func(string) string) (*tls.Config, error) {
 	if clientCAFile == "" {
 		return nil, fmt.Errorf("%s=%s requires %s", EnvClientAuth, clientAuth, EnvClientCAFile)
 	}
-	// ponytail: the client CA pool is read once at startup; rotating the
+	// The client CA pool is read once at startup. Rotating the
 	// client-trust CA needs a restart. Reload it like the serving certificate
 	// if CA rotation without a restart becomes an operational need.
 	pem, err := os.ReadFile(clientCAFile) // #nosec G304 -- operator-configured client CA path

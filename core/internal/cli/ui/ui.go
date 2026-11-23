@@ -348,10 +348,8 @@ func RequestedFormat(args []string, def Format, valueFlags map[string]bool, form
 		// --format=text or --json=false deselect JSON on the parse-failure
 		// path alone, so `plan compile --format=text --bogus` answered in
 		// text while every other failure of the same command answered in
-		// JSON. Nothing can deselect it.
-		// ponytail: an early return works because Format is exactly
-		// text|json; a third output mode would need a per-command
-		// "modes offered" set instead.
+		// JSON. Format currently has two values. If another output mode is added,
+		// each command will need to declare the modes it supports.
 		return FormatJSON
 	}
 	// Track the two selector flags independently (last occurrence of each

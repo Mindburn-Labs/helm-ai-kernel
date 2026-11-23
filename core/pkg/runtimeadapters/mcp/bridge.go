@@ -73,9 +73,6 @@ type WriteClassifier func(toolName string, args map[string]any) bool
 
 // DefaultWriteClassifier flags tool names with common mutating verbs. Deployments
 // should replace it with connector-declared effect classes.
-//
-// ponytail: verb heuristic; connector effect-class metadata should drive this in
-// production (see effects.EffectRequest.EffectType).
 func DefaultWriteClassifier(toolName string, _ map[string]any) bool {
 	lower := strings.ToLower(toolName)
 	for _, verb := range []string{"create", "update", "delete", "send", "write", "add", "post", "merge", "deploy", "publish", "pay", "transfer", "remove", "set", "close", "comment"} {
@@ -1003,7 +1000,7 @@ func mergeMetadata(md map[string]string, inputHash, delegationSessionID string) 
 // for a single-process kernel; a deployment that needs durable, cross-process
 // replay protection injects a data-plane-backed store instead.
 //
-// ponytail: in-memory map; durable permit/nonce state is a data-plane concern.
+// Use a durable store when nonce state must survive process restarts.
 type MemoryNonceStore struct {
 	mu   sync.Mutex
 	seen map[string]struct{}

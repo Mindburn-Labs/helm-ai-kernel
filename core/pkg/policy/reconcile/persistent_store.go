@@ -40,8 +40,8 @@ type policyReplayWatermark struct {
 // PersistentSnapshotStore keeps active snapshots in memory and persists only
 // the minimum replay watermark needed to reject rollback after a restart.
 //
-// ponytail: file serialization is process-local; move this state to a
-// transactional shared store before running multiple Kernel writers.
+// The store serializes writes with an instance mutex. Multiple Kernel writers
+// require a shared transactional store.
 type PersistentSnapshotStore struct {
 	mu                    sync.Mutex
 	path                  string

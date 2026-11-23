@@ -67,9 +67,9 @@ type Keystore struct {
 
 // LocalKMS is a file-backed KMS using AES-256-GCM with versioned keys.
 //
-// ponytail: one serving process per keystore. A running server holds the
-// keystore it loaded at start, so rotate/revoke take effect on restart. Several
-// replicas sharing a key need a cloud KMS backend behind Manager.
+// Use one serving process per keystore. It loads the keys at startup, so
+// rotation and revocation take effect on restart. Replicas that share a key
+// need a cloud KMS backend behind Manager.
 type LocalKMS struct {
 	mu    sync.RWMutex
 	store Keystore

@@ -24,7 +24,7 @@ const (
 	riskScanPreviewDir       = "previews"
 	riskScanActorID          = "helm-ai-kernel/scan"
 	riskScanEffectType       = "risk-scan"
-	// ponytail: 16 MiB per artifact bounds offline verification; make the limit configurable only if legitimate scan exports exceed it.
+	// Limit each artifact to 16 MiB to bound offline verification.
 	maxRiskScanArtifactBytes = 16 << 20
 )
 

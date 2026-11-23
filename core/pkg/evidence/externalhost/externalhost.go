@@ -372,9 +372,8 @@ func validateActionEffectEvent(e *contracts.ActionEffectEvent) error {
 // imported receipt's normalized fields are the ones the vendor actually signed.
 type BindingChecker func(signedPayload []byte, receipt *contracts.ExternalHostReceipt) error
 
-// ponytail: package-global registry (database/sql driver pattern) so adapters
-// can register checkers without an import cycle — adapters import externalhost,
-// not the reverse.
+// Adapters register checkers here so externalhost can look them up without
+// importing the adapter packages.
 var bindingCheckers = map[string]BindingChecker{}
 
 // RegisterBindingChecker registers a binding checker for a source_profile.

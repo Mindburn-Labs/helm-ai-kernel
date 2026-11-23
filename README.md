@@ -2,11 +2,10 @@
 
 **Fail-closed execution firewall for AI agents.**
 
-HELM sits between Claude Code, Codex, MCP tools, shell commands, and other agent
-actions. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed receipt
-you can verify later. Verification checks signature integrity out of the box;
-trusting *who* signed is a separate, explicit step — see
-[local signer and trusted verification](docs/reference/workstation-governance.md#local-signer-and-trusted-verification).
+HELM evaluates agent actions that reach its hooks, wrappers, proxies, MCP
+boundaries, or API. It returns `ALLOW`, `DENY`, or `ESCALATE`. For signed
+decisions, use the receipt to verify integrity and check the signer against
+a trusted public key. See [trusted verification](docs/reference/workstation-governance.md#local-signer-and-trusted-verification).
 
 ![HELM AI Kernel: one boundary, one decision, one receipt](docs/assets/readme-boundary-preview.png)
 
@@ -25,8 +24,7 @@ helm-ai-kernel setup claude-code --yes
 The fully qualified Homebrew install adds the tap and trusts only this formula.
 See [Homebrew Tap Trust](https://docs.brew.sh/Tap-Trust).
 
-Ask your agent to do something risky. HELM blocks or escalates the action before
-it runs, then records the decision.
+The verification command takes the recorded hook receipt path.
 
 ```bash
 helm-ai-kernel workstation verify-decision \
@@ -40,9 +38,9 @@ from another machine, pin the signer's key out of band with
 `--trusted-public-key-file`. Receipts signed by the legacy derivable seed
 (retired in the security patch line) always remain untrusted.
 
-No cloud account. No model key. No Docker. No production credentials.
+Receipt verification runs offline.
 
-## Security Model (short)
+## Security model
 
 Fail-closed by default: unknown tools escalate or deny before dispatch; signed
 receipts prove the verdict; EvidencePacks verify offline. HELM does not replace
@@ -52,8 +50,8 @@ model: [Execution security model](docs/EXECUTION_SECURITY_MODEL.md).
 
 Ceremony in the operator TUI requires typing `APPROVE` or `DENY`. The catalog
 ranks Doctor, Watch, Policy, Freeze, and Threat before setup convenience.
-Local `mcp approve` does not mint MCP authority. Escape hatches: `HELM_NO_TUI=1`,
-`TERM=dumb`, pipes. Details: [CLI I/O Convention](docs/guides/cli-io-convention.md).
+Local `mcp approve` rejects opaque local approval metadata. For text output use
+`HELM_NO_TUI=1`, `TERM=dumb`, or a pipe. See the [CLI I/O convention](docs/guides/cli-io-convention.md).
 
 ## What It Does
 
@@ -79,43 +77,20 @@ non-allowlisted HTTPS request. Prompt-only manipulation, model refusal, or an
 agent that never attempts the tool call needs model, app, and sandbox controls
 alongside HELM.
 
-## One Example
-
-```text
-Agent asks: delete the production database
-HELM sees: protected data + irreversible action
-HELM says: DENY
-You get:  a signed receipt you can verify offline (integrity always;
-          signer trust once you've pinned the workstation public key)
-```
-
 ## Where To Go Next
 
 | Need | Link |
 | --- | --- |
-| 5-minute local proof | [Quickstart](docs/QUICKSTART.md) |
+| Local quickstart | [Quickstart](docs/QUICKSTART.md) |
 | End-to-end proof loop | [HELM Proof Loop](docs/PROOF_LOOP.md) |
 | Local AI-agent risk audit | [Agent Risk Scan](docs/reference/agent-risk-scan.md) |
 | CLI commands | [CLI reference](docs/reference/cli.md) |
+| Command source | [Command layout](core/cmd/README.md) |
 | Security model | [Execution security model](docs/EXECUTION_SECURITY_MODEL.md) |
 | MCP tool quarantine | [MCP integration](docs/INTEGRATIONS/mcp.md) |
 | Client implementation handoff | [Implementation partner handoff](docs/guides/implementation-partner.md) |
 | Evidence verification | [Verification](docs/VERIFICATION.md) |
 | AI security category map | [AI Security Categories](docs/AI_SECURITY_CATEGORIES.md) |
-
-## What It Is Not
-
-- Not Kubernetes Helm.
-- Not the hosted HELM Enterprise product.
-- Not HELM Company Builder, Company OS, or HELM Network. Those are target
-  commercial experiences around this boundary, not Kernel features or evidence
-  that they are generally available.
-- Not an app generator, foundation model, social network, bank, escrow service,
-  payment rail, or general ledger. Users may build with any compatible external
-  tool and route consequential actions through this boundary.
-- Not a vague AI-safety claim.
-
-It is the open-source execution boundary: policy in, action checked, receipt out.
 
 ## Free Forever
 

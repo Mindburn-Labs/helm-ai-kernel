@@ -275,8 +275,8 @@ func listValueOK(v string) bool {
 // filters, and everything after the cursor, one row past the page. Every value
 // is a bound parameter.
 //
-// ponytail: it is served in order by authority_effect_attempts_by_update
-// (migration 1), so a page costs the page. A filter that few attempts match
+// The authority_effect_attempts_by_update index supports an ordered read
+// limited to the requested page. A filter that few attempts match
 // is applied to the rows of that index range in order, so it costs the
 // workspace's history: about 50 ms per 300,000 attempts measured for a state
 // none is in. Upgrade to a partial index on the states that await someone

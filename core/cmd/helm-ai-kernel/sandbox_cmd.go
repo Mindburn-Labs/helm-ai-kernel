@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 )
 
 // runSandboxCmd implements `helm-ai-kernel sandbox` — governed sandbox execution.
@@ -250,6 +254,150 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if !allPass {
+		return 1
+	}
+	return 0
+}
+
+func runSandboxProfiles(args []string, stdout, stderr io.Writer) int {
+	return runSandboxInspect(append(args, "--json"), stdout, stderr)
+}
+
+func runSandboxGrant(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("sandbox grant", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	runtimeName := cmd.String("runtime", "", "Runtime name")
+	profileName := cmd.String("profile", "default", "Sandbox profile")
+	imageDigest := cmd.String("image-digest", "", "Image/template digest")
+	policyEpoch := cmd.String("policy-epoch", "local", "Policy epoch")
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	if *runtimeName == "" {
+		fmt.Fprintln(stderr, "Error: --runtime is required")
+		return 2
+	}
+	if *imageDigest == "" {
+		fmt.Fprintln(stderr, "Error: --image-digest is required before sandbox execution")
+		return 2
+	}
+	policy := runtimesandbox.DefaultPolicy()
+	policy.PolicyID = *profileName
+	grant, err := runtimesandbox.GrantFromPolicy(policy, *runtimeName, *profileName, *imageDigest, *policyEpoch, time.Now().UTC())
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if *jsonOutput {
+		return writeSurfaceJSON(stdout, grant)
+	}
+	fmt.Fprintf(stdout, "Sandbox grant %s hash=%s\n", grant.GrantID, grant.GrantHash)
+	return 0
+}
+
+func runSandboxList(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("sandbox list", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	grants := newLocalSurfaceRegistry().ListSandboxGrants()
+	if *jsonOutput {
+		return writeSurfaceJSON(stdout, grants)
+	}
+	fmt.Fprintln(stdout, "No sandbox grants recorded in this local CLI registry.")
+	return 0
+}
+
+func runSandboxGet(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("sandbox get", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	grantID := cmd.String("grant-id", "", "Sandbox grant id")
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	if *grantID == "" && cmd.NArg() > 0 {
+		*grantID = cmd.Arg(0)
+	}
+	if *grantID == "" {
+		fmt.Fprintln(stderr, "Error: --grant-id is required")
+		return 2
+	}
+	result := map[string]any{"grant_id": *grantID, "state": "not_found", "verified": false}
+	if *jsonOutput {
+		return writeSurfaceJSONResult(stdout, result, false)
+	}
+	fmt.Fprintf(stdout, "Sandbox grant %s is not recorded in this local CLI registry\n", *grantID)
+	return 1
+}
+
+func runSandboxVerify(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("sandbox verify", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	grantID := cmd.String("grant-id", "", "Sandbox grant id")
+	grantHash := cmd.String("grant-hash", "", "Expected grant hash")
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	result := contracts.SandboxPreflightResult{
+		Verdict:       contracts.VerdictAllow,
+		GrantID:       *grantID,
+		GrantHash:     *grantHash,
+		DispatchReady: *grantHash != "",
+		CheckedAt:     time.Now().UTC(),
+	}
+	if *grantHash == "" {
+		result.Verdict = contracts.VerdictDeny
+		result.ReasonCode = contracts.ReasonSandboxViolation
+		result.Findings = []string{"grant hash is required for offline verification"}
+	}
+	if *jsonOutput {
+		return writeSurfaceJSONResult(stdout, result, result.Verdict == contracts.VerdictAllow)
+	}
+	fmt.Fprintf(stdout, "Sandbox verify verdict=%s grant=%s\n", result.Verdict, result.GrantID)
+	if result.Verdict != contracts.VerdictAllow {
+		return 1
+	}
+	return 0
+}
+
+func runSandboxPreflightSurface(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("sandbox preflight", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	runtimeName := cmd.String("runtime", "", "Runtime name")
+	profileName := cmd.String("profile", "default", "Sandbox profile")
+	imageDigest := cmd.String("image-digest", "", "Image/template digest")
+	policyEpoch := cmd.String("policy-epoch", "local", "Policy epoch")
+	expectedHash := cmd.String("expected-grant-hash", "", "Expected grant hash")
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	if *runtimeName == "" {
+		fmt.Fprintln(stderr, "Error: --runtime is required")
+		return 2
+	}
+	policy := runtimesandbox.DefaultPolicy()
+	policy.PolicyID = *profileName
+	grant, err := runtimesandbox.GrantFromPolicy(policy, *runtimeName, *profileName, *imageDigest, *policyEpoch, time.Now().UTC())
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	result := verifySandboxGrantForDispatch(grant, *expectedHash)
+	if *jsonOutput {
+		_ = writeSurfaceJSON(stdout, result)
+		if result.Verdict != contracts.VerdictAllow {
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(stdout, "Sandbox preflight verdict=%s grant_hash=%s\n", result.Verdict, result.GrantHash)
+	if result.Verdict != contracts.VerdictAllow {
 		return 1
 	}
 	return 0

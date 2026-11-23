@@ -557,7 +557,7 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 				ReceiptID     string    `json:"receipt_id"`
 				BreakGlass    bool      `json:"break_glass"`
 			}{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1217",
+			Source: "core/cmd/helm-ai-kernel/contract_authority_routes.go registerAuthorityContractRoutes",
 			AcceptedProperties: []string{
 				"state",
 				"created_at",
@@ -570,11 +570,11 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 				Method string `json:"method"`
 				TTLMS  int64  `json:"ttl_ms"`
 			}{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1281",
+			Source: "core/cmd/helm-ai-kernel/contract_authority_routes.go registerAuthorityContractRoutes",
 		},
 		"POST /api/v1/approvals/{approval_id}/webauthn/assert": {
 			Type:   reflect.TypeOf(contracts.ApprovalWebAuthnAssertion{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1295",
+			Source: "core/cmd/helm-ai-kernel/contract_authority_routes.go registerAuthorityContractRoutes",
 		},
 		"POST /api/v1/approvals/{approval_id}/{action}": {
 			Type: reflect.TypeOf(struct {
@@ -582,18 +582,18 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 				Reason               string `json:"reason"`
 				ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
 			}{}),
-			Source:             "core/cmd/helm-ai-kernel/contract_routes.go:1312",
+			Source:             "core/cmd/helm-ai-kernel/contract_authority_routes.go registerAuthorityContractRoutes",
 			AcceptedProperties: []string{"actor"},
 		},
 		"POST /api/v1/harness/change-contracts/{change_id}/approve": {
 			Type: reflect.TypeOf(struct {
 				ReceiptRef string `json:"receipt_ref"`
 			}{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:555",
+			Source: "core/cmd/helm-ai-kernel/contract_artifact_routes.go registerArtifactContractRoutes",
 		},
 		"PUT /api/v1/budgets/{budget_id}": {
 			Type:   reflect.TypeOf(contracts.BudgetCeiling{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1372",
+			Source: "core/cmd/helm-ai-kernel/contract_authority_routes.go registerAuthorityContractRoutes",
 			AcceptedProperties: []string{
 				"max_tool_calls",
 				"max_spend_minor",
@@ -604,7 +604,7 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		},
 		"POST /api/v1/telemetry/export": {
 			Type:   reflect.TypeOf(contracts.TelemetryExportRequest{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1421",
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go registerContractRoutes",
 			AcceptedProperties: []string{
 				"policy_epoch",
 				"verdict",
@@ -615,12 +615,12 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		},
 		"POST /api/v1/mcp/scan": {
 			Type:               reflect.TypeOf(contracts.MCPScanRequest{}),
-			Source:             "core/cmd/helm-ai-kernel/contract_routes.go:897",
+			Source:             "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			AcceptedProperties: []string{"manifest"},
 		},
 		"PUT /api/v1/mcp/auth-profiles/{profile_id}": {
 			Type:   reflect.TypeOf(contracts.MCPAuthorizationProfile{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:955",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			AcceptedProperties: []string{
 				"protocol_version",
 				"tool_scopes",
@@ -630,11 +630,11 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		},
 		"POST /api/v1/mcp/authorize-call": {
 			Type:   reflect.TypeOf(contracts.MCPAuthorizeCallRequest{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:971",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 		},
 		"POST /api/v1/sandbox/preflight": {
 			Type:   reflect.TypeOf(contracts.SandboxPreflightRequest{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1108",
+			Source: "core/cmd/helm-ai-kernel/contract_sandbox_routes.go registerSandboxContractRoutes",
 		},
 
 		"POST /api/demo/run": {
@@ -714,47 +714,47 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Reason: "JSON-RPC request contract is deferred to a follow-up slice",
 		},
 		"POST /api/v1/evidence/export": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_evidence_routes.go registerEvidenceContractRoutes",
 			Reason: "evidence export request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/evidence/verify": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_evidence_routes.go registerEvidenceContractRoutes",
 			Reason: "evidence verify request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/evidence/verification-scopes": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_evidence_routes.go registerEvidenceContractRoutes",
 			Reason: "verification-scope request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/telemetry/harness-traces": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_artifact_routes.go registerArtifactContractRoutes",
 			Reason: "harness trace request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/plans/transactions": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_artifact_routes.go registerArtifactContractRoutes",
 			Reason: "plan-transaction request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/harness/change-contracts": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_artifact_routes.go registerArtifactContractRoutes",
 			Reason: "harness contract creation request not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/evidence/envelopes": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_evidence_routes.go registerEvidenceEnvelopeContractRoutes",
 			Reason: "evidence envelope request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/mcp/registry": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:808",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			Reason: "MCP registry discovery request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/mcp/registry/approve": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:847",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			Reason: "approval-verification-unavailable endpoint intentionally ignores body fields and is deferred",
 		},
 		"POST /api/v1/mcp/registry/{server_id}/approve": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:873",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			Reason: "approval-verification-unavailable endpoint intentionally ignores body fields and is deferred",
 		},
 		"POST /api/v1/mcp/registry/{server_id}/revoke": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:878",
+			Source: "core/cmd/helm-ai-kernel/contract_mcp_routes.go registerMCPContractRoutes",
 			Reason: "MCP revoke request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /mcp/v1/execute": {
@@ -762,7 +762,7 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Reason: "MCP execute request contract is deferred to a follow-up slice",
 		},
 		"POST /api/v1/sandbox/grants": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Source: "core/cmd/helm-ai-kernel/contract_sandbox_routes.go registerSandboxContractRoutes",
 			Reason: "sandbox grant creation request not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/authz/check": {

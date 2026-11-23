@@ -164,7 +164,7 @@ G304 core/cmd/helm-ai-kernel/conform_managed_agents.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/conform_managed_agents.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/conform_managed_agents.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/connect_cmd.go a4908f05df81
-G304 core/cmd/helm-ai-kernel/contract_routes.go 43facd485f9c
+G304 core/cmd/helm-ai-kernel/contract_evidence_export.go 43facd485f9c
 G304 core/cmd/helm-ai-kernel/counterfactual_cmd.go e32164746a81
 G304 core/cmd/helm-ai-kernel/demo_cmd.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/demo_finance_cmd.go dbfffc239169

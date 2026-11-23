@@ -6799,13 +6799,13 @@
           ]
         },
         {
-          "file": "core/cmd/helm-ai-kernel/contract_routes.go",
+          "file": "core/cmd/helm-ai-kernel/contract_evidence_verify.go",
           "tests": [
             "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
           ]
         },
         {
-          "file": "core/cmd/helm-ai-kernel/contract_routes.go",
+          "file": "core/cmd/helm-ai-kernel/contract_evidence_verify.go",
           "tests": [
             "core/cmd/helm-ai-kernel.TestEvidenceVerifyReadsAReceiptFileAsItsReaderDoes"
           ]

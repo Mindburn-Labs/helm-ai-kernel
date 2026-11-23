@@ -2023,13 +2023,13 @@ removal_proofs:
       - "core/pkg/crypto.TestKeyRingReportsALegacyReceiptAsNotChecked"
       - "core/cmd/helm-ai-kernel.TestEvidenceVerifyUnderAKeyRingReportsALegacyReceiptAsNotChecked"
   - control: CTL-064
-    file: core/cmd/helm-ai-kernel/contract_routes.go
+    file: core/cmd/helm-ai-kernel/contract_evidence_verify.go
     find: "\t\t\tcase errors.Is(err, errNoTrustedReceiptVerifier), errors.Is(err, helmcrypto.ErrLegacyReceiptRefused):\n"
     replace: "\t\t\tcase errors.Is(err, errNoTrustedReceiptVerifier):\n"
     tests:
       - "core/cmd/helm-ai-kernel.TestEvidenceVerifyDoesNotCheckAnUnversionedReceipt"
   - control: CTL-064
-    file: core/cmd/helm-ai-kernel/contract_routes.go
+    file: core/cmd/helm-ai-kernel/contract_evidence_verify.go
     find: "\t\treceipt, err := receiptverify.ParseReceipt(data, receiptverify.AnySignatureProfile)\n"
     replace: "\t\treceipt := new(contracts.Receipt)\n\t\terr := json.Unmarshal(data, receipt)\n"
     tests:

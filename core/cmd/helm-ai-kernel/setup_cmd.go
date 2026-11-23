@@ -1,3 +1,5 @@
+// quantum_posture: the setup flags accept a classical Ed25519 signing-seed path.
+
 package main
 
 import (

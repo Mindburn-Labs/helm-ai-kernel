@@ -130,6 +130,7 @@
       "source_paths": [
         "core/cmd/helm-ai-kernel/server_cmd.go",
         "core/cmd/helm-ai-kernel/proxy_cmd.go",
+        "core/cmd/helm-ai-kernel/proxy_receipt_store.go",
         "core/cmd/helm-ai-kernel/quickstart_cmd_test.go"
       ],
       "example_paths": [
@@ -319,6 +320,7 @@
       "public_doc_slug": "integrations/openai-compatible-proxy",
       "source_paths": [
         "core/cmd/helm-ai-kernel/proxy_cmd.go",
+        "core/cmd/helm-ai-kernel/proxy_protocol.go",
         "sdk/python/README.md",
         "sdk/ts/README.md"
       ],

@@ -132,9 +132,9 @@ func TestProductionGuardianFactoryRunsEveryRequiredDenyGate(t *testing.T) {
 
 func TestProductionEntrypointsCannotBypassCheckedGuardianFactory(t *testing.T) {
 	productionEntrypoints := map[string]bool{
-		"main.go":        false,
-		"proxy_cmd.go":   false,
-		"mcp_runtime.go": false,
+		"server_runtime.go": false,
+		"proxy_cmd.go":      false,
+		"mcp_runtime.go":    false,
 	}
 	partialConstructorAllowlist := map[string]string{
 		"plan_cmd.go":    "offline analysis command does not dispatch external effects",

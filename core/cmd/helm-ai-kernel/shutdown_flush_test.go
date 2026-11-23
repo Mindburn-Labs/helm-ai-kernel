@@ -138,9 +138,9 @@ func TestFlushObservabilityExportsAfterDrainConsumedBudget(t *testing.T) {
 // TestShutdownFlushOrderGuardCatchesAFlushBeforeTheDrain, which performs it.
 func TestShutdownFlushesObservabilityProvider(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "main.go", nil, 0)
+	file, err := parser.ParseFile(fset, "server_runtime.go", nil, 0)
 	if err != nil {
-		t.Fatalf("parse main.go: %v", err)
+		t.Fatalf("parse server_runtime.go: %v", err)
 	}
 
 	closure := shutdownClosure(t, file)
@@ -307,17 +307,14 @@ func isFlushObservabilityCall(call *ast.CallExpr) bool {
 // TestShutdownFlushOrderGuardCatchesAFlushBeforeTheDrain is the mutation proof
 // for the ordering half.
 //
-// It takes the REAL closure out of main.go, moves the statement holding the
-// flush to the top of the body — the refactor that keeps every other test in
-// this package green while dropping in-flight spans — and requires the guard to
-// report it. The mutation is applied to the parsed tree rather than to main.go
-// on disk: another agent owns that file, and a guard that can only be proven by
-// editing production source is a guard nobody re-proves.
+// The test moves the flush to the top of the shutdown closure in the parsed
+// server_runtime.go tree and requires the guard to catch it. That order can
+// drop in-flight spans. The mutation stays in memory.
 func TestShutdownFlushOrderGuardCatchesAFlushBeforeTheDrain(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "main.go", nil, 0)
+	file, err := parser.ParseFile(fset, "server_runtime.go", nil, 0)
 	if err != nil {
-		t.Fatalf("parse main.go: %v", err)
+		t.Fatalf("parse server_runtime.go: %v", err)
 	}
 	closure := shutdownClosure(t, file)
 	if closure == nil {

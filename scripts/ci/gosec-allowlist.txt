@@ -67,8 +67,8 @@ G115 core/pkg/kms/kms.go 4f078372fcad
 G115 core/pkg/otel/governance_tracer.go 6f4893ebd0c9
 G115 core/pkg/otel/governance_tracer.go fa749bbe492b
 G115 core/pkg/privacy/mpc.go 5d8e07b03f73
-G115 core/pkg/privacy/privacy.go 160873b302bc
-G115 core/pkg/privacy/privacy.go b9a02391f631
+G115 core/pkg/privacy/text_encoding.go 160873b302bc
+G115 core/pkg/privacy/text_encoding.go b9a02391f631
 G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d

@@ -1419,13 +1419,13 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/pack_checks.go",
           "tests": [
             "core/pkg/verifier.TestVerifyBundle_HashMismatch"
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/pack_checks.go",
           "tests": [
             "core/pkg/verifier.TestCheckRegistry_NoCheckPassesWithoutInput"
           ]
@@ -1467,7 +1467,7 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/policy_replay.go",
           "tests": [
             "core/pkg/verifier.TestReplayDeterminism_ATapeThatDoesNotReplayFails"
           ]
@@ -1503,7 +1503,7 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/policy_replay.go",
           "tests": [
             "core/pkg/verifier.TestVerifyBundle_DivergingReplayMaterialFailsWithoutG2"
           ]
@@ -1541,7 +1541,7 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/policy_replay.go",
           "tests": [
             "core/pkg/verifier.TestReplayDeterminism_G2RequiresATapeWithEntries"
           ]
@@ -6829,7 +6829,7 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/signature_trust.go",
           "tests": [
             "core/pkg/verifier.TestDevLocalMCPReceiptIsNotCheckedAsLegacyByDefault",
             "core/cmd/helm-ai-kernel.TestVerifyChecksAnUnversionedMCPReceiptOnlyWhenAsked"
@@ -6849,19 +6849,19 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/receipt_chains.go",
           "tests": [
             "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt"
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/signature_trust.go",
           "tests": [
             "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/signature_trust.go",
           "tests": [
             "core/pkg/verifier.TestUncheckedLegacyReceiptIsReportedAsNotChecked"
           ]
@@ -6891,13 +6891,13 @@
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/receipt_chains.go",
           "tests": [
             "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
           ]
         },
         {
-          "file": "core/pkg/verifier/verifier.go",
+          "file": "core/pkg/verifier/signature_trust.go",
           "tests": [
             "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
           ]

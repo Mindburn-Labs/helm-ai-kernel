@@ -2,20 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 type consoleBootstrapResponse struct {
@@ -83,20 +79,6 @@ type consoleStoreDiagnostic struct {
 	Source  string `json:"source,omitempty"`
 	Path    string `json:"path,omitempty"`
 	Detail  string `json:"detail,omitempty"`
-}
-
-type consoleRouteDiagnostic struct {
-	Method            string `json:"method"`
-	Path              string `json:"path"`
-	MuxPattern        string `json:"mux_pattern"`
-	Auth              string `json:"auth"`
-	RateLimit         string `json:"rate_limit"`
-	ContractStatus    string `json:"contract_status"`
-	OperationID       string `json:"operation_id"`
-	Owner             string `json:"owner"`
-	Group             string `json:"group"`
-	UICoverage        string `json:"ui_coverage"`
-	UnsupportedReason string `json:"unsupported_reason,omitempty"`
 }
 
 type consoleSurfaceDefinition struct {
@@ -534,56 +516,6 @@ func consoleSurfaceDefinitionByID(id string) (consoleSurfaceDefinition, bool) {
 	return consoleSurfaceDefinition{}, false
 }
 
-func consoleRouteDiagnostics() []consoleRouteDiagnostic {
-	specs := RuntimeRouteSpecs()
-	out := make([]consoleRouteDiagnostic, 0, len(specs))
-	for _, spec := range specs {
-		out = append(out, consoleRouteDiagnosticForSpec(spec))
-	}
-	return out
-}
-
-func consoleRouteDiagnosticsForSurface(surface string) []consoleRouteDiagnostic {
-	all := consoleRouteDiagnostics()
-	out := make([]consoleRouteDiagnostic, 0, len(all))
-	for _, route := range all {
-		if route.Group == surface {
-			out = append(out, route)
-		}
-	}
-	return out
-}
-
-func consoleRouteDiagnosticForSpec(spec RuntimeRouteSpec) consoleRouteDiagnostic {
-	coverage, reason := routeUICoverage(spec)
-	return consoleRouteDiagnostic{
-		Method:            spec.Method,
-		Path:              spec.Path,
-		MuxPattern:        spec.MuxPattern,
-		Auth:              string(spec.Auth),
-		RateLimit:         string(spec.RateLimit),
-		ContractStatus:    string(spec.ContractStatus),
-		OperationID:       spec.OperationID,
-		Owner:             spec.Owner,
-		Group:             routeSurfaceGroup(spec.Path),
-		UICoverage:        coverage,
-		UnsupportedReason: reason,
-	}
-}
-
-func routeUICoverage(spec RuntimeRouteSpec) (string, string) {
-	if spec.Auth == RouteAuthService || spec.ContractStatus == RouteContractInternal {
-		return "unsupported", "service-internal route is not callable from the OSS Console"
-	}
-	if spec.ContractStatus == RouteContractCompatibility || spec.ContractStatus == RouteContractImplementation {
-		return "developer-only", "compatibility or implementation route is shown only in Developer diagnostics"
-	}
-	if strings.HasPrefix(spec.Path, "/api/demo") || strings.HasPrefix(spec.Path, "/api/ag-ui") || strings.HasPrefix(spec.Path, "/.well-known") || spec.Path == "/mcp" || strings.HasPrefix(spec.Path, "/mcp/") {
-		return "developer-only", "low-level, demo, or protocol route is not part of the primary operator workflow"
-	}
-	return "wired", ""
-}
-
 func routeSurfaceGroup(path string) string {
 	switch {
 	case strings.HasPrefix(path, "/api/v1/console/diagnostics"):
@@ -647,126 +579,6 @@ func statusFromStore(svc *Services) string {
 	return "unavailable"
 }
 
-func aggregateAgents(receipts []*contracts.Receipt) []map[string]any {
-	type agentStats struct {
-		ID       string
-		Count    int
-		LastSeen string
-		Verdict  string
-	}
-	stats := map[string]*agentStats{}
-	for _, receipt := range receipts {
-		id := strings.TrimSpace(receipt.ExecutorID)
-		if id == "" {
-			id = "anonymous"
-		}
-		entry := stats[id]
-		if entry == nil {
-			entry = &agentStats{ID: id}
-			stats[id] = entry
-		}
-		entry.Count++
-		entry.Verdict = receipt.Status
-		if receipt.Timestamp.After(parseTime(entry.LastSeen)) {
-			entry.LastSeen = receipt.Timestamp.UTC().Format(time.RFC3339Nano)
-		}
-	}
-	records := make([]map[string]any, 0, len(stats))
-	for _, stat := range stats {
-		records = append(records, map[string]any{
-			"agent":     stat.ID,
-			"receipts":  stat.Count,
-			"last_seen": stat.LastSeen,
-			"verdict":   stat.Verdict,
-		})
-	}
-	sort.Slice(records, func(i, j int) bool {
-		return fmt.Sprint(records[i]["agent"]) < fmt.Sprint(records[j]["agent"])
-	})
-	return records
-}
-
-func aggregateActions(receipts []*contracts.Receipt) []map[string]any {
-	type actionStats struct {
-		Action string
-		Count  int
-		Last   string
-		Hash   string
-	}
-	stats := map[string]*actionStats{}
-	for _, receipt := range receipts {
-		action := strings.TrimSpace(receipt.EffectID)
-		if action == "" {
-			action = metadataString(receipt.Metadata, "action")
-		}
-		if action == "" {
-			action = "unknown"
-		}
-		entry := stats[action]
-		if entry == nil {
-			entry = &actionStats{Action: action}
-			stats[action] = entry
-		}
-		entry.Count++
-		entry.Last = receipt.Timestamp.UTC().Format(time.RFC3339Nano)
-		entry.Hash = receipt.ReceiptID
-	}
-	records := make([]map[string]any, 0, len(stats))
-	for _, stat := range stats {
-		records = append(records, map[string]any{
-			"action":       stat.Action,
-			"count":        stat.Count,
-			"last_seen":    stat.Last,
-			"last_receipt": stat.Hash,
-		})
-	}
-	sort.Slice(records, func(i, j int) bool {
-		return fmt.Sprint(records[i]["action"]) < fmt.Sprint(records[j]["action"])
-	})
-	return records
-}
-
-func metadataString(metadata map[string]any, key string) string {
-	if metadata == nil {
-		return ""
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprint(value))
-}
-
-func receiptAuditRecords(receipts []*contracts.Receipt) []map[string]any {
-	records := make([]map[string]any, 0, len(receipts))
-	for _, receipt := range receipts {
-		records = append(records, map[string]any{
-			"event_id":    stableConsoleEventID(receipt),
-			"at":          receipt.Timestamp.UTC().Format(time.RFC3339Nano),
-			"actor":       receipt.ExecutorID,
-			"action":      receipt.EffectID,
-			"status":      receipt.Status,
-			"receipt_id":  receipt.ReceiptID,
-			"decision_id": receipt.DecisionID,
-		})
-	}
-	return records
-}
-
-func replayConsoleRecords(receipts []*contracts.Receipt) []map[string]any {
-	records := make([]map[string]any, 0, len(receipts))
-	for _, receipt := range receipts {
-		records = append(records, map[string]any{
-			"receipt_id":    receipt.ReceiptID,
-			"executor_id":   receipt.ExecutorID,
-			"lamport_clock": receipt.LamportClock,
-			"prev_hash":     receipt.PrevHash,
-			"signature":     receipt.Signature != "",
-		})
-	}
-	return records
-}
-
 func policyRecords(opts serverOptions) []map[string]string {
 	if strings.TrimSpace(opts.PolicyPath) == "" {
 		return []map[string]string{{"key": "policy", "value": "unconfigured"}}
@@ -775,35 +587,6 @@ func policyRecords(opts serverOptions) []map[string]string {
 		{"key": "policy_path", "value": opts.PolicyPath},
 		{"key": "server_mode", "value": opts.Mode},
 	}
-}
-
-func stableConsoleEventID(receipt *contracts.Receipt) string {
-	sum := sha256.Sum256([]byte(receipt.ReceiptID + receipt.DecisionID + receipt.Timestamp.UTC().Format(time.RFC3339Nano)))
-	return "audit_" + fmt.Sprintf("%x", sum[:6])
-}
-
-func parseTime(value string) time.Time {
-	parsed, _ := time.Parse(time.RFC3339Nano, value)
-	return parsed
-}
-
-func listConsoleReceipts(ctx context.Context, svc *Services, limit int) []*contracts.Receipt {
-	tenantID, err := authenticatedReceiptTenantID(ctx)
-	if err != nil {
-		return nil
-	}
-	if svc == nil || svc.ReceiptStore == nil {
-		return nil
-	}
-	reader, ok := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
-	if !ok {
-		return nil
-	}
-	receipts, err := reader.ListLatestByTenant(ctx, tenantID, limit)
-	if err != nil {
-		return nil
-	}
-	return receipts
 }
 
 func envOrDefault(name, fallback string) string {

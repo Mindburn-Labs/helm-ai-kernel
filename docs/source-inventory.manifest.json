@@ -203,7 +203,11 @@
         "core/cmd/helm-ai-kernel/evaluate_memory.go",
         "core/cmd/helm-ai-kernel/receipt_routes_test.go",
         "core/cmd/helm-ai-kernel/console_routes.go",
+        "core/cmd/helm-ai-kernel/console_route_diagnostics.go",
+        "core/cmd/helm-ai-kernel/console_receipt_views.go",
         "core/cmd/helm-ai-kernel/console_routes_test.go",
+        "core/cmd/helm-ai-kernel/server_http.go",
+        "core/cmd/helm-ai-kernel/server_runtime.go",
         "core/pkg/api/**"
       ],
       "owner_doc_path": "core/cmd/README.md",

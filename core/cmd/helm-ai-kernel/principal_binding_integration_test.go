@@ -21,8 +21,8 @@ import (
 // (requireRuntimeTenant, via SetPrincipalBindingStore) each hold their own
 // handle to a store.PrincipalBindingStore: *Services.PrincipalBindings for
 // the endpoint, the package-level principalBindingStore for the gate. In
-// production both are wired to the same instance in main.go (lines
-// ~369-370); this test is the only place that wiring is verified rather than
+// production runServerWithOptions wires both to the same instance.
+// This test is the only place that wiring is verified rather than
 // merely inspected — a future refactor that splits the two sinks apart
 // would be caught here.
 func TestPrincipalBindingEndpointToGateSharedStoreInvariant(t *testing.T) {
@@ -41,7 +41,7 @@ func TestPrincipalBindingEndpointToGateSharedStoreInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wire the ONE store instance both ways, exactly as main.go does at
+	// Wire the ONE store instance both ways, as runServerWithOptions does at
 	// registration: onto *Services for the admin endpoint, and into the
 	// gate via SetPrincipalBindingStore.
 	svc := &Services{PrincipalBindings: sharedStore}

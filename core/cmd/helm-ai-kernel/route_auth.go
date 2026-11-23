@@ -19,7 +19,7 @@ import (
 // principalBindingStore is the package-level registry consulted by tenant and
 // organization-runtime gates to accept (tenant, principal) pairs beyond the
 // single env-configured pair. It is nil unless SetPrincipalBindingStore is called
-// during server startup (see main.go registration), matching
+// during server startup in runServerWithOptions, matching
 // requireRuntimeTenant's existing pattern of reading global os.Getenv state.
 // nil => env-pair-only behavior (current behavior, no panic).
 var principalBindingStore store.PrincipalBindingStore

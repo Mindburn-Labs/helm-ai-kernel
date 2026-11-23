@@ -212,7 +212,7 @@ func TestMetricsLoopbackOnlyOrAuthenticated(t *testing.T) {
 // /metrics only through protectedMetricsHandler.
 func TestListenerSecretsUseConstantTimeComparison(t *testing.T) {
 	secretName := regexp.MustCompile(`(?i)(token|key|secret|provided|credential)`)
-	for _, file := range []string{"listener_auth.go", "mcp_runtime.go", "proxy_cmd.go", "main.go"} {
+	for _, file := range []string{"listener_auth.go", "mcp_runtime.go", "proxy_cmd.go", "main.go", "server_runtime.go", "server_runtime_config.go", "server_http.go"} {
 		fset := token.NewFileSet()
 		parsed, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {

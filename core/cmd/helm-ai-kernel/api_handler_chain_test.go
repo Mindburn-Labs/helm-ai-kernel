@@ -42,9 +42,9 @@ func TestBuildAPIHandlerLayerOrder(t *testing.T) {
 	}
 
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "main.go", nil, 0)
+	file, err := parser.ParseFile(fset, "server_http.go", nil, 0)
 	if err != nil {
-		t.Fatalf("parse main.go: %v", err)
+		t.Fatalf("parse server_http.go: %v", err)
 	}
 
 	ret := singleReturnExpr(t, file, "buildAPIHandler")
@@ -79,7 +79,7 @@ func singleReturnExpr(t *testing.T, file *ast.File, fnName string) ast.Expr {
 		}
 		return ret.Results[0]
 	}
-	t.Fatalf("no func %s found in main.go: the handler chain moved; re-point this guard rather than deleting it", fnName)
+	t.Fatalf("no func %s found in server_http.go: the handler chain moved; re-point this guard rather than deleting it", fnName)
 	return nil
 }
 

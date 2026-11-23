@@ -54,5 +54,6 @@ and the [sealed / air-gapped host guide](../../docs/guides/air-gap-appliance.md)
 
 - `run.sh` — the end-to-end flow
 - `verify_chain.py` — offline receipt-chain integrity check
-- `core/cmd/helm-ai-kernel/proxy_cmd.go` — the governed proxy and receipt store
+- `core/cmd/helm-ai-kernel/proxy_cmd.go` — the governed proxy
+- `core/cmd/helm-ai-kernel/proxy_receipt_store.go` — the JSONL receipt store
 - `scripts/launch/mock-openai-upstream.py` — the local mock model server

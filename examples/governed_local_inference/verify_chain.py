@@ -11,7 +11,7 @@ and verifies, with no network and no HELM binary, that:
 
 The hash is computed over the raw bytes of each line as written, so this
 reproduces the same causal chain the kernel maintains in
-core/cmd/helm-ai-kernel/proxy_cmd.go (receiptStore.Append).
+core/cmd/helm-ai-kernel/proxy_receipt_store.go (receiptStore.Append).
 """
 import hashlib
 import json

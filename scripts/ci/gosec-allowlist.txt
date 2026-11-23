@@ -226,9 +226,9 @@ G304 core/cmd/helm-ai-kernel/plan_cmd.go f30282e93ef4
 G304 core/cmd/helm-ai-kernel/policy_cmd.go 70cf39abc284
 G304 core/cmd/helm-ai-kernel/policy_export.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/private_config_file.go 84f8ae84aaaf
-G304 core/cmd/helm-ai-kernel/proxy_cmd.go 378b1b60131a
-G304 core/cmd/helm-ai-kernel/proxy_cmd.go 68450043cea4
 G304 core/cmd/helm-ai-kernel/proxy_cmd.go 7e2d50cf97b2
+G304 core/cmd/helm-ai-kernel/proxy_receipt_store.go 378b1b60131a
+G304 core/cmd/helm-ai-kernel/proxy_receipt_store.go 68450043cea4
 G304 core/cmd/helm-ai-kernel/quickstart_cmd.go 4e8db607270c
 G304 core/cmd/helm-ai-kernel/quickstart_cmd.go 74b93bd94034
 G304 core/cmd/helm-ai-kernel/quickstart_cmd.go b18ab4cbec78

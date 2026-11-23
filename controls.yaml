@@ -278,13 +278,13 @@ removal_proofs:
     tests:
       - "core/pkg/verifier/packfs.TestDirectoryReplacementIsRefused"
   - control: CTL-009
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/pack_checks.go
     find: "\t\t\tif actualHash != expectedHash {\n"
     replace: "\t\t\tif false && actualHash != expectedHash {\n"
     tests:
       - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
   - control: CTL-009
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/pack_checks.go
     find: "\tif path == \"\" {\n\t\treturn notRun(\"connector_evidence\", \"pack has no connector_evidence.json\")\n"
     replace: "\tif path == \"\" {\n\t\treturn verified(\"connector_evidence\", \"no connector evidence record\")\n"
     tests:
@@ -326,7 +326,7 @@ removal_proofs:
     tests:
       - "core/pkg/verifier.TestEUAIActProfile_FilesPastThePackBudgetAreNamed"
   - control: CTL-009
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/policy_replay.go
     find: "\t\tif len(issues) > 0 {\n\t\t\treturn failed(name, fmt.Sprintf(\"the tape does not replay:"
     replace: "\t\tif false && len(issues) > 0 {\n\t\t\treturn failed(name, fmt.Sprintf(\"the tape does not replay:"
     tests:
@@ -362,7 +362,7 @@ removal_proofs:
     tests:
       - "core/pkg/verifier/externalreceipt.TestVerifyBundleRefusesAHostEvidenceDirectoryLinkedFromOutsideThePack"
   - control: CTL-009
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/policy_replay.go
     find: "\t\tif liveHash != replayHash {\n"
     replace: "\t\tif false && liveHash != replayHash {\n"
     tests:
@@ -400,7 +400,7 @@ removal_proofs:
       - "core/pkg/verifier.TestReplayDeterminism_ATapePastTheByteBudgetFailsByName"
       - "core/pkg/tape.TestLoadTape_EntryFilesPastTheTapeBudgetFailByName"
   - control: CTL-009
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/policy_replay.go
     find: "\t\t\tif declared {\n\t\t\t\treturn failed(name, \"gate G2 requires a tape to replay"
     replace: "\t\t\tif false && declared {\n\t\t\t\treturn failed(name, \"gate G2 requires a tape to replay"
     tests:
@@ -2053,7 +2053,7 @@ removal_proofs:
     tests:
       - "core/cmd/helm-ai-kernel.TestDemoVerifyReadsTheReceiptAsItsReaderDoes"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/signature_trust.go
     find: "\t\tif legacyV4ReceiptRefused(document, opts) {\n\t\t\treturn false, false\n\t\t}\n"
     replace: ""
     tests:
@@ -2073,19 +2073,19 @@ removal_proofs:
       - "core/pkg/receiptverify.TestValidateReceiptMemberNamesAppliesOnlyTheNameRules"
       - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/receipt_chains.go
     find: "\t\tif err := receiptverify.ValidateReceiptMemberNames(data); err != nil {\n"
     replace: "\t\tif err := receiptverify.ValidateReceiptMemberNames(data); false && err != nil {\n"
     tests:
       - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceipt"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/signature_trust.go
     find: "\t\t\t\tif errors.Is(parseErr, receiptverify.ErrJSONTooDeep) {\n"
     replace: "\t\t\t\tif false && errors.Is(parseErr, receiptverify.ErrJSONTooDeep) {\n"
     tests:
       - "core/pkg/verifier.TestDeeplyNestedReceiptIsNotSkippedBySignatureTrust"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/signature_trust.go
     find: "\tif notChecked > 0 {\n"
     replace: "\tif false && notChecked > 0 {\n"
     tests:
@@ -2115,13 +2115,13 @@ removal_proofs:
     tests:
       - "core/pkg/crypto.TestOnlyTheLegacyOptionOpensTheLegacyPreimage"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/receipt_chains.go
     find: "\tif succ.SignatureVersion != contracts.ReceiptSignatureV5 && n.declared != \"\" {\n"
     replace: "\tif n.declared != \"\" {\n"
     tests:
       - "core/pkg/verifier.TestTeamPackCannotHideADeletedReceiptBehindAnUnsignedStandIn"
   - control: CTL-064
-    file: core/pkg/verifier/verifier.go
+    file: core/pkg/verifier/signature_trust.go
     find: "\tif tooDeep > 0 {\n"
     replace: "\tif false && tooDeep > 0 {\n"
     tests:

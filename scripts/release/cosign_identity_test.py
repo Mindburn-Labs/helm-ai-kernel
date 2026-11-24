@@ -291,7 +291,14 @@ class DocumentedRecipeTest(unittest.TestCase):
 
     def test_every_documented_cosign_verification_pins_the_exact_release_identity(self) -> None:
         commands = self.documented_cosign_commands()
-        self.assertGreaterEqual(len(commands), 4, "expected the PUBLISHING and Hermes recipes")
+        for verb in ("verify", "verify-blob"):
+            self.assertTrue(
+                any(
+                    name == "docs/PUBLISHING.md" and command.strip().startswith(f"cosign {verb} ")
+                    for name, command in commands
+                ),
+                f"docs/PUBLISHING.md must show cosign {verb}",
+            )
         for name, command in commands:
             with self.subTest(doc=name, command=command[:80]):
                 self.assertNotIn("--certificate-identity-regexp", command)

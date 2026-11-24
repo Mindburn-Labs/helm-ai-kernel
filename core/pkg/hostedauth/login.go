@@ -1,8 +1,10 @@
 // Package hostedauth holds the credentials a local helm-ai-kernel keeps for the
 // hosted HELM control plane: the Console login session (login), the device-code
-// machine credential (connect, mcp bridge) and the Console pairing (control-plane
-// pair). It moved out of the retired Launchpad tree (HELM-762) unchanged.
+// machine credential (connect, mcp bridge) and Console pairing (control-plane pair).
 package hostedauth
+
+// quantum_posture: login persists a JWT from the Control Plane and sends it as
+// a bearer token. It introduces no signing or verification primitive.
 
 import (
 	"bytes"

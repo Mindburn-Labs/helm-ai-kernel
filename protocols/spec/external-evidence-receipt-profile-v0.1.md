@@ -7,6 +7,8 @@ created: 2026-05-21
 
 # HELM External Evidence Receipt Profile v0.1
 
+<!-- quantum_posture: the receipt profile specifies classical Ed25519 signatures and SHA-256 hashing. -->
+
 ## Purpose
 
 This profile defines the vendor-neutral envelope HELM accepts for externally

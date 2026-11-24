@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -120,24 +119,17 @@ func (s *ActivityServer) ListOwnerExceptions(ctx context.Context, req *connect.R
 	return connect.NewResponse(out), nil
 }
 
-func activityTimestamp(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
 func activityCoverageProto(c activitytrail.Coverage) *gatewayv1.ActivityCoverage {
 	return &gatewayv1.ActivityCoverage{Repository: c.Repository, Class: c.Class, Enabled: c.Enabled,
-		DefaultBranch: c.DefaultBranch, HeadSha: c.HeadSHA, LastPollAt: activityTimestamp(c.LastPollAt),
-		LastPollError: c.LastPollError, LastEventPollAt: activityTimestamp(c.LastEventPollAt),
-		NextEventPollAt: activityTimestamp(c.NextEventPollAt), EventWindowCapped: c.EventWindowCapped,
+		DefaultBranch: c.DefaultBranch, HeadSha: c.HeadSHA, LastPollAt: optionalTime(c.LastPollAt),
+		LastPollError: c.LastPollError, LastEventPollAt: optionalTime(c.LastEventPollAt),
+		NextEventPollAt: optionalTime(c.NextEventPollAt), EventWindowCapped: c.EventWindowCapped,
 		AttributionComplete: c.AttributionComplete, UnattributedCount: c.UnattributedCount}
 }
 
 func activityObservationProto(o activitytrail.Observation) *gatewayv1.ActivityObservation {
 	return &gatewayv1.ActivityObservation{Repository: o.Repository, Ref: o.Ref, BeforeSha: o.BeforeSHA,
 		AfterSha: o.AfterSHA, FactDigest: o.FactDigest, ActorLogin: o.ActorLogin,
-		ProviderTime: activityTimestamp(o.ProviderTime), ObservedAt: timestamppb.New(o.ObservedAt),
+		ProviderTime: optionalTime(o.ProviderTime), ObservedAt: timestamppb.New(o.ObservedAt),
 		Source: o.Source, Coverage: o.Coverage, Governed: o.Governed}
 }

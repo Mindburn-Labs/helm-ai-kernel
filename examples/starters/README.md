@@ -25,6 +25,8 @@ bash examples/starters/google/ci-smoke.sh
 bash examples/starters/openai/ci-smoke.sh
 ```
 
-The smoke scripts check that `helm-ai-kernel init <profile>` creates `helm.yaml` and
-`.env.helm.example` in a temporary project, then run `helm-ai-kernel doctor`
-there without failing on its result.
+The smoke scripts pass when `helm-ai-kernel init <profile>` creates nonempty
+`helm.yaml` and `.env.helm.example` files in a temporary project. They also run
+`helm-ai-kernel doctor` and print its exit status as a separate environment
+diagnostic. Doctor returns 0 for healthy, 1 for warnings, and 2 for critical
+failures.

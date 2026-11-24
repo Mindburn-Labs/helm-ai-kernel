@@ -5,6 +5,8 @@ last_reviewed: 2026-05-20
 
 # helm-ai-kernel CNCF Sandbox Application
 
+<!-- quantum_posture: the release evidence cited here uses classical Cosign signatures. -->
+
 ## Audience
 
 Maintainers using this internal governance note to track source-backed CNCF-readiness evidence for HELM AI Kernel.

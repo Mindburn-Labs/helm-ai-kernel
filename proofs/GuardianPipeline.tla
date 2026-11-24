@@ -1,6 +1,6 @@
 ---- MODULE GuardianPipeline ----
-\* TLA+ Specification for the HELM Guardian 6-Gate Pipeline
-\* Proves: FailClosed, DefaultDeny, AllowRequiresUnanimity
+\* Model of the HELM Guardian six-gate pipeline.
+\* TLC checks the invariants in guardian.cfg within its configured action bound.
 \*
 \* Model-check with: java -jar .cache/tlc/tlc.jar -config guardian.cfg GuardianPipeline.tla
 
@@ -30,7 +30,7 @@ TypeInvariant ==
 
 \* ─── INVARIANTS (Safety Properties) ──────────────────────────────────────
 
-\* I1: Fail-Closed — If ANY gate errors, the verdict MUST be DENY
+\* I1: A gate error rules out ALLOW.
 FailClosed ==
     (\E g \in Gates : gateState[g] = "ERROR") => pipelineVerdict # "ALLOW"
 

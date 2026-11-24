@@ -1,10 +1,3 @@
-// Package governance — DenialReceipt.
-//
-// Per HELM 2030 Spec §1.2 — Fail-Closed Autonomy:
-//
-//	If policy, provenance, tool boundaries, tenancy isolation, jurisdiction
-//	constraints, verification, or budgets cannot be satisfied, HELM refuses
-//	the action and emits a DenialReceipt. No "best effort" in production paths.
 package governance
 
 import (
@@ -26,8 +19,7 @@ const (
 	DenialEnvelope     DenialReason = "ENVELOPE"
 )
 
-// DenialReceipt is the proof artifact emitted when any fail-closed boundary
-// refuses an action. Every refusal is receipted — no silent drops.
+// DenialReceipt records the reason and context for a refused action.
 type DenialReceipt struct {
 	ReceiptID   string       `json:"receipt_id"`
 	DeniedAt    time.Time    `json:"denied_at"`
@@ -42,7 +34,7 @@ type DenialReceipt struct {
 	ContentHash string       `json:"content_hash"`
 }
 
-// DenialLedger records all denial receipts for audit.
+// DenialLedger preserves the type of the retired in-memory denial ledger.
 type DenialLedger struct {
 	mu       sync.Mutex
 	receipts []DenialReceipt

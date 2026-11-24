@@ -1,6 +1,6 @@
 // Command invcheck enforces the invariant constitution in HELM_INVARIANTS.md.
 //
-// Two gates live here:
+// Three subcommands check the constitution and its control registry.
 //
 //	invcheck verify         every INV-NNN carries a verify: hint, ids are unique,
 //	                        and every machine-checkable reference in a hint

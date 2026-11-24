@@ -86,10 +86,17 @@ def check_chart_smoke(path: Path) -> None:
     require_digest_default(path, text)
     for token in [
         "PRODUCTION_IMAGE_DIGEST",
-        "requires image.digest pinned by immutable sha256 digest",
         "--set image.digest=",
+        'source "$SCENARIO_DIR/production.sh"',
     ]:
         require(text, token, path)
+
+    production_path = path.with_suffix("") / "production.sh"
+    require(
+        production_path.read_text(encoding="utf-8"),
+        'assert_contains "$image_digest_fail_log" "requires image.digest pinned by immutable sha256 digest"',
+        production_path,
+    )
 
 
 def check_authority_state_chart(path: Path) -> None:

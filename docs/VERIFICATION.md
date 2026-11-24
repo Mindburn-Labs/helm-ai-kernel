@@ -175,7 +175,7 @@ Whether missing evidence is `FAILED` or `NOT_RUN` follows from what requires it:
     tape replayed. Without `G2` the files in `05_DIFFS` are not read:
     producers keep placeholders and other artifacts there, and only `G2`
     makes them replay differences; under `G2` an empty file whose name starts
-    with `.` (the `.keep` the launchpad writer creates) is a placeholder and
+    with `.` (such as `.keep` in older Launchpad packs) is a placeholder and
     anything else is a difference. A `gates` value that is not a list of
     gate names is malformed and fails.
   - An `eu_ai_act_profile` is found in every `.json` file, in every document

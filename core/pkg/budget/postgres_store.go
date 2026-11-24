@@ -6,7 +6,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// PostgresStorage implements Storage using PostgreSQL.
+// PostgresStorage preserves the type of the retired Postgres budget store.
 type PostgresStorage struct {
 	db *sql.DB
 }

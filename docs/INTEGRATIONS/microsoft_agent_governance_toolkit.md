@@ -9,10 +9,6 @@ last_reviewed: 2026-05-05
 
 Integration developers mapping Microsoft agent tooling through the HELM OpenAI-compatible proxy and receipt flow.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `integrations/microsoft-agent-governance-toolkit`
@@ -20,37 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of Microsoft Agent Governance Toolkit Coexistence in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["Microsoft Agent Governance Toolkit Coexistence"]
-        A["TypeScript SDK Coverage"]
-        B["Deployment Pattern"]
-        C["Limits"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-
-    %% Premium Styling Rules
-```
-
 
 Microsoft announced Agent Governance Toolkit (AGT) on 2026-04-02 as an open-source runtime governance layer for autonomous AI agents. The announcement and repository position AGT around deterministic action policy, zero-trust identity, sandboxing, SRE controls, and framework integrations across LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, LlamaIndex, and adjacent agent stacks.
 

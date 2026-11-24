@@ -40,8 +40,6 @@ flowchart TD
     compose --> chart
     chart --> receipt
     receipt --> verify
-
-    %% Premium Styling Rules
     style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
@@ -68,7 +66,7 @@ flowchart TD
 | TypeScript OpenAI base URL | `examples/ts_openai_baseurl/` | You want typed JavaScript/TypeScript proxy integration. |
 | JavaScript OpenAI base URL | `examples/js_openai_baseurl/` | You want a minimal JavaScript proxy example. |
 | MCP client | `examples/mcp_client/` | You want MCP invocation through HELM. |
-| Receipt verification | `examples/receipt_verification/` | You want offline verification examples. |
+| Receipt verification | `examples/receipt_verification/` | You want SDK receipt inspection or the offline verifier command. |
 | Starters | `examples/starters/` | You want provider starter layouts for OpenAI, Anthropic, Google, or Codex-style agents. |
 | Policies | `examples/policies/` | You want CEL/Rego/Cedar policy examples. |
 

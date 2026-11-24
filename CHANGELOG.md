@@ -9,10 +9,6 @@ last_reviewed: 2026-09-28
 
 This changelog is for developers, operators, security reviewers, and evaluators tracking public HELM AI Kernel interface changes across releases.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `helm-ai-kernel/changelog`
@@ -21,8 +17,6 @@ After this page you should know what this surface is for, which source files own
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
 ## Troubleshooting
 
 | Symptom | First check |
@@ -30,63 +24,13 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 | A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
 | A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
-## Diagram
-
-This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["HELM AI Kernel Changelog"]
-        A["[Unreleased]"]
-        R5["[0.8.5] - 2026-08-23"]
-        R4["[0.8.4] - 2026-08-12"]
-        A00["[0.7.2] - 2026-07-13"]
-        A0["[0.7.1] - 2026-07-07"]
-        A1["[0.7.0] - 2026-07-05"]
-        A2["[0.6.0] - 2026-07-02"]
-        B["[0.5.20] - 2026-07-01"]
-        B0["[0.5.19] - 2026-07-01"]
-        B1["[0.5.16] - 2026-06-18"]
-        B2["[0.5.10] - 2026-06-04"]
-        C["[0.5.9] - 2026-06-03"]
-        D["[0.5.4] - 2026-05-20"]
-        E["[0.5.3] - 2026-05-19"]
-        F["[0.5.2] - 2026-05-19"]
-        G["[0.5.1] - 2026-05-18"]
-        H["[0.5.0] - 2026-05-13"]
-        I["[0.4.0] - 2026-04-25"]
-        J["Validation"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> R5
-    R5 --> R4
-    R4 --> A00
-    A00 --> A0
-    A0 --> A1
-    A1 --> A2
-    A2 --> B
-    B --> B0
-    B0 --> B1
-    B1 --> B2
-    B2 --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> I
-    I --> J
-
-    %% Premium Styling Rules
-```
-
-
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+- `run maintenance` lists open and acknowledged local incidents and returns
+  exit status 1 when any need review. It no longer fabricates conformance
+  results or marks incidents resolved.
 
 - `make first-use` builds the kernel and standalone verifier, exercises authenticated local HTTP ALLOW/DENY decisions and fetches their receipts, then verifies them offline and rejects tampered receipts and the wrong key. Source quickstart instructions include the required credentials and an allow-capable sample policy.
 - Setup dry runs can preview configuration before the client is installed. Real installation still requires the client and validates existing signing material and configuration. Named Claude Code/Codex status defaults to project scope; fleet status and doctor inspect both supported scopes. Repair and removal retain their existing defaults.

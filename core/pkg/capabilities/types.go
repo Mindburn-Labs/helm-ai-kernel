@@ -19,8 +19,7 @@ type Capability struct {
 	Outputs     SchemaDefinition  `json:"outputs"`
 	Signature   string            `json:"signature"` // Hash of Name+Inputs+Outputs
 
-	// Handler is the runtime implementation.
-	// In a real system, this is loaded from WASM/Plugin.
+	// Handler invokes the capability in process.
 	Handler func(context.Context, map[string]interface{}) (map[string]interface{}, error) `json:"-"`
 }
 

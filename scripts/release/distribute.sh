@@ -24,6 +24,8 @@ fi
 
 echo "⚠️  Legacy/manual helper: tag-triggered release.yml is the maintained lockstep release path."
 echo "Distributing HELM $VERSION across all ecosystems..."
+skipped=()
+maven_failed=false
 
 # 1. Go (via Git Tags)
 echo "🐹 Tagging Go SDK..."
@@ -60,6 +62,7 @@ echo "✅ Go SDK tagged (v$VERSION)."
 echo "🦀 Publishing Rust SDK..."
 if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
     echo "⚠️  CARGO_REGISTRY_TOKEN not set. Skipping Rust publish."
+    skipped+=(crates.io)
 else
     cd sdk/rust
     # Update version in Cargo.toml
@@ -74,6 +77,7 @@ fi
 echo "📦 Publishing NPM package..."
 if [ -z "$NPM_TOKEN" ]; then
     echo "⚠️  NPM_TOKEN not set. Skipping NPM publish."
+    skipped+=(npm)
 else
     cd sdk/ts
     npm version "$VERSION" --no-git-tag-version --allow-same-version
@@ -88,6 +92,7 @@ fi
 echo "🐍 Publishing PyPI package..."
 if [ -z "$PYPI_TOKEN" ]; then
     echo "⚠️  PYPI_TOKEN not set. Skipping PyPI publish."
+    skipped+=(PyPI)
 else
     cd sdk/python
     # Update version in pyproject.toml
@@ -103,6 +108,7 @@ fi
 echo "☕ Publishing Java SDK..."
 if [ -z "$OSSRH_USERNAME" ]; then
     echo "⚠️  OSSRH_USERNAME not set. Skipping Maven publish."
+    skipped+=(Maven)
 else
     cd sdk/java
     mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
@@ -115,6 +121,7 @@ else
     else
         echo "⚠️  Maven publication failed."
         echo "   TIP: Status 402 usually means Sonatype Central needs account verification."
+        maven_failed=true
     fi
     cd ../..
 fi
@@ -123,6 +130,7 @@ fi
 echo "🐳 Publishing Docker image..."
 if [ -z "$DOCKER_REPO" ]; then
     echo "⚠️  DOCKER_REPO not set. Skipping Docker publish."
+    skipped+=(Docker)
 else
     if [ -n "$DOCKER_PASSWORD" ] && [ -n "$DOCKER_USERNAME" ]; then
         echo "🔑 Logging into Docker..."
@@ -135,4 +143,11 @@ else
     echo "✅ Docker image published."
 fi
 
-echo "🎉 Full Distribution complete for version $VERSION!"
+if (( ${#skipped[@]} )); then
+    printf 'Skipped publication channels for %s: %s\n' "$VERSION" "${skipped[*]}"
+fi
+if [[ "$maven_failed" == true ]]; then
+    printf 'Manual distribution for %s failed at Maven.\n' "$VERSION" >&2
+    exit 1
+fi
+printf 'Manual distribution finished for %s.\n' "$VERSION"

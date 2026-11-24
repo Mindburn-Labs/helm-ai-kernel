@@ -4,8 +4,7 @@ import (
 	"sync"
 )
 
-// MemoryStorage implements Storage in memory.
-// Thread-safe via RWMutex.
+// MemoryStorage preserves the type of the retired in-memory budget store.
 type MemoryStorage struct {
 	mu      sync.RWMutex
 	budgets map[string]*Budget

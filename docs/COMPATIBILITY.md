@@ -39,8 +39,6 @@ flowchart TD
     SDKs --> Starters
     Kernel --> Policy
     Policy --> Deploy
-
-    %% Premium Styling Rules
     style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
 

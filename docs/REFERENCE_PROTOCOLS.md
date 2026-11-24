@@ -45,8 +45,6 @@ flowchart TD
     receipt --> evidence
     evidence --> conformance
     conformance --> registry
-
-    %% Premium Styling Rules
     style request fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style decision fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff

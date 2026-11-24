@@ -9,10 +9,6 @@ last_reviewed: 2026-05-05
 
 Security reviewers mapping MCP firewall behavior to OWASP-style agentic threat categories.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `owasp-mcp-threat-mapping`
@@ -20,45 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of OWASP MCP Threat Mapping in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        A["Source truth"]
-        C["Validation"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        Page["OWASP MCP Threat Mapping"]
-    end
-
-    subgraph Execution["3. Execution & Verdict Plane"]
-        B["Reader action"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-
-    %% Premium Styling Rules
-    style Page fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
-```
-
 
 This page maps retained HELM AI Kernel control points to OWASP-style MCP and agent-tooling threat areas. It is a public engineering map, not a certification statement.
 

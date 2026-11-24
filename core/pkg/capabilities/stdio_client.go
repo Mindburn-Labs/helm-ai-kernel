@@ -1,7 +1,5 @@
 package capabilities
 
-import ()
-
 // StdioMCPClient talks to an MCP server via stdio.
 type StdioMCPClient struct {
 	Command string

@@ -41,8 +41,6 @@ flowchart TD
     Schemas --> Tests
     Tests --> SDKs
     SDKs --> Receipts
-
-    %% Premium Styling Rules
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
 

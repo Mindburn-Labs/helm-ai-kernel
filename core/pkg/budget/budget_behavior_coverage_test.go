@@ -1,13 +1,6 @@
 package budget
 
-import (
-	"context"
-	"errors"
-	"testing"
-	"time"
-)
-
-// --- RiskWeights (4 levels) ---
+import "testing"
 
 func TestRiskWeights_LowIsOne(t *testing.T) {
 	if RiskWeights[RiskLow] != 1.0 {
@@ -33,57 +26,12 @@ func TestRiskWeights_CriticalIsTen(t *testing.T) {
 	}
 }
 
-// --- NewRiskEnforcer ---
-
-// --- SetBudget / GetBudget ---
-
-// --- CheckRisk per level ---
-
-// --- ShrinkAutonomy ---
-
-// --- IsAutonomousAllowed per threshold ---
-
-// --- ComputeCapMillis ---
-
-// --- BlastRadiusCap ---
-
-// --- RiskScoreCap ---
-
-// --- MemoryStorage ---
-
-// --- NewSimpleEnforcer ---
-
-// --- Check: within / exceeded / boundary ---
-
-// --- Fail-closed on error ---
-
-type failingStorage struct{ MemoryStorage }
-
-func (f *failingStorage) Get(_ context.Context, _ string) (*Budget, error) {
-	return nil, errors.New("storage down")
-}
-
-type failingSetStorage struct{ MemoryStorage }
-
-func (f *failingSetStorage) Get(_ context.Context, _ string) (*Budget, error) {
-	return &Budget{TenantID: "t1", DailyLimit: 9999, MonthlyLimit: 9999, LastUpdated: time.Now()}, nil
-}
-func (f *failingSetStorage) Set(_ context.Context, _ *Budget) error {
-	return errors.New("write failed")
-}
-
-// --- Enforcement receipts ---
-
-// --- Budget type fields ---
-
 func TestCost_FieldsAccessible(t *testing.T) {
 	c := Cost{Amount: 150, Currency: "USD", Reason: "inference"}
 	if c.Amount != 150 || c.Currency != "USD" || c.Reason != "inference" {
 		t.Error("Cost fields not set correctly")
 	}
 }
-
-// --- Additional SimpleEnforcer behaviors ---
 
 func TestRiskBudget_FieldsAccessible(t *testing.T) {
 	rb := RiskBudget{

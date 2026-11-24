@@ -2,8 +2,6 @@
 // Per HELM Normative Addendum v1.5 Section B - Deterministic CEL Profile.
 package governance
 
-import ()
-
 // CELDPProfileID is the profile identifier for deterministic CEL.
 const CELDPProfileID = "cel-dp-v1"
 

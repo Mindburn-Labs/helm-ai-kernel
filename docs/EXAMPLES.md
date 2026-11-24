@@ -49,8 +49,6 @@ flowchart TD
     Run --> Receipt
     Receipt --> Verify
     Verify --> Gate
-
-    %% Premium Styling Rules
     style Run fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff

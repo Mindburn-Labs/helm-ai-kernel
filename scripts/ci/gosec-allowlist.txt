@@ -161,7 +161,7 @@ G304 core/cmd/helm-ai-kernel/host_evidence_cmd.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/import_cmd.go 40d95a4c52e5
 G304 core/cmd/helm-ai-kernel/incident_cmd.go 06be88a9da1f
 G304 core/cmd/helm-ai-kernel/incident_cmd.go ae3c5478a0d9
-G304 core/cmd/helm-ai-kernel/incident_cmd.go ae3c5478a0d9
+G304 core/cmd/helm-ai-kernel/incident_cmd.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/incident_cmd.go e002b30f196c
 G304 core/cmd/helm-ai-kernel/init_cmd.go a2d566e15b03
 G304 core/cmd/helm-ai-kernel/lite_mode.go 78c57287c713
@@ -293,7 +293,6 @@ G306 core/cmd/helm-ai-kernel/evidence_prove_entry_cmd.go a51a8ca3d792
 G306 core/cmd/helm-ai-kernel/import_cmd.go 2524c2b031f4
 G306 core/cmd/helm-ai-kernel/incident_cmd.go 40e960e5b568
 G306 core/cmd/helm-ai-kernel/incident_cmd.go 48045badb9a7
-G306 core/cmd/helm-ai-kernel/incident_cmd.go 63c15c583773
 G306 core/cmd/helm-ai-kernel/init_cmd.go 1786a5c2a0e7
 G306 core/cmd/helm-ai-kernel/init_cmd.go 5382413e0cba
 G306 core/cmd/helm-ai-kernel/init_cmd.go d91d070d8295

@@ -1,7 +1,5 @@
 package capabilities
 
-import ()
-
 // MissingOrgan describes a single missing capability with resolution options.
 type MissingOrgan struct {
 	CapabilityID          string            `json:"capability_id"`

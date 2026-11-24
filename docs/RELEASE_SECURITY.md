@@ -47,8 +47,6 @@ flowchart TD
     sbom --> verify
     attestation --> verify
     optional --> verify
-
-    %% Premium Styling Rules
     style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
 

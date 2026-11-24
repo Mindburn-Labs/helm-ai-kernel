@@ -2,8 +2,6 @@
 // Per HELM Normative Addendum v1.5 Section C - EvidencePack Merkle Construction.
 package executor
 
-import ()
-
 // MerkleProfileID is the profile identifier for Merkle-v1.
 const MerkleProfileID = "merkle-v1"
 

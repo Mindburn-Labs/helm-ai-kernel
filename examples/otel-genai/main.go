@@ -1,23 +1,10 @@
-// Example: helm-ai-kernel governance tracer emitting OTel GenAI semconv spans.
-//
-// This program is the canonical end-to-end smoke test for Workstream C of
-// the helm-ai-kernel SOTA execution plan. It demonstrates that:
-//
-//  1. helm-ai-kernel governance spans carry the stable OTel GenAI attribute keys
-//     (gen_ai.system, gen_ai.request.model, gen_ai.tool.call.id, ...).
-//  2. The helm correlation_id is mirrored into gen_ai.tool.call.id, giving
-//     a 1:1 cross-reference between OTel traces and helm-ai-kernel receipts.
-//  3. helm-specific governance attributes (helm.verdict, helm.policy_id,
-//     helm.proof_node_id) live under the helm.* namespace alongside the
-//     gen_ai.* keys on the same span.
+// This example records an OpenTelemetry GenAI tool-call span with HELM
+// governance attributes. The receipt correlation ID also appears as
+// gen_ai.tool.call.id.
 //
 // Run:
 //
 //	cd examples/otel-genai && go run .
-//
-// Smoke test (asserts the same contract):
-//
-//	cd examples/otel-genai && go test ./...
 package main
 
 import (
@@ -41,17 +28,12 @@ func main() {
 	}
 }
 
-// run wires an in-memory exporter, emits one governed tool-call span, and
-// prints the recorded attributes so an operator can eyeball the contract.
-// It returns the recorded SpanStubs so the smoke test can assert against
-// the exact attribute set.
+// run records one tool-call span and prints its attributes.
 func run(out io.Writer) error {
 	ctx := context.Background()
 
-	// Wire an in-memory exporter so the example is self-contained — no OTel
-	// collector needed to demo the contract. Setting the global provider
-	// means helmotel.NoopTracer (which calls otel.Tracer("helm.governance.noop"))
-	// will pick up our exporter automatically.
+	// NoopTracer uses the global provider, so install the in-memory exporter
+	// before constructing the tracer.
 	exp := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	otelapi.SetTracerProvider(tp)
@@ -59,11 +41,8 @@ func run(out io.Writer) error {
 
 	gt := helmotel.NoopTracer()
 
-	// Generate a helm correlation_id, the same way the helm-ai-kernel proxy does.
 	corr := tracing.NewCorrelationID()
 
-	// Emit a governed GenAI tool-call span. This is the wire shape every
-	// SIEM exporter consumes.
 	gt.TraceGenAIToolCall(ctx, helmotel.GenAIToolCallEvent{
 		System:        observability.GenAISystemOpenAI,
 		RequestModel:  "gpt-6-sol",
@@ -85,7 +64,6 @@ func run(out io.Writer) error {
 		LatencyMs:     1.2,
 	})
 
-	// Force-flush the exporter pipeline so all spans are visible.
 	if err := tp.ForceFlush(ctx); err != nil {
 		return fmt.Errorf("flush: %w", err)
 	}

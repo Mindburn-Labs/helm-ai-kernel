@@ -1,7 +1,5 @@
 package governance
 
-import ()
-
 // AgentSafetyContext is the runtime fact contract consumed by the built-in
 // agent-safety baseline bundle.
 type AgentSafetyContext struct {

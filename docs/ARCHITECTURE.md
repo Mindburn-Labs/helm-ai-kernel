@@ -11,10 +11,6 @@ last_reviewed: 2026-05-05
 
 Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, API, or integration docs.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `architecture`
@@ -23,50 +19,8 @@ After this page you should know what this surface is for, which source files own
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of Architecture in reading order.
 Use [Canonical diagrams](architecture/canonical-diagrams.md) for public
 execution-boundary, MCP quarantine, evidence, drift, and long-horizon visuals.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["Architecture"]
-        B["2. Execution and Proxy Surface"]
-        D["4. Contracts and Schemas"]
-        E["5. SDKs"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        A["1. Policy Boundary"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        C["3. Receipts and Evidence"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-
-    %% Premium Styling Rules
-    style A fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style C fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
 
 HELM is organized around an execution boundary rather than around model prompting. The retained OSS implementation has five main pieces.
 

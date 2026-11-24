@@ -1,11 +1,3 @@
-// estimate.go provides pre-execution cost estimation based on historical data.
-// Before running a workflow, estimate total cost from similar past executions.
-//
-// Design invariants:
-//   - Estimates based on moving average of recent executions
-//   - Per-tool cost models maintained independently
-//   - Thread-safe
-//   - Returns both point estimate and confidence interval
 package budget
 
 import (
@@ -27,8 +19,7 @@ type CostEstimate struct {
 // EstimatorOption configures optional behavior for CostEstimator.
 type EstimatorOption func(*CostEstimator)
 
-// CostEstimator maintains per-tool cost histories and computes estimates
-// using a moving average with percentile-based confidence intervals.
+// CostEstimator preserves the type of the retired cost estimator.
 type CostEstimator struct {
 	mu         sync.RWMutex
 	history    map[string][]int64 // toolName -> recent costs (cents)

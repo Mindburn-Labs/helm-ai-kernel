@@ -1,35 +1,11 @@
 import Lake
 open Lake DSL
 
-/-
-  Lake build configuration for the HELM AI Kernel Lean proofs.
-
-  Workstream F / F2 + F3 — Phase 3 of the helm-ai-kernel 100% SOTA execution
-  plan. The single library target `EffectPermitSoundness` lives one
-  directory up from this lakefile (in proofs/), reached via `srcDir`.
-
-  Run locally:
-
-      cd proofs/Lean
-      lake build
-
-  Requires Lean 4 toolchain (elan + lake) — see lean-toolchain for the
-  pinned version. CI installs elan and runs the same command from
-  .github/workflows/lean.yml.
--/
-
 package helmAiKernelProofs where
-  -- The proof is self-contained and uses no external libraries. Mathlib
-  -- would let us drop a few `simp` calls but would slow CI considerably.
-  --
-  -- Lean reports `sorry` as a warning, so without this option `lake build`
-  -- exits 0 on an unproven theorem. scripts/ci/lean_proof_gate.sh checks
-  -- that a `sorry` still fails the build.
+  -- Treat Lean's `sorry` warning as an error. The CI gate checks this.
   moreLeanArgs := #["-DwarningAsError=true"]
 
 @[default_target]
 lean_lib EffectPermitSoundness where
-  -- The .lean source lives one directory up, in proofs/. Lake resolves
-  -- module name `EffectPermitSoundness` against `srcDir` + ".lean".
   srcDir := ".."
   roots := #[`EffectPermitSoundness]

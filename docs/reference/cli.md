@@ -90,6 +90,14 @@ helm-ai-kernel boundary records --verdict ESCALATE --json
 helm-ai-kernel boundary verify --record-id <record-id> --json
 ```
 
+## Local incidents
+
+Run `helm-ai-kernel run maintenance --max 5` to list the most severe open or
+acknowledged incidents in `data/incidents/`. It exits 0 when none are pending,
+1 when incidents need review or the registry cannot be read, and 2 for invalid
+arguments. Use `helm-ai-kernel incident show <id>` to inspect one. The maintenance
+report is read-only.
+
 ## Receipts
 
 ```bash

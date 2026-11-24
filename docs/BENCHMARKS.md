@@ -9,10 +9,6 @@ last_reviewed: 2026-05-05
 
 Maintainers comparing local benchmark harnesses and reported performance measurements against source-backed results.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `benchmarks`
@@ -20,41 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of Benchmarks in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["Benchmarks"]
-        A["Targets"]
-        B["What the Harness Covers"]
-        C["Output"]
-        D["Test-case count (referenced by pitch decks)"]
-        E["Machine-readable output"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-
-    %% Premium Styling Rules
-```
-
 
 The benchmark harness measures retained kernel paths locally. This page documents how to run the harness, not a frozen set of numbers.
 

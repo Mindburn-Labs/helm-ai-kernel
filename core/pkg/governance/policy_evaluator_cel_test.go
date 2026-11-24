@@ -1,7 +1,5 @@
 package governance
 
-import ()
-
 func celPolicyModule(policy, name, version string) ModuleBundle {
 	if name == "" {
 		name = "acme.reader"

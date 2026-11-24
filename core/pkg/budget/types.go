@@ -1,5 +1,4 @@
-// Package budget provides per-tenant budget enforcement with fail-closed behavior.
-// When budget checks fail or are uncertain, access is denied to prevent cost overruns.
+// Package budget defines types and interfaces for spending estimates, limits, and decisions.
 package budget
 
 import (

@@ -1,16 +1,8 @@
-// Package policylangs implements the cross-language policy equivalence
-// harness for HELM. The harness loads a single logical rule expressed in
-// CEL, OPA/Rego, and Cedar form, evaluates each rendition against the
-// same DecisionRequest, and reports the per-language verdict.
+// Package policylangs evaluates equivalent CEL, Rego, and Cedar policies
+// against the same request and reports each verdict.
 //
-// Workstream F / F1 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
-//
-// Why a hand-rolled CEL leg here:
-// the policybundles registry advertises CEL but does not yet route CEL
-// compile through it (the kernel authority function owns that surface).
-// Until those two paths merge, the harness builds a minimal CEL evaluator
-// against the canonical DecisionRequest map shape so the equivalence
-// suite can exercise all three front-ends through one codepath.
+// The harness evaluates CEL directly with the shared request shape. Kernel
+// authority compiles CEL separately from the Rego and Cedar registry.
 package policylangs
 
 import (

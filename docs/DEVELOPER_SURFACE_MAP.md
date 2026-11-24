@@ -52,8 +52,6 @@ flowchart TD
     receipt --> verify
     verify --> deploy
     deploy --> operate
-
-    %% Premium Styling Rules
     style boundary fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff

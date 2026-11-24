@@ -321,6 +321,8 @@
       "source_paths": [
         "core/cmd/helm-ai-kernel/proxy_cmd.go",
         "core/cmd/helm-ai-kernel/proxy_protocol.go",
+        "core/cmd/helm-ai-kernel/proxy_request.go",
+        "core/cmd/helm-ai-kernel/proxy_response.go",
         "sdk/python/README.md",
         "sdk/ts/README.md"
       ],

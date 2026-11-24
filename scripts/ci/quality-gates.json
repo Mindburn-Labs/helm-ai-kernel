@@ -773,6 +773,9 @@
       "timeout_seconds": 120,
       "paths": [
         "deploy/helm-chart/templates/deployment.yaml",
+        "deploy/helm-chart/templates/_deployment-validation.tpl",
+        "deploy/helm-chart/templates/_deployment-policy-env.tpl",
+        "deploy/helm-chart/files/prepare-authority-state.sh",
         "deploy/helm-chart/values.yaml",
         "deploy/helm-chart/values.schema.json",
         "scripts/ci/kind_smoke.sh",

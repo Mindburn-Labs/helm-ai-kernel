@@ -327,6 +327,7 @@
         ".github/workflows/**",
         "scripts/ci/quality-gates.json",
         "scripts/ci/release_workflow_contract_test.py",
+        "scripts/release/workflow/**",
         "scripts/release/publish_go_module_tags.sh",
         "scripts/release/publish_go_module_tags_test.py",
         "scripts/release/prepare_dev_chart.py",

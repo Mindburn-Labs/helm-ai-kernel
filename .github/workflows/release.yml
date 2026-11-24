@@ -49,44 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PUSH_COMMIT: ${{ github.event.after }}
           WORKFLOW_COMMIT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if ! [[ "${PUSH_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Push event after value is not a full commit SHA: ${PUSH_COMMIT}"
-            exit 1
-          fi
-          if ! [[ "${WORKFLOW_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Workflow commit is not a full commit SHA: ${WORKFLOW_COMMIT}"
-            exit 1
-          fi
-          # For an annotated tag push, github.event.after is the SHA of the tag
-          # OBJECT, not of the commit it points to, while github.sha is the
-          # commit. Bind the pushed object to the live ref, then the ref's
-          # commit to the workflow commit. The old "after == sha" test could
-          # only pass for a lightweight tag, which the next check forbids
-          # (v0.8.5 run 34246001234 failed here on 2026-09-08).
-          ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}")"
-          ref_type="$(jq -er '.object.type' <<<"${ref_json}")"
-          live_tag_object="$(jq -er '.object.sha' <<<"${ref_json}")"
-          if [ "${ref_type}" != "tag" ]; then
-            echo "::error::Release ref ${GITHUB_REF_NAME} is ${ref_type}, not an annotated tag object."
-            exit 1
-          fi
-          if [ "${PUSH_COMMIT}" != "${live_tag_object}" ]; then
-            echo "::error::Pushed tag object ${PUSH_COMMIT} does not match the live ref object ${live_tag_object}; the tag moved after the push."
-            exit 1
-          fi
-          tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${live_tag_object}")"
-          target_type="$(jq -er '.object.type' <<<"${tag_json}")"
-          target_commit="$(jq -er '.object.sha' <<<"${tag_json}")"
-          if [ "${target_type}" != "commit" ]; then
-            echo "::error::Annotated release tag points to ${target_type}, not a commit."
-            exit 1
-          fi
-          if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then
-            echo "::error::Annotated release tag resolves to ${target_commit}, not workflow commit ${WORKFLOW_COMMIT}."
-            exit 1
-          fi
+        run: bash scripts/release/workflow/verify_release_tag.sh
       - name: Verify the supported SLSA generator tag resolves to the reviewed commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,41 +58,13 @@ jobs:
           actual="$(gh api repos/slsa-framework/slsa-github-generator/commits/v2.1.0 --jq .sha)"
           test "$actual" = f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
       - name: Require tagged commit to be on origin/main
-        run: |
-          set -euo pipefail
-          # The rule is "never release a commit that is not on main". Requiring
-          # the tag to EQUAL current origin/main enforced something stricter and
-          # unachievable: any merge landing while the release runs — or between
-          # a failed job and its rerun — moved main and made the tagged release
-          # permanently uncompletable, even though its commit is still on main.
-          # v0.8.1 hit exactly that: artifacts published from 44bcb7e0, then a
-          # later merge stranded the run. Ancestry keeps the guarantee (the
-          # tagged commit is reachable from main, so nothing off-main ships)
-          # without forbidding the repository to move.
-          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
-          git fetch --quiet origin main
-          if ! git merge-base --is-ancestor "${tag_commit}" origin/main; then
-            main_commit="$(git rev-parse origin/main)"
-            echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not reachable from origin/main ${main_commit}."
-            exit 1
-          fi
+        run: bash scripts/release/workflow/require_main_ancestry.sh
       - name: Require the public docs origin to serve a working release
         run: python3 scripts/release/check_docs_readiness.py
       - name: Require contracts catalog OpenAPI to already match
         env:
           GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DOWNSTREAM_FANOUT_TOKEN with contents:read on Mindburn-Labs/contracts-catalog is required before release publication."
-            exit 1
-          fi
-          kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"
-          catalog_blob="$(gh api 'repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main' --jq '.sha')"
-          if [ "$kernel_blob" != "$catalog_blob" ]; then
-            echo "::error::contracts-catalog main OpenAPI does not match this tag. Sync and merge the catalog before tagging ${GITHUB_REF_NAME}."
-            exit 1
-          fi
+        run: bash scripts/release/workflow/verify_catalog_openapi.sh
 
   validate:
     runs-on: ubuntu-latest
@@ -166,17 +101,7 @@ jobs:
           github_token: ${{ github.token }}
       - name: Install oasdiff (prior-release contract breaking-change gate)
         run: |
-          set -euo pipefail
-          ver=1.23.0
-          tmp="$(mktemp -d)"
-          archive="$tmp/oasdiff_${ver}_linux_amd64.tar.gz"
-          sha256='972b10535c3db4366b9dc3ebc11ca021279af3095267c3cffdca854a3a3c4f89'
-          curl -fsSL -o "$archive" "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz"
-          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
-          tar -xzf "$archive" -C "$tmp"
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 "$tmp/oasdiff" "$HOME/.local/bin/oasdiff"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          bash scripts/release/workflow/install_oasdiff.sh
           "$HOME/.local/bin/oasdiff" --version
       - name: Install codegen tools
         run: |
@@ -267,73 +192,7 @@ jobs:
           CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
           CONSOLE_SOURCE_SHA: ${{ steps.console-pin.outputs.source_sha }}
           CONSOLE_WORKFLOW_REF: ${{ steps.console-pin.outputs.workflow_ref }}
-        run: |
-          set -euo pipefail
-          command -v gh >/dev/null
-          case "${CONSOLE_WORKFLOW_REF}" in
-            refs/tags/*) ;;
-            *)
-              echo "::error::Console workflow_ref must be an immutable refs/tags/... source pin."
-              exit 1
-              ;;
-          esac
-          workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"
-          workflow_sha="$(gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq '.sha')"
-          if [ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]; then
-            echo "::error::Console workflow_ref ${CONSOLE_WORKFLOW_REF} resolves to ${workflow_sha}, not pinned source ${CONSOLE_SOURCE_SHA}. Create a protected immutable tag at the pinned source before releasing."
-            exit 1
-          fi
-          prior_runs="${RUNNER_TEMP}/console-local-sidecar-prior-runs.txt"
-          gh run list \
-            --repo "${CONSOLE_REPOSITORY}" \
-            --workflow release-local-sidecar.yml \
-            --event workflow_dispatch \
-            --limit 100 \
-            --json databaseId \
-            --jq '.[].databaseId' | sort > "${prior_runs}"
-          gh workflow run release-local-sidecar.yml \
-            --repo "${CONSOLE_REPOSITORY}" \
-            --ref "${workflow_tag}" \
-            -f source_sha="${CONSOLE_SOURCE_SHA}" \
-            -f kernel_release_version="${GITHUB_REF_NAME}"
-
-          expected_title="local-sidecar ${GITHUB_REF_NAME} ${CONSOLE_SOURCE_SHA}"
-          run_id=""
-          for _ in $(seq 1 60); do
-            run_id="$(gh run list \
-              --repo "${CONSOLE_REPOSITORY}" \
-              --workflow release-local-sidecar.yml \
-              --event workflow_dispatch \
-              --limit 100 \
-              --json databaseId,displayTitle \
-              | python3 -c 'import json, pathlib, sys; expected, prior_path = sys.argv[1:]; prior = set(pathlib.Path(prior_path).read_text(encoding="utf-8").splitlines()); matches = [str(run["databaseId"]) for run in json.load(sys.stdin) if run.get("displayTitle") == expected and str(run["databaseId"]) not in prior]; sys.exit("multiple newly-dispatched Console sidecar runs matched the exact title") if len(matches) > 1 else print(matches[0] if matches else "")' "${expected_title}" "${prior_runs}")"
-            if [ -n "${run_id}" ]; then
-              break
-            fi
-            sleep 2
-          done
-          if [ -z "${run_id}" ]; then
-            echo "::error::Console sidecar workflow did not expose one exact dispatched run"
-            exit 1
-          fi
-
-          for _ in $(seq 1 180); do
-            state="$(gh run view "${run_id}" --repo "${CONSOLE_REPOSITORY}" --json status,conclusion \
-              | python3 -c 'import json, sys; run = json.load(sys.stdin); print(run.get("status", ""), run.get("conclusion") or "")')"
-            status="${state%% *}"
-            conclusion="${state#* }"
-            if [ "${status}" = "completed" ]; then
-              if [ "${conclusion}" != "success" ]; then
-                echo "::error::Console sidecar workflow ${run_id} completed with ${conclusion}"
-                exit 1
-              fi
-              echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::Console sidecar workflow ${run_id} did not complete"
-          exit 1
+        run: bash scripts/release/workflow/dispatch_console_sidecar.sh
       - name: Download exact Console aggregate and target artifacts
         env:
           GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
@@ -597,19 +456,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MAIN_DIGEST: ${{ steps.push.outputs.digest }}
           SLIM_DIGEST: ${{ steps.push-slim.outputs.digest }}
-        run: |
-          set -euo pipefail
-          mkdir -p image-provenance
-          for variant in main slim; do
-            digest="${MAIN_DIGEST}"
-            if [[ "${variant}" == slim ]]; then digest="${SLIM_DIGEST}"; fi
-            gh attestation verify "oci://${REGISTRY}/${IMAGE_NAME}@${digest}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --cert-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
-              --source-digest "${GITHUB_SHA}" --source-ref "${GITHUB_REF}" \
-              --predicate-type https://slsa.dev/provenance/v1 \
-              --format json > "image-provenance/${variant}.json"
-          done
+        run: bash scripts/release/workflow/verify_image_provenance.sh
       - name: Upload verified image provenance
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -677,70 +524,7 @@ jobs:
       - name: Publish formula PR to Mindburn-Labs/homebrew-tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "::error::HOMEBREW_TAP_TOKEN not configured; cannot publish a complete lockstep release."
-            exit 1
-          fi
-          git config --global user.name "mindburn-release-bot"
-          git config --global user.email "release@mindburn.org"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Mindburn-Labs/homebrew-tap.git" tap
-          branch="release/helm-ai-kernel-${GITHUB_REF_NAME}"
-          mkdir -p tap/Formula
-          cp Formula/helm-ai-kernel.rb tap/Formula/helm-ai-kernel.rb
-          cd tap
-          if [ -z "$(git status --porcelain -- Formula/helm-ai-kernel.rb)" ]; then
-            echo "Homebrew formula already matches ${GITHUB_REF_NAME}."
-            exit 0
-          fi
-          git checkout -B "$branch"
-          git add Formula/helm-ai-kernel.rb
-          git commit -m "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}"
-          git push --force-with-lease origin "$branch"
-
-          export GH_TOKEN="$HOMEBREW_TAP_TOKEN"
-          pr="$(gh pr list \
-            --repo Mindburn-Labs/homebrew-tap \
-            --head "$branch" \
-            --base main \
-            --state open \
-            --json number \
-            --jq '.[0].number // ""')"
-          if [ -z "$pr" ]; then
-            pr_url="$(gh pr create \
-              --repo Mindburn-Labs/homebrew-tap \
-              --base main \
-              --head "$branch" \
-              --title "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}" \
-              --body "Automated Homebrew formula update for helm-ai-kernel ${GITHUB_REF_NAME} from the signed release asset.")"
-            pr="${pr_url##*/}"
-          fi
-          gh pr merge "$pr" \
-            --repo Mindburn-Labs/homebrew-tap \
-            --squash \
-            --auto \
-            --delete-branch
-          for attempt in $(seq 1 120); do
-            state="$(gh pr view "$pr" \
-              --repo Mindburn-Labs/homebrew-tap \
-              --json state \
-              --jq '.state')"
-            case "$state" in
-              MERGED) exit 0 ;;
-              CLOSED)
-                echo "::error::Homebrew PR #${pr} closed without merging."
-                exit 1
-                ;;
-              OPEN) echo "Waiting for Homebrew PR #${pr} to reach MERGED (${attempt}/120)." ;;
-              *)
-                echo "::error::Homebrew PR #${pr} has unexpected state ${state}."
-                exit 1
-                ;;
-            esac
-            sleep 5
-          done
-          echo "::error::Timed out waiting for Homebrew PR #${pr} to reach MERGED."
-          exit 1
+        run: bash scripts/release/workflow/publish_homebrew_formula.sh
 
   chart:
     runs-on: ubuntu-latest
@@ -922,37 +706,7 @@ jobs:
         run: make version-drift
       - name: Check existing package version
         working-directory: sdk/python
-        run: |
-          PACKAGE_VERSION=$(python - <<'PY'
-          from pathlib import Path
-          import tomllib
-          data = tomllib.loads(Path("pyproject.toml").read_text())
-          print(data["project"]["version"])
-          PY
-          )
-          python - "$PACKAGE_VERSION" <<'PY'
-          import json
-          import sys
-          import urllib.error
-          import urllib.request
-
-          expected = sys.argv[1]
-          url = f"https://pypi.org/pypi/helm-sdk/{expected}/json"
-          try:
-              with urllib.request.urlopen(url, timeout=30) as response:
-                  payload = json.loads(response.read().decode("utf-8"))
-          except urllib.error.HTTPError as exc:
-              if exc.code == 404:
-                  print("missing")
-                  raise SystemExit(0)
-              raise
-
-          actual = payload.get("info", {}).get("version")
-          if actual != expected:
-              print(f"mismatch:{actual}")
-              raise SystemExit(1)
-          raise SystemExit(f"Refusing to publish existing helm-sdk version {expected}; choose a fresh version")
-          PY
+        run: bash ../../scripts/release/workflow/guard_pypi_sdk_version.sh
       - name: Build and validate
         working-directory: sdk/python
         run: |
@@ -980,41 +734,7 @@ jobs:
       - name: Check existing crate version
         id: crate
         working-directory: sdk/rust
-        run: |
-          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
-          echo "version=$CARGO_VERSION" >> "$GITHUB_OUTPUT"
-          status=$(python - "$CARGO_VERSION" <<'PY'
-          import json
-          import sys
-          import urllib.error
-          import urllib.request
-
-          expected = sys.argv[1]
-          req = urllib.request.Request(
-              f"https://crates.io/api/v1/crates/helm-sdk/{expected}",
-              headers={"User-Agent": "MindburnLabs-VersionDriftGuard/1.0"},
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  payload = json.loads(response.read().decode("utf-8"))
-          except urllib.error.HTTPError as exc:
-              if exc.code == 404:
-                  print("missing")
-                  raise SystemExit(0)
-              raise
-
-          actual = payload.get("version", {}).get("num")
-          if actual != expected:
-              print(f"mismatch:{actual}")
-              raise SystemExit(1)
-          print("published")
-          PY
-          )
-          if [ "$status" = "published" ]; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash ../../scripts/release/workflow/check_crate_version.sh
       - name: Build, test, and dry run
         if: steps.crate.outputs.published != 'true'
         working-directory: sdk/rust
@@ -1153,21 +873,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Check published lockstep channels before GitHub Release
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          mkdir -p dist/version-status
-          python3 scripts/release/check_version_drift.py \
-            --expected-version "$VERSION" \
-            --write-status dist/version-status/version-status.json \
-            published \
-            --npm-propagation-timeout 900 \
-            --pypi-propagation-timeout 900 \
-            --only ghcr-image \
-            --only ghcr-chart \
-            --only npm-sdk \
-            --only pypi-sdk \
-            --only crates-sdk \
-            --only go-proxy-sdk
+        run: bash scripts/release/workflow/check_published_registry_versions.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: version-status
@@ -1280,30 +986,7 @@ jobs:
       - name: Stage Console assets and standalone layouts
         env:
           CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
-        run: |
-          set -euo pipefail
-          assets=console-release-assets
-          layout_input=console-layout-input
-          mkdir -p "${assets}" "${layout_input}"
-          python3 scripts/release/console_local_sidecar.py stage \
-            --input-dir console-local-sidecar \
-            --output-dir "${assets}" \
-            --pins release/console-local-sidecar-pins.json \
-            --kernel-release "${GITHUB_REF_NAME}" \
-            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
-          cp "${assets}"/* "${layout_input}/"
-          cp \
-            bin/helm-ai-kernel-linux-amd64 \
-            bin/helm-ai-kernel-linux-arm64 \
-            bin/helm-ai-kernel-darwin-amd64 \
-            bin/helm-ai-kernel-darwin-arm64 \
-            "${layout_input}/"
-          python3 scripts/release/console_local_sidecar.py layout \
-            --input-dir "${layout_input}" \
-            --output-dir "${assets}" \
-            --pins release/console-local-sidecar-pins.json \
-            --kernel-release "${GITHUB_REF_NAME}" \
-            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+        run: bash scripts/release/workflow/stage_console_release_assets.sh
       - id: console-pin
         name: Resolve exact Console browser source pin
         run: |
@@ -1351,20 +1034,7 @@ jobs:
       - name: Create a signed Console checksum manifest
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: |
-          set -euo pipefail
-          cd console-release-assets
-          find . -maxdepth 1 -type f \
-            \( \
-              -name 'helm-console-local-sidecar-*' \
-              -o -name 'helm-ai-kernel-*-console.tar.gz' \
-              -o -name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle' \
-            \) \
-            -print0 | sort -z | xargs -0 sha256sum > CONSOLE-SHA256SUMS.txt
-          test -s CONSOLE-SHA256SUMS.txt
-          cosign sign-blob --yes \
-            --bundle CONSOLE-SHA256SUMS.txt.cosign.bundle \
-            CONSOLE-SHA256SUMS.txt
+        run: bash scripts/release/workflow/sign_console_checksums.sh
       - name: Verify staged Console assets before publication
         run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -1461,93 +1131,18 @@ jobs:
       - name: Wait for published version convergence
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          set +e
-          VERSION="${GITHUB_REF_NAME#v}"
-          skip_args=()
-          for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
-            skip_args+=(--skip "$surface")
-          done
-          status=0
-          for attempt in $(seq 1 40); do
-            python3 scripts/release/check_version_drift.py \
-              --expected-version "$VERSION" \
-              published \
-              --surface-timeout 10 \
-              --rate-limit-retries 1 \
-              "${skip_args[@]}"
-            status=$?
-            if [ "$status" -eq 0 ]; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 40 ]; then
-              echo "Published version surfaces have not converged (${attempt}/40); retrying."
-              sleep 30
-            fi
-          done
-          if [ "$status" -eq 75 ]; then
-            echo "::warning::Published version surfaces stayed unreadable within the bounded retry budget (rate limited); reporting unknown rather than drift."
-            exit 0
-          fi
-          echo "::error::Published version surfaces did not converge within the bounded retry budget."
-          exit 1
+        run: bash scripts/release/workflow/wait_for_published_versions.sh
       - name: Wait for eventually consistent surfaces
         id: eventual
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          set +e
-          VERSION="${GITHUB_REF_NAME#v}"
-          only_args=()
-          for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
-            only_args+=(--only "$surface")
-          done
-          for attempt in $(seq 1 20); do
-            if python3 scripts/release/check_version_drift.py \
-              --expected-version "$VERSION" \
-              published \
-              --surface-timeout 10 \
-              --rate-limit-retries 1 \
-              "${only_args[@]}"; then
-              echo "converged=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            if [ "$attempt" -lt 20 ]; then
-              echo "Eventually consistent surfaces have not converged (${attempt}/20); retrying."
-              sleep 60
-            fi
-          done
-          echo "converged=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::Eventually consistent surfaces (${EVENTUALLY_CONSISTENT_SURFACES}) have not converged yet; the daily Version Drift Monitor reports drift if they stay behind."
-          exit 0
+        run: bash scripts/release/workflow/wait_for_slow_release_surfaces.sh
       - name: Check full published version status
         if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
           EVENTUAL_CONVERGED: ${{ steps.eventual.outputs.converged }}
-        run: |
-          set -uo pipefail
-          set +e
-          VERSION="${GITHUB_REF_NAME#v}"
-          skip_args=()
-          if [ "$EVENTUAL_CONVERGED" = "false" ]; then
-            for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
-              skip_args+=(--skip "$surface")
-            done
-          fi
-          python3 scripts/release/check_version_drift.py \
-            --expected-version "$VERSION" \
-            --write-status version-status.json \
-            published \
-            "${skip_args[@]}"
-          status=$?
-          if [ "$status" -eq 75 ]; then
-            echo "::warning::At least one published surface could not be read (rate limited); version-status.json records it as unknown, not drift."
-            exit 0
-          fi
-          exit "$status"
+        run: bash scripts/release/workflow/write_published_version_status.sh
       - name: Replace release version status with full post-release status
         if: success()
         env:

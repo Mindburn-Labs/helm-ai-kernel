@@ -30,7 +30,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW = WORKFLOWS / "release.yml"
+REHEARSAL_WORKFLOW = WORKFLOWS / "release-rehearsal.yml"
 DEV_IMAGE_WORKFLOW = WORKFLOWS / "dev-image.yml"
+WORKFLOW_SCRIPTS = ROOT / "scripts" / "release" / "workflow"
+WORKFLOW_SCRIPT_COMMAND = re.compile(r"bash ((?:\.\./)*scripts/release/workflow/[a-z0-9_]+\.sh)")
 VERSION_SURFACES = ROOT / "release" / "version-surfaces.yaml"
 MAKEFILE = ROOT / "Makefile"
 STAGE_RELEASE_ASSETS = ROOT / "scripts" / "release" / "stage_release_assets.sh"
@@ -168,14 +171,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_pre_release_registry_receipt_waits_without_bypassing_failure(self) -> None:
         job = self.job("version-status")
+        check = self.workflow_script(job, "Check published lockstep channels before GitHub Release")
         self.assertIn("timeout-minutes: 40", job)
-        self.assertIn("--npm-propagation-timeout 900", job)
-        self.assertIn("--pypi-propagation-timeout 900", job)
-        self.assertNotIn("--report", job)
+        self.assertIn("--npm-propagation-timeout 900", check)
+        self.assertIn("--pypi-propagation-timeout 900", check)
+        self.assertNotIn("--report", job + check)
         self.assertNotIn("continue-on-error", job)
-        self.assertNotIn("|| true", job)
+        self.assertNotIn("|| true", job + check)
         for surface in ("ghcr-image", "ghcr-chart", "npm-sdk", "pypi-sdk", "crates-sdk", "go-proxy-sdk"):
-            self.assertIn(f"--only {surface}", job)
+            self.assertIn(f"--only {surface}", check)
 
     def test_slsa_is_verified_before_github_publication(self) -> None:
         producer = self.job("slsa-provenance")
@@ -207,12 +211,17 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
-        cls.job_blocks = {
+        cls.job_blocks = cls.workflow_job_blocks(cls.workflow)
+
+    @staticmethod
+    def workflow_job_blocks(workflow: str) -> dict[str, str]:
+        jobs = workflow.split("\njobs:\n", 1)[1]
+        return {
             match.group("name"): match.group("body")
             for match in re.finditer(
                 r"^  (?P<name>[A-Za-z0-9_-]+):\n"
                 r"(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
-                cls.workflow,
+                jobs,
                 re.MULTILINE | re.DOTALL,
             )
         }
@@ -251,11 +260,35 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         assert match is not None
         return "\n".join((match.group("inline"), match.group("block")))
 
+    def workflow_script_sources(self, job: str, step_name: str | None = None) -> list[str]:
+        sources = []
+        for step in yaml.load(job, Loader=yaml.BaseLoader).get("steps", []):
+            if step_name is not None and step.get("name") != step_name:
+                continue
+            for line in step.get("run", "").splitlines():
+                match = WORKFLOW_SCRIPT_COMMAND.fullmatch(line)
+                if match is None:
+                    continue
+                path = (ROOT / step.get("working-directory", ".") / match[1]).resolve()
+                self.assertEqual(path.parent, WORKFLOW_SCRIPTS)
+                self.assertTrue(path.is_file(), f"{step.get('name')} references missing script {path}")
+                sources.append(path.read_text(encoding="utf-8"))
+        return sources
+
+    def workflow_script(self, job: str, step_name: str) -> str:
+        sources = self.workflow_script_sources(job, step_name)
+        self.assertEqual(len(sources), 1, f"{step_name} must call a checked-in release script")
+        return sources[0]
+
     def external_mutation_jobs(self) -> set[str]:
         return {
             name
             for name, body in self.job_blocks.items()
-            if any(marker in body for marker in EXTERNAL_MUTATION_MARKERS)
+            if any(
+                marker in source
+                for source in (body, *self.workflow_script_sources(body))
+                for marker in EXTERNAL_MUTATION_MARKERS
+            )
         }
 
     def step(self, job: str, name: str) -> str:
@@ -324,7 +357,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIn("subject-digest: ${{ steps." + push_id + ".outputs.digest }}", attestation)
             self.assertIn("push-to-registry: true", attestation)
             self.assertNotIn("continue-on-error", attestation)
-        verification = self.step(container, "Verify image provenance")
+        verification = self.workflow_script(container, "Verify image provenance")
         for binding in (
             'oci://${REGISTRY}/${IMAGE_NAME}@${digest}',
             '--repo "${GITHUB_REPOSITORY}"',
@@ -338,9 +371,16 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_release_has_no_human_or_single_attempt_gate(self) -> None:
         self.assertNotIn("release-authority", self.job_blocks)
+        scripts = [
+            source
+            for job in self.job_blocks.values()
+            for source in self.workflow_script_sources(job)
+        ]
         for marker in REMOVED_GATE_MARKERS:
             with self.subTest(marker=marker):
                 self.assertNotIn(marker, self.workflow)
+                for script in scripts:
+                    self.assertNotIn(marker, script)
 
     def test_preflight_binds_the_live_annotated_tag_object(self) -> None:
         # A push payload's `after` value is the annotated tag OBJECT's SHA
@@ -348,29 +388,32 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         # the commit. The preflight binds the pushed object to the live ref, and
         # the ref's target commit to the workflow commit.
         preflight = self.job("release-preflight")
-        self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", preflight)
-        self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", preflight)
+        step_name = "Bind this run to the live annotated tag and pushed commit"
+        step = self.step(preflight, step_name)
+        binding = self.workflow_script(preflight, step_name)
+        self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", step)
+        self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", step)
         self.assertNotIn(
             'if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then',
-            preflight,
+            binding,
         )
         self.assertIn(
             'if [ "${PUSH_COMMIT}" != "${live_tag_object}" ]; then',
-            preflight,
+            binding,
         )
         self.assertIn(
             'gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"',
-            preflight,
+            binding,
         )
-        self.assertIn('if [ "${ref_type}" != "tag" ]; then', preflight)
+        self.assertIn('if [ "${ref_type}" != "tag" ]; then', binding)
         self.assertIn(
             'gh api "repos/${GITHUB_REPOSITORY}/git/tags/${live_tag_object}"',
-            preflight,
+            binding,
         )
-        self.assertIn('if [ "${target_type}" != "commit" ]; then', preflight)
+        self.assertIn('if [ "${target_type}" != "commit" ]; then', binding)
         self.assertIn(
             'if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then',
-            preflight,
+            binding,
         )
 
     def test_every_tag_release_mutation_runs_after_all_release_validation(self) -> None:
@@ -482,9 +525,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.job_blocks = original
 
     def test_python_version_collision_cannot_skip_the_real_publisher(self) -> None:
-        check = self.step(self.job("python-sdk"), "Check existing package version")
+        check = self.workflow_script(self.job("python-sdk"), "Check existing package version")
         match = re.search(
-            r'python - "\$PACKAGE_VERSION" <<\'PY\'\n(?P<script>.*?)^          PY$',
+            r'python - "\$PACKAGE_VERSION" <<\'PY\'\n(?P<script>.*?)^PY$',
             check, re.MULTILINE | re.DOTALL,
         )
         self.assertIsNotNone(match)
@@ -653,42 +696,51 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_tag_release_is_main_only_and_catalog_is_presynced(self) -> None:
         preflight = self.job("release-preflight")
+        ancestry = self.workflow_script(preflight, "Require tagged commit to be on origin/main")
+        catalog = self.workflow_script(preflight, "Require contracts catalog OpenAPI to already match")
         self.assertIn("needs: version-contract", preflight)
-        self.assertIn('tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"', preflight)
+        self.assertIn('tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"', ancestry)
         # Ancestry, not equality: the tagged commit must be reachable from
         # main so nothing off-main ships, while a merge landing mid-release no
         # longer strands the tag (v0.8.1 was stranded exactly that way).
-        self.assertIn("git merge-base --is-ancestor", preflight)
-        self.assertIn("origin/main", preflight)
-        self.assertNotIn('if [ "$tag_commit" != "$main_commit" ]', preflight)
-        self.assertIn("kernel_blob=\"$(git hash-object --no-filters api/openapi/helm.openapi.yaml)\"", preflight)
+        self.assertIn("git merge-base --is-ancestor", ancestry)
+        self.assertIn("origin/main", ancestry)
+        self.assertNotIn('if [ "$tag_commit" != "$main_commit" ]', ancestry)
+        self.assertIn('kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"', catalog)
         self.assertIn(
             "repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main",
-            preflight,
+            catalog,
         )
-        self.assertIn('if [ "$kernel_blob" != "$catalog_blob" ]; then', preflight)
+        self.assertIn('if [ "$kernel_blob" != "$catalog_blob" ]; then', catalog)
         self.assertIn("needs: release-preflight", self.job("validate"))
         self.assertIn("release-preflight", self.job("github-release"))
 
     def test_release_validation_has_the_prior_release_contract_toolchain(self) -> None:
         validate = self.job("validate")
+        installer = self.workflow_script(validate, "Install oasdiff (prior-release contract breaking-change gate)")
+        rehearsal = REHEARSAL_WORKFLOW.read_text(encoding="utf-8")
+        rehearsal_job = self.workflow_job_blocks(rehearsal)["rehearse"]
+        self.assertEqual(
+            self.workflow_script(rehearsal_job, "Install oasdiff (same pin as release.yml)"),
+            installer,
+        )
         self.assertIn("fetch-depth: 0", validate)
-        self.assertIn("Install oasdiff (prior-release contract breaking-change gate)", validate)
-        self.assertIn("sha256sum --check --strict", validate)
+        self.assertIn("sha256sum --check --strict", installer)
         self.assertIn("make quality-release", validate)
         self.assertNotIn("Fetch main ref for proto compatibility checks", validate)
 
     def test_release_never_creates_a_catalog_pr_or_bypasses_tap_policy(self) -> None:
         self.assertNotIn("downstream-fanout:", self.workflow)
         homebrew = self.job("homebrew")
-        self.assertNotIn("--admin", homebrew)
-        self.assertIn("--auto", homebrew)
-        self.assertIn("--delete-branch", homebrew)
-        self.assertIn("for attempt in $(seq 1 120); do", homebrew)
-        self.assertIn('state="$(gh pr view "$pr"', homebrew)
-        self.assertIn("MERGED) exit 0 ;;", homebrew)
-        self.assertIn("CLOSED)", homebrew)
-        self.assertIn("Timed out waiting for Homebrew PR", homebrew)
+        publisher = self.workflow_script(homebrew, "Publish formula PR to Mindburn-Labs/homebrew-tap")
+        self.assertNotIn("--admin", homebrew + publisher)
+        self.assertIn("--auto", publisher)
+        self.assertIn("--delete-branch", publisher)
+        self.assertIn("for attempt in $(seq 1 120); do", publisher)
+        self.assertIn('state="$(gh pr view "$pr"', publisher)
+        self.assertIn("MERGED) exit 0 ;;", publisher)
+        self.assertIn("CLOSED)", publisher)
+        self.assertIn("Timed out waiting for Homebrew PR", publisher)
 
     def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
@@ -911,19 +963,24 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_release_workflow_never_exposes_raw_evidence_private_pem(self) -> None:
         self.assertNotIn("HELM_EVIDENCE_KMS_PRIVATE_PEM", self.workflow)
+        for job in self.job_blocks.values():
+            for script in self.workflow_script_sources(job):
+                self.assertNotIn("HELM_EVIDENCE_KMS_PRIVATE_PEM", script)
 
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
+        staging = self.workflow_script(console_assets, "Stage Console assets and standalone layouts")
+        checksums = self.workflow_script(console_assets, "Create a signed Console checksum manifest")
         self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
             self.job_needs("console-release-assets")))
         self.assertNotIn("github-release", console_assets)
         self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)
-        self.assertIn("console_local_sidecar.py stage", console_assets)
-        self.assertIn("console_local_sidecar.py layout", console_assets)
-        self.assertIn("layout_input=console-layout-input", console_assets)
-        self.assertIn('cp "${assets}"/* "${layout_input}/"', console_assets)
-        self.assertIn('"${layout_input}/"', console_assets)
+        self.assertIn("console_local_sidecar.py stage", staging)
+        self.assertIn("console_local_sidecar.py layout", staging)
+        self.assertIn("layout_input=console-layout-input", staging)
+        self.assertIn('cp "${assets}"/* "${layout_input}/"', staging)
+        self.assertIn('"${layout_input}/"', staging)
         self.assertIn("repository: ${{ steps.console-pin.outputs.repository }}", console_assets)
         self.assertIn("ref: ${{ steps.console-pin.outputs.source_sha }}", console_assets)
         self.assertIn("token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}", console_assets)
@@ -934,32 +991,36 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             console_assets.index("console_layout_browser_smoke.mjs"),
             console_assets.index("Cosign keyless-sign standalone Console layouts"),
         )
-        self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
+        self.assertIn("CONSOLE-SHA256SUMS.txt", checksums)
         self.assertIn("cosign sign-blob", console_assets)
+        self.assertIn("cosign sign-blob", checksums)
         self.assertIn("actions/upload-artifact", console_assets)
-        self.assertNotIn("gh release upload", console_assets)
-        self.assertNotIn("published", console_assets)
-        self.assertIn("-name 'helm-console-local-sidecar-*'", console_assets)
-        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz'", console_assets)
-        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle'", console_assets)
+        self.assertNotIn("gh release upload", console_assets + staging + checksums)
+        self.assertNotIn("published", console_assets + staging + checksums)
+        self.assertIn("-name 'helm-console-local-sidecar-*'", checksums)
+        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz'", checksums)
+        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle'", checksums)
 
         required_assets = VERSION_SURFACES.read_text()
         self.assertIn('"CONSOLE-SHA256SUMS.txt"', required_assets)
         self.assertIn('"CONSOLE-SHA256SUMS.txt.cosign.bundle"', required_assets)
 
         post_release = self.job("post-release-version-drift")
+        wait = self.workflow_script(post_release, "Wait for published version convergence")
+        eventual = self.workflow_script(post_release, "Wait for eventually consistent surfaces")
+        status = self.workflow_script(post_release, "Check full published version status")
         self.assertIn(
             "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]",
             post_release,
         )
         self.assertIn("always()", post_release)
         self.assertIn("needs.console-release-assets.result == 'success'", post_release)
-        self.assertIn("for attempt in $(seq 1 40); do", post_release)
+        self.assertIn("for attempt in $(seq 1 40); do", wait)
         self.assertRegex(
-            post_release,
+            wait,
             r'--expected-version "\$VERSION" \\\n\s+published \\\n\s+--surface-timeout 10',
         )
-        self.assertIn("Published version surfaces did not converge within the bounded retry budget.", post_release)
+        self.assertIn("Published version surfaces did not converge within the bounded retry budget.", wait)
         self.assertRegex(post_release, r"(?m)^    timeout-minutes: \d+$")
         self.assertLess(
             post_release.index("- name: Wait for published version convergence"),
@@ -985,23 +1046,22 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         published_ids = {surface["id"] for surface in json.loads(VERSION_SURFACES.read_text())["published_surfaces"]}
         self.assertLessEqual(set(eventual_ids), published_ids)
 
-        wait_step = self.step(post_release, "Wait for published version convergence")
-        self.assertIn('skip_args+=(--skip "$surface")', wait_step)
-        self.assertIn('"${skip_args[@]}"', wait_step)
-        self.assertIn("exit 1", wait_step)
+        self.assertIn('skip_args+=(--skip "$surface")', wait)
+        self.assertIn('"${skip_args[@]}"', wait)
+        self.assertIn("exit 1", wait)
 
         eventual_step = self.step(post_release, "Wait for eventually consistent surfaces")
         self.assertIn("id: eventual", eventual_step)
-        self.assertIn('only_args+=(--only "$surface")', eventual_step)
-        self.assertIn('"${only_args[@]}"', eventual_step)
-        self.assertIn('echo "converged=true" >> "$GITHUB_OUTPUT"', eventual_step)
-        self.assertIn('echo "converged=false" >> "$GITHUB_OUTPUT"', eventual_step)
-        self.assertIn("::warning::Eventually consistent surfaces", eventual_step)
-        self.assertNotIn("::error::", eventual_step)
+        self.assertIn('only_args+=(--only "$surface")', eventual)
+        self.assertIn('"${only_args[@]}"', eventual)
+        self.assertIn('echo "converged=true" >> "$GITHUB_OUTPUT"', eventual)
+        self.assertIn('echo "converged=false" >> "$GITHUB_OUTPUT"', eventual)
+        self.assertIn("::warning::Eventually consistent surfaces", eventual)
+        self.assertNotIn("::error::", eventual_step + eventual)
 
         status_step = self.step(post_release, "Check full published version status")
         self.assertIn("EVENTUAL_CONVERGED: ${{ steps.eventual.outputs.converged }}", status_step)
-        self.assertIn('if [ "$EVENTUAL_CONVERGED" = "false" ]; then', status_step)
+        self.assertIn('if [ "$EVENTUAL_CONVERGED" = "false" ]; then', status)
         self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
         self.assert_post_release_status_safety(post_release)
 
@@ -1114,14 +1174,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")
+        dispatch = self.workflow_script(console_sidecar, "Dispatch and await exact Console native closure build")
         self.assertIn("CONSOLE_WORKFLOW_REF: ${{ steps.console-pin.outputs.workflow_ref }}", console_sidecar)
-        self.assertIn('case "${CONSOLE_WORKFLOW_REF}" in', console_sidecar)
-        self.assertIn('refs/tags/*) ;;', console_sidecar)
-        self.assertIn('workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"', console_sidecar)
-        self.assertIn('gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq \'.sha\'', console_sidecar)
-        self.assertIn('[ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]', console_sidecar)
-        self.assertIn('--ref "${workflow_tag}"', console_sidecar)
-        self.assertNotIn("--ref main", console_sidecar)
+        self.assertIn('case "${CONSOLE_WORKFLOW_REF}" in', dispatch)
+        self.assertIn('refs/tags/*) ;;', dispatch)
+        self.assertIn('workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"', dispatch)
+        self.assertIn('gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq \'.sha\'', dispatch)
+        self.assertIn('[ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]', dispatch)
+        self.assertIn('--ref "${workflow_tag}"', dispatch)
+        self.assertNotIn("--ref main", console_sidecar + dispatch)
 
 
 if __name__ == "__main__":

@@ -260,7 +260,7 @@ G304 core/pkg/kms/kms.go d415d308cf18
 G304 core/pkg/packs/install/manifest.go dbfffc239169
 G304 core/pkg/policy/reconcile/persistent_store.go 9ef7bf203908
 G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322
-G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
+G304 core/pkg/policy/reconcile/reconcile_sources.go e69ba0e5799b
 G304 core/pkg/skillpacks/github.go 60c09d522cae
 G304 core/pkg/skillpacks/plugin.go 1776bdcd5325
 G304 core/pkg/skillpacks/plugin.go 6d3ab38598d3

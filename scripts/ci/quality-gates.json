@@ -314,7 +314,8 @@
       "paths": [
         "VERSION",
         "release/console-local-sidecar-pins.json",
-        "scripts/release/console_local_sidecar.py"
+        "scripts/release/console_local_sidecar.py",
+        "scripts/release/console_sidecar_format.py"
       ]
     },
     {
@@ -671,6 +672,7 @@
         "scripts/release/check_version_drift.py",
         "scripts/release/version_drift_*.py",
         "scripts/release/console_local_sidecar.py",
+        "scripts/release/console_sidecar_format.py",
         "scripts/ci/contract_breaking.sh",
         "release/console-local-sidecar-pins.json",
         "release/version-surfaces.yaml",

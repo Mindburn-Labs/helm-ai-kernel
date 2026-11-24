@@ -33,7 +33,9 @@ WORKFLOW = WORKFLOWS / "release.yml"
 REHEARSAL_WORKFLOW = WORKFLOWS / "release-rehearsal.yml"
 DEV_IMAGE_WORKFLOW = WORKFLOWS / "dev-image.yml"
 WORKFLOW_SCRIPTS = ROOT / "scripts" / "release" / "workflow"
-WORKFLOW_SCRIPT_COMMAND = re.compile(r"bash ((?:\.\./)*scripts/release/workflow/[a-z0-9_]+\.sh)")
+WORKFLOW_SCRIPT_COMMAND = re.compile(
+    r"bash (?:\.release-workflow/)?((?:\.\./)*scripts/release/workflow/[a-z0-9_]+\.sh)"
+)
 VERSION_SURFACES = ROOT / "release" / "version-surfaces.yaml"
 MAKEFILE = ROOT / "Makefile"
 STAGE_RELEASE_ASSETS = ROOT / "scripts" / "release" / "stage_release_assets.sh"
@@ -192,21 +194,52 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                           "crates-sdk", "maven-sdk", "console-release-assets"):
             self.assertIn("verify-slsa", self.job_needs(publisher))
         verifier = self.job("verify-slsa")
+        verifier_job = yaml.load(verifier, Loader=yaml.BaseLoader)
+        self.assertEqual(verifier_job["permissions"], {"actions": "read", "contents": "read"})
+        self.assert_release_helper_checkout(verifier_job, "verify_slsa.sh")
+        verify_step = "Verify standard SLSA policy and exact source binding"
+        self.assertIn("run: bash .release-workflow/scripts/release/workflow/verify_slsa.sh",
+                      self.step(verifier, verify_step))
+        script = self.workflow_script(verifier, verify_step)
         for marker in ("slsa-verifier verify-artifact dist/SHA256SUMS.txt",
                        '--source-tag "$GITHUB_REF_NAME"',
+                       "--source-uri github.com/Mindburn-Labs/helm-ai-kernel",
+                       "--provenance-path slsa-provenance/multiple.intoto.jsonl",
+                       "cosign verify-blob-attestation dist/SHA256SUMS.txt",
+                       "--bundle slsa-provenance/multiple.intoto.jsonl",
                        '--certificate-github-workflow-sha "$GITHUB_SHA"',
                        '--certificate-github-workflow-ref "$GITHUB_REF"',
                        '--certificate-github-workflow-repository "$GITHUB_REPOSITORY"',
                        "--certificate-oidc-issuer https://token.actions.githubusercontent.com",
                        "generator_generic_slsa3.yml@refs/tags/v2.1.0",
                        "sha256sum --check SHA256SUMS.txt"):
-            self.assertIn(marker, verifier)
-        self.assertNotIn("continue-on-error", verifier)
-        self.assertNotIn("|| true", verifier)
+            self.assertIn(marker, script)
+        self.assertLess(verifier.index("path: slsa-provenance/"), verifier.index(f"name: {verify_step}"))
+        self.assertLess(verifier.index(f"name: {verify_step}"), verifier.index("name: verified-slsa-provenance"))
+        self.assertNotIn("continue-on-error", verifier + script)
+        self.assertNotIn("|| true", verifier + script)
         self.assertIn("python3 scripts/release/check_docs_readiness.py",
                       self.job("release-preflight"))
         self.assertIn("commits/v2.1.0", self.job("release-preflight"))
         self.assertIn("f7dd8c54c2067bafc12ca7a55595d5ee9b75204a", self.job("release-preflight"))
+
+    def test_container_signing_uses_the_build_digests(self) -> None:
+        signing = self.job("cosign-container")
+        signing_job = yaml.load(signing, Loader=yaml.BaseLoader)
+        self.assertEqual(signing_job["permissions"],
+                         {"contents": "read", "id-token": "write", "packages": "write"})
+        self.assertEqual(self.job_needs("cosign-container"), {"container"})
+        self.assert_release_helper_checkout(signing_job, "sign_container_image.sh")
+        for variant, output in (("main", "image-digest"), ("slim", "slim-digest")):
+            name = f"Sign {variant} image keyless"
+            step = self.step(signing, name)
+            self.assertIn("COSIGN_EXPERIMENTAL: \"1\"", step)
+            self.assertIn(f"IMAGE_DIGEST: ${{{{ needs.container.outputs.{output} }}}}", step)
+            self.assertIn("run: bash .release-workflow/scripts/release/workflow/sign_container_image.sh", step)
+            script = self.workflow_script(signing, name)
+            self.assertIn('cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${IMAGE_DIGEST:?', script)
+            self.assertNotIn("|| true", script)
+        self.assertNotIn("continue-on-error", signing)
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -279,6 +312,22 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         sources = self.workflow_script_sources(job, step_name)
         self.assertEqual(len(sources), 1, f"{step_name} must call a checked-in release script")
         return sources[0]
+
+    def assert_release_helper_checkout(self, job: dict, script: str) -> None:
+        steps = job["steps"]
+        checkouts = [step for step in steps if step.get("uses", "").startswith("actions/checkout@")]
+        self.assertEqual(checkouts, [steps[0]])
+        self.assertEqual(steps[0], {
+            "name": "Checkout release helper",
+            "uses": "actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd",
+            "with": {
+                "ref": "${{ github.workflow_sha }}",
+                "path": ".release-workflow",
+                "sparse-checkout": f"/scripts/release/workflow/{script}",
+                "sparse-checkout-cone-mode": "false",
+                "persist-credentials": "false",
+            },
+        })
 
     def external_mutation_jobs(self) -> set[str]:
         return {

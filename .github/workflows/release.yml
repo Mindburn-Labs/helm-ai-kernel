@@ -454,6 +454,14 @@ jobs:
       id-token: write
       packages: write
     steps:
+      - name: Checkout release helper
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-workflow
+          sparse-checkout: /scripts/release/workflow/sign_container_image.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -463,13 +471,13 @@ jobs:
       - name: Sign main image keyless
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: |
-          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.container.outputs.image-digest }}"
+          IMAGE_DIGEST: ${{ needs.container.outputs.image-digest }}
+        run: bash .release-workflow/scripts/release/workflow/sign_container_image.sh
       - name: Sign slim image keyless
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: |
-          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.container.outputs.slim-digest }}"
+          IMAGE_DIGEST: ${{ needs.container.outputs.slim-digest }}
+        run: bash .release-workflow/scripts/release/workflow/sign_container_image.sh
 
   benchmark-pin:
     runs-on: ubuntu-latest
@@ -1016,6 +1024,14 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Checkout release helper
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-workflow
+          sparse-checkout: /scripts/release/workflow/verify_slsa.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26.11"
@@ -1032,22 +1048,7 @@ jobs:
           name: ${{ needs.slsa-provenance.outputs.provenance-name }}
           path: slsa-provenance/
       - name: Verify standard SLSA policy and exact source binding
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum --check SHA256SUMS.txt)
-          slsa-verifier verify-artifact dist/SHA256SUMS.txt \
-            --provenance-path slsa-provenance/multiple.intoto.jsonl \
-            --source-uri github.com/Mindburn-Labs/helm-ai-kernel \
-            --source-tag "$GITHUB_REF_NAME" \
-            --builder-id 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0'
-          cosign verify-blob-attestation dist/SHA256SUMS.txt \
-            --bundle slsa-provenance/multiple.intoto.jsonl \
-            --type slsaprovenance02 \
-            --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0' \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
-            --certificate-github-workflow-ref "$GITHUB_REF" \
-            --certificate-github-workflow-sha "$GITHUB_SHA"
+        run: bash .release-workflow/scripts/release/workflow/verify_slsa.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verified-slsa-provenance

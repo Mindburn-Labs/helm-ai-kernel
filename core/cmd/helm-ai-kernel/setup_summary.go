@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 type setupSummary struct {
@@ -268,10 +268,10 @@ func printSetupPlan(w io.Writer, summary setupSummary) {
 var setupPersistedKernelURL = loadPersistedKernelURL
 
 func loadPersistedKernelURL() string {
-	if mc, err := lpcmd.LoadMachineCredential(); err == nil && strings.TrimSpace(mc.APIURL) != "" {
+	if mc, err := hostedauth.LoadMachineCredential(); err == nil && strings.TrimSpace(mc.APIURL) != "" {
 		return strings.TrimRight(mc.APIURL, "/")
 	}
-	if p, err := lpcmd.LoadPairing(); err == nil && strings.TrimSpace(p.APIURL) != "" {
+	if p, err := hostedauth.LoadPairing(); err == nil && strings.TrimSpace(p.APIURL) != "" {
 		return strings.TrimRight(p.APIURL, "/")
 	}
 	return ""

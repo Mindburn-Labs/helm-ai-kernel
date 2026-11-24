@@ -451,7 +451,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "use-helm",
 			Title: "Use HELM",
 			Commands: []string{
-				"watch", "receipts", "mcp", "launch", "app", "up", "run", "proxy", "spend-proxy", "local", "sandbox", "hook", "serve", "server", "dev", "scaffold", "shadow", "skills", "control-plane", "integrate", "health", "threat",
+				"watch", "receipts", "mcp", "proxy", "spend-proxy", "local", "sandbox", "hook", "serve", "server", "dev", "scaffold", "shadow", "skills", "control-plane", "integrate", "health", "threat",
 			},
 		},
 		{
@@ -465,7 +465,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "operate",
 			Title: "Operate",
 			Commands: []string{
-				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "telemetry", "trust", "unfreeze", "workstation",
+				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "telemetry", "trust", "unfreeze", "workstation",
 			},
 		},
 	}
@@ -475,10 +475,6 @@ func completionContexts() []completionContext {
 	return expandCompletionContexts([]completionContext{
 		{Path: []string{"completion"}, Candidates: []string{"bash", "zsh", "fish", "powershell"}},
 		{Path: []string{"help"}, Candidates: append([]string{"--all", "--json"}, completionWords()...)},
-		{Path: []string{"launch"}, Candidates: []string{"matrix", "apps", "substrates", "plan", "status", "logs", "repair", "delete", "evidence", "promote", "secrets", "imports"}},
-		{Path: []string{"launch", "delete"}, Candidates: []string{"--cascade"}},
-		{Path: []string{"launch", "evidence"}, Candidates: []string{"--export", "--json", "--output"}},
-		{Path: []string{"launch", "plan"}, Candidates: []string{"--json"}},
 		{Path: []string{"quickstart"}, Candidates: []string{"--addr", "--port", "--data-dir", "--reset", "--offline", "--profile", "claude", "codex", "mcp", "openai-compatible", "--json", "--dry-run", "--yes", "--console", "--console-port", "--no-open"}},
 		{Path: []string{"receipts"}, Candidates: []string{"status", "list", "show", "tail", "verify", "export"}},
 		{Path: []string{"receipts", "tail"}, Candidates: []string{"--agent", "--server", "--since", "--json", "--format", "text", "json", "--limit"}},

@@ -92,42 +92,6 @@ def check_chart_smoke(path: Path) -> None:
         require(text, token, path)
 
 
-def check_launchpad_smoke(path: Path) -> None:
-    text = path.read_text(encoding="utf-8")
-    for token in [
-        "--container-runtime=containerd",
-        "ctr --namespace k8s.io images inspect",
-        "ctr --namespace k8s.io images tag --force",
-        'crictl inspecti "$KERNEL_IMAGE_DIGEST_REF"',
-        '--set "image.digest=${KERNEL_IMAGE_DIGEST}"',
-    ]:
-        require(text, token, path)
-
-
-def check_launchpad_test_network_policy(values_path: Path, test_path: Path) -> None:
-    text = values_path.read_text(encoding="utf-8")
-    require(
-        text,
-        """        - podSelector:
-            matchLabels:
-              app.kubernetes.io/part-of: helm-ai-kernel
-              app.kubernetes.io/component: test
-      ports:
-        - protocol: TCP
-          port: 8081""",
-        values_path,
-    )
-
-    test_text = test_path.read_text(encoding="utf-8")
-    require(
-        test_text,
-        'app.kubernetes.io/name: {{ printf "%s-launchpad-test" (include "helm-ai-kernel.name" .)',
-        test_path,
-    )
-    if '{{- include "helm-ai-kernel.labels" . | nindent 4 }}' in test_text:
-        fail(f"{test_path}: launchpad test pod must not inherit the kernel service selector labels")
-
-
 def check_authority_state_chart(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     required = [
@@ -168,11 +132,6 @@ def check_authority_state_chart(path: Path) -> None:
 def main() -> None:
     check_kind_smoke(ROOT / "scripts/ci/kind_smoke.sh")
     check_chart_smoke(ROOT / "scripts/ci/helm_chart_smoke.sh")
-    check_launchpad_smoke(ROOT / "scripts/ci/launchpad_k8s_smoke.sh")
-    check_launchpad_test_network_policy(
-        ROOT / "scripts/ci/helm_production_network_policy_values.yaml",
-        ROOT / "deploy/helm-chart/templates/tests/launchpad-connectivity.yaml",
-    )
     check_authority_state_chart(ROOT / "deploy/helm-chart/templates/deployment.yaml")
     print("Helm smoke hardening checks passed.")
 

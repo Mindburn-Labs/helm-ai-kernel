@@ -254,7 +254,6 @@ func consoleSurfaceDefinitions() []consoleSurfaceDefinition {
 		{ID: "replay", Label: "Verify", Group: "Proof", Source: "/api/v1/evidence/verify"},
 		{ID: "proofgraph", Label: "ProofGraph", Group: "Proof", Source: "/api/v1/proofgraph/sessions"},
 		{ID: "harness", Label: "Harness", Group: "Developer", Source: "/api/v1/harness/change-contracts"},
-		{ID: "launchpad", Label: "Launchpad", Group: "Runtime", Source: "/api/v1/launchpad/matrix"},
 		{ID: "telemetry", Label: "Telemetry", Group: "Developer", Source: "/api/v1/telemetry/otel/config"},
 		{ID: "coexistence", Label: "Coexistence", Group: "Developer", Source: "/api/v1/coexistence/capabilities"},
 		{ID: "audit", Label: "Audit", Group: "Proof", Source: "/api/v1/console/surfaces/audit"},
@@ -369,16 +368,12 @@ func buildConsoleDiagnostics(svc *Services, opts serverOptions, r *http.Request)
 	dbStatus := "unavailable"
 	sqlitePath := ""
 	artifactPath := ""
-	launchpadRoot := launchpadStoreRoot("")
 	if svc != nil {
 		dataDir = normalizedDataDir(svc.DataDir)
 		dbMode = firstNonEmpty(svc.DatabaseMode, "unknown")
 		dbStatus = firstNonEmpty(svc.DatabaseStatus, statusFromStore(svc))
 		sqlitePath = svc.SQLitePath
 		artifactPath = svc.ArtifactStorePath
-		if svc.LaunchpadStore != nil {
-			launchpadRoot = svc.LaunchpadStore.Root()
-		}
 	}
 	if sqlitePath == "" {
 		sqlitePath = filepath.Join(dataDir, "helm.db")
@@ -445,14 +440,6 @@ func buildConsoleDiagnostics(svc *Services, opts serverOptions, r *http.Request)
 				Status:  "ready",
 				Backend: "file",
 				Path:    artifactPath,
-			},
-			{
-				ID:      "launchpad_store",
-				Label:   "Launchpad Store",
-				Status:  "ready",
-				Backend: "file",
-				Source:  "/api/v1/launchpad/launches/{launch_id}",
-				Path:    launchpadRoot,
 			},
 		},
 		Routes: consoleRouteDiagnostics(),
@@ -526,8 +513,6 @@ func routeSurfaceGroup(path string) string {
 		return "settings"
 	case strings.HasPrefix(path, "/api/v1/agent-ui") || strings.HasPrefix(path, "/api/ag-ui"):
 		return "agents"
-	case strings.HasPrefix(path, "/api/v1/launchpad"):
-		return "launchpad"
 	case strings.HasPrefix(path, "/api/v1/receipts"):
 		return "receipts"
 	case strings.HasPrefix(path, "/api/v1/proofgraph"):

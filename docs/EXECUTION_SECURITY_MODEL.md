@@ -151,9 +151,9 @@ an agent can reach.
 | :--- | :--- |
 | **Capability manifests** | The kernel MCP server serves a fixed tool catalog and lists it at `/mcp/v1/capabilities`. `helm-gateway` lists to an agent only the effect types of its live mandates (CTL-057) |
 | **Policy packs** | A serve policy file names one reference pack. The pack's `runtime_actions` are the actions `serve`, `proxy --policy` and `mcp serve --policy` can allow from that file; an action with no policy is denied (CTL-001) |
-| **Side-effect classes** | Each MCP catalog tool and kernel effect type carries an effect class, `E0` to `E4`, and `plan` maps the class of a plan step to a backend and profile label. `helm-gateway` resolves a risk class per effect and escalates a high-risk one for approval (CTL-052) |
+| **Side-effect classes** | Each MCP catalog tool and kernel effect type carries an effect class, `E0` to `E4`. `helm-gateway` resolves a risk class per effect and escalates a high-risk one for approval (CTL-052) |
 | **Mandates** | `helm-gateway` admits an effect only under a live mandate of the caller's principal that names the effect type (CTL-052), and mints a GitHub credential only for a repository the tenant's installation entry allows (CTL-051) |
-| **Destination scoping** | The Guardian in `serve`, `proxy` and `mcp serve` denies every evaluation that names an egress destination; no configuration adds an allowlist (CTL-047). The egress proxy of a Launchpad local container denies destinations outside its catalog entry (CTL-033) |
+| **Destination scoping** | The Guardian in `serve`, `proxy` and `mcp serve` denies every evaluation that names an egress destination; no configuration adds an allowlist (CTL-047) |
 | **Filesystem/network deny-by-default** | Sandbox grants declare deny-by-default I/O. Records only: the kernel runs no pack and has no sandbox runtime (`controls.yaml` CTL-044, retired) |
 | **Sandbox profiles** | `sandbox profiles` and `sandbox grant` list and seal backend profiles as records, and `sandbox exec` refuses every request. `helm-gateway` runs `sandbox.create`, `sandbox.exec` and `sandbox.terminate` through the provider an operator configures (CTL-062) |
 

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 // bridgeEdge is a fake cloud MCP edge plus device refresh endpoint. The /mcp
@@ -105,7 +105,7 @@ func (f *bridgeEdge) handler(t *testing.T) http.Handler {
 func seedBridgeCredential(t *testing.T, apiURL string, accessExpiry time.Time) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
-	cred := lpcmd.MachineCredential{
+	cred := hostedauth.MachineCredential{
 		TokenType:        "Bearer",
 		AccessToken:      "access-SECRET-1",
 		RefreshToken:     "refresh-SECRET-1",
@@ -115,7 +115,7 @@ func seedBridgeCredential(t *testing.T, apiURL string, accessExpiry time.Time) {
 		AccessExpiresAt:  accessExpiry.UTC().Format(time.RFC3339),
 		RefreshExpiresAt: time.Now().Add(720 * time.Hour).UTC().Format(time.RFC3339),
 	}
-	if err := lpcmd.SaveMachineCredential(cred); err != nil {
+	if err := hostedauth.SaveMachineCredential(cred); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -196,7 +196,7 @@ func TestMCPBridge401RefreshRetryOnce(t *testing.T) {
 		t.Errorf("retried response not forwarded:\n%s", out.String())
 	}
 	// Rotated tokens persisted through the standard save path.
-	mc, err := lpcmd.LoadMachineCredential()
+	mc, err := hostedauth.LoadMachineCredential()
 	if err != nil {
 		t.Fatalf("LoadMachineCredential: %v", err)
 	}

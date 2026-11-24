@@ -1,8 +1,0 @@
-mode: demo
-side_effects: disabled
-runtime_dry_run: true
-command:
-  - opencode
-healthcheck:
-  type: command
-  command: opencode --version

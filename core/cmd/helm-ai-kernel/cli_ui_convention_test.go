@@ -96,8 +96,6 @@ func TestCLIErrorFormatterGolden(t *testing.T) {
 			"Error: log append: --leaf-hash is required"},
 		{"plan unknown subcommand", "plan", []string{"bogus"}, 2,
 			"Error: plan: unknown subcommand: bogus"},
-		{"plan evaluate missing plan", "plan", []string{"evaluate", "--dry-run"}, 2,
-			"Error: plan evaluate: --plan is required"},
 		{"trust unknown subcommand", "trust", []string{"bogus"}, 2,
 			"Error: trust: unknown subcommand: bogus"},
 	}
@@ -140,99 +138,6 @@ func TestCLIVerifyEntryFormatFlagJSON(t *testing.T) {
 	assertCleanStdout(t, stdout)
 	if !strings.HasPrefix(stderr, `{"error":{"op":"verify entry","message":"cannot read proof: `) {
 		t.Fatalf("wrapped error drifted: %q", stderr)
-	}
-}
-
-// --- Regression: plan compile --format (permit blocker P2) -----------------
-
-func TestCLIPlanCompileFormatFlag(t *testing.T) {
-	// --format=json must be accepted and produce the PlanSpec JSON on stdout.
-	code, stdout, stderr := runCLI(t, "plan", "compile", "--format=json", "step-one", "step-two")
-	if code != 0 {
-		t.Fatalf("plan compile --format=json code=%d stderr=%s", code, stderr)
-	}
-	var plan map[string]any
-	if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
-		t.Fatalf("stdout not PlanSpec JSON: %v\n%s", err, stdout)
-	}
-
-	// --json keeps working as the alias with an equivalent payload (the
-	// PlanSpec carries a generated id and timestamp, so compare structure).
-	codeB, outB, _ := runCLI(t, "plan", "compile", "--json", "step-one", "step-two")
-	if codeB != 0 {
-		t.Fatalf("plan compile --json code=%d", codeB)
-	}
-	var planB map[string]any
-	if err := json.Unmarshal([]byte(outB), &planB); err != nil {
-		t.Fatalf("--json stdout not PlanSpec JSON: %v", err)
-	}
-	nodesA := plan["dag"].(map[string]any)["nodes"].([]any)
-	nodesB := planB["dag"].(map[string]any)["nodes"].([]any)
-	if len(nodesA) != len(nodesB) || len(nodesA) != 2 {
-		t.Fatalf("alias payloads diverged: --format=%d nodes, --json=%d nodes", len(nodesA), len(nodesB))
-	}
-
-	// Unknown format values are still rejected fail-closed.
-	code, stdout, stderr = runCLI(t, "plan", "compile", "--format=yaml", "step-one")
-	if code != 2 {
-		t.Fatalf("unknown --format accepted: code=%d", code)
-	}
-	assertCleanStdout(t, stdout)
-	if !strings.Contains(stderr, "expected text|json") {
-		t.Fatalf("stderr missing format guidance: %q", stderr)
-	}
-}
-
-// Regression: P2 FORMAT_TEXT_EMITS_JSON — plan compile advertised --format
-// but emitted PlanSpec JSON whatever was asked for, so --format=text silently
-// produced the output it had just been told not to. An unsupported mode is
-// rejected, not ignored.
-func TestCLIPlanCompileRejectsDeselectingJSON(t *testing.T) {
-	for _, args := range [][]string{
-		{"plan", "compile", "--format=text", "step-one"},
-		{"plan", "compile", "--format", "text", "step-one"},
-		{"plan", "compile", "--json=false", "step-one"},
-	} {
-		code, stdout, stderr := runCLI(t, args[0], args[1:]...)
-		if code != 2 {
-			t.Fatalf("%v: code=%d, want 2 — the unsupported mode must be rejected\nstdout=%s", args, code, stdout)
-		}
-		assertCleanStdout(t, stdout)
-		if !strings.Contains(stderr, "not supported") || !strings.Contains(stderr, "PlanSpec JSON only") {
-			t.Fatalf("%v: stderr does not explain the JSON-only contract: %q", args, stderr)
-		}
-		// The refusal itself still honours the JSON-only error envelope.
-		var env map[string]any
-		firstLine, _, _ := strings.Cut(stderr, "\n")
-		if err := json.Unmarshal([]byte(firstLine), &env); err != nil {
-			t.Fatalf("%v: refusal is not a JSON envelope: %v\n%s", args, err, firstLine)
-		}
-	}
-
-	// The JSON defaults are untouched: no flag at all still compiles.
-	code, stdout, stderr := runCLI(t, "plan", "compile", "step-one")
-	if code != 0 {
-		t.Fatalf("default invocation broke: code=%d stderr=%s", code, stderr)
-	}
-	var plan map[string]any
-	if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
-		t.Fatalf("default stdout not PlanSpec JSON: %v", err)
-	}
-}
-
-func TestCLIPlanCompileConflictingAliasesUseEffectiveMode(t *testing.T) {
-	for _, args := range [][]string{
-		{"plan", "compile", "--format=json", "--json=false", "step-one"},
-		{"plan", "compile", "--format=text", "--json=true", "step-one"},
-	} {
-		code, stdout, stderr := runCLI(t, args[0], args[1:]...)
-		if code != 0 {
-			t.Fatalf("%v: code=%d stderr=%s", args, code, stderr)
-		}
-		var plan map[string]any
-		if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
-			t.Fatalf("%v: stdout not PlanSpec JSON: %v\n%s", args, err, stdout)
-		}
 	}
 }
 
@@ -307,8 +212,6 @@ func TestCLIJSONModeStderrIsOneDocument(t *testing.T) {
 	}{
 		{"risk-summary format=json", "risk-summary", []string{"--format=json"}},
 		{"risk-summary legacy --json", "risk-summary", []string{"--json"}},
-		{"plan compile missing input", "plan", []string{"compile", "--format=json"}},
-		{"plan compile default json", "plan", []string{"compile"}},
 		{"verify entry missing proof", "verify", []string{"--entry", "r/x.json", "--format=json"}},
 		{"verify entry legacy --json", "verify", []string{"--entry", "r/x.json", "--json"}},
 	}
@@ -325,8 +228,7 @@ func TestCLIJSONModeStderrIsOneDocument(t *testing.T) {
 }
 
 func TestCLITextModeKeepsHumanErrorForm(t *testing.T) {
-	// plan compile is JSON-only, but risk-summary text mode keeps the human
-	// error + usage lines.
+	// risk-summary text mode keeps the human error + usage lines.
 	_, _, stderr := runCLI(t, "risk-summary")
 	if !strings.HasPrefix(stderr, "Error: risk-summary: --effect or --list is required\n") {
 		t.Fatalf("text error drifted: %q", stderr)
@@ -374,7 +276,6 @@ func TestCLIJSONModeFlagParseErrorIsEnvelope(t *testing.T) {
 		{"risk-summary format then bad flag", "risk-summary", []string{"--format=json", "--bogus"}},
 		{"risk-summary bad flag then format", "risk-summary", []string{"--bogus", "--format=json"}},
 		{"risk-summary legacy json", "risk-summary", []string{"--json", "--bogus"}},
-		{"plan compile", "plan", []string{"compile", "--format=json", "--bogus"}},
 		{"verify entry", "verify", []string{"--entry", "r/x.json", "--json", "--bogus"}},
 		{"receipts tail", "receipts", []string{"tail", "--agent", "a1", "--format=json", "--bogus"}},
 		{"trust eu-list status", "trust", []string{"eu-list", "status", "--json", "--bogus"}},
@@ -398,26 +299,6 @@ func TestCLITextModeFlagParseErrorClean(t *testing.T) {
 	}
 	if stderr != "Error: risk-summary: flag provided but not defined: -bogus\n" {
 		t.Fatalf("text parse error drifted: %q", stderr)
-	}
-}
-
-// --- Regression: plan compile parse error uses its JSON default (round-6 P2)
-
-func TestCLIPlanCompileParseErrorIsEnvelope(t *testing.T) {
-	// P2 PLAN_COMPILE_PARSE_ERROR_FORMAT: plan compile's default output mode
-	// is JSON, so even a bare malformed flag (no explicit --format/--json)
-	// must render the JSON error envelope.
-	code, stdout, stderr := runCLI(t, "plan", "compile", "--bogus")
-	if code != 2 {
-		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
-	}
-	assertCleanStdout(t, stdout)
-	assertSingleJSONDocument(t, stderr)
-
-	// Other commands keep text as their default parse-error mode.
-	code, _, stderr = runCLI(t, "risk-summary", "--bogus")
-	if code != 2 || stderr != "Error: risk-summary: flag provided but not defined: -bogus\n" {
-		t.Fatalf("text default drifted: code=%d stderr=%q", code, stderr)
 	}
 }
 
@@ -479,22 +360,6 @@ func TestCLIDecisionReceiptFormatIDNotSelector(t *testing.T) {
 	}
 	assertCleanStdout(t, stdout)
 	assertSingleJSONDocument(t, stderr)
-}
-
-func TestCLIPlanCompileFalseAliasKeepsEnvelope(t *testing.T) {
-	// P2 PLAN_COMPILE_FALSE_ALIAS_TEXT_ERRORS: --json=false cannot deselect
-	// the envelope on a JSON-only command.
-	for _, args := range [][]string{
-		{"compile", "--json=false"},
-		{"compile", "--json=false", "--format=text"},
-	} {
-		code, stdout, stderr := runCLI(t, "plan", args...)
-		if code != 2 {
-			t.Fatalf("%v: code=%d want 2 (stderr=%s)", args, code, stderr)
-		}
-		assertCleanStdout(t, stdout)
-		assertSingleJSONDocument(t, stderr)
-	}
 }
 
 // --- Regression: conflicting aliases render the effective mode (round-11 P2)

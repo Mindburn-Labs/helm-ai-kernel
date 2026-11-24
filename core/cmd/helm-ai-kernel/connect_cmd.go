@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 func init() {
@@ -33,7 +33,7 @@ func runConnectCmd(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&clientName, "name", "HELM AI Kernel CLI", "Self-reported client name shown in the Console")
 	fs.BoolVar(&noOpen, "no-open", false, "Do not attempt to open a browser; print the URL only")
 	fs.BoolVar(&noConfig, "no-config", false, "Authenticate and store the credential without writing an agent client config")
-	fs.BoolVar(&nativeHTTP, "native-http", false, "Write a remote HTTP config referencing $"+lpcmd.MachineTokenEnvVar+" instead of the stdio bridge (you must export that env var yourself)")
+	fs.BoolVar(&nativeHTTP, "native-http", false, "Write a remote HTTP config referencing $"+hostedauth.MachineTokenEnvVar+" instead of the stdio bridge (you must export that env var yourself)")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -57,7 +57,7 @@ func runConnectCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	opts := lpcmd.ConnectOptions{
+	opts := hostedauth.ConnectOptions{
 		CloudBaseURL: cloudBase,
 		ClientName:   clientName,
 		ClientType:   "cli",
@@ -68,7 +68,7 @@ func runConnectCmd(args []string, stdout, stderr io.Writer) int {
 		opts.OpenBrowser = func(string) error { return os.ErrInvalid }
 	}
 
-	result, err := lpcmd.RunConnect(opts)
+	result, err := hostedauth.RunConnect(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "connect: %v\n", err)
 		return 1
@@ -88,7 +88,7 @@ func runConnectCmd(args []string, stdout, stderr io.Writer) int {
 	configPath := setupClientConfigPath(setupOpts)
 	var writeErr error
 	if nativeHTTP {
-		writeErr = writeRemoteMCPConfig(setupOpts, edge, lpcmd.MachineTokenEnvVar)
+		writeErr = writeRemoteMCPConfig(setupOpts, edge, hostedauth.MachineTokenEnvVar)
 	} else {
 		bin, binErr := connectBridgeBinaryPath()
 		if binErr != nil {
@@ -229,7 +229,7 @@ func deriveCloudMCPURL(base string) string {
 	return strings.TrimRight(base, "/") + "/mcp"
 }
 
-func printConnectSummary(stdout io.Writer, result lpcmd.ConnectResult, edge, target, scope, configPath string, noConfig, nativeHTTP bool) {
+func printConnectSummary(stdout io.Writer, result hostedauth.ConnectResult, edge, target, scope, configPath string, noConfig, nativeHTTP bool) {
 	fmt.Fprintf(stdout, "\nConnected to cloud HELM\n")
 	fmt.Fprintf(stdout, "   Workspace:  %s\n", result.WorkspaceID)
 	if result.Principal != "" {
@@ -244,8 +244,8 @@ func printConnectSummary(stdout io.Writer, result lpcmd.ConnectResult, edge, tar
 	fmt.Fprintf(stdout, "   Client:     %s (%s scope)\n", target, scope)
 	fmt.Fprintf(stdout, "   Config:     %s\n", configPath)
 	if nativeHTTP {
-		fmt.Fprintf(stdout, "\nThe config references the bearer via $%s; connect does NOT populate it.\n", lpcmd.MachineTokenEnvVar)
-		fmt.Fprintf(stdout, "You are responsible for exporting %s in the agent's environment before starting it.\n", lpcmd.MachineTokenEnvVar)
+		fmt.Fprintf(stdout, "\nThe config references the bearer via $%s; connect does NOT populate it.\n", hostedauth.MachineTokenEnvVar)
+		fmt.Fprintf(stdout, "You are responsible for exporting %s in the agent's environment before starting it.\n", hostedauth.MachineTokenEnvVar)
 		return
 	}
 	fmt.Fprintf(stdout, "\nThe config launches 'helm-ai-kernel mcp bridge' over stdio; the bridge authenticates\n")

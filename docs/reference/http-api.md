@@ -184,14 +184,15 @@ logged. Listing a principal widens the token cross-check above for exactly
 that principal: its token passes in every tenant it is bound to, and is still
 refused in any tenant it is not.
 
-**Stores without a tenant dimension.** The boundary surface registry and the
-Launchpad run store are each one store per process. Their `tenant_scoped`
-routes serve only the configured tenant (`HELM_RUNTIME_TENANT_ID`, `default`
-when unset), and every other bound tenant gets `403`, with the fence on or off.
-This includes boundary status, capabilities and records, evidence verification
-scopes, harness traces and change contracts, plan transactions, and Launchpad
-resources, together with their item routes. The Launchpad routes
-are also off unless `HELM_LAUNCHPAD_ROUTES_ENABLED=1`.
+**Stores without a tenant dimension.** The boundary surface registry is one
+store per process. Its `tenant_scoped` routes serve only the configured tenant
+(`HELM_RUNTIME_TENANT_ID`, `default` when unset), and every other bound tenant
+gets `403`, with the fence on or off. This includes boundary status,
+capabilities and records, evidence verification scopes, harness traces and
+change contracts and plan transactions, together with their item routes.
+The `/api/v1/launchpad/*` operations still listed in the OpenAPI document are
+not served (404): Launchpad was removed from the kernel (HELM-762) and the
+operations leave the document with the next minor version.
 
 Request bodies and `context` never select a scope; see below.
 

@@ -7,9 +7,9 @@
   "summary": {
     "total": 93,
     "enforced": 57,
-    "observed_only": 22,
-    "unmanaged": 14,
-    "retired_invariants": 13,
+    "observed_only": 20,
+    "unmanaged": 16,
+    "retired_invariants": 15,
     "build_plane": 1
   },
   "controls": [
@@ -1585,7 +1585,7 @@
       "bypass_assumptions": [
         "A client that talks to a tool server directly is not governed (INV-024).",
         "`helm-ai-kernel mcp approve` refuses to mint approval authority without a verifier.",
-        "The transport proofs run with a test executor built on launchpadmcp.Authorize; the Guardian decision is proven through the local MCP runtime's executor."
+        "The transport proofs run with a test executor built on callauth.Authorize; the Guardian decision is proven through the local MCP runtime's executor."
       ],
       "tests": {
         "allowed": [
@@ -2273,8 +2273,7 @@
         ],
         "bypass": [
           "core/cmd/helm-ai-kernel.TestEveryTenantRouteDeclaresItsDataScope",
-          "core/cmd/helm-ai-kernel.TestTenantIsolationProbeDetectsASharedStore",
-          "core/cmd/helm-ai-kernel.TestLaunchpadRoutesAreOffByDefault"
+          "core/cmd/helm-ai-kernel.TestTenantIsolationProbeDetectsASharedStore"
         ]
       },
       "removal_proofs": [
@@ -2726,41 +2725,18 @@
       "title": "Launchpad local-container preflight and egress allowlist",
       "owner": "Mindburn Labs core team (kernel)",
       "claim": "A Launchpad local container is refused unless network defaults to deny and host filesystem escape and privilege escalation are blocked; its egress proxy denies destinations outside the catalog.",
-      "status": "observed-only",
+      "status": "unmanaged",
       "plane": "runtime",
-      "reason": "Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep.",
-      "entry_points": [
-        {
-          "symbol": "core/pkg/launchpad/runtime.LocalContainerRuntime.Preflight",
-          "reachability": "reachable"
-        },
-        {
-          "symbol": "core/pkg/launchpad/runtime.LaunchOwnedEgressProxy.Start",
-          "reachability": "reachable"
-        }
-      ],
+      "reason": "Retired (helm-tracker#328, HELM-762): Launchpad, its local-container runtime and its egress proxy were deleted from the kernel. Sandbox adapters stay with helm-gateway (core/pkg/connectors/sandbox).",
+      "retired": true,
+      "entry_points": [],
       "gates": [],
-      "config": [
-        "HELM_LAUNCHPAD_ROUTES_ENABLED (off by default)"
-      ],
-      "protected_operations": [
-        "Launching an app through Launchpad on the local container runtime."
-      ],
-      "bypass_assumptions": [
-        "Launchpad routes are off by default.",
-        "The Kubernetes transparent egress path is outside the shipped binary (CTL-038)."
-      ],
+      "config": [],
+      "protected_operations": [],
+      "bypass_assumptions": [],
       "tests": {
-        "allowed": [
-          "core/pkg/launchpad/runtime.TestPreflightAllowsGVisorRuntimeClass",
-          "core/pkg/launchpad/runtime.TestLaunchOwnedEgressProxyWritesReceiptAndAllowsOpenRouterConnect"
-        ],
-        "forbidden": [
-          "core/pkg/launchpad/runtime.TestPreflightNetworkDefaultDeny",
-          "core/pkg/launchpad/runtime.TestPreflightBlocksHostFilesystemEscape",
-          "core/pkg/launchpad/runtime.TestPreflightBlocksContainerPrivilegeEscalation",
-          "core/pkg/launchpad/runtime.TestLaunchOwnedEgressProxyDeniesUnknownDestination"
-        ],
+        "allowed": [],
+        "forbidden": [],
         "removal": [],
         "bypass": []
       },
@@ -3320,15 +3296,14 @@
       "title": "Kubernetes transparent egress for Launchpad",
       "owner": "Mindburn Labs core team (kernel)",
       "claim": "In the Kubernetes Launchpad profile, app egress is redirected through the launch-owned egress proxy.",
-      "status": "observed-only",
+      "status": "unmanaged",
       "plane": "runtime",
-      "reason": "Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them.",
+      "reason": "Retired (helm-tracker#328, HELM-762): the Launchpad chart apps, tools/launchpad/egressproxy and the Kubernetes Launchpad smoke were deleted with Launchpad.",
+      "retired": true,
       "entry_points": [],
       "gates": [],
       "config": [],
-      "protected_operations": [
-        "Egress from Launchpad pods on Kubernetes."
-      ],
+      "protected_operations": [],
       "bypass_assumptions": [],
       "tests": {
         "allowed": [],
@@ -6342,8 +6317,7 @@
         "A pattern that relies on two context members being adjacent in the canonical text, or that matches a member name case-insensitively, depends on the caller's other members. A member the caller sends that sorts between the two (foo, or effect_class0, between effect_class and principal_id) ends the adjacency. Reserved names are removed only when the key, trimmed, is spelled exactly, and tool_name only when it is spelled exactly, so Effect_Class, EFFECT_CLASS or Tool_Name from the caller reaches policy and matches a (?i) pattern written for effect_class or tool_name.",
         "The signed ext-authz response echoes the request's effect_class and risk_class as submitted and carries neither the bound class nor its source: when the kernel evaluated a higher class, a verifier of that response alone does not learn it. The evaluated class is in the decision's effect. Carrying it in the response is a contract change that has not been made.",
         "The organization-runtime decision attestation carries the submitted effect class, because the control plane verifies that member against the effect_level it sent. The class the ceiling was checked against, its source and the declaration are in the decision record's input context, which the attestation does not sign. When the activation gate refuses the request, the decision record signed for the refusal carries no effect digest, so its signature does not cover that input context either.",
-        "The class binding covers the routes and paths named in protected_operations and MCP tool calls. The kernel bridge (core/pkg/bridge) evaluates EXECUTE_TOOL with no effect_class, and the MCP tool helm.verify evaluates the action and resource named in its arguments with no effect_class, so class-keyed rules, the P0 E4 denial included, do not match there.",
-        "The plan adapter (core/pkg/effectgraph) passes a step id as the request resource, so an EXECUTE_TOOL plan step selects the rule named by its step id; a CALL_TOOL step is evaluated as CALL_TOOL."
+        "The class binding covers the routes and paths named in protected_operations and MCP tool calls. The kernel bridge (core/pkg/bridge) evaluates EXECUTE_TOOL with no effect_class, and the MCP tool helm.verify evaluates the action and resource named in its arguments with no effect_class, so class-keyed rules, the P0 E4 denial included, do not match there."
       ],
       "tests": {
         "allowed": [

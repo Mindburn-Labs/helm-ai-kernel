@@ -108,13 +108,8 @@
       "source_patterns": [
         "protocols/README.md",
         "protocols/*/**",
-        "docs/LAUNCHPAD.md",
-        "docs/launchpad/**",
         "docs/skills/**",
-        "policies/launchpad/**",
         "policies/skills/**",
-        "registry/launchkit/**",
-        "registry/launchpad/**",
         "registry/skills/**",
         "schemas/README.md",
         "schemas/*.json",

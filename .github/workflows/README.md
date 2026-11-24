@@ -61,10 +61,6 @@ surface for the `helm-ai-kernel` project.
   runner when that package, its Go module files or this workflow changes.
   It checks native path semantics, including rejection of backslash path
   separators. It is separate from the required `ci / gate` status.
-- `helm-integration.yml` runs the minikube Launchpad smoke when the chart or
-  smoke driver changes. The positive lane spends OpenRouter tokens, so on a
-  pull request it runs only with the `launchpad-live-test` label and is
-  skipped otherwise; it never reports success without running. Not required.
 - `lean.yml` and `tla.yml` check the Lean proof and the GuardianPipeline TLA+
   spec. Neither is required.
 - `claude-managed-agents-live-evidence.yml` runs the protected Daytona live
@@ -82,15 +78,6 @@ surface for the `helm-ai-kernel` project.
   chart and binary from one commit. Its signing identity is
   `dev-image.yml@refs/heads/main`, so release verification rejects everything
   it produces.
-- `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
-  egress-proxy artifacts, then runs gated live local-container conformance when
-  manually dispatched with the scoped CI key. Main runs retain artifact evidence
-  only; an explicitly dispatched, live-conformance-backed run can attach a
-  review patch, but neither this workflow nor the catalog workflow creates a
-  branch or pull request.
-- `launchpad-clean-install.yml` validates the published Homebrew package on a
-  macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
-  produced EvidencePacks, and uploads redacted GA evidence.
 - `nightly-quality.yml` runs mutation, flake, vulnerability, runbook,
   migration, dependency hygiene, schema, benchmark, invariant and dead-package
   checks with `QUALITY_STRICT=1`: any failure, crash or missing tool is red.

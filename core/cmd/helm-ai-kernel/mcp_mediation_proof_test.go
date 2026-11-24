@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	launchpadmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/mcp"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp/callauth"
 )
 
 func TestMCPMediationProofTransportsRouteToolCallsThroughExecutor(t *testing.T) {
@@ -439,7 +439,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 	catalog := proofCatalog(t)
 	var dispatches []mcppkg.ToolExecutionRequest
 	executor := func(_ context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
-		decision := launchpadmcp.Authorize(launchpadmcp.ServerRecord{
+		decision := callauth.Authorize(callauth.ServerRecord{
 			ServerID:   "srv",
 			LaunchID:   "launch-1",
 			AppID:      "openclaw",
@@ -447,7 +447,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 			PolicyHash: "sha256:policy",
 			Approved:   true,
 			SchemaPins: map[string]string{"proof.write": "sha256:write"},
-		}, launchpadmcp.CallRequest{
+		}, callauth.CallRequest{
 			ServerID:   "srv",
 			LaunchID:   "launch-1",
 			AppID:      "openclaw",
@@ -455,7 +455,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 			PolicyHash: "sha256:policy",
 			ToolName:   req.ToolName,
 			SchemaHash: "sha256:write",
-			Effect:     launchpadmcp.EffectSideEffect,
+			Effect:     callauth.EffectSideEffect,
 		})
 		if decision.Verdict != "ALLOW" {
 			return mcppkg.ToolExecutionResponse{Content: decision.Reason, IsError: true, Evaluated: true}, nil
@@ -515,7 +515,7 @@ func TestMCPMediationProofUnapprovedServersBlockDispatchAcrossTransports(t *test
 	catalog := proofCatalog(t)
 	var dispatches []mcppkg.ToolExecutionRequest
 	executor := func(_ context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
-		decision := launchpadmcp.Authorize(launchpadmcp.ServerRecord{}, launchpadmcp.CallRequest{
+		decision := callauth.Authorize(callauth.ServerRecord{}, callauth.CallRequest{
 			ServerID:   "srv-unapproved",
 			LaunchID:   "launch-1",
 			AppID:      "openclaw",
@@ -523,7 +523,7 @@ func TestMCPMediationProofUnapprovedServersBlockDispatchAcrossTransports(t *test
 			PolicyHash: "sha256:policy",
 			ToolName:   req.ToolName,
 			SchemaHash: "sha256:read",
-			Effect:     launchpadmcp.EffectRead,
+			Effect:     callauth.EffectRead,
 		})
 		if decision.Verdict != "ALLOW" {
 			return mcppkg.ToolExecutionResponse{Content: decision.Reason, IsError: true, Evaluated: true}, nil

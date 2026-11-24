@@ -28,7 +28,9 @@ cd "$(dirname "$0")/../.."
 
 CLI_BIN="${CLI_BIN:-$(mktemp -d)/helm-ai-kernel}"
 UNSIGNED_PACK="${UNSIGNED_PACK:-fixtures/minimal}"
-SEALED_PACK="${SEALED_PACK:-reference_packs/launchpad/hermes-local-container}"
+# Unset: `mcp proof` below writes and seals one with a dev-local key that the
+# pack itself declares, which is the self-attested case this workload needs.
+SEALED_PACK="${SEALED_PACK:-}"
 
 # A closed port, not a bogus hostname: DNS failure and connection refusal take
 # different code paths, and refusal is the one a real air-gap produces.
@@ -74,6 +76,11 @@ case_result() {
 
 echo "Building the verifier from source..."
 (cd core && GOWORK=off go build -o "$CLI_BIN" ./cmd/helm-ai-kernel)
+if [ -z "$SEALED_PACK" ]; then
+  proof_root="$(mktemp -d)"
+  airgapped "$CLI_BIN" mcp proof --out "$proof_root" --run-id falsification >/dev/null
+  SEALED_PACK="$proof_root/falsification/evidencepacks/falsification"
+fi
 
 echo
 echo "Falsification: 'Proof stronger than platform logs' (vision paper §9.1.2)"

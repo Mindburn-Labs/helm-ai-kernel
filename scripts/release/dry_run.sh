@@ -110,7 +110,6 @@ required=(
   release.high_risk.v3.toml
   sample-policy-material.tar
   evidence-pack.tar
-  helm-ai-kernel-launchpad-data.tar
   helm-ai-kernel.rb
   release-attestation.json
   SHA256SUMS.txt
@@ -241,7 +240,6 @@ required_names = {
     "release.high_risk.v3.toml",
     "sample-policy-material.tar",
     "evidence-pack.tar",
-    "helm-ai-kernel-launchpad-data.tar",
     "helm-ai-kernel.rb",
 }
 missing = sorted(required_names - names)
@@ -259,14 +257,14 @@ if version not in formula:
     raise SystemExit("Homebrew formula does not include the release version")
 if "Mindburn-Labs/helm-ai-kernel" not in formula:
     raise SystemExit("Homebrew formula does not point at Mindburn-Labs/helm-ai-kernel")
-if "helm-ai-kernel-launchpad-data.tar" not in formula or "launch matrix --json" not in formula:
-    raise SystemExit("Homebrew formula does not install or test Launchpad data")
+if "hook pre-tool --client claude-code" not in formula or '"permissionDecision":"deny"' not in formula:
+    raise SystemExit("Homebrew formula does not test the coding-agent hook denial")
+if "launchpad" in formula.lower() or "resource " in formula:
+    raise SystemExit("Homebrew formula must install only the kernel binary")
 if not formula.startswith("# frozen_string_literal: true\n\nclass HelmAiKernel < Formula\n"):
     raise SystemExit("Homebrew formula has invalid leading indentation")
 if "\n\n\n" in formula:
     raise SystemExit("Homebrew formula contains extra blank lines")
-if formula.find("on_macos do") > formula.find('resource "launchpad-data" do'):
-    raise SystemExit("Homebrew formula platform blocks must precede resources")
 if "console-web" in formula or "helm-console-web" in formula:
     raise SystemExit("Homebrew formula must remain headless and must not install console web assets")
 

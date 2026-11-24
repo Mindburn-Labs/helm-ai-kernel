@@ -72,7 +72,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/policy/wasm` (325) | None | None. It is named by `protocols/policy-schema/v1/canonicalization.md` and `docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md`. | **INV-005** | **Removed** after INV-005 was re-homed to the CEL `decide` in `core/pkg/kernel/authority`, which the Guardian calls in production and whose fail-closed tests now back the invariant. Both documents are corrected. | s2 |
 | `core/pkg/compliance/*` (24 packages, 13,010 LOC) and the `compliance/zkprovider/gdpr17` module | `governance` and `registry`, through `compliance/jcs` only | `compliance/jcs` reaches the Control Plane, Enterprise and Data Plane through `evidence` and `boundary/approvalceremony` | — | **Removed** (s4a). `compliance/jcs` moved verbatim to `canonicalize/legacyjson`, so governance and registry hashes stay byte-identical; the regulated packs (H12) and the `gdpr17` module are deleted. | s4a |
 | `core/pkg/conform` (3 packages, 6,078 LOC), gates G0–G15 | `cmd/helm-ai-kernel`: `conform`, `verify`, `demo`, `demo finance`, receipt evaluation | Six HTTP 501 routes from #971. See the notes below the table. | — | **Split** (s4d). Gates G1–G15 and GX, their profiles and `--level` are retired: `--level` exits 2. G0 stays for the signed release report. `adversarial` stays for `threat`. The `verify` helpers stay. The six routes were removed in s4b. | s4d |
-| `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Off by default** (s4d). `helm-ai-kernel up` needs `HELM_LAUNCHKIT_ENABLED=1`. Launchpad retirement and the egress-proxy image stay with HELM-762. | s4d |
+| `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Off by default** (s4d). **Removed** by helm-tracker#328 (HELM-762): both trees, the `launch`, `app`, `up`, `teardown` and `secret` verbs, the routes, registry, reference packs, policies, schemas, chart apps, egress proxy, workflows and the `helm-ai-kernel-launchpad-data.tar` release asset. | s4d, #328 |
 | `core/pkg/channels/*` (1,588), `core/cmd/channel_gateway` (277) | The `channel_gateway` main; `packs/antispoof` (protected) / `tests/conformance/channels`, `antispoof` | None. `channel_gateway` is not in the release or the images. | — | **Removed** (s4d), together with `packs/antispoof`, its only importer, and both conformance suites. The boundary manifest is regenerated. | s4d |
 | MCP rug-pull detector (`core/pkg/mcp/rugpull.go`) and pinned-schema checks | Rug-pull: no non-test caller. `core/pkg/mcp` itself stays. | `mcp-bundle.json` advertises `rug-pull-detection` | — | **Rug-pull: removed** (s4c). **Pinned schema: disabled by default** (s4c): the published docs-site MCP guide still passes `--require-pinned-schema=true`, so the flags and the `pinned_schema_hash` field stay accepted but ignored. | s4c |
 | `tee` CLI (`tee_cmd.go`), `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | `cmd/helm-ai-kernel` | None | — | **Removed** (s4c). No caller in the Console, the Control Plane or the docs site. | s4c |
@@ -290,7 +290,8 @@ Not changed in this slice:
   `main` before it reaches the MCP section: `/api/v1/evaluate` now requires a
   `session_id`. That fix is separate.
 - Launchpad's `require_schema_pin` app-spec field stays; it belongs to the
-  Launchpad slice (HELM-762).
+  Launchpad slice (HELM-762), which helm-tracker#328 later removed with
+  Launchpad.
 
 ## Slice 4d evidence
 
@@ -337,7 +338,8 @@ They are removed. So are:
 - the Hermes docs show the opt-in.
 
 Launchpad retirement stays with HELM-762, and the egress-proxy image rebuild is
-outside this slice.
+outside this slice. helm-tracker#328 later deleted Launchpad, LaunchKit and the
+egress proxy.
 
 **Gates.** Stale allowlist lines removed: 18 deadcode, 32 gosec and 2 gitleaks.
 

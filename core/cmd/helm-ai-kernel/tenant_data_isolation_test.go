@@ -59,7 +59,6 @@ var tenantDataScope = map[string]string{
 	"/api/v1/plans/transactions/":           configuredTenantStore,
 	"/api/v1/harness/change-contracts":      configuredTenantStore,
 	"/api/v1/harness/change-contracts/":     configuredTenantStore,
-	"/api/v1/launchpad/":                    configuredTenantStore,
 	"/api/v1/coexistence/capabilities":      noTenantData,
 	"/api/v1/telemetry/otel/config":         noTenantData,
 }
@@ -175,21 +174,6 @@ func TestTenantIsolationProbeDetectsASharedStore(t *testing.T) {
 	}
 	if leaksTenantAData(http.StatusForbidden, leaky) || leaksTenantAData(http.StatusOK, `{"receipts":[]}`) {
 		t.Fatal("a refusal or an empty result was flagged as a leak")
-	}
-}
-
-// Launchpad is off unless HELM_LAUNCHPAD_ROUTES_ENABLED is set (§14.7).
-func TestLaunchpadRoutesAreOffByDefault(t *testing.T) {
-	t.Setenv(launchpadRoutesEnabledEnv, "")
-	mux := newRuntimeRouteMux()
-	RegisterLaunchpadRoutes(mux, &Services{})
-	if got := mux.Mounted(); len(got) != 0 {
-		t.Fatalf("Launchpad mounted %v without opt-in", got)
-	}
-	t.Setenv(launchpadRoutesEnabledEnv, "1")
-	RegisterLaunchpadRoutes(mux, &Services{})
-	if got := mux.Mounted(); len(got) != 1 || got[0] != "/api/v1/launchpad/" {
-		t.Fatalf("Launchpad opt-in mounted %v", got)
 	}
 }
 

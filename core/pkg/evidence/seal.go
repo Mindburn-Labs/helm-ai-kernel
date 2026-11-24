@@ -879,45 +879,6 @@ func ResolveEvidencePackDataDir(dataDir string) string {
 	return ".helm"
 }
 
-func LoadEvidencePackTrustConfig(dataDir string) (*EvidencePackTrustConfig, error) {
-	return LoadEvidencePackTrustConfigWithPath("", dataDir)
-}
-
-// LocalProducerTrustConfig returns the trust roots for packs sealed by this
-// installation under dataDir: the configured trust config, if any, plus the
-// file-dev key already stored in dataDir. It never creates a key and never
-// reads the working directory, so a pack signed by anyone else stays
-// unverifiable.
-func LocalProducerTrustConfig(dataDir string) (*EvidencePackTrustConfig, error) {
-	cfg, err := LoadEvidencePackTrustConfig(dataDir)
-	if err != nil {
-		return nil, err
-	}
-	path := FileDevEvidenceKeyPath(dataDir)
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return cfg, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	signer, err := parseFileDevEvidenceSigner(path, data)
-	if err != nil {
-		return nil, err
-	}
-	out := EvidencePackTrustConfig{}
-	if cfg != nil {
-		out = *cfg
-	}
-	keys := make(map[string]string, len(out.TrustedKeys)+1)
-	for keyID, publicKey := range out.TrustedKeys {
-		keys[keyID] = publicKey
-	}
-	keys[signer.KeyID()] = signer.PublicKeyHex()
-	out.TrustedKeys = keys
-	return &out, nil
-}
-
 func LoadEvidencePackTrustConfigWithPath(configPath, dataDir string) (*EvidencePackTrustConfig, error) {
 	for _, path := range evidencePackTrustConfigCandidates(configPath, dataDir) {
 		data, err := os.ReadFile(path)

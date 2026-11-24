@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 // bridgeExpirySkew refreshes the access token slightly before its recorded
@@ -44,14 +44,14 @@ func runMCPBridge(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if strings.TrimSpace(remoteURL) == "" {
-		mc, err := lpcmd.LoadMachineCredential()
+		mc, err := hostedauth.LoadMachineCredential()
 		if err != nil {
 			fmt.Fprintf(stderr, "mcp bridge: %v\n", err)
 			return 2
 		}
 		remoteURL = deriveCloudMCPURL(mc.APIURL)
 	}
-	if err := lpcmd.RequireSecureBaseURL(remoteURL); err != nil {
+	if err := hostedauth.RequireSecureBaseURL(remoteURL); err != nil {
 		fmt.Fprintf(stderr, "mcp bridge: %v\n", err)
 		return 2
 	}
@@ -90,13 +90,13 @@ func bridgeForwardMessage(stdout io.Writer, remoteURL string, client *http.Clien
 		return bridgeWriteError(stdout, req, -32700, fmt.Sprintf("re-encode request: %v", err))
 	}
 
-	cred, err := lpcmd.LoadMachineCredential()
+	cred, err := hostedauth.LoadMachineCredential()
 	if err != nil {
 		return bridgeFailClosed(stdout, req, fmt.Sprintf("no usable cloud credential: %v", err))
 	}
 	refreshed := false
 	if bridgeAccessExpired(cred, now()) {
-		cred, err = lpcmd.RefreshMachineCredential(client, cred)
+		cred, err = hostedauth.RefreshMachineCredential(client, cred)
 		if err != nil {
 			return bridgeFailClosed(stdout, req, fmt.Sprintf("machine credential refresh failed: %v", err))
 		}
@@ -108,7 +108,7 @@ func bridgeForwardMessage(stdout io.Writer, remoteURL string, client *http.Clien
 		return bridgeWriteError(stdout, req, -32000, fmt.Sprintf("forward to remote MCP endpoint failed: %v", err))
 	}
 	if status == http.StatusUnauthorized && !refreshed {
-		cred, err = lpcmd.RefreshMachineCredential(client, cred)
+		cred, err = hostedauth.RefreshMachineCredential(client, cred)
 		if err != nil {
 			return bridgeFailClosed(stdout, req, fmt.Sprintf("machine credential refresh failed: %v", err))
 		}
@@ -141,7 +141,7 @@ func bridgeForwardMessage(stdout io.Writer, remoteURL string, client *http.Clien
 // bridgeAccessExpired reports whether the stored access token is missing or at
 // (or within bridgeExpirySkew of) its recorded expiry. An unparseable expiry
 // is treated as not-yet-expired; the remote 401 path still fails closed.
-func bridgeAccessExpired(cred lpcmd.MachineCredential, now time.Time) bool {
+func bridgeAccessExpired(cred hostedauth.MachineCredential, now time.Time) bool {
 	if strings.TrimSpace(cred.AccessToken) == "" {
 		return true
 	}

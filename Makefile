@@ -658,7 +658,3 @@ controls:
 
 controls-check:
 	cd tools/invcheck && GOWORK=off go run . verify -root ../.. && GOWORK=off go run . controls -root ../..
-
-.PHONY: launchpad-promotion-check
-launchpad-promotion-check:
-	cd core && go run ./cmd/helm-ai-kernel launch promote --apps openclaw,hermes --sync-derived --check

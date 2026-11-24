@@ -83,9 +83,9 @@ func TestEvidenceTrustConfigRoundTripsAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveEvidencePackTrustConfig: %v", err)
 	}
-	loaded, err := LoadEvidencePackTrustConfig(dataDir)
+	loaded, err := LoadEvidencePackTrustConfigWithPath("", dataDir)
 	if err != nil {
-		t.Fatalf("LoadEvidencePackTrustConfig: %v", err)
+		t.Fatalf("LoadEvidencePackTrustConfigWithPath: %v", err)
 	}
 	if loaded == nil || loaded.Signer.KeyID != cfg.Signer.KeyID {
 		t.Fatalf("loaded config = %+v, want signer %s", loaded, cfg.Signer.KeyID)

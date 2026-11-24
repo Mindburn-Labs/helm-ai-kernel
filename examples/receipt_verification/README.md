@@ -25,11 +25,14 @@ a signer vouching for its own key proves only that it can sign. Accepting one is
 an explicit decision:
 
 ```bash
+# write a pack sealed with a dev-local key that the pack itself declares
+helm-ai-kernel mcp proof --out /tmp/helm-mcp-proof --run-id demo
+
 # refused: the seal is self-attested
-helm-ai-kernel verify reference_packs/launchpad/hermes-local-container
+helm-ai-kernel verify /tmp/helm-mcp-proof/demo/evidencepacks/demo
 
 # accepted, because the operator said so
-helm-ai-kernel verify reference_packs/launchpad/hermes-local-container --allow-self-attested
+helm-ai-kernel verify /tmp/helm-mcp-proof/demo/evidencepacks/demo --allow-self-attested
 ```
 
 External trust roots are supplied by flag or environment, never read from the

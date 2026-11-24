@@ -80,8 +80,8 @@ Key mechanics:
 - **Artifact set hash**: path-sorted `{path, sha256}` refs, hashed as JCS —
   independently re-derivable from the artifact directory.
 - **Attestor seam**: three injectable provider funcs (systemd props, nft
-  ruleset, cgroup limits) mirroring `launchpad/runtime`'s
-  `DockerInfoProvider` pattern; `LiveProber()` compiles everywhere, probes
+  ruleset, cgroup limits), the same seam as the `DockerInfoProvider` of the
+  deleted Launchpad runtime; `LiveProber()` compiles everywhere, probes
   only on a systemd/nftables host, and every probe failure is fail-closed
   (never a fabricated MATCH). nftables comparison hashes normalized text; the
   ruleset is emitted with the named `priority filter` so file and `nft list`

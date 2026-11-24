@@ -102,6 +102,18 @@ func TestRunMCPApproveRejectsUnsafeScopes(t *testing.T) {
 	}
 }
 
+// The positional form inspected a Launchpad run (retired, HELM-762). It is
+// refused instead of falling through to the profile list.
+func TestRunSandboxInspectRefusesAPositionalRunID(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := runSandboxInspect([]string{"launch-123"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit code = %d, want 2; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage: helm-ai-kernel sandbox inspect") {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestRunSandboxInspectJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runSandboxInspect([]string{"--runtime", "wazero", "--json"}, &stdout, &stderr)

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 func init() {
@@ -45,7 +45,7 @@ func runLoginCmd(args []string, stdout, stderr io.Writer) int {
 		password = strings.TrimRight(string(data), "\r\n")
 	}
 
-	opts := lpcmd.LoginOptions{
+	opts := hostedauth.LoginOptions{
 		Email:    email,
 		Password: password,
 		APIURL:   apiURL,
@@ -53,7 +53,7 @@ func runLoginCmd(args []string, stdout, stderr io.Writer) int {
 		Stderr:   stderr,
 	}
 
-	if err := lpcmd.RunLogin(opts); err != nil {
+	if err := hostedauth.RunLogin(opts); err != nil {
 		fmt.Fprintf(stderr, "login: %v\n", err)
 		return 1
 	}

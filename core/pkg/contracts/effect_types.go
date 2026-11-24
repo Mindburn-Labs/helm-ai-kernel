@@ -407,9 +407,8 @@ func CataloguedEffectClass(typeID string) (string, bool) {
 }
 
 // IsReservedPreviewEffect reports whether typeID is a reserved preview
-// identifier. Reserved identifiers are never executable: plan validation,
-// graph evaluation and the effect boundary refuse them before policy
-// evaluation.
+// identifier. Reserved identifiers are never executable: the effect boundary
+// refuses them before policy evaluation.
 func IsReservedPreviewEffect(typeID string) bool {
 	switch typeID {
 	case EffectTypeProviderProvision,

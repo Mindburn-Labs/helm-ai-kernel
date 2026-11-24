@@ -20,7 +20,7 @@ assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
 `v0.12.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
-`helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
+`multiple.intoto.jsonl`, and matching
 `*.cosign.bundle` files for every primary asset.
 
 From the first release after `v0.11.3`, each release also carries the
@@ -44,7 +44,6 @@ GitHub release before publication is claimed:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
-- `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 - `multiple.intoto.jsonl`
@@ -56,10 +55,11 @@ is a compliance mapping, not executable policy: it contains no supported
 top-level runtime actions, so the sample TOML compiles with zero allow-rules
 and remains fail-closed until an explicit supported runtime policy is supplied.
 
-Homebrew remains headless: it downloads only the Kernel binary and Launchpad
-data. Browser UI assets are not Kernel release assets. Where a release
-declares the loopback Console local-sidecar, it is a verified standalone native
-closure—not a Homebrew resource or a hosted UI.
+Homebrew remains headless: it downloads only the Kernel binary, and its test
+runs the coding-agent hook against a destructive command. Browser UI assets are
+not Kernel release assets. Where a release declares the loopback Console
+local-sidecar, it is a verified standalone native closure—not a Homebrew
+resource or a hosted UI.
 
 For a Console-enabled release, the signed aggregate manifest is source-pinned and its
 SHA-256 is compiled into every standalone Kernel binary before release staging.

@@ -14,7 +14,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
-	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/nativepack"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/packfs"
@@ -641,9 +641,6 @@ func boolExit(ok bool) int {
 }
 
 func runEvidenceExport(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		return runLaunchEvidence(append([]string{args[0], "--export", "--json"}, args[1:]...), stdout, stderr)
-	}
 	cmd := flag.NewFlagSet("evidence export", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 

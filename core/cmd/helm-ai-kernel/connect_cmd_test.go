@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 func TestSetupKernelURLPrefersPersistedEndpoint(t *testing.T) {
@@ -38,7 +38,7 @@ func TestWriteRemoteClaudeMCPHeaderNoTokenLeak(t *testing.T) {
 	}
 
 	const secretToken = "access-SECRET-value"
-	if err := writeRemoteClaudeMCP(path, "https://api.helm.example/mcp", lpcmd.MachineTokenEnvVar, ""); err != nil {
+	if err := writeRemoteClaudeMCP(path, "https://api.helm.example/mcp", hostedauth.MachineTokenEnvVar, ""); err != nil {
 		t.Fatalf("writeRemoteClaudeMCP: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestWriteRemoteClaudeMCPHeaderNoTokenLeak(t *testing.T) {
 	if helm.Type != "http" || helm.URL != "https://api.helm.example/mcp" {
 		t.Errorf("remote transport not configured: %+v", helm)
 	}
-	wantHeader := "Bearer ${" + lpcmd.MachineTokenEnvVar + "}"
+	wantHeader := "Bearer ${" + hostedauth.MachineTokenEnvVar + "}"
 	if helm.Headers["Authorization"] != wantHeader {
 		t.Errorf("Authorization header = %q, want %q", helm.Headers["Authorization"], wantHeader)
 	}
@@ -82,7 +82,7 @@ func TestWriteRemoteCodexMCPHeaderNoTokenLeak(t *testing.T) {
 	path := filepath.Join(dir, "config.toml")
 	const secretToken = "access-SECRET-value"
 
-	if err := writeRemoteCodexMCP(path, "https://api.helm.example/mcp", lpcmd.MachineTokenEnvVar, ""); err != nil {
+	if err := writeRemoteCodexMCP(path, "https://api.helm.example/mcp", hostedauth.MachineTokenEnvVar, ""); err != nil {
 		t.Fatalf("writeRemoteCodexMCP: %v", err)
 	}
 	raw, err := os.ReadFile(path)
@@ -95,7 +95,7 @@ func TestWriteRemoteCodexMCPHeaderNoTokenLeak(t *testing.T) {
 	}
 	if !strings.Contains(s, "[mcp_servers."+setupMCPServerName+"]") ||
 		!strings.Contains(s, `url = "https://api.helm.example/mcp"`) ||
-		!strings.Contains(s, `bearer_token_env_var = "`+lpcmd.MachineTokenEnvVar+`"`) {
+		!strings.Contains(s, `bearer_token_env_var = "`+hostedauth.MachineTokenEnvVar+`"`) {
 		t.Fatalf("codex remote config not written as expected:\n%s", s)
 	}
 }
@@ -112,7 +112,7 @@ func TestWriteRemoteMCPRollbackOnWriteFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := writeRemoteClaudeMCP(path, "https://api.helm.example/mcp", lpcmd.MachineTokenEnvVar, "")
+	err := writeRemoteClaudeMCP(path, "https://api.helm.example/mcp", hostedauth.MachineTokenEnvVar, "")
 	if err == nil {
 		t.Fatal("expected error from injected write failure")
 	}
@@ -153,8 +153,8 @@ func TestWriteBridgeClaudeMCPStdioEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The default path must not depend on any env var (nothing populates it).
-	if strings.Contains(string(raw), lpcmd.MachineTokenEnvVar) {
-		t.Fatalf("bridge config references %s:\n%s", lpcmd.MachineTokenEnvVar, raw)
+	if strings.Contains(string(raw), hostedauth.MachineTokenEnvVar) {
+		t.Fatalf("bridge config references %s:\n%s", hostedauth.MachineTokenEnvVar, raw)
 	}
 
 	var cfg struct {
@@ -205,7 +205,7 @@ func TestWriteBridgeCodexMCPStdioEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(raw)
-	if strings.Contains(s, lpcmd.MachineTokenEnvVar) || strings.Contains(s, "bearer_token_env_var") {
+	if strings.Contains(s, hostedauth.MachineTokenEnvVar) || strings.Contains(s, "bearer_token_env_var") {
 		t.Fatalf("bridge config references an env-supplied bearer:\n%s", s)
 	}
 	if !strings.Contains(s, "[mcp_servers.other]") {

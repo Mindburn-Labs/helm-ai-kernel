@@ -156,7 +156,6 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	registerReceiptRoutes(mux, svc)
 	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, handleRetiredKernelApprove))
 	registerContractRoutes(mux, svc)
-	RegisterLaunchpadRoutes(mux, svc)
 
 	// --- Obligation ---
 	mux.HandleFunc("/api/v1/obligation/create", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {

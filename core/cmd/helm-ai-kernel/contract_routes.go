@@ -17,8 +17,8 @@ import (
 )
 
 // protectConfiguredTenantStore guards a tenant_scoped route whose store has no
-// tenant dimension: the boundary SurfaceRegistry and the Launchpad run store are
-// each one process-wide store. Such a store belongs to the tenant this Kernel is
+// tenant dimension: the boundary SurfaceRegistry is one process-wide store.
+// Such a store belongs to the tenant this Kernel is
 // configured for (HELM_RUNTIME_TENANT_ID, "default" when unset), so any other
 // bound tenant is refused rather than shown or allowed to change that tenant's
 // records (S-05). Partitioning these stores per tenant would need a tenant

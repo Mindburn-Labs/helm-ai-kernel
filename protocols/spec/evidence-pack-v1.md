@@ -146,7 +146,7 @@ Evidence packs use path prefixes to categorize entries:
 Implementations MAY define additional path prefixes. Unrecognized prefixes
 MUST NOT cause verification failure.
 
-Launchpad numbered EvidencePacks map native host evidence to
+Numbered native EvidencePacks (`00_INDEX.json` ... `12_REPORTS/`) map host evidence to
 `11_HOST_EVIDENCE/`. Verifiers MUST accept both `host_evidence/<source>/...`
 and `11_HOST_EVIDENCE/<source>/...` when validating imported host evidence.
 
@@ -238,7 +238,7 @@ protocol, and verdict.
 ### 4.4.1 External Host Evidence (EFFECT)
 
 Externally produced host and network receipt chains MAY be included under
-`host_evidence/` or, for Launchpad numbered packs, `11_HOST_EVIDENCE/`. These
+`host_evidence/` or, for numbered native packs, `11_HOST_EVIDENCE/`. These
 chains follow the External Evidence Receipt Profile v0.1 and can be verified
 offline without trusting HELM infrastructure. Hardware-rooted fields are stored
 and structurally checked; cryptographic TPM or TEE validation is only successful

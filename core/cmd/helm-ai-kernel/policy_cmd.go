@@ -7,8 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
 )
 
 // PolicyFixture is a test case for a policy.
@@ -34,13 +32,12 @@ type PolicyTemplate struct {
 // runPolicyCmd implements `helm-ai-kernel policy test` — policy fixture testing.
 func runPolicyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel policy <test|templates|init|simulate|export> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel policy <test|templates|init|export> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  test       Run policy fixtures from directory")
 		fmt.Fprintln(stderr, "  templates  List available policy starter templates")
 		fmt.Fprintln(stderr, "  init       Generate starter policy in current directory")
-		fmt.Fprintln(stderr, "  simulate   Simulate least-privilege Launchpad policy for an app")
 		fmt.Fprintln(stderr, "  export     Emit a Cedar or OPA view of CLI-visible policy (not source of truth)")
 		return 2
 	}
@@ -52,53 +49,15 @@ func runPolicyCmd(args []string, stdout, stderr io.Writer) int {
 		return runPolicyTemplates(stdout)
 	case "init":
 		return runPolicyInit(args[1:], stdout, stderr)
-	case "simulate":
-		return runPolicySimulate(args[1:], stdout, stderr)
 	case "export":
 		return runPolicyExport(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel policy <test|templates|init|simulate|export> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel policy <test|templates|init|export> [flags]")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown policy subcommand: %s\n", args[0])
 		return 2
 	}
-}
-
-func runPolicySimulate(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("policy simulate", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	substrate := fs.String("substrate", "local-container", "substrate id")
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) != 1 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel policy simulate <app> [--substrate local-container] [--json]")
-		return 2
-	}
-	catalog, err := loadLaunchpadCatalog(stderr)
-	if err != nil {
-		return 1
-	}
-	app, ok := catalog.App(rest[0])
-	if !ok {
-		fmt.Fprintf(stderr, "unknown app: %s\n", rest[0])
-		return 1
-	}
-	compiled, _ := compileLaunchPlan(catalog, rest[0], *substrate, "local.operator", stderr)
-	simulation := readmodel.PolicySimulationForApp(app, compiled)
-	if *jsonOut {
-		return writeLaunchJSON(stdout, simulation)
-	}
-	fmt.Fprintf(stdout, "Policy simulation for %s: %s\n", simulation.AppID, simulation.Verdict)
-	fmt.Fprintf(stdout, "%s\n", simulation.PlainEnglish)
-	for _, diff := range simulation.Diff {
-		fmt.Fprintf(stdout, "  - %s\n", diff)
-	}
-	fmt.Fprintf(stdout, "CLI: %s\n", simulation.CLIEquivalent)
-	return exitForVerdict(simulation.Verdict)
 }
 
 func runPolicyTest(args []string, stdout, stderr io.Writer) int {

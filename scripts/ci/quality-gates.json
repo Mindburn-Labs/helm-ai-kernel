@@ -70,7 +70,6 @@
         "command-tests",
         "receipt-verifier-wasm",
         "go-module-tests",
-        "launchpad-promotion",
         "verify-fixtures",
         "release-no-mock-tee",
         "tcb-imports",
@@ -774,7 +773,6 @@
         "deploy/helm-chart/values.schema.json",
         "scripts/ci/kind_smoke.sh",
         "scripts/ci/helm_chart_smoke.sh",
-        "scripts/ci/launchpad_k8s_smoke.sh",
         "scripts/ci/check_helm_smoke_hardening.py",
         "scripts/ci/quality-gates.json"
       ]
@@ -816,8 +814,7 @@
         "release/**",
         "core/**",
         "install.sh",
-        "docs/PUBLISHING.md",
-        "docs/launchpad/HERMES_PRODUCTION_RUNBOOK.md"
+        "docs/PUBLISHING.md"
       ]
     },
     {
@@ -1071,16 +1068,6 @@
         "scripts/ci/go_module_tests.sh"
       ],
       "description": "Tests every tracked Go module except core, whose packages are covered by go-test and command-tests."
-    },
-    {
-      "id": "launchpad-promotion",
-      "title": "Launchpad promotion drift",
-      "command": "make launchpad-promotion-check",
-      "timeout_seconds": 600,
-      "paths": [
-        "core/**",
-        "registry/launchpad/**"
-      ]
     },
     {
       "id": "release-no-mock-tee",

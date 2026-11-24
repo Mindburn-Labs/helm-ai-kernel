@@ -1,8 +1,0 @@
-{
-  "receipt_id": "launchpad.codex.kernel-verdict",
-  "decision_id": "launchpad.codex.local-container",
-  "decision_hash": "sha256:codex-local-container",
-  "status": "ESCALATE",
-  "verdict": "ESCALATE",
-  "lamport_clock": 1
-}

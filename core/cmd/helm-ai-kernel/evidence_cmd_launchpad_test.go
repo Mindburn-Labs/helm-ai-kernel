@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
-	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/nativepack"
 )
 
 func TestEvidenceInspectReportsLaunchpadGraph(t *testing.T) {

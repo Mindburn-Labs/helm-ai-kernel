@@ -331,6 +331,28 @@ func runIncidentAck(args []string, stdout, stderr io.Writer) int {
 
 // ── Maintenance Run ─────────────────────────────────────────────────────────
 
+const runMaintenanceUsage = "Usage: helm-ai-kernel run maintenance [--once] [--max N]"
+
+func printRunMaintenanceHelp(stdout io.Writer) {
+	fmt.Fprintln(stdout, runMaintenanceUsage)
+}
+
+func runMaintenanceCommandGroup(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, runMaintenanceUsage)
+		return 2
+	}
+	if args[0] != "maintenance" {
+		fmt.Fprintf(stderr, "Unknown run subcommand: %s\n", args[0])
+		return 2
+	}
+	if helpArgs, ok := normalizeHelpRequest(args[1:]); ok {
+		_ = runMaintenanceCmd(helpArgs, stdout, stdout)
+		return 0
+	}
+	return runMaintenanceCmd(args[1:], stdout, stderr)
+}
+
 // runMaintenanceCmd implements `helm-ai-kernel run maintenance` — governed self-fixing.
 func runMaintenanceCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("run maintenance", flag.ContinueOnError)
@@ -650,4 +672,5 @@ func safeReceipt(r string) string {
 func init() {
 	Register(Subcommand{Name: "incident", Aliases: []string{}, Usage: "Manage incidents (list, show, ack, create)", RunFn: runIncidentCmd})
 	Register(Subcommand{Name: "brief", Aliases: []string{}, Usage: "Generate daily system health brief", RunFn: runBriefCmd})
+	Register(Subcommand{Name: "run", Usage: "Run kernel maintenance", RunFn: runMaintenanceCommandGroup, HelpFn: printRunMaintenanceHelp})
 }

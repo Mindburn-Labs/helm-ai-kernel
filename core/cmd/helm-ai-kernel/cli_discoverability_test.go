@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
 func TestHelpJSONCatalogIsStableAndSideEffectFree(t *testing.T) {
@@ -69,8 +67,8 @@ func TestHelpJSONCatalogIsStableAndSideEffectFree(t *testing.T) {
 	if len(expected) != 0 {
 		t.Fatalf("catalog omitted commands: %v", sortedDiscoverabilityNames(expected))
 	}
-	if catalogContainsName(catalog, "launchpad") {
-		t.Fatal("catalog listed alias launchpad as a canonical command")
+	if catalogContainsName(catalog, "conformance") {
+		t.Fatal("catalog listed alias conformance as a canonical command")
 	}
 	if !catalogContainsName(catalog, "watch") {
 		t.Fatal("catalog omitted the integrated watch command")
@@ -147,8 +145,6 @@ func TestCompletionScriptsAreDeterministicAndSideEffectFree(t *testing.T) {
 				}
 			}
 			for _, token := range []string{
-				"launch",
-				"delete",
 				"evidence",
 				"setup",
 				"codex",
@@ -178,10 +174,8 @@ func TestCompletionAliasesReuseCanonicalContexts(t *testing.T) {
 		path []string
 		want []string
 	}{
-		{path: []string{"launchpad"}, want: completionCandidates([]string{"launch"})},
 		{path: []string{"--help"}, want: completionCandidates([]string{"help"})},
 		{path: []string{"-h"}, want: completionCandidates([]string{"help"})},
-		{path: []string{"help", "launchpad"}, want: completionCandidates([]string{"help", "launch"})},
 	} {
 		if got := completionCandidates(tc.path); !reflect.DeepEqual(got, tc.want) {
 			t.Fatalf("completionCandidates(%v) = %v, want %v", tc.path, got, tc.want)
@@ -189,14 +183,14 @@ func TestCompletionAliasesReuseCanonicalContexts(t *testing.T) {
 	}
 
 	bash := runDiscoverabilityCommand(t, "completion", "bash")
-	for _, token := range []string{`"launchpad") words="matrix apps substrates plan status logs repair delete evidence promote secrets imports"`, `"--help") words=`, `"-h") words=`} {
+	for _, token := range []string{`"--help") words=`, `"-h") words=`} {
 		if !strings.Contains(bash, token) {
 			t.Fatalf("bash completion omitted alias context %q", token)
 		}
 	}
 
 	zsh := runDiscoverabilityCommand(t, "completion", "zsh")
-	for _, token := range []string{`"launchpad")`, `"--help")`, `"-h")`} {
+	for _, token := range []string{`"--help")`, `"-h")`} {
 		if !strings.Contains(zsh, token) {
 			t.Fatalf("zsh completion omitted alias context %q", token)
 		}
@@ -406,7 +400,6 @@ func isolateDiscoverabilityTest(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "xdg-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
-	t.Setenv("HELM_LAUNCHPAD_HOME", filepath.Join(root, "launchpad"))
 	before, err := snapshotHelpTestTree(root)
 	if err != nil {
 		t.Fatal(err)
@@ -418,20 +411,10 @@ func isolateDiscoverabilityTest(t *testing.T) {
 		startCalls++
 		return nil
 	}
-	originalDeleteCloudResources := deleteCloudResources
-	providerCalls := 0
-	deleteCloudResources = func(session.LaunchRun) (map[string][]byte, []string, error) {
-		providerCalls++
-		return nil, nil, nil
-	}
 	t.Cleanup(func() {
 		defer func() { startServer = originalStartServer }()
-		defer func() { deleteCloudResources = originalDeleteCloudResources }()
 		if startCalls != 0 {
 			t.Fatalf("discoverability command started the server %d times", startCalls)
-		}
-		if providerCalls != 0 {
-			t.Fatalf("discoverability command invoked provider deletion %d times", providerCalls)
 		}
 		after, err := snapshotHelpTestTree(root)
 		if err != nil {

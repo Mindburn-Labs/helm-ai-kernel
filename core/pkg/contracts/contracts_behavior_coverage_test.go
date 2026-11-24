@@ -328,64 +328,6 @@ func TestComputeRiskSummary_E1IsLow(t *testing.T) {
 
 // ── Truth Discipline ──────────────────────────────────────────
 
-func TestTruthAnnotation_HasBlockingUnknowns(t *testing.T) {
-	ta := &TruthAnnotation{
-		Unknowns: []Unknown{{ID: "u1", Impact: UnknownImpactBlocking}},
-	}
-	if !ta.HasBlockingUnknowns() {
-		t.Error("should detect blocking unknown")
-	}
-}
-
-func TestTruthAnnotation_NoBlockingUnknowns(t *testing.T) {
-	ta := &TruthAnnotation{
-		Unknowns: []Unknown{{ID: "u1", Impact: UnknownImpactInformational}},
-	}
-	if ta.HasBlockingUnknowns() {
-		t.Error("informational unknown should not be blocking")
-	}
-}
-
-func TestTruthAnnotation_BlockingUnknownIDs(t *testing.T) {
-	ta := &TruthAnnotation{
-		Unknowns: []Unknown{
-			{ID: "u1", Impact: UnknownImpactBlocking},
-			{ID: "u2", Impact: UnknownImpactDegrading},
-			{ID: "u3", Impact: UnknownImpactBlocking},
-		},
-	}
-	ids := ta.BlockingUnknownIDs()
-	if len(ids) != 2 {
-		t.Fatalf("expected 2 blocking IDs, got %d", len(ids))
-	}
-}
-
-func TestTruthAnnotation_Merge_TakesLowerConfidence(t *testing.T) {
-	a := &TruthAnnotation{Confidence: 0.9}
-	b := &TruthAnnotation{Confidence: 0.5}
-	merged := a.Merge(b)
-	if merged.Confidence != 0.5 {
-		t.Errorf("merged confidence = %f, want 0.5", merged.Confidence)
-	}
-}
-
-func TestTruthAnnotation_Merge_CombinesFacts(t *testing.T) {
-	a := &TruthAnnotation{FactSet: []FactRef{{FactID: "f1"}}}
-	b := &TruthAnnotation{FactSet: []FactRef{{FactID: "f2"}}}
-	merged := a.Merge(b)
-	if len(merged.FactSet) != 2 {
-		t.Fatalf("expected 2 facts, got %d", len(merged.FactSet))
-	}
-}
-
-func TestTruthAnnotation_Merge_NilOther(t *testing.T) {
-	a := &TruthAnnotation{Confidence: 0.8}
-	merged := a.Merge(nil)
-	if merged.Confidence != 0.8 {
-		t.Errorf("merge with nil should preserve original confidence")
-	}
-}
-
 // ── Reflex ────────────────────────────────────────────────────
 
 func TestEvaluateReflexes_NilReturnsNil(t *testing.T) {

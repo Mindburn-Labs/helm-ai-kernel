@@ -17,7 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
-	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/nativepack"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 

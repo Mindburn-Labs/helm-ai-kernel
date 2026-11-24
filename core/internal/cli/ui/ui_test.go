@@ -275,7 +275,7 @@ func TestRequestedFormatGolden(t *testing.T) {
 }
 
 // Regression: P2 PARSE_ERROR_FORMAT_DESELECTED — a JSON-only command (def
-// FormatJSON, e.g. plan compile) pins its error envelope to JSON on every
+// FormatJSON) pins its error envelope to JSON on every
 // path. Flags that deselect JSON for ordinary commands must not reach the
 // parse-failure path and answer in text there alone.
 func TestRequestedFormatJSONOnlyCannotBeDeselected(t *testing.T) {

@@ -411,3 +411,26 @@ func TestConfigurePostgresPoolFromEnv(t *testing.T) {
 
 	assert.Equal(t, 7, db.Stats().MaxOpenConnections)
 }
+
+// `run maintenance --help` answered on stdout with exit 0 while the retired
+// Launchpad `run` command dispatched it; the dispatcher keeps that.
+func TestRunMaintenanceHelpIsStdoutAndExitsZero(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "run", "maintenance", "--help"}, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Usage of run maintenance") || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunHelpListsOnlyMaintenance(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "run", "--help"}, &stdout, &stderr)
+	if code != 0 || stdout.String() != "Usage: helm-ai-kernel run maintenance [--once] [--max N]\n" || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"helm-ai-kernel", "run", "logs", "old-run"}, &stdout, &stderr); code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "Unknown run subcommand: logs") {
+		t.Fatalf("retired run logs: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}

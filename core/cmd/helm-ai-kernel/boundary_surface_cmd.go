@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
@@ -48,6 +49,36 @@ func writeSurfaceJSONResult(w io.Writer, value any, successful bool) int {
 		return 1
 	}
 	return 0
+}
+
+// sanitizeReceiptPart lowercases value and maps every byte outside [a-z0-9]
+// to '_', so it is safe as a receipt id and a file name.
+func sanitizeReceiptPart(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "unknown"
+	}
+	return out
+}
+
+// shellQuote single-quotes value for a POSIX shell.
+func shellQuote(value string) string {
+	if value == "" {
+		return `""`
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func runBoundarySurfaceCmd(args []string, stdout, stderr io.Writer) int {

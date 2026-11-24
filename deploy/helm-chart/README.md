@@ -75,15 +75,10 @@ flowchart TD
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
 | `image.digest` | empty | Immutable `sha256` digest; required in production and takes precedence over `image.tag`. |
-| `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and optional launchpad app Pods/Jobs/test Pod. |
+| `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and gateway Pods and Jobs. |
 | `networkPolicy.enabled` | `false` | Renders the Kernel Pod NetworkPolicy; required in production. |
 | `networkPolicy.ingress` | `[]` | Explicit production ingress peers and ports. Empty or broad selectors fail production rendering. |
 | `networkPolicy.egress` | `[]` | Explicit production egress peers and ports. `ipBlock` peers must be exact `/32` or `/128` hosts. |
-| `launchpadApps.hermes.mode` | `job` | `job` renders the promoted single-query smoke Job; `deployment` renders a long-lived Hermes gateway Deployment without claiming live F2 promotion. |
-| `launchpadApps.hermes.provider` | `openrouter` | Provider passed to the default Hermes Job command. |
-| `launchpadApps.hermes.model` | `openai/gpt-6-luna` | Model passed to the default Hermes Job command. |
-| `launchpadApps.hermes.query` | `ping` | Single query passed to the default Hermes Job command. |
-| `launchpadApps.hermes.commandOverride` | `[]` | Full command array replacement for operator-specific Hermes runtime evidence. |
 | `replicaCount` | `1` | Kernel pod count. Production is single-writer until policy replay watermarks move to a distributed transactional store. |
 | `helm.*` | retained | Legacy values root retained for one compatibility window. |
 | `helm.bindAddr` | `0.0.0.0` | Required inside Kubernetes pods. |

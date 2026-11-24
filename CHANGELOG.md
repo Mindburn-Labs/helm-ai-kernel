@@ -91,6 +91,19 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - `make first-use` builds the kernel and standalone verifier, exercises authenticated local HTTP ALLOW/DENY decisions and fetches their receipts, then verifies them offline and rejects tampered receipts and the wrong key. Source quickstart instructions include the required credentials and an allow-capable sample policy.
 - Setup dry runs can preview configuration before the client is installed. Real installation still requires the client and validates existing signing material and configuration. Named Claude Code/Codex status defaults to project scope; fleet status and doctor inspect both supported scopes. Repair and removal retain their existing defaults.
 
+### Removed
+
+- Launchpad and LaunchKit launching, provisioning, app management and planning
+  are removed from the kernel, along with their chart apps, registry data,
+  release asset and CI workflows. The `launch` (`launchpad`), `app`, `up`,
+  `teardown` and `secret` commands, `plan compile`, `plan evaluate`, and
+  Launchpad-specific `run`, `mcp quarantine`, `policy simulate`, sandbox-run
+  inspection and evidence export are no longer supported. `run maintenance`,
+  `plan transactions`, connect/login/pairing, the MCP bridge, native evidence
+  verification, sandbox adapters and `helm-gateway` remain. The retired HTTP
+  operations remain in the versioned OpenAPI document for compatibility and
+  are not served. Existing evidence packs remain inspectable.
+
 ### Upgrade notes
 
 - Run `helm-ai-kernel setup <client> --yes` again after upgrading. The hook

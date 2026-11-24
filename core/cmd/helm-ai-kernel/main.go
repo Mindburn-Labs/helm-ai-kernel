@@ -98,12 +98,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		return runThreatCmd(rest, stdout, stderr)
-	case "run":
-		if len(args) > 2 && args[2] == "maintenance" {
-			return runMaintenanceCmd(args[3:], stdout, stderr)
-		}
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
-		return 2
 	case "version":
 		rest, code, ok := applyOperatorFormat("version", args[2:], stderr)
 		if !ok {

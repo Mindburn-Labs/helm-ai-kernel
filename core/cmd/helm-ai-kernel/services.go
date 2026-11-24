@@ -34,7 +34,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kms"
-	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/merkle"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
@@ -52,7 +51,6 @@ type Services struct {
 	DatabaseStatus    string
 	SQLitePath        string
 	ArtifactStorePath string
-	LaunchpadStore    *launchsession.Store
 
 	// --- Infrastructure ---
 	Config        *config.Config
@@ -136,7 +134,6 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		DatabaseStatus:    "unknown",
 		SQLitePath:        filepath.Join(dataDir, "helm.db"),
 		ArtifactStorePath: filepath.Join(dataDir, "artifacts"),
-		LaunchpadStore:    launchsession.NewStore(launchpadStoreRoot(dataDir)),
 		AuditStore:        store.NewAuditStore(),
 	}
 
@@ -400,13 +397,6 @@ func normalizedDataDir(dataDir string) string {
 		dataDir = "data"
 	}
 	return dataDir
-}
-
-func launchpadStoreRoot(dataDir string) string {
-	if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
-		return override
-	}
-	return filepath.Join(normalizedDataDir(dataDir), "launchpad")
 }
 
 // defaultBoundaryPolicy returns the policy template used at startup before any

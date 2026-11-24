@@ -28,16 +28,14 @@ var operatorFormatDocumentExempt = map[string]string{
 	"dev":         "listener; bind is not an inspect document",
 	"connect":     "listener; bind is not an inspect document",
 	"login":       "listener; bind is not an inspect document",
-	"up":          "listener; bind is not an inspect document",
 	"onboard":     "listener unless --dry-run; TUI refuses binds",
 	"quickstart":  "listener unless --dry-run; TUI refuses binds",
 }
 
 // operatorFormatPassthrough keeps --format in argv. These commands register
 // --format themselves (or own a text|json format string). Stripping it
-// breaks plan compile's JSON-only refusal and RequestedFormat last-wins.
+// breaks RequestedFormat last-wins.
 var operatorFormatPassthrough = map[string]string{
-	"plan":         "RegisterFormat default JSON; --format=text must remain to refuse",
 	"doctor":       "RegisterFormat + RequestedFormat",
 	"freeze":       "RegisterFormat + RequestedFormat",
 	"unfreeze":     "RegisterFormat + RequestedFormat",

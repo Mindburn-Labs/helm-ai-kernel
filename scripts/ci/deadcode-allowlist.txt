@@ -1,10 +1,10 @@
+#     line is removed in the same PR (HELM-756 deletion waves shrink it);
+#   - deleting or wiring code makes its line stale, and the gate fails until the
+#   - new unreachable code fails the gate; never add a line for it.
 # Frozen deadcode allowlist (HELM-745, target architecture R10).
 # Functions in the core module that no shipped binary (scripts/ci/deadcode-roots.txt)
-# can reach, as measured when the gate landed on origin/main 9ac7bf68.
 # Key: <package path> <function>. The list only shrinks:
-#   - deleting or wiring code makes its line stale, and the gate fails until the
-#     line is removed in the same PR (HELM-756 deletion waves shrink it);
-#   - new unreachable code fails the gate; never add a line for it.
+# can reach, as measured when the gate landed on origin/main 9ac7bf68.
 github.com/Mindburn-Labs/helm-ai-kernel/core/cmd/helm-ai-kernel EmbedderAdapter.Embed
 github.com/Mindburn-Labs/helm-ai-kernel/core/cmd/helm-ai-kernel ExportPack
 github.com/Mindburn-Labs/helm-ai-kernel/core/cmd/helm-ai-kernel PublicRuntimeRouteSpecs
@@ -543,8 +543,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/plc WithTim
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/web WithHTTPClient
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/web WithScheme
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/web WithTimeout
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/intentcompiler Compiler.WithClock
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/intentcompiler StaticDecomposer.DecomposeStructured
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel NewContextGuardWithFingerprint
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi Compile
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi DeterministicFormalVerifier.Verify
@@ -569,17 +567,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime NewRuntime
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime Runtime.CheckHealth
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime Runtime.Query
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime Runtime.SubmitIntent
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders MustDefaultCatalog
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan Compile
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan CompileWithRoot
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision DigitalOceanProvisioner.Plan
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision HetznerProvisioner.Plan
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts Chain.Head
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime ValidateOpenRouterAllowlist
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime appStateRoot
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime parseFilesystemMount
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime projectAppStateMounts
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session ValidState
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp ExecutionFirewall.CounterfactualReceiptFor
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp ExecutionFirewall.FilterVisibleTools
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp Gateway.handleJSONRPCRequest

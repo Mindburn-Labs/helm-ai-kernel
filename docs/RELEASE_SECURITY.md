@@ -59,7 +59,7 @@ release is complete only when GitHub shows Darwin/Linux/Windows binaries,
 `SHA256SUMS.txt`, `sbom.json`,
 `v0.12.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
-`helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
 `v0.12.0.json`, `version-status.json`, and matching `*.cosign.bundle` files for
 each primary asset. Browser UI bundles are not Kernel release assets. Where a
 release declares the loopback Console local-sidecar, it is a verified standalone

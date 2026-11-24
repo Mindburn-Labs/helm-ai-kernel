@@ -159,7 +159,6 @@ The release workflow attaches these assets:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
-- `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-console-local-sidecar-*`
 - `helm-ai-kernel-*-console.tar.gz`

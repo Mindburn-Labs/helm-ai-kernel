@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/hostedauth"
 )
 
 func init() {
@@ -47,14 +47,14 @@ func runControlPlanePairCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	opts := lpcmd.PairOptions{
+	opts := hostedauth.PairOptions{
 		WorkspaceID: workspaceID,
 		APIURL:      apiURL,
 		Stdout:      stdout,
 		Stderr:      stderr,
 	}
 
-	if err := lpcmd.RunPair(opts); err != nil {
+	if err := hostedauth.RunPair(opts); err != nil {
 		fmt.Fprintf(stderr, "control-plane pair: %v\n", err)
 		return 1
 	}
@@ -62,15 +62,15 @@ func runControlPlanePairCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runControlPlaneStatusCmd(stdout, stderr io.Writer) int {
-	pairing, err := lpcmd.LoadPairing()
+	pairing, err := hostedauth.LoadPairing()
 	if err != nil {
 		fmt.Fprintf(stderr, "control-plane status: %v\n", err)
 		return 1
 	}
 
-	session, sessionErr := lpcmd.LoadSession()
+	session, sessionErr := hostedauth.LoadSession()
 	tokenStatus := "expired"
-	if sessionErr == nil && !lpcmd.IsTokenExpired(session) {
+	if sessionErr == nil && !hostedauth.IsTokenExpired(session) {
 		tokenStatus = "valid"
 	}
 

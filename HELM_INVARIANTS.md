@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-93 controls: 57 enforced (1 of them by CI gates), 22 observed-only, 14 unmanaged (13 of them retired invariants).
+93 controls: 57 enforced (1 of them by CI gates), 20 observed-only, 16 unmanaged (15 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -130,12 +130,12 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-030 | MCP HTTP OAuth | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
 | CTL-031 | Proxy withholds ungovernable tool responses | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
 | CTL-032 | Savings-pack verification needs a pinned issuer | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
-| CTL-033 | Launchpad local-container preflight and egress allowlist | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
+| CTL-033 | Launchpad local-container preflight and egress allowlist | retired | Retired (helm-tracker#328, HELM-762): Launchpad, its local-container runtime and its egress proxy were deleted from the kernel. Sandbox adapters stay with helm-gateway (core/pkg/connectors/sandbox). |
 | CTL-034 | Delegation-session gate | observed-only | Production wires an empty in-memory delegation store that nothing writes, so every delegation_session_id denies. The documented checks (session capabilities within the delegator's policy, scope and principal) never run against a real session. |
 | CTL-035 | Local coding-agent hook shell guard | observed-only | The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. The hook and the agent run as the same operating-system user, so the signing seed is readable by a program that does not name it. Deleting the trust-material override in workstation.Decide, the tool-input guard (guardedToolTarget), the decision for a tool with no class, or the per-destination split makes the tests named for them fail, but the registry holds removal proofs for enforced entries only, and no removal proof can cover the claim about each client's command line as a whole. |
 | CTL-036 | Workstation enforce wrapper | enforced | — |
 | CTL-037 | Workstation receipt verification and the views built on it | enforced | — |
-| CTL-038 | Kubernetes transparent egress for Launchpad | observed-only | Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them. |
+| CTL-038 | Kubernetes transparent egress for Launchpad | retired | Retired (helm-tracker#328, HELM-762): the Launchpad chart apps, tools/launchpad/egressproxy and the Kubernetes Launchpad smoke were deleted with Launchpad. |
 | CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
 | CTL-040 | Effect close | observed-only | Retired (helm-tracker#266): EffectCloser and its signed close records had no shipped caller and were deleted. No code in this tree holds the rule. |
 | CTL-041 | Connector release authority | observed-only | Retired (helm-tracker#266): no shipped path ever appended a release authority, so the writer (PostgresReleaseAuthorityAdminStore.Append) and SignConnectorReleaseAuthority moved into a test fixture and the control has no shipped entry point. The shipped runtime builds PostgresReleaseAuthorityStore only to verify release-authority envelopes carried in effect reservation events; its load methods verify what they read but have no shipped caller. The table's insert trigger enforces append-only succession for any row a deployment inserts. |

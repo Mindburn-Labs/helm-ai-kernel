@@ -135,7 +135,7 @@ func TestConsoleDiagnosticsExposeRedactedRuntimeStores(t *testing.T) {
 	if strings.Contains(body, "secret@") || strings.Contains(body, "postgres://helm") {
 		t.Fatalf("console diagnostics leaked DATABASE_URL: %s", body)
 	}
-	if !strings.Contains(body, "launchpad_store") || !strings.Contains(body, "route") {
+	if !strings.Contains(body, "artifact_store") || !strings.Contains(body, "route") {
 		t.Fatalf("console diagnostics missing store/route detail: %s", body)
 	}
 }

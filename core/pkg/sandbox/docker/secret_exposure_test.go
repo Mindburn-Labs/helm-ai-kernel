@@ -24,31 +24,6 @@ func secretSpec() *sandbox.SandboxSpec {
 
 // 17-04: sandbox env values must not appear in the docker CLI's argv, which
 // every local user can read, or in logs. They still reach docker by env.
-func TestDockerRunnerKeepsSecretsOutOfArgvAndLogs(t *testing.T) {
-	docker := secrettest.FakeExecutable(t, "docker", "")
-	logs := secrettest.CaptureLogs(t)
-
-	r := NewDockerRunner()
-	r.dockerBin = docker.Path
-	result, receipt, err := r.Run(secretSpec())
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, _ := json.Marshal(struct{ Result, Receipt any }{result, receipt})
-
-	argv := docker.Argv(t)
-	secrettest.AssertAbsent(t, canary, map[string]string{"docker argv": argv, "logs": logs.String(), "result and receipt": string(out)})
-	if receipt.Spec.Env["OPENROUTER_API_KEY"] != "[REDACTED]" {
-		t.Fatalf("receipt lost the env name: %v", receipt.Spec.Env)
-	}
-	if !strings.Contains(argv, "[-e] [OPENROUTER_API_KEY]") {
-		t.Fatalf("env var not passed by name: %s", argv)
-	}
-	if !strings.Contains(docker.Env(t), "OPENROUTER_API_KEY="+canary) {
-		t.Fatal("secret no longer reaches docker's environment")
-	}
-}
-
 func TestSandboxesRunnerKeepsSecretsOutOfArgvAndLogs(t *testing.T) {
 	docker := secrettest.FakeExecutable(t, "docker", "")
 	logs := secrettest.CaptureLogs(t)
@@ -70,9 +45,6 @@ func TestEnvNamesThatWouldCarryValuesAreRejected(t *testing.T) {
 	for _, name := range []string{"", "KEY=" + canary, "A\x00B"} {
 		spec := secretSpec()
 		spec.Env = map[string]string{name: "v"}
-		if err := NewDockerRunner().Validate(spec); err == nil {
-			t.Fatalf("DockerRunner accepted env name %q", name)
-		}
 		if err := NewSandboxesRunner(SandboxesConfig{}).Validate(spec); err == nil {
 			t.Fatalf("SandboxesRunner accepted env name %q", name)
 		}

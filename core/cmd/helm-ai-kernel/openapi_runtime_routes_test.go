@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -21,8 +23,6 @@ import (
 
 func TestOpenAPIPathsAreRegisteredByHelmServeRuntime(t *testing.T) {
 	chdirTempDir(t)
-	// Launchpad routes are published but mounted only when explicitly enabled.
-	t.Setenv(launchpadRoutesEnabledEnv, "1")
 
 	mux := http.NewServeMux()
 	svc, cleanup := newContractRouteTestServices(t)
@@ -56,6 +56,12 @@ func TestRuntimeRouteRegistryMatchesOpenAPI(t *testing.T) {
 	}
 
 	for key, operationID := range operations {
+		if _, retired := retiredLaunchpadOpenAPIOperations[key]; retired {
+			if _, ok := registry[key]; ok {
+				t.Fatalf("retired Launchpad operation %s is back in the runtime route registry", key)
+			}
+			continue
+		}
 		registered, ok := registry[key]
 		if !ok {
 			t.Fatalf("OpenAPI operation %s is missing from runtime route registry", key)
@@ -71,6 +77,83 @@ func TestRuntimeRouteRegistryMatchesOpenAPI(t *testing.T) {
 		}
 		if operationID != registered.OperationID {
 			t.Fatalf("operationId drift for %s: registry=%s openapi=%s", key, registered.OperationID, operationID)
+		}
+	}
+}
+
+// retiredLaunchpadOpenAPIOperations are the Launchpad operations the OpenAPI
+// document still lists after Launchpad was deleted from the kernel (HELM-762).
+// The server registers no handler for them and answers 404, as the default
+// server already did. They leave the document with the next minor version: the
+// openapi-breaking gate (scripts/ci/contract_breaking.sh) admits removing them
+// only behind a 0.y minor bump or after a deprecation already on main, and the
+// SDK types regenerate with them.
+var retiredLaunchpadOpenAPIOperations = map[string]string{
+	"GET /api/v1/launchpad/apps":                           "listLaunchpadApps",
+	"GET /api/v1/launchpad/substrates":                     "listLaunchpadSubstrates",
+	"GET /api/v1/launchpad/matrix":                         "getLaunchpadMatrix",
+	"POST /api/v1/launchpad/plan":                          "planLaunchpadRun",
+	"POST /api/v1/launchpad/launch":                        "createLaunchpadRun",
+	"GET /api/v1/launchpad/imports":                        "listLaunchpadImports",
+	"POST /api/v1/launchpad/imports":                       "createLaunchpadImport",
+	"GET /api/v1/launchpad/imports/{import_id}":            "getLaunchpadImport",
+	"POST /api/v1/launchpad/imports/{import_id}/preflight": "preflightLaunchpadImport",
+	"POST /api/v1/launchpad/imports/{import_id}/promote":   "promoteLaunchpadImport",
+	"POST /api/v1/launchpad/imports/{import_id}/launch":    "launchImportedApp",
+	"POST /api/v1/launchpad/imports/{import_id}/teardown":  "teardownLaunchpadImport",
+	"GET /api/v1/launchpad/runs":                           "listLaunchpadRuns",
+	"POST /api/v1/launchpad/runs":                          "createLaunchpadRuntimeRun",
+	"GET /api/v1/launchpad/runs/{run_id}":                  "getLaunchpadRuntimeRun",
+	"GET /api/v1/launchpad/runs/{run_id}/events":           "listLaunchpadRunEvents",
+	"GET /api/v1/launchpad/runs/{run_id}/receipts":         "listLaunchpadRunReceipts",
+	"GET /api/v1/launchpad/runs/{run_id}/logs":             "getLaunchpadRunLogs",
+	"POST /api/v1/launchpad/runs/{run_id}/evidence/export": "exportLaunchpadRunEvidence",
+	"POST /api/v1/launchpad/runs/{run_id}/teardown":        "teardownLaunchpadRuntimeRun",
+	"POST /api/v1/launchpad/policy/simulate":               "simulateLaunchpadPolicy",
+	"GET /api/v1/launchpad/sandbox/{run_id}":               "inspectLaunchpadSandbox",
+	"GET /api/v1/launchpad/mcp/threat-reviews":             "listLaunchpadMcpThreatReviews",
+	"POST /api/v1/launchpad/mcp/approvals":                 "approveLaunchpadMcpTools",
+	"GET /api/v1/launchpad/launches/{launch_id}":           "getLaunchpadRun",
+	"POST /api/v1/launchpad/launches/{launch_id}/repair":   "repairLaunchpadRun",
+	"POST /api/v1/launchpad/launches/{launch_id}/delete":   "deleteLaunchpadRun",
+	"GET /api/v1/launchpad/secrets":                        "listLaunchpadSecretGrants",
+	"POST /api/v1/launchpad/secrets":                       "bindLaunchpadSecretGrant",
+}
+
+// The retired list is exact: every listed operation is still in the OpenAPI
+// document under its operationId, no other /api/v1/launchpad/ operation
+// exists, and the serve runtime routes none of them.
+func TestRetiredLaunchpadOperationsAreDocumentedButNotServed(t *testing.T) {
+	chdirTempDir(t)
+	operations := readOpenAPIOperations(t)
+	for key, operationID := range retiredLaunchpadOpenAPIOperations {
+		if got, ok := operations[key]; !ok || got != operationID {
+			t.Fatalf("retired Launchpad operation %s: OpenAPI operationId=%q present=%v, want %q", key, got, ok, operationID)
+		}
+	}
+	for key := range operations {
+		if strings.Contains(key, " /api/v1/launchpad/") {
+			if _, ok := retiredLaunchpadOpenAPIOperations[key]; !ok {
+				t.Fatalf("OpenAPI operation %s is under the retired Launchpad prefix but not in the retired list", key)
+			}
+		}
+	}
+
+	mux := http.NewServeMux()
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	RegisterSubsystemRoutes(mux, svc)
+	RegisterConsoleRoutes(mux, svc, serverOptions{Mode: "serve", PolicyPath: "policy.toml"})
+	RegisterLocalFirstRunRoutes(mux, svc, serverOptions{Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()})
+	parameter := regexp.MustCompile(`\{[a-z_]+\}`)
+	for key := range retiredLaunchpadOpenAPIOperations {
+		method, path, _ := strings.Cut(key, " ")
+		req, err := http.NewRequest(method, "http://helm.test"+parameter.ReplaceAllString(path, "x"), nil)
+		if err != nil {
+			t.Fatalf("build request for %s: %v", key, err)
+		}
+		if _, pattern := mux.Handler(req); strings.HasPrefix(pattern, "/api/v1/launchpad") {
+			t.Fatalf("retired Launchpad operation %s is still routed by pattern %q", key, pattern)
 		}
 	}
 }
@@ -260,7 +343,7 @@ func TestRequestBodyContractMatchesRuntime(t *testing.T) {
 		properties = uniqueSorted(append(properties, contract.AcceptedProperties...))
 		unexpectedProperties := make([]string, 0, len(schema.Properties))
 		for name := range schema.Properties {
-			if !containsString(properties, name) {
+			if !slices.Contains(properties, name) {
 				unexpectedProperties = append(unexpectedProperties, name)
 			}
 		}
@@ -271,7 +354,7 @@ func TestRequestBodyContractMatchesRuntime(t *testing.T) {
 
 		missingRequired := make([]string, 0, len(schema.Required))
 		for _, name := range uniqueSorted(schema.Required) {
-			if !containsString(required, name) {
+			if !slices.Contains(required, name) {
 				missingRequired = append(missingRequired, name)
 			}
 		}
@@ -670,40 +753,40 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Reason: "agent UI runtime request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/launchpad/plan": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad planning request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/launch": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad launch request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/imports": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad import request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/runs": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad run creation request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/runs/{run_id}/teardown": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad teardown request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/policy/simulate": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad policy simulation request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/mcp/approvals": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad MCP approval request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/secrets": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad secret binding request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/v1/launchpad/launches/{launch_id}/delete": {
-			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
-			Reason: "launchpad delete request contract not yet classified in HELM-481 phase 1",
+			Source: "retired with Launchpad (HELM-762); no kernel handler",
+			Reason: "retired Launchpad operation; it leaves the OpenAPI document with the next minor version (retiredLaunchpadOpenAPIOperations)",
 		},
 		"POST /api/ag-ui/run": {
 			Source: "core/cmd/helm-ai-kernel/console_agui_routes.go:64",

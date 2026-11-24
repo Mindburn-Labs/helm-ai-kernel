@@ -13,8 +13,6 @@ import (
 
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
@@ -99,34 +97,6 @@ func runMCPApprove(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stderr, "Error: %v\n", mcppkg.ErrApprovalVerificationUnavailable)
 	return 2
-}
-
-func runMCPQuarantine(args []string, stdout, stderr io.Writer) int {
-	cmd := flag.NewFlagSet("mcp quarantine", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
-	jsonOutput := cmd.Bool("json", false, "Output threat reviews as JSON")
-	if err := cmd.Parse(args); err != nil {
-		return 2
-	}
-	catalog, err := loadLaunchpadCatalog(stderr)
-	if err != nil {
-		return 1
-	}
-	runs, _ := session.NewStore("").List()
-	reviews := readmodel.MCPThreatReviews(catalog, runs)
-	if *jsonOutput {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(map[string]any{"threat_reviews": reviews})
-		return 0
-	}
-	fmt.Fprintln(stdout, "MCP Threat Reviews")
-	for _, review := range reviews {
-		fmt.Fprintf(stdout, "  %s  app=%s state=%s proof=%s\n", review.ServerID, review.AppID, review.State, review.ProofStatus)
-		fmt.Fprintf(stdout, "    %s\n", review.Summary)
-		fmt.Fprintf(stdout, "    CLI: %s\n", review.CLIEquivalent)
-	}
-	return 0
 }
 
 func splitCommand(command string) []string {

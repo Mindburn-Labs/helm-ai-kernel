@@ -7,6 +7,10 @@
     {
       "gate": "boundary-regression",
       "reason": "The manifest-specific cases lose their subject when the kernel digest manifest is retired. The untracked, ignored and missing-source cases are retained in scripts/ci/check_source_tree_test.py under gate-self-tests, with the checker run by tracked-file-hygiene. Enterprise mirror verification and TCB import isolation remain independently owned and active."
+    },
+    {
+      "gate": "launchpad-promotion",
+      "reason": "Launchpad and LaunchKit implementation, data, routes and promotion workflows are retired under helm-tracker#328. The removed gate validated Launchpad-only promotion inputs and cannot establish behavior after those surfaces are deleted. The surviving release mechanism remains covered by release-rehearsal-self-test, deployment-smoke, kind-smoke, release-smoke and the release dry run; the merge profile still runs the first-use gate through the local boundary and standalone verifier."
     }
   ]
 }

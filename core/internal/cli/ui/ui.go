@@ -342,11 +342,11 @@ func ValueFlagNames(fs *flag.FlagSet) map[string]bool {
 // valueFlags but never selects the error mode.
 func RequestedFormat(args []string, def Format, valueFlags map[string]bool, formatSelector bool) Format {
 	if def == FormatJSON {
-		// A FormatJSON default marks a JSON-only command (plan compile): the
+		// A FormatJSON default marks a JSON-only command: the
 		// mode is its contract, not a preference, and its post-parse error
 		// paths pin FormatJSON outright. Scanning flags here would let
 		// --format=text or --json=false deselect JSON on the parse-failure
-		// path alone, so `plan compile --format=text --bogus` answered in
+		// path alone, so `<cmd> --format=text --bogus` answered in
 		// text while every other failure of the same command answered in
 		// JSON. Format currently has two values. If another output mode is added,
 		// each command will need to declare the modes it supports.
@@ -415,8 +415,8 @@ func RequestedFormat(args []string, def Format, valueFlags map[string]bool, form
 // output mode (RequestedFormat seeded with def) — keeping JSON-mode stderr
 // exactly one document even when the failure is a malformed flag. def must
 // be the command's own default output mode: FormatText for ordinary
-// commands, FormatJSON for JSON-only commands such as plan compile (whose
-// --json defaults to true). It returns (0, true) on success. On failure it
+// commands, FormatJSON for JSON-only commands (whose --json defaults to
+// true). It returns (0, true) on success. On failure it
 // has already written the error to chrome and returns (ExitUsage, false):
 //
 //	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary", cliui.FormatText); !ok {

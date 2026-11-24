@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// The provider seam mirrors launchpad/runtime's DockerInfoProvider pattern:
-// plain function types, injectable for deterministic tests, with the live
+// The provider seam uses plain function types, as the deleted Launchpad runtime's
+// DockerInfoProvider did: injectable for deterministic tests, with the live
 // implementations doing the actual OS reads. Probe failures are errors, never
 // fabricated MATCH values — the attestor fails closed on an unreadable OS.
 type (

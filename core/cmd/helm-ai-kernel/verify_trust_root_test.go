@@ -267,18 +267,3 @@ func TestSpendProxySavingsVerifyRequiresPinnedIssuer(t *testing.T) {
 		t.Fatalf("half pin exit=%d, want 2", code)
 	}
 }
-
-// Audit 02-08, second site: launch evidence refs come from a local run record,
-// so a pack signed by a key other than the launch store's own must not verify.
-func TestLaunchEvidenceRefsRejectForeignSignedPack(t *testing.T) {
-	clearVerifierTrustEnv(t)
-	storeRoot := t.TempDir()
-	packDir := writeCLISealedPack(t, t.TempDir())
-	checks := verifyLaunchEvidenceRefs([]string{packDir}, storeRoot)
-	if len(checks) != 1 || checks[0].Verified {
-		t.Fatalf("foreign-signed pack verified as launch evidence: %+v", checks)
-	}
-	if !strings.HasPrefix(checks[0].Summary, "UNVERIFIABLE") {
-		t.Fatalf("summary = %q, want UNVERIFIABLE", checks[0].Summary)
-	}
-}

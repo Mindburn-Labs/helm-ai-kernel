@@ -50,7 +50,7 @@ Every scenario must emit `dispatched=false`, a receipt under
 
 - CLI: [`mcp_proof_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_proof_cmd.go)
 - Tests: [`mcp_proof_cmd_test.go`](../../core/cmd/helm-ai-kernel/mcp_proof_cmd_test.go)
-- MCP decisions: [`governance.go`](../../core/pkg/launchpad/mcp/governance.go)
+- MCP decisions: [`callauth.go`](../../core/pkg/mcp/callauth/callauth.go)
 - Offline verifier: [`verifier.go`](../../core/pkg/verifier/verifier.go)
 
 ## Validation
@@ -58,5 +58,5 @@ Every scenario must emit `dispatched=false`, a receipt under
 ```bash
 cd core
 go test ./cmd/helm-ai-kernel -run 'TestRunMCPProof|TestRunMCPCmdHelpIncludesProof'
-go test ./pkg/launchpad/mcp ./pkg/evidence ./pkg/verifier ./pkg/runtimeadapters/mcp ./pkg/launchpad/receipts
+go test ./pkg/mcp/callauth ./pkg/evidence ./pkg/verifier ./pkg/runtimeadapters/mcp ./pkg/nativepack
 ```

@@ -125,7 +125,7 @@ Native EvidencePack v1 bundles store imported host evidence under:
 host_evidence/<source>/<chain-file>
 ```
 
-Launchpad numbered bundles store the same evidence under:
+Numbered native bundles store the same evidence under:
 
 ```text
 11_HOST_EVIDENCE/<source>/<chain-file>

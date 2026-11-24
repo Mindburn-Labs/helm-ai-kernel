@@ -17,8 +17,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
-	launchpadmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/mcp"
-	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp/callauth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/nativepack"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -27,9 +27,9 @@ type mcpProofScenario struct {
 	Name        string
 	ThreatClass string
 	Summary     string
-	Server      launchpadmcp.ServerRecord
-	Request     launchpadmcp.CallRequest
-	Decision    *launchpadmcp.Decision
+	Server      callauth.ServerRecord
+	Request     callauth.CallRequest
+	Decision    *callauth.Decision
 }
 
 type mcpProofScenarioResult struct {
@@ -122,7 +122,7 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	packDir, err := lpreceipts.WriteEvidencePack(runDir, runID, artifacts)
+	packDir, err := nativepack.WriteEvidencePack(runDir, runID, artifacts)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: write EvidencePack: %v\n", err)
 		return 1
@@ -138,7 +138,7 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	archivePath, err := lpreceipts.WriteEvidencePackArchive(packDir)
+	archivePath, err := nativepack.WriteEvidencePackArchive(packDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: archive EvidencePack: %v\n", err)
 		return 1
@@ -227,7 +227,7 @@ func selectMCPProofScenarios(name string, at time.Time) ([]mcpProofScenario, err
 }
 
 func mcpProofScenarios(_ time.Time) []mcpProofScenario {
-	opaqueApproval := launchpadmcp.ServerRecord{
+	opaqueApproval := callauth.ServerRecord{
 		ServerID:   "srv-approved",
 		LaunchID:   "launch-proof",
 		AppID:      "proof-app",
@@ -239,8 +239,8 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			"proof.write": "sha256:write",
 		},
 	}
-	req := func(toolName, schemaHash string, effect launchpadmcp.ToolEffect) launchpadmcp.CallRequest {
-		return launchpadmcp.CallRequest{
+	req := func(toolName, schemaHash string, effect callauth.ToolEffect) callauth.CallRequest {
+		return callauth.CallRequest{
 			ServerID:   "srv-approved",
 			LaunchID:   "launch-proof",
 			AppID:      "proof-app",
@@ -251,7 +251,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			Effect:     effect,
 		}
 	}
-	replayDecision := launchpadmcp.Decision{
+	replayDecision := callauth.Decision{
 		Verdict:    "DENY",
 		Reason:     "ERR_MCP_REPLAY_REORDERING_ATTEMPT",
 		LaunchID:   "launch-proof",
@@ -266,8 +266,8 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			Name:        "Malicious or unknown MCP server is quarantined",
 			ThreatClass: "malicious_mcp_server",
 			Summary:     "An unrecognized MCP server cannot dispatch a tool call.",
-			Server:      launchpadmcp.ServerRecord{},
-			Request: launchpadmcp.CallRequest{
+			Server:      callauth.ServerRecord{},
+			Request: callauth.CallRequest{
 				ServerID:   "srv-evil",
 				LaunchID:   "launch-proof",
 				AppID:      "proof-app",
@@ -275,7 +275,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 				PolicyHash: "sha256:policy-proof",
 				ToolName:   "shell.exec",
 				SchemaHash: "sha256:shell",
-				Effect:     launchpadmcp.EffectSideEffect,
+				Effect:     callauth.EffectSideEffect,
 			},
 		},
 		{
@@ -284,7 +284,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "prompt_injected_tool_output",
 			Summary:     "Opaque approval metadata cannot turn a tainted tool-output instruction into a dispatch grant without credential verification.",
 			Server:      opaqueApproval,
-			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
+			Request:     req("proof.write", "sha256:write", callauth.EffectSideEffect),
 		},
 		{
 			ID:          "excessive_agency",
@@ -292,7 +292,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "excessive_agency",
 			Summary:     "A destructive autonomous action remains blocked until credential-verified approval creates a dispatch grant.",
 			Server:      opaqueApproval,
-			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
+			Request:     req("proof.write", "sha256:write", callauth.EffectSideEffect),
 		},
 		{
 			ID:          "confused_deputy_scope_mismatch",
@@ -300,7 +300,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "confused_deputy",
 			Summary:     "A request tries to reuse another launch scope.",
 			Server:      opaqueApproval,
-			Request: launchpadmcp.CallRequest{
+			Request: callauth.CallRequest{
 				ServerID:   "srv-approved",
 				LaunchID:   "launch-other",
 				AppID:      "proof-app",
@@ -308,7 +308,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 				PolicyHash: "sha256:policy-proof",
 				ToolName:   "proof.read",
 				SchemaHash: "sha256:read",
-				Effect:     launchpadmcp.EffectRead,
+				Effect:     callauth.EffectRead,
 			},
 		},
 		{
@@ -317,7 +317,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "missing_schema_pin",
 			Summary:     "Opaque approval state cannot bypass credential verification or a pinned tool schema.",
 			Server:      opaqueApproval,
-			Request:     req("proof.unpinned", "sha256:unknown", launchpadmcp.EffectRead),
+			Request:     req("proof.unpinned", "sha256:unknown", callauth.EffectRead),
 		},
 		{
 			ID:          "schema_drift",
@@ -325,7 +325,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "schema_drift",
 			Summary:     "Opaque approval state cannot bypass credential verification or schema-pin enforcement.",
 			Server:      opaqueApproval,
-			Request:     req("proof.read", "sha256:drift", launchpadmcp.EffectRead),
+			Request:     req("proof.read", "sha256:drift", callauth.EffectRead),
 		},
 		{
 			ID:          "replay_reordering_attempt",
@@ -333,7 +333,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ThreatClass: "replay_reordering",
 			Summary:     "A replay ledger attempts to present side effects out of causal order.",
 			Server:      opaqueApproval,
-			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
+			Request:     req("proof.write", "sha256:write", callauth.EffectSideEffect),
 			Decision:    &replayDecision,
 		},
 	}
@@ -345,7 +345,7 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 	previousReceiptHash := ""
 
 	for idx, scenario := range scenarios {
-		decision := launchpadmcp.Authorize(scenario.Server, scenario.Request)
+		decision := callauth.Authorize(scenario.Server, scenario.Request)
 		if scenario.Decision != nil {
 			decision = *scenario.Decision
 		}
@@ -353,12 +353,12 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			return nil, nil, fmt.Errorf("proof scenario %s allowed unexpectedly", scenario.ID)
 		}
 		dispatched := false
-		decisionHash := lpreceipts.Hash(map[string]any{
+		decisionHash := nativepack.Hash(map[string]any{
 			"scenario_id": scenario.ID,
 			"decision":    decision,
 			"request":     scenario.Request,
 		})
-		argsHash := lpreceipts.Hash(scenario.Request)
+		argsHash := nativepack.Hash(scenario.Request)
 		receipt := &contracts.Receipt{
 			ReceiptID:    "rcpt_mcp_proof_" + scenario.ID,
 			DecisionID:   "decision_mcp_proof_" + scenario.ID,
@@ -402,7 +402,7 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			return nil, nil, err
 		}
 		receiptData = append(receiptData, '\n')
-		receiptHash := lpreceipts.HashBytes(receiptData)
+		receiptHash := nativepack.HashBytes(receiptData)
 		previousReceiptHash = receiptHash
 		artifacts["receipts/"+scenario.ID+".json"] = receiptData
 

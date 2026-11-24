@@ -3,7 +3,7 @@
 This directory holds sanitized transcripts for HELM AI Kernel launch and MCP
 quarantine demos. These files are public proof aids, not execution authority.
 
-- `local-demo.transcript.txt` records the local Launchpad demo path.
+- `local-demo.transcript.txt` records the local seven-action launch demo.
 - `mcp-quarantine.transcript.txt` records the fixture MCP quarantine path.
 
 For the receipt-backed MCP proof EvidencePack path, use:

@@ -12,8 +12,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
 func TestDispatchHelpSkipsHandler(t *testing.T) {
@@ -181,7 +179,6 @@ func TestHelpMatrix(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "xdg-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
-	t.Setenv("HELM_LAUNCHPAD_HOME", filepath.Join(root, "launchpad"))
 
 	before, err := snapshotHelpTestTree(root)
 	if err != nil {
@@ -194,14 +191,6 @@ func TestHelpMatrix(t *testing.T) {
 		return nil
 	}
 	t.Cleanup(func() { startServer = originalStartServer })
-
-	originalDeleteCloudResources := deleteCloudResources
-	providerCalls := 0
-	deleteCloudResources = func(session.LaunchRun) (map[string][]byte, []string, error) {
-		providerCalls++
-		return nil, nil, nil
-	}
-	t.Cleanup(func() { deleteCloudResources = originalDeleteCloudResources })
 
 	canonicalNames := make([]string, 0, len(subcommands))
 	for name, cmd := range subcommands {
@@ -220,7 +209,7 @@ func TestHelpMatrix(t *testing.T) {
 		}
 	}
 	for _, name := range []string{
-		"init", "health", "launch", "teardown", "up", "coverage", "approvals", "authz", "budget", "boundary", "traces",
+		"init", "health", "coverage", "approvals", "authz", "budget", "boundary", "traces",
 		"server", "serve", "threat", "version",
 	} {
 		assertSafeHelp(t, []string{name, "--help"})
@@ -234,9 +223,6 @@ func TestHelpMatrix(t *testing.T) {
 
 	if startCalls != 0 {
 		t.Fatalf("help started the server %d times", startCalls)
-	}
-	if providerCalls != 0 {
-		t.Fatalf("help invoked provider deletion %d times", providerCalls)
 	}
 	after, err := snapshotHelpTestTree(root)
 	if err != nil {

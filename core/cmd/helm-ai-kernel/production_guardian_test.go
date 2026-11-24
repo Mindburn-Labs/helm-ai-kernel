@@ -137,7 +137,6 @@ func TestProductionEntrypointsCannotBypassCheckedGuardianFactory(t *testing.T) {
 		"mcp_runtime.go":    false,
 	}
 	partialConstructorAllowlist := map[string]string{
-		"plan_cmd.go":    "offline analysis command does not dispatch external effects",
 		"demo_routes.go": "receipt-only demo evaluates sample policy and cannot dispatch external effects",
 	}
 	allowlistHits := make(map[string]int, len(partialConstructorAllowlist))

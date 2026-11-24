@@ -110,8 +110,8 @@ record() {
   fi
 }
 
-record pr_boundary "PR Boundary: No open PRs contain commercial infrastructure terminology." "python3 scripts/launch/pr_boundary_check.py"
-record terminology_boundary "Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift." "test -f docs/VERDICT_CANONICALIZATION.md && rg -q 'ALLOW' docs/VERDICT_CANONICALIZATION.md && rg -q 'DENY' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md && rg -q 'DEFER' docs/VERDICT_CANONICALIZATION.md"
+record pr_boundary "Check the listed open PRs for configured boundary terms." "python3 scripts/launch/pr_boundary_check.py"
+record terminology_boundary "Check the verdict reference for ALLOW, DENY, ESCALATE and DEFER." "test -f docs/VERDICT_CANONICALIZATION.md && rg -q 'ALLOW' docs/VERDICT_CANONICALIZATION.md && rg -q 'DENY' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md && rg -q 'DEFER' docs/VERDICT_CANONICALIZATION.md"
 record version "Version: VERSION is set to launch target ${LAUNCH_TARGET_VERSION}." "test \"\$(cat VERSION)\" = '${LAUNCH_TARGET_VERSION}'"
 record homebrew "Homebrew: README points to canonical mindburn-labs/tap/helm-ai-kernel." "rg -q 'brew install mindburn-labs/tap/helm-ai-kernel' README.md && ! rg -q 'brew install (helm-ai-kernel|mindburnlabs/tap/helm-ai-kernel)' README.md"
 
@@ -140,7 +140,7 @@ if [[ "$WRITE" -eq 1 ]]; then
   cat > "$REPORT_FILE" <<EOF
 # HELM AI Kernel Launch Readiness Checklist
 
-This report tracks the final launch-readiness state of the \`helm-ai-kernel\` repository. It is updated mechanically by the \`scripts/launch/launch-ready.sh\` verification tool.
+This report records the launch checks run from this checkout. Each failed check names its log file.
 
 Last verification: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Verification logs are emitted by the tool for each run and are intentionally

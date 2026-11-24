@@ -10,7 +10,7 @@ type SSOProvider interface {
 	Callback(ctx context.Context, code string) (*IdentityToken, error)
 }
 
-// OIDCProvider implements OpenID Connect authentication.
+// OIDCProvider holds issuer and OAuth client settings.
 type OIDCProvider struct {
 	IssuerURL    string
 	ClientID     string

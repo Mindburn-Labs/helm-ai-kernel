@@ -64,8 +64,7 @@ type BlockingState struct {
 	onExpire func(*BlockingState)
 }
 
-// LivenessManager manages blocking states and enforces timeouts.
-// Per Section E.5: Central liveness management.
+// LivenessManager retains the blocking-state, watcher and timeout fields.
 type LivenessManager struct {
 	mu       sync.RWMutex
 	states   map[string]*BlockingState

@@ -64,16 +64,7 @@ type CircuitBreakerStats struct {
 // CircuitBreakerOption configures a CircuitBreaker via the functional options pattern.
 type CircuitBreakerOption func(*CircuitBreaker)
 
-// CircuitBreaker implements the circuit breaker pattern for the effects gateway.
-// It protects connectors from cascading failures by fast-rejecting requests
-// when a downstream connector is unhealthy.
-//
-// State machine:
-//
-//	CLOSED  ──(failures >= threshold)──▶  OPEN
-//	OPEN    ──(recoveryTimeout elapsed)──▶  HALF_OPEN
-//	HALF_OPEN ──(successes >= successThreshold)──▶  CLOSED
-//	HALF_OPEN ──(any failure)──▶  OPEN
+// CircuitBreaker retains the state and counters of the former local breaker.
 type CircuitBreaker struct {
 	mu               sync.RWMutex
 	state            CircuitState
@@ -99,9 +90,7 @@ type CircuitBreaker struct {
 // CircuitBreakerRegistry
 // ---------------------------------------------------------------------------
 
-// CircuitBreakerRegistry manages a collection of per-connector circuit breakers.
-// It creates breakers lazily on first access and applies default options to
-// each new breaker.
+// CircuitBreakerRegistry holds per-connector breakers and their default options.
 type CircuitBreakerRegistry struct {
 	mu       sync.RWMutex
 	breakers map[string]*CircuitBreaker

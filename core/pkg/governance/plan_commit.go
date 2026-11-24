@@ -5,23 +5,7 @@ import (
 	"time"
 )
 
-// PlanCommitController implements the approval-required workflow for
-// high-risk effects (E3/E4). It blocks execution until a human approval
-// is received or a timeout elapses.
-//
-// Workflow:
-//  1. Guardian detects E3/E4 effect → calls SubmitPlan()
-//  2. PlanCommitController stores the plan and its hash
-//  3. External system (console, CLI) calls Approve() or Reject()
-//  4. Guardian calls WaitForApproval() which blocks until decision or timeout
-//  5. On approval → execution proceeds with ApprovalReceipt
-//  6. On rejection or timeout → deny with APPROVAL_REQUIRED or APPROVAL_TIMEOUT
-//
-// Design invariants:
-//   - Plans are identified by deterministic content hash
-//   - All transitions are receipted
-//   - Timeout results in automatic denial (fail-closed)
-//   - Clock is injected for deterministic testing
+// PlanCommitController retains the pending-plan state of the former controller.
 type PlanCommitController struct {
 	mu    sync.Mutex
 	plans map[string]*pendingPlan

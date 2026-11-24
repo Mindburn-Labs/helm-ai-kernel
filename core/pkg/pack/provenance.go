@@ -1,18 +1,4 @@
-// quantum_posture: classical Ed25519/SHA-256 only; adds no post-quantum assurance.
-// provenance.go implements cryptographic provenance verification for HELM packs.
-// Per arXiv 2604.08407, the LiteLLM supply chain attack (March 2026) exploited
-// dependency confusion to inject malicious code into every deployment.
-//
-// HELM packs are signed by their publisher. Before loading any pack, the
-// provenance verifier checks:
-//  1. Publisher signature is valid (Ed25519)
-//  2. Content hash matches declared hash
-//  3. Publisher is in the trusted publisher set
-//
-// Design invariants:
-//   - Fail-closed: invalid provenance = pack rejected
-//   - No network calls (verification is offline)
-//   - Supports key rotation via publisher key list
+// quantum_posture: pack provenance records carry classical Ed25519 signatures and SHA-256 digests.
 package pack
 
 import (
@@ -30,8 +16,7 @@ type ProvenanceRecord struct {
 	Version        string    `json:"version"`
 }
 
-// ProvenanceVerifier maintains a set of trusted publisher keys and verifies
-// pack provenance records against them. All operations are offline.
+// ProvenanceVerifier retains the trusted publisher keys of the former pack verifier.
 type ProvenanceVerifier struct {
 	mu          sync.RWMutex
 	trustedKeys map[string][]byte // keyID -> Ed25519 public key bytes

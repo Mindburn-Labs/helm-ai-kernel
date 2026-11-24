@@ -124,7 +124,7 @@ func ComputeCardHash(card *AgentCard) string {
 
 // ── Agent Registry ───────────────────────────────────────────────
 
-// AgentRegistry manages discovery and lookup of agent cards.
+// AgentRegistry retains the indexes of the former agent-card registry.
 type AgentRegistry struct {
 	mu           sync.RWMutex
 	cards        map[string]*AgentCard           // agentID -> card

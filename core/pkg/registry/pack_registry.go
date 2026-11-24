@@ -44,7 +44,7 @@ type PackSignature struct {
 	SignedAt  time.Time `json:"signed_at"`
 }
 
-// PackRegistry manages pack entries with staged activation.
+// PackRegistry retains the pack indexes and verifier of the former registry.
 type PackRegistry struct {
 	entries  map[string]*PackEntry // packID -> entry
 	byName   map[string][]string   // name -> list of packIDs (all versions)

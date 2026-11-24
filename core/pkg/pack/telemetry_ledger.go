@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// LedgerTelemetryHook implements TelemetryHook with a cryptographic ledger.
+// LedgerTelemetryHook retains the path of the former pack telemetry ledger.
 type LedgerTelemetryHook struct {
 	filePath string
 	mu       sync.Mutex

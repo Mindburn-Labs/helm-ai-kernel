@@ -1,10 +1,4 @@
-// Package api — autonomy_handler.go serves the GlobalAutonomyState projection.
-//
-// GET /api/autonomy/state
-//
-// This handler computes GlobalAutonomyState on each request by reading from
-// authoritative stores. It does NOT cache — the caller rate-limits via polling
-// interval or subscribes via WebSocket for push.
+// Autonomy state and control contracts.
 package api
 
 import (
@@ -34,7 +28,7 @@ type AutonomyControlProvider interface {
 	GetCurrentGlobalMode() contracts.GlobalMode
 }
 
-// AutonomyHandler serves autonomy-related API endpoints.
+// AutonomyHandler retains the provider fields of the former autonomy endpoint handler.
 type AutonomyHandler struct {
 	provider        AutonomyStateProvider
 	controlProvider AutonomyControlProvider // nil if control is not supported
@@ -69,13 +63,7 @@ var actionsRequiringSovereign = map[string]bool{
 	"ISLAND": true,
 }
 
-// ──────────────────────────────────────────────────────────────
-// InMemoryAutonomyProvider — default implementation
-// ──────────────────────────────────────────────────────────────
-
-// InMemoryAutonomyProvider is a simple in-memory implementation of AutonomyStateProvider.
-// It holds the current state and provides methods to update it.
-// Production deployments should replace this with a ledger-backed implementation.
+// InMemoryAutonomyProvider retains the fields of the former in-memory autonomy provider.
 type InMemoryAutonomyProvider struct {
 	posture    contracts.Posture
 	globalMode contracts.GlobalMode

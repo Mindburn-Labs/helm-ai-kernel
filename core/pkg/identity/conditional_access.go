@@ -4,6 +4,7 @@ package identity
 
 import (
 	"net"
+	"slices"
 	"sync"
 	"time"
 )
@@ -135,15 +136,15 @@ func (e *ConditionalAccessEngine) matchesConditions(cond PolicyConditions, ctx A
 	}
 
 	// Check device type
-	if len(cond.AllowedDeviceTypes) > 0 && !contains(cond.AllowedDeviceTypes, ctx.DeviceType) {
+	if len(cond.AllowedDeviceTypes) > 0 && !slices.Contains(cond.AllowedDeviceTypes, ctx.DeviceType) {
 		return true
 	}
 
 	// Check location
-	if len(cond.DeniedLocations) > 0 && contains(cond.DeniedLocations, ctx.Location) {
+	if len(cond.DeniedLocations) > 0 && slices.Contains(cond.DeniedLocations, ctx.Location) {
 		return true
 	}
-	if len(cond.AllowedLocations) > 0 && !contains(cond.AllowedLocations, ctx.Location) {
+	if len(cond.AllowedLocations) > 0 && !slices.Contains(cond.AllowedLocations, ctx.Location) {
 		return true
 	}
 
@@ -153,7 +154,7 @@ func (e *ConditionalAccessEngine) matchesConditions(cond PolicyConditions, ctx A
 	}
 
 	// Check principal types
-	if len(cond.PrincipalTypes) > 0 && !containsPT(cond.PrincipalTypes, ctx.PrincipalType) {
+	if len(cond.PrincipalTypes) > 0 && !slices.Contains(cond.PrincipalTypes, ctx.PrincipalType) {
 		return true
 	}
 
@@ -194,24 +195,6 @@ func matchTimeWindow(t time.Time, windows []TimeWindow) bool {
 			if t.Weekday() == wd && t.Hour() >= w.StartHour && t.Hour() < w.EndHour {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func contains(slice []string, val string) bool {
-	for _, s := range slice {
-		if s == val {
-			return true
-		}
-	}
-	return false
-}
-
-func containsPT(slice []PrincipalType, val PrincipalType) bool {
-	for _, s := range slice {
-		if s == val {
-			return true
 		}
 	}
 	return false

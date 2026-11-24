@@ -49,7 +49,7 @@ G110 core/cmd/helm-ai-kernel/verify_archive.go 4ddf8fc2ae34
 G110 core/pkg/evidencepack/archive.go 94e1b87c600d
 G110 core/pkg/skillpacks/github.go 32416a651160
 G115 core/cmd/helm-ai-kernel/diskspace_unix.go 426fbcec53c2
-G115 core/cmd/helm-ai-kernel/doctor_cmd.go 1e38f6c891ce
+G115 core/cmd/helm-ai-kernel/doctor_checks.go 1e38f6c891ce
 G115 core/cmd/helm-ai-kernel/setup_hermes.go 50e9b97d65ab
 G115 core/pkg/agentruntime/reducer.go 68d7c3e040f4
 G115 core/pkg/agentruntime/store.go 0708994559a4
@@ -66,7 +66,7 @@ G115 core/pkg/privacy/text_encoding.go b9a02391f631
 G115 core/pkg/threatscan/semantic.go db1cf2e6aea7
 G115 core/pkg/threatscan/semantic.go ff66dbb3e017
 G115 core/pkg/translog/log.go bee3261b7e8d
-G117 core/pkg/evidence/seal.go 68fb71c61e81
+G117 core/pkg/evidence/seal_signer.go 68fb71c61e81
 G122 core/cmd/helm-ai-kernel/boundary_profile_cmd.go cea0f3d77997
 G122 core/cmd/helm-ai-kernel/demo_cmd.go dbfffc239169
 G122 core/cmd/helm-ai-kernel/demo_finance_cmd.go dbfffc239169
@@ -133,7 +133,7 @@ G304 core/cmd/helm-ai-kernel/counterfactual_cmd.go e32164746a81
 G304 core/cmd/helm-ai-kernel/demo_cmd.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/demo_finance_cmd.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/did_cmd.go 84f8ae84aaaf
-G304 core/cmd/helm-ai-kernel/doctor_cmd.go 88ea7ce1b8c0
+G304 core/cmd/helm-ai-kernel/doctor_checks.go 88ea7ce1b8c0
 G304 core/cmd/helm-ai-kernel/evaluate_receipt_file.go 4ad234d21eb4
 G304 core/cmd/helm-ai-kernel/evaluate_receipt_file.go dd2b3a2e3c4b
 G304 core/cmd/helm-ai-kernel/evidence_prove_entry_cmd.go 6d3ab38598d3
@@ -232,7 +232,7 @@ G304 core/cmd/receipt_verify/main.go ec35404e84d7
 G304 core/cmd/receipt_verify/main.go ef25ef080adc
 G304 core/pkg/agentruntime/storelock_flock.go 4454b0931305
 G304 core/pkg/boundary/profile/probe.go ad3f9cda0030
-G304 core/pkg/boundary/surface_registry.go e002b30f196c
+G304 core/pkg/boundary/surface_registry_storage.go e002b30f196c
 G304 core/pkg/bundles/loader.go dbfffc239169
 G304 core/pkg/conform/engine.go dbfffc239169
 G304 core/pkg/conform/engine.go dbfffc239169
@@ -250,8 +250,8 @@ G304 core/pkg/evidence/externalhost/externalhost.go dbfffc239169
 G304 core/pkg/evidence/seal.go 3b5f87d18ff4
 G304 core/pkg/evidence/seal.go 3f9cc40a5d53
 G304 core/pkg/evidence/seal.go 8d2e21e4627d
-G304 core/pkg/evidence/seal.go dbfffc239169
-G304 core/pkg/evidence/seal.go e002b30f196c
+G304 core/pkg/evidence/seal_signer.go e002b30f196c
+G304 core/pkg/evidence/seal_trust_config.go dbfffc239169
 G304 core/pkg/evidence/storage.go 64f674508bdf
 G304 core/pkg/evidence/storage.go dbfffc239169
 G304 core/pkg/evidence/storage.go eab592a5a322

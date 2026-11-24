@@ -4,8 +4,7 @@ This is a frozen snapshot of one `scripts/launch/launch-ready.sh --write` run.
 It is **not** a live status page and nothing keeps it current.
 
 - Snapshot taken: 2026-05-19T17:15:07Z, against launch target `0.5.0`.
-- `VERSION` is now `0.8.4`, and the tool derives its launch target from
-  `cat VERSION`, so a fresh run would check a different target.
+- Each new run reads its launch target from `VERSION` unless overridden.
 - The tool writes to `${HELM_LAUNCH_READY_REPORT}` and otherwise to
   `$LOG_DIR/launch-readiness.txt` in a `mktemp` directory. `make launch-ready`
   passes neither, so it never rewrites this file. This copy was produced by

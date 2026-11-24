@@ -19,7 +19,7 @@ type DataObject interface {
 	GetClassification() DataClass
 }
 
-// Classifier provides heuristic-based data classification.
+// Classifier holds the pattern fields of the former heuristic classifier.
 type Classifier struct {
 	piiPatterns []*regexp.Regexp
 }

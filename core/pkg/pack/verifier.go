@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Verifier provides pack verification capabilities.
+// Verifier retains the registry and trust anchors of the former pack verifier.
 type Verifier struct {
 	registry     PackRegistry
 	trustAnchors []TrustAnchor

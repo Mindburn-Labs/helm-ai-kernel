@@ -16,7 +16,7 @@ import (
 // only shrinks.
 var oneFormatExempt = map[string]string{
 	// MCP transport: the MCP HTTP binding answers auth failures itself.
-	"cmd/helm-ai-kernel/mcp_runtime.go": "MCP transport",
+	"cmd/helm-ai-kernel/mcp_http.go": "MCP transport",
 	// OpenAI-compatible proxy listener, a separate wire contract.
 	"cmd/helm-ai-kernel/proxy_cmd.go": "OpenAI-compatible proxy",
 }

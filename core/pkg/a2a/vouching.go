@@ -50,7 +50,7 @@ type SlashResult struct {
 
 // ── Vouching Engine ───────────────────────────────────────────────
 
-// VouchingEngine manages peer vouching with joint liability.
+// VouchingEngine retains the vouch records, voucher index and scorer.
 type VouchingEngine struct {
 	mu      sync.RWMutex
 	vouches map[string]*VouchRecord // vouchID -> record

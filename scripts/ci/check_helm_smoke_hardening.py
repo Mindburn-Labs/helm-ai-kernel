@@ -86,32 +86,39 @@ def check_chart_smoke(path: Path) -> None:
     require_digest_default(path, text)
     for token in [
         "PRODUCTION_IMAGE_DIGEST",
-        "requires image.digest pinned by immutable sha256 digest",
         "--set image.digest=",
+        'source "$SCENARIO_DIR/production.sh"',
     ]:
         require(text, token, path)
 
+    production_path = path.with_suffix("") / "production.sh"
+    require(
+        production_path.read_text(encoding="utf-8"),
+        'assert_contains "$image_digest_fail_log" "requires image.digest pinned by immutable sha256 digest"',
+        production_path,
+    )
+
 
 def check_authority_state_chart(path: Path) -> None:
-    text = path.read_text(encoding="utf-8")
-    required = [
+    required_deployment = [
+        '{{- include "helm-ai-kernel.validateDeployment" . -}}',
+        'required "missing chart file files/prepare-authority-state.sh" (.Files.Get "files/prepare-authority-state.sh")',
         'name: prepare-authority-state',
-        'runtimeInit.image must be pinned by immutable sha256 digest',
         'runAsNonRoot: true',
         'runAsUser: {{ required "podSecurityContext.runAsUser is required for authority-state initialization" .Values.podSecurityContext.runAsUser }}',
         'runAsGroup: {{ required "podSecurityContext.runAsGroup is required for authority-state initialization" .Values.podSecurityContext.runAsGroup }}',
         'readOnlyRootFilesystem: true',
         'drop:\n                - ALL',
+        'mountPath: /var/run/helm-signing-key',
+        'defaultMode: 256',
+    ]
+    required_script = [
         'authority data volume is not writable by the restricted runtime identity',
         'chmod 0600 "$root_key"',
         'cmp -s "$source_key" "$root_key"',
         'refusing silent rotation',
-        'mountPath: /var/run/helm-signing-key',
-        'defaultMode: 256',
     ]
-    for token in required:
-        require(text, token, path)
-    for token in [
+    forbidden = [
         'runAsNonRoot: false',
         'runAsUser: 0',
         'runAsGroup: 0',
@@ -124,9 +131,20 @@ def check_authority_state_chart(path: Path) -> None:
         'chmod 0700 "$data_dir"',
         'subPath: root.key',
         'mountPath: {{ printf "%s/root.key"',
-    ]:
-        if token in text:
-            fail(f"{path}: forbidden privileged, root/CHOWN, or direct signing Secret mount remains: {token}")
+    ]
+    chart_files = [
+        (path, required_deployment),
+        (path.with_name("_deployment-validation.tpl"), ["runtimeInit.image must be pinned by immutable sha256 digest"]),
+        (path.with_name("_deployment-policy-env.tpl"), []),
+        (path.parent.parent / "files/prepare-authority-state.sh", required_script),
+    ]
+    for chart_file, required in chart_files:
+        text = chart_file.read_text(encoding="utf-8")
+        for token in required:
+            require(text, token, chart_file)
+        for token in forbidden:
+            if token in text:
+                fail(f"{chart_file}: forbidden privileged, root/CHOWN, or direct signing Secret mount remains: {token}")
 
 
 def main() -> None:

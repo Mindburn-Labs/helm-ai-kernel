@@ -38,18 +38,7 @@ jobs:
         with:
           github_token: ${{ github.token }}
       - name: Install oasdiff (same pin as release.yml)
-        run: |
-          set -euo pipefail
-          ver=1.23.0
-          tmp="$(mktemp -d)"
-          archive="$tmp/oasdiff_${ver}_linux_amd64.tar.gz"
-          sha256='972b10535c3db4366b9dc3ebc11ca021279af3095267c3cffdca854a3a3c4f89'
-          curl -fsSL -o "$archive" "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz"
-          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
-          tar -xzf "$archive" -C "$tmp"
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 "$tmp/oasdiff" "$HOME/.local/bin/oasdiff"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        run: bash scripts/release/workflow/install_oasdiff.sh
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
         with:
           version: v3.15.4

@@ -253,25 +253,7 @@ jobs:
           go-version: "1.26.11"
           cache-dependency-path: "**/go.sum"
       - name: Require explicit external release EvidencePack trust
-        run: |
-          if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then
-            echo "::error::HOMEBREW_TAP_TOKEN must be configured before publishing a release"
-            exit 1
-          fi
-          for name in \
-            HELM_RELEASE_EVIDENCE_PROFILE \
-            HELM_RELEASE_EVIDENCE_ANCHOR_TYPE \
-            HELM_RELEASE_EVIDENCE_ANCHOR_URI \
-            HELM_RELEASE_EVIDENCE_STORAGE_URI \
-            HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND \
-            HELM_EVIDENCE_KMS_KEY_ID \
-            HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX \
-            HELM_EVIDENCE_KMS_SIGN_COMMAND; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name must be configured for release EvidencePack trust"
-              exit 1
-            fi
-          done
+        run: bash scripts/release/workflow/require_release_evidence_trust.sh
       - name: Build and stage release assets
         run: make release-assets
       - name: Check receipt_verify release assets
@@ -662,21 +644,7 @@ jobs:
       - name: Check existing package version
         id: package
         working-directory: sdk/ts
-        run: |
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          published_version="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
-          if [ -n "$published_version" ]; then
-            if [ "$published_version" != "$PACKAGE_VERSION" ]; then
-              echo "::error::Registry metadata mismatch for ${PACKAGE_NAME}@${PACKAGE_VERSION}: got ${published_version}"
-              exit 1
-            fi
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash ../../scripts/release/workflow/check_npm_sdk_version.sh
       # npm trusted publishing (OIDC, no registry token) needs npm >= 11.5.1;
       # Node 22 bundles npm 10. Provenance is attached automatically.
       - name: Install npm with trusted publishing support
@@ -774,23 +742,7 @@ jobs:
       - name: Check if version already published
         id: precheck
         working-directory: sdk/java
-        run: |
-          set -euo pipefail
-          VER=$(cat ../../VERSION)
-          URL="https://repo1.maven.org/maven2/io/github/mindburnlabs/helm-sdk/${VER}/helm-sdk-${VER}.pom"
-          code=$(curl -sS -o /dev/null -w "%{http_code}" "$URL")
-          if [ "$code" = "200" ]; then
-            pom="$(curl -fsS "$URL")"
-            if ! grep -q "<artifactId>helm-sdk</artifactId>" <<< "$pom" || ! grep -q "<version>${VER}</version>" <<< "$pom"; then
-              echo "::error::Maven Central metadata mismatch for helm-sdk ${VER}"
-              exit 1
-            fi
-            echo "helm-sdk ${VER} is already in Maven Central; skipping publish."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "helm-sdk ${VER} not in Central yet (HTTP ${code}); proceeding with publish."
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash ../../scripts/release/workflow/check_maven_sdk_version.sh
       - name: Build
         if: steps.precheck.outputs.skip != 'true'
         working-directory: sdk/java

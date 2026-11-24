@@ -744,6 +744,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
+        trust_step = "Require explicit external release EvidencePack trust"
+        trust_check = self.workflow_script(binaries, trust_step)
         self.assertIn(
             "needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]",
             binaries,
@@ -757,16 +759,11 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}", binaries)
         self.assertIn("HOMEBREW_TAP_TOKEN_PRESENT: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}", binaries)
-        self.assertIn("name: Require explicit external release EvidencePack trust", binaries)
-        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND", binaries)
-        self.assertIn('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then', binaries)
-        self.assertIn("HOMEBREW_TAP_TOKEN must be configured before publishing a release", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND", trust_check)
+        self.assertIn('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then', trust_check)
+        self.assertIn("HOMEBREW_TAP_TOKEN must be configured before publishing a release", trust_check)
         self.assertLess(
-            binaries.index('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then'),
-            binaries.index("Build and stage release assets"),
-        )
-        self.assertLess(
-            binaries.index("Require explicit external release EvidencePack trust"),
+            binaries.index(f"- name: {trust_step}"),
             binaries.index("Build and stage release assets"),
         )
         self.assertNotIn("console-local-sidecar", binaries)

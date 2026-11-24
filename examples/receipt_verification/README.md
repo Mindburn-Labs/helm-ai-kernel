@@ -1,13 +1,8 @@
 # Receipt Verification Examples
 
-> **These scripts are not offline verification.** They connect to a running
-> kernel and call `verify_evidence`, so the thing being trusted is the same
-> service that produced the evidence. They are *inspection* examples — useful
-> for exploring receipts you already own, useless as proof to anyone who does
-> not already trust the service.
->
-> For verification that a third party can run without trusting us, use the
-> offline verifier below.
+The Python and TypeScript scripts inspect receipts from a running kernel and
+request verification against that kernel's signer. For independent
+verification, use the offline CLI with a trusted public key.
 
 ## Offline verification (no HELM service in the trust path)
 
@@ -72,23 +67,30 @@ non-zero if any case behaves differently.
 - `verify_receipts.py`
 - `verify_receipts.ts`
 
-Both walk ProofGraph sessions on a running kernel, print receipt metadata, and
-recompute one local hash over four fields. That local check is a demonstration,
-not the receipt signature: the real preimage is canonicalized over the full
-receipt, and `client.verify_evidence()` is a **server-side** call.
+Both read the first ProofGraph session through the SDK, print up to three
+receipts, and request server-side verification of the session's EvidencePack.
+The displayed `blob_hash` identifies the input snapshot when one is available.
+The scripts print the checks the server ran and exit with status 1 if the
+bundle is `FAILED` or `UNVERIFIABLE`.
 
 ### Prerequisites
 
-- A running kernel. `helm-ai-kernel serve --policy` defaults to
-  `http://127.0.0.1:7714`; `helm-ai-kernel server` defaults to
-  `http://127.0.0.1:8080`.
-- Receipts already present in the ProofGraph store.
-- Python package from `sdk/python`, or a JavaScript runtime with `fetch`.
+- A running kernel with receipts in the ProofGraph store. Set `HELM_URL` if
+  the kernel uses an address other than `http://127.0.0.1:7714`.
+- Set `HELM_ADMIN_API_KEY` (or `HELM_API_KEY`), `HELM_TENANT_ID`, and
+  `HELM_PRINCIPAL_ID` for the runtime whose receipts you want to inspect.
+
+Run either example from the repository root.
 
 ```bash
-cd examples/receipt_verification
-PYTHONPATH=../../sdk/python python verify_receipts.py
-npx tsx verify_receipts.ts
+python -m pip install ./sdk/python
+python examples/receipt_verification/verify_receipts.py
+```
+
+```bash
+npm --prefix sdk/ts ci
+npm --prefix sdk/ts run build
+node --experimental-strip-types examples/receipt_verification/verify_receipts.ts
 ```
 
 The retained fixture gate is:

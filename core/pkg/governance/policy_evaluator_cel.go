@@ -6,7 +6,7 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-// CELPolicyEvaluator implements PolicyEvaluator using CEL with Caching and System Policy.
+// CELPolicyEvaluator retains the environment, program cache and system rule fields.
 type CELPolicyEvaluator struct {
 	env         *cel.Env
 	prgCache    map[string]cel.Program

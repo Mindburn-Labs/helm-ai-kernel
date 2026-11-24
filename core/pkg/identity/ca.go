@@ -40,7 +40,7 @@ type CertificateRequest struct {
 	ValidityDays  int      `json:"validity_days"`
 }
 
-// CertificateAuthority issues and manages agent identity certificates.
+// CertificateAuthority retains the keys, certificate index and revocation state of the former issuer.
 type CertificateAuthority struct {
 	mu         sync.RWMutex
 	caID       string

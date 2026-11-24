@@ -19,7 +19,7 @@ type MemoryKeyProvider struct {
 	priv ed25519.PrivateKey
 }
 
-// Keyring manages the Governance Keys using a Provider.
+// Keyring retains the provider field of the former governance keyring.
 type Keyring struct {
 	provider KeyProvider
 }

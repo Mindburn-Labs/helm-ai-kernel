@@ -1,8 +1,6 @@
 package capabilities
 
-import ()
-
-// StdioMCPClient talks to an MCP server via stdio.
+// StdioMCPClient records the command and arguments for an MCP stdio client.
 type StdioMCPClient struct {
 	Command string
 	Args    []string

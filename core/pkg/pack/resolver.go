@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Resolver provides deterministic pack resolution.
+// Resolver retains the registry and cache fields of the former pack resolver.
 type Resolver struct {
 	registry PackRegistry
 	cache    *ResolutionCache

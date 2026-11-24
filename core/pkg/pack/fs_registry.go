@@ -4,8 +4,7 @@ import (
 	"sync"
 )
 
-// FSRegistry implements PackRegistry using a file system directory.
-// Structure: <root>/<pack_id>/<version>/manifest.json
+// FSRegistry retains the root directory of the former filesystem pack registry.
 type FSRegistry struct {
 	rootDir string
 	mu      sync.RWMutex

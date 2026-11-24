@@ -129,21 +129,6 @@
 | `effect_digest/v1.json`           | L1          | normative     | Effect digest for hashing                                 |
 | Infrastructure effects            | L3          | normative     | `create_droplet`, `scale_cluster`, `deploy_release`, etc. |
 | Chaos effects                     | L3          | informational | `chaos_kill_node`, `chaos_network_delay`                  |
-| `launch/*.v1.json`                | L2          | preview       | Provider-neutral arbitrary-workload routing, generic state transitions, and non-executable authority/receipt wire shapes |
-
-Launch routing schemas are preview-only. Provider-specific regions, SKUs,
-hostnames, supported workload shapes, pricing evidence, and actions live in
-versioned capability profiles. Route quotes resolve source-owned commercial,
-FX, tax, and credit evidence and recompute gross exposure using conservative
-integer arithmetic. Workload kinds and graph relationships remain extensible
-tokens rather than a website-only Kernel enum. Schema presence or a candidate
-provider profile grants no execution authority.
-The effect envelope and receipt files now have a deterministic Go verifier and
-an independent cross-language reference pack, but remain non-executable preview
-contracts. Their identifiers remain absent from the executable catalog until
-base-effect expansion, every policy and Kernel boundary consumer, connector
-certification, durable effect reservation, start interlock, reconciliation, and
-signed closure are promoted together through the deployed Data Plane.
 
 ### Evidence (`evidence/`)
 

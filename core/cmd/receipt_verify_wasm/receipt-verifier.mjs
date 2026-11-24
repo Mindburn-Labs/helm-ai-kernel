@@ -2,8 +2,8 @@
 // the pinned WASM bytes. Loading assets and choosing trust remain host actions.
 // Verification itself performs no fetch and never discovers a trust root.
 //
-// verifyJSON(receiptJSON, trustRootJSON) returns the report as an object. Two
-// refusals concern how a host reads the receipt it passed in:
+// verifyJSON(receiptJSON, trustRootJSON) returns the report as an object. Three
+// refusal cases affect how a host reads the receipt it passed in:
 //
 //   - Member names are matched exactly, as JSON.parse matches them. A document
 //     in which a receipt, bundle or permit member is spelled in another letter

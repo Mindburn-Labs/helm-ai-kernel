@@ -39,7 +39,7 @@ type TrustPath struct {
 
 // ── Propagator ────────────────────────────────────────────────────
 
-// TrustPropagator computes transitive trust scores through vouch chains.
+// TrustPropagator holds the scorer, vouching engine and propagation configuration.
 type TrustPropagator struct {
 	scorer  *trust.BehavioralTrustScorer
 	voucher *VouchingEngine

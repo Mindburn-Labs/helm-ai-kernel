@@ -56,7 +56,7 @@ type FederatedTrustReport struct {
 	ReportedAt time.Time `json:"reported_at"`
 }
 
-// TrustScorer computes and tracks trust scores for MCP tools.
+// TrustScorer retains the tool-score and federated report state of the former scorer.
 type TrustScorer struct {
 	mu               sync.RWMutex
 	scores           map[string]*TrustScore            // key: "serverID:toolName"

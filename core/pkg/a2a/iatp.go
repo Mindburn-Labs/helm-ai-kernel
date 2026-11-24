@@ -82,7 +82,7 @@ const (
 
 // ── Authenticator ─────────────────────────────────────────────────
 
-// IATPAuthenticator manages IATP challenge-response authentication.
+// IATPAuthenticator retains the signer and session fields of the former IATP authenticator.
 type IATPAuthenticator struct {
 	signer     crypto.Signer
 	agentID    string

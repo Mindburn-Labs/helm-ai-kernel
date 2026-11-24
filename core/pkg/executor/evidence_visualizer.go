@@ -108,7 +108,7 @@ type VerificationError struct {
 	Severity    string `json:"severity"` // "error", "warning"
 }
 
-// VisualEvidenceVerifier provides K2.5-style visual evidence verification.
+// VisualEvidenceVerifier retains the configuration and metrics of the former visual verifier.
 type VisualEvidenceVerifier struct {
 	mu      sync.RWMutex
 	config  *VisualEvidenceConfig

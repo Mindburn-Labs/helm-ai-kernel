@@ -55,8 +55,6 @@ flowchart TD
     install --> receipts
     scan --> export
     install --> revoke
-
-    %% Premium Styling Rules
     style inspect fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```

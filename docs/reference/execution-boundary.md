@@ -47,8 +47,6 @@ flowchart TD
     Dispatch --> Receipt
     Receipt --> Checkpoint
     Checkpoint --> Evidence
-
-    %% Premium Styling Rules
     style Request fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Normalize fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style PDP fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff

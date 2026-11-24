@@ -1,49 +1,6 @@
 package a2a
 
-import (
-	"testing"
-	"time"
-)
-
-// ══════════════════════════════════════════════════════════════════════════════
-// A2A Conformance Test Vectors
-//
-// These tests provide deterministic coverage of every negotiation code path:
-//   - Version negotiation (semver major/minor/patch compatibility)
-//   - Feature negotiation (required, offered, intersection)
-//   - Signature validation (key lookup, agent binding, algorithm, tamper)
-//   - Envelope completeness (missing fields → deterministic deny)
-//   - Expiry handling (expired → deny)
-//   - Policy enforcement (deny rules, wildcard matching)
-//
-// Each deny case asserts the exact DenyReason code.
-// ══════════════════════════════════════════════════════════════════════════════
-
-// --- Helpers ----------------------------------------------------------------
-
-func staticClock(t time.Time) func() time.Time {
-	return func() time.Time { return t }
-}
-
-// --- Version Negotiation ----------------------------------------------------
-
-// --- Feature Negotiation ----------------------------------------------------
-
-// --- Signature Validation ---------------------------------------------------
-
-// --- Envelope Completeness --------------------------------------------------
-
-// --- Expiry Handling --------------------------------------------------------
-
-// --- Policy Enforcement -----------------------------------------------------
-
-// --- Evaluation Order -------------------------------------------------------
-
-// --- Receipt & Metadata -----------------------------------------------------
-
-// --- Hash Determinism -------------------------------------------------------
-
-// --- DenyReason Constants ---------------------------------------------------
+import "testing"
 
 func TestConformance_DenyReasonValues(t *testing.T) {
 	// Verify all 7 DenyReason constants have expected string values
@@ -62,8 +19,6 @@ func TestConformance_DenyReasonValues(t *testing.T) {
 		}
 	}
 }
-
-// --- Feature Constants ------------------------------------------------------
 
 func TestConformance_FeatureValues(t *testing.T) {
 	// Verify all 9 Feature constants have expected string values
@@ -84,8 +39,6 @@ func TestConformance_FeatureValues(t *testing.T) {
 		}
 	}
 }
-
-// --- SchemaVersion -----------------------------------------------------------
 
 func TestConformance_SchemaVersion_String(t *testing.T) {
 	cases := []struct {

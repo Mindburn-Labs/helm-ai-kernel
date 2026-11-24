@@ -1,7 +1,5 @@
 package governance
 
-import ()
-
 // ChangeClass defines the risk level of a self-modification.
 type ChangeClass string
 

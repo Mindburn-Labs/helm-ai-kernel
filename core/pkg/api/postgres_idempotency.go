@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// PostgresIdempotencyStore provides durable idempotency enforcement backed by PostgreSQL.
-// Replaces the volatile InMemoryIdempotencyStore to survive process restarts.
+// PostgresIdempotencyStore retains the connection and TTL of the former API store.
 type PostgresIdempotencyStore struct {
 	db  *sql.DB
 	ttl time.Duration

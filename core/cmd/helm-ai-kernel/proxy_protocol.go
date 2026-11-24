@@ -206,19 +206,14 @@ func readProxyFunctionCall(fn map[string]any) proxyToolCall {
 	return proxyToolCall{name: name, arguments: arguments, readable: name != "" && isString}
 }
 
-// validateToolCallArgs performs PEP validation: validates tool arguments
-// via the manifest package (JCS canonicalization + SHA-256 hash).
-// Schema validation is skipped (nil schema) in open-policy proxy mode;
-// schemas can be loaded from manifest files in the future.
+// validateToolCallArgs parses JSON arguments and returns their canonical
+// SHA-256 digest. The open-policy proxy passes a nil tool schema.
 func validateToolCallArgs(argsStr string) (string, bool) {
-	// Step 1: args must parse as valid JSON (fail-closed on malformed)
 	var parsed any
 	if err := json.Unmarshal([]byte(argsStr), &parsed); err != nil {
 		return "", false
 	}
 
-	// Step 2: Delegate to manifest package for JCS canonicalization + SHA-256
-	// nil schema = skip schema enforcement, still canonicalize + hash
 	result, err := manifest.ValidateAndCanonicalizeToolArgs(nil, parsed)
 	if err != nil {
 		return "", false

@@ -35,8 +35,7 @@ type CapabilityViolation struct {
 	Evidence    string `json:"evidence"` // The offending pattern/code
 }
 
-// CapabilityVerifier performs static analysis of skill content to detect
-// undeclared capabilities.
+// CapabilityVerifier retains the clock field of the former capability scanner.
 type CapabilityVerifier struct {
 	clock func() time.Time
 }

@@ -1,7 +1,5 @@
 package mcp
 
-import ()
-
 // toolName generates a unique tool name for concurrency tests.
 func toolName(idx int) string {
 	names := []string{

@@ -11,10 +11,6 @@ last_reviewed: 2026-05-12
 
 Maintainers, adopters, and downstream packagers deciding what is in HELM AI Kernel and what is outside this repository.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `kernel-scope`
@@ -22,8 +18,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
 ## RLM Input Evidence Boundary
 
@@ -211,13 +205,6 @@ OSS does not include:
 
 The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, conformance, and release artifacts. Hosted, organization-specific, and browser UI operations live outside this repository and integrate through those public contracts.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
 ## Diagram
 
 ```mermaid
@@ -244,7 +231,5 @@ flowchart TD
     retain --> verify
     kernel --> exclude
     exclude --> commercial
-
-    %% Premium Styling Rules
     style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```

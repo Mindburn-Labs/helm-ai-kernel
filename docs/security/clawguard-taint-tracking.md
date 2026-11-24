@@ -9,10 +9,6 @@ last_reviewed: 2026-05-05
 
 Security researchers and maintainers reviewing the source-backed ClawGuard taint-tracking mapping for HELM AI Kernel.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `security/clawguard-taint-tracking`
@@ -20,8 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
 Source: Wei Zhao, Zhe Li, Peixin Zhang, and Jun Sun, "ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection", arXiv:2604.11790.
 
@@ -98,13 +92,6 @@ taint_contains("pii")
 
 The shorthand is rewritten to the explicit form inside the PRG evaluator. Policy-pack validation supports the same shorthand against the top-level `taint` variable.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
 ## Diagram
 
 ```mermaid
@@ -136,8 +123,6 @@ flowchart TD
     check -->|unsafe| deny
     effect --> receipt
     deny --> receipt
-
-    %% Premium Styling Rules
     style check fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style effect fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style deny fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff

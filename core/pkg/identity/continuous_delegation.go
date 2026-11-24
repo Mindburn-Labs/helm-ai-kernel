@@ -33,9 +33,7 @@ type ContinuousDelegation struct {
 // CDMOption configures optional ContinuousDelegationManager settings.
 type CDMOption func(*ContinuousDelegationManager)
 
-// ContinuousDelegationManager manages continuous delegations with TTL,
-// refresh, revocation, and sub-delegation semantics.
-// All methods are safe for concurrent use from multiple goroutines.
+// ContinuousDelegationManager retains the delegation state and clock of the former manager.
 type ContinuousDelegationManager struct {
 	mu          sync.RWMutex
 	delegations map[string]*ContinuousDelegation // id -> delegation

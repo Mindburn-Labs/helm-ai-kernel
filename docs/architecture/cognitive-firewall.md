@@ -9,10 +9,6 @@ last_reviewed: 2026-05-05
 
 Architecture reviewers evaluating the fail-closed execution firewall pattern and its HELM AI Kernel implementation boundaries.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `architecture/cognitive-firewall`
@@ -20,8 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
 Source: Qianlong Lan and Anuj Kaul, "The Cognitive Firewall: Securing Browser Based AI Agents Against Indirect Prompt Injection Via Hybrid Edge Cloud Defense", arXiv:2603.23791.
 
@@ -45,13 +39,6 @@ The split-compute guard should run before browser side effects are dispatched:
 4. Deployments that also use Guardian should pass the same destination as `destination`, the page text hash as evidence, and tainted browser content as `user_input`/`source_channel=TOOL_OUTPUT` so Guardian's threat scanner and egress checker can produce the final signed decision.
 
 This keeps semantic reasoning and execution authority split: the planner may propose, but the deterministic guard owns the last pre-dispatch decision.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 
@@ -86,8 +73,6 @@ flowchart TD
     execute --> receipt
     block --> receipt
     receipt --> verify
-
-    %% Premium Styling Rules
     style normalize fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style permit fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff

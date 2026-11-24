@@ -71,8 +71,8 @@ func RegisterConsoleAGUIRoutes(mux routeMux, svc *Services, opts serverOptions) 
 			return
 		}
 
-		threadID := firstAIKernelNonEmpty(req.ThreadID, "kernel-thread")
-		runID := firstAIKernelNonEmpty(req.RunID, fmt.Sprintf("kernel-run-%d", time.Now().UTC().UnixNano()))
+		threadID := firstNonEmptyString(req.ThreadID, "kernel-thread")
+		runID := firstNonEmptyString(req.RunID, fmt.Sprintf("kernel-run-%d", time.Now().UTC().UnixNano()))
 		messageID := fmt.Sprintf("kernel-msg-%d", time.Now().UTC().UnixNano())
 
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -89,7 +89,7 @@ func RegisterConsoleAGUIRoutes(mux routeMux, svc *Services, opts serverOptions) 
 		receipts := listConsoleReceipts(r.Context(), svc, 25)
 		state := jsonSafeAIKernelState(req.State)
 		state["receipt_count"] = len(receipts)
-		state["current_surface"] = firstAIKernelNonEmpty(req.CurrentSurface, "command")
+		state["current_surface"] = firstNonEmptyString(req.CurrentSurface, "command")
 		state["conformance"] = envOrDefault("HELM_CONFORMANCE_STATUS", "unreported")
 
 		if !emit("RUN_STARTED", map[string]any{"threadId": threadID, "runId": runID}) {
@@ -248,13 +248,4 @@ func jsonSafeAIKernelState(state map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return decoded
-}
-
-func firstAIKernelNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }

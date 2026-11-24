@@ -5,13 +5,11 @@ last_reviewed: 2026-05-20
 
 # helm-ai-kernel CNCF Sandbox Application
 
+<!-- quantum_posture: the release evidence cited here uses classical Cosign signatures. -->
+
 ## Audience
 
 Maintainers using this internal governance note to track source-backed CNCF-readiness evidence for HELM AI Kernel.
-
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
 
 ## Source Truth
 
@@ -20,8 +18,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
 This document is the canonical narrative used to file helm-ai-kernel for CNCF
 Sandbox admission. It is intentionally short and references the project's

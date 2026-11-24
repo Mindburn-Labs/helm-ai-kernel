@@ -1,7 +1,5 @@
 package capabilities
 
-import ()
-
 // MissingOrgan describes a single missing capability with resolution options.
 type MissingOrgan struct {
 	CapabilityID          string            `json:"capability_id"`
@@ -60,17 +58,13 @@ type ModuleRegistry interface {
 	GetPackForModule(moduleID string) string
 }
 
-// DefaultModuleRegistry is a static registry for known module mappings.
+// DefaultModuleRegistry retains the mapping from capability IDs to module suggestions.
 type DefaultModuleRegistry struct {
 	modules map[string][]SuggestedModule
 }
 
-// OrganDetector analyzes a PRG RequirementSet against the Catalog.
+// OrganDetector retains the tool catalog and module registry dependencies.
 type OrganDetector struct {
 	catalog        *ToolCatalog
 	moduleRegistry ModuleRegistry
 }
-
-// NewOrganDetectorWithRegistry removed - was dead code
-
-// Scan removed - was dead code

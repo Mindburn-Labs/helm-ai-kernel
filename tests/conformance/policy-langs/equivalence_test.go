@@ -1,11 +1,3 @@
-// Cross-language policy equivalence suite.
-//
-// For every triple under corpus/{cel,rego,cedar}/<NN>-<name>.<ext>, the
-// suite (1) compiles all three forms, (2) generates 100 deterministic
-// random EquivalenceRequest instances, and (3) asserts the verdicts are
-// byte-identical across CEL, Rego, and Cedar evaluators.
-//
-// Workstream F / F1 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 package policylangs
 
 import (
@@ -31,9 +23,7 @@ var triples = []string{
 	"05-view-or-editor-edit",
 }
 
-// Input pools used by the property generator. They are deliberately
-// small so a 100-request pass exercises every value combination on
-// average and keeps every random run inside the policies' value space.
+// Input pools keep the generated requests inside the policies' value space.
 var (
 	principals = []string{"alice", "bob", "carol"}
 	actions    = []string{"view", "edit", "delete", "drop", "create"}
@@ -85,9 +75,8 @@ func seedFor(name string) uint64 {
 	return h
 }
 
-// TestEquivalence_AllTriples is the suite's headline check. For each
-// triple it builds three evaluators, runs 100 fuzzed requests, and
-// asserts CEL == Rego == Cedar verdict for every input.
+// TestEquivalence_AllTriples compares the three evaluators on a seeded
+// sample of requests for each policy in the corpus.
 func TestEquivalence_AllTriples(t *testing.T) {
 	ctx := context.Background()
 	for _, base := range triples {

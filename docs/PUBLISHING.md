@@ -25,43 +25,6 @@ You should know which package identities are source-backed, which registry claim
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of Publishing in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["Publishing"]
-        A["Package Identities"]
-        B["Release Inputs"]
-        C["Release Automation"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        D["Verification"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-    C --> D
-
-    %% Premium Styling Rules
-    style D fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
-
 The repository retains packaging metadata for the kernel binaries, container image, and the public SDKs.
 
 ## Package Identities

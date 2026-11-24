@@ -36,25 +36,6 @@ type Incident struct {
 	Tags               []string `json:"tags,omitempty"`
 }
 
-// MaintenanceResult records the outcome of a maintenance run.
-type MaintenanceResult struct {
-	RunID            string       `json:"run_id"`
-	Timestamp        string       `json:"timestamp"`
-	IncidentsHandled int          `json:"incidents_handled"`
-	Resolutions      []Resolution `json:"resolutions"`
-	EvidencePackHash string       `json:"evidence_pack_hash"`
-}
-
-// Resolution records how a single incident was resolved.
-type Resolution struct {
-	IncidentID      string `json:"incident_id"`
-	PatchType       string `json:"patch_type"` // policy | config | constraint | pack_update
-	PatchDetail     string `json:"patch_detail"`
-	ConformancePass bool   `json:"conformance_pass"`
-	Applied         bool   `json:"applied"`
-	ReceiptID       string `json:"receipt_id"`
-}
-
 // DailyBrief is a human-readable summary linked to receipts.
 type DailyBrief struct {
 	Date            string            `json:"date"`
@@ -81,7 +62,7 @@ func runIncidentCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel incident <list|show|ack|create> [flags]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Governed Maintenance — incident tracking with receipts.")
+		fmt.Fprintln(stderr, "Manage the local incident registry.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  list     List all incidents")
@@ -195,7 +176,11 @@ func runIncidentList(args []string, stdout, stderr io.Writer) int {
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()
 
-	incidents := loadAllIncidents()
+	incidents, err := loadAllIncidents()
+	if err != nil {
+		fmt.Fprintf(stderr, "Read incident registry: %v\n", err)
+		return 1
+	}
 
 	// Filter
 	var filtered []Incident
@@ -224,7 +209,7 @@ func runIncidentList(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "Incident Registry (%d total)\n", len(filtered))
 
 	if len(filtered) == 0 {
-		fmt.Fprintln(stdout, "  [PASS]  No incidents found.")
+		fmt.Fprintln(stdout, "  No incidents match.")
 		return 0
 	}
 
@@ -329,155 +314,6 @@ func runIncidentAck(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// ── Maintenance Run ─────────────────────────────────────────────────────────
-
-const runMaintenanceUsage = "Usage: helm-ai-kernel run maintenance [--once] [--max N]"
-
-func printRunMaintenanceHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, runMaintenanceUsage)
-}
-
-func runMaintenanceCommandGroup(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, runMaintenanceUsage)
-		return 2
-	}
-	if args[0] != "maintenance" {
-		fmt.Fprintf(stderr, "Unknown run subcommand: %s\n", args[0])
-		return 2
-	}
-	if helpArgs, ok := normalizeHelpRequest(args[1:]); ok {
-		_ = runMaintenanceCmd(helpArgs, stdout, stdout)
-		return 0
-	}
-	return runMaintenanceCmd(args[1:], stdout, stderr)
-}
-
-// runMaintenanceCmd implements `helm-ai-kernel run maintenance` — governed self-fixing.
-func runMaintenanceCmd(args []string, stdout, stderr io.Writer) int {
-	cmd := flag.NewFlagSet("run maintenance", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
-
-	var (
-		once     bool
-		maxItems int
-	)
-	cmd.BoolVar(&once, "once", true, "Run once and exit (default)")
-	cmd.IntVar(&maxItems, "max", 5, "Maximum incidents to process")
-
-	if err := cmd.Parse(args); err != nil {
-		return 2
-	}
-
-	incidents := loadAllIncidents()
-
-	// Filter to actionable incidents (open or acked)
-	var actionable []Incident
-	for _, inc := range incidents {
-		if inc.Status == "open" || inc.Status == "acked" {
-			actionable = append(actionable, inc)
-		}
-	}
-
-	// Sort by severity + recurrence (critical first, then by recurrence descending)
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3}
-	sort.Slice(actionable, func(i, j int) bool {
-		si, sj := severityOrder[actionable[i].Severity], severityOrder[actionable[j].Severity]
-		if si != sj {
-			return si < sj
-		}
-		return actionable[i].Recurrence > actionable[j].Recurrence
-	})
-
-	if len(actionable) > maxItems {
-		actionable = actionable[:maxItems]
-	}
-
-	fmt.Fprintf(stdout, "\n%sMaintenance Run%s\n", ColorBold+ColorYellow, ColorReset)
-	fmt.Fprintf(stdout, "   Actionable incidents: %d\n\n", len(actionable))
-
-	if len(actionable) == 0 {
-		fmt.Fprintln(stdout, "   No actionable incidents. System healthy.")
-		fmt.Fprintln(stdout, "")
-		return 0
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	runHash := sha256.Sum256([]byte(fmt.Sprintf("maintenance:%s:%d", now, len(actionable))))
-	runID := fmt.Sprintf("maint-%s", hex.EncodeToString(runHash[:6]))
-
-	result := MaintenanceResult{
-		RunID:     runID,
-		Timestamp: now,
-	}
-
-	for i, inc := range actionable {
-		fmt.Fprintf(stdout, "   [%d/%d] %s — %s (%s)\n", i+1, len(actionable), inc.ID, inc.Title, inc.Severity)
-
-		// Step 1: Replay from last-good receipt
-		fmt.Fprintf(stdout, "         ↳ Replaying from %s\n", safeReceipt(inc.LastGoodReceipt))
-
-		// Step 2: Propose patch
-		patchType := determinePatchType(inc.Category)
-		patchDetail := fmt.Sprintf("Auto-patch for %s: tighten %s constraints", inc.Title, inc.Category)
-		fmt.Fprintf(stdout, "         ↳ Patch: %s — %s\n", patchType, patchDetail)
-
-		// Step 3: Run conformance on patch
-		conformancePass := true // In production, actually run conformance
-		fmt.Fprintf(stdout, "         ↳ Conformance: PASS\n")
-
-		// Step 4: Apply within envelope
-		receiptID := generatePackReceipt("maintenance.apply", inc.ID, map[string]string{
-			"patch_type": patchType, "conformance": "pass",
-		})
-
-		// Step 5: Resolve incident
-		inc.Status = "resolved"
-		inc.UpdatedAt = now
-		inc.Resolution = patchDetail
-		inc.ResolutionReceipt = receiptID
-		_ = saveIncident(&inc)
-
-		fmt.Fprintf(stdout, "         ↳ Resolved: receipt=%s\n\n", receiptID)
-
-		result.Resolutions = append(result.Resolutions, Resolution{
-			IncidentID:      inc.ID,
-			PatchType:       patchType,
-			PatchDetail:     patchDetail,
-			ConformancePass: conformancePass,
-			Applied:         true,
-			ReceiptID:       receiptID,
-		})
-	}
-
-	result.IncidentsHandled = len(result.Resolutions)
-
-	// Generate EvidencePack hash
-	resData, _ := json.Marshal(result)
-	epHash := sha256.Sum256(resData)
-	result.EvidencePackHash = hex.EncodeToString(epHash[:])
-
-	// Emit evolution event
-	emitEvolutionEvent(EvolutionEvent{
-		Type:      "maintenance_applied",
-		Timestamp: now,
-		Details:   result,
-	})
-
-	// Save maintenance result
-	maintDir := filepath.Join("data", "maintenance")
-	_ = os.MkdirAll(maintDir, 0750)
-	maintData, _ := json.MarshalIndent(result, "", "  ")
-	_ = os.WriteFile(filepath.Join(maintDir, runID+".json"), maintData, 0644)
-
-	fmt.Fprintf(stdout, "   %sMaintenance Complete%s\n", ColorBold+ColorGreen, ColorReset)
-	fmt.Fprintf(stdout, "   Run ID:      %s\n", runID)
-	fmt.Fprintf(stdout, "   Resolved:    %d incidents\n", result.IncidentsHandled)
-	fmt.Fprintf(stdout, "   Evidence:    %s\n\n", result.EvidencePackHash[:32])
-
-	return 0
-}
-
 // ── Daily Brief ─────────────────────────────────────────────────────────────
 
 // runBriefCmd implements `helm-ai-kernel brief daily` — human-readable system summary.
@@ -498,7 +334,11 @@ func runBriefCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runBriefDaily(stdout, stderr io.Writer) int {
-	incidents := loadAllIncidents()
+	incidents, err := loadAllIncidents()
+	if err != nil {
+		fmt.Fprintf(stderr, "Read incident registry: %v\n", err)
+		return 1
+	}
 
 	today := time.Now().UTC().Format("2006-01-02")
 
@@ -576,8 +416,7 @@ func runBriefDaily(stdout, stderr io.Writer) int {
 	if len(topIncidents) > 0 {
 		fmt.Fprintf(stdout, "\n  Top Incidents:\n")
 		for _, ti := range topIncidents {
-			icon := map[string]string{"critical": "", "high": "", "medium": "", "low": ""}[ti.Severity]
-			fmt.Fprintf(stdout, "    %s %s — %s [%s]\n", icon, ti.ID, ti.Title, ti.Status)
+			fmt.Fprintf(stdout, "    %s — %s [%s]\n", ti.ID, ti.Title, ti.Status)
 		}
 	}
 
@@ -633,44 +472,36 @@ func findIncident(id string) (*Incident, error) {
 	return nil, fmt.Errorf("incident %q not found", id)
 }
 
-func loadAllIncidents() []Incident {
+func loadAllIncidents() ([]Incident, error) {
 	dir := incidentsDir()
-	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	var incidents []Incident
-	for _, f := range files {
-		data, _ := os.ReadFile(f)
-		var inc Incident
-		if err := json.Unmarshal(data, &inc); err == nil {
-			incidents = append(incidents, inc)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
 		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		var incident Incident
+		if err := json.Unmarshal(data, &incident); err != nil {
+			return nil, fmt.Errorf("decode incident %q: %w", path, err)
+		}
+		incidents = append(incidents, incident)
 	}
-	return incidents
-}
-
-func determinePatchType(category string) string {
-	switch category {
-	case "policy":
-		return "policy"
-	case "connector":
-		return "constraint"
-	case "schema":
-		return "config"
-	case "sandbox":
-		return "constraint"
-	default:
-		return "config"
-	}
-}
-
-func safeReceipt(r string) string {
-	if r == "" {
-		return "(genesis)"
-	}
-	return r
+	return incidents, nil
 }
 
 func init() {
 	Register(Subcommand{Name: "incident", Aliases: []string{}, Usage: "Manage incidents (list, show, ack, create)", RunFn: runIncidentCmd})
 	Register(Subcommand{Name: "brief", Aliases: []string{}, Usage: "Generate daily system health brief", RunFn: runBriefCmd})
-	Register(Subcommand{Name: "run", Usage: "Run kernel maintenance", RunFn: runMaintenanceCommandGroup, HelpFn: printRunMaintenanceHelp})
 }

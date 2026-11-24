@@ -10,7 +10,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-func TestSOTA2026NegativeBoundaryVectorsAreConformanceGates(t *testing.T) {
+func TestDefaultNegativeBoundaryVectorsDeclareRequiredEvidence(t *testing.T) {
 	required := []string{
 		"policy-not-ready",
 		"stale-policy-bundle",
@@ -51,12 +51,12 @@ func TestSOTA2026NegativeBoundaryVectorsAreConformanceGates(t *testing.T) {
 	}
 	for _, id := range required {
 		if _, ok := seen[id]; !ok {
-			t.Fatalf("missing SOTA 2026 negative boundary vector %q", id)
+			t.Fatalf("missing negative boundary vector %q", id)
 		}
 	}
 }
 
-func TestSOTA2026BoundaryRegistryPersistsCheckpointedRecords(t *testing.T) {
+func TestBoundaryRegistryPersistsCheckpointedRecords(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	path := filepath.Join(t.TempDir(), "surfaces.json")
 	registry, err := boundary.NewFileBackedSurfaceRegistry(path, func() time.Time { return now })

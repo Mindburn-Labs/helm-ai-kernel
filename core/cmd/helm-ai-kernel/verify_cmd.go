@@ -5,9 +5,6 @@ package main
 // claimed for this CLI verification path.
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -17,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -372,90 +368,6 @@ func parseRequiredChecks(value string) ([]string, error) {
 	return names, nil
 }
 
-func extractEvidenceArchive(bundlePath, dstDir string) error {
-	file, err := os.Open(bundlePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	var reader io.Reader = file
-	if strings.HasSuffix(bundlePath, ".gz") || strings.HasSuffix(bundlePath, ".tgz") {
-		gzReader, err := gzip.NewReader(file)
-		if err != nil {
-			return fmt.Errorf("open gzip archive: %w", err)
-		}
-		defer gzReader.Close()
-		reader = gzReader
-	}
-
-	tarReader := tar.NewReader(reader)
-	var extractedBytes int64
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read tar entry: %w", err)
-		}
-
-		targetPath, err := safeArchiveEntryPath(dstDir, header.Name)
-		if err != nil {
-			return err
-		}
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0750); err != nil {
-				return fmt.Errorf("create directory %s: %w", targetPath, err)
-			}
-		case tar.TypeReg:
-			if header.Size < 0 {
-				return fmt.Errorf("archive entry %s has invalid size", header.Name)
-			}
-			if header.Size > maxEvidenceBundleBytes {
-				return fmt.Errorf("archive entry %s exceeds %d bytes", header.Name, maxEvidenceBundleBytes)
-			}
-			if extractedBytes+header.Size > maxEvidenceBundleBytes {
-				return fmt.Errorf("archive exceeds %d extracted bytes", maxEvidenceBundleBytes)
-			}
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0750); err != nil {
-				return fmt.Errorf("prepare file %s: %w", targetPath, err)
-			}
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-			if err != nil {
-				return fmt.Errorf("create file %s: %w", targetPath, err)
-			}
-			written, err := io.Copy(outFile, tarReader)
-			if err != nil {
-				outFile.Close()
-				return fmt.Errorf("extract file %s: %w", targetPath, err)
-			}
-			if written != header.Size {
-				outFile.Close()
-				return fmt.Errorf("archive entry %s size mismatch", header.Name)
-			}
-			extractedBytes += written
-			if err := outFile.Close(); err != nil {
-				return fmt.Errorf("close file %s: %w", targetPath, err)
-			}
-		default:
-			return fmt.Errorf("unsupported archive entry %s", header.Name)
-		}
-	}
-}
-
-func hasCanonicalEvidenceLayout(root string) bool {
-	if _, err := os.Stat(filepath.Join(root, "00_INDEX.json")); err == nil {
-		return true
-	}
-	if _, err := os.Stat(filepath.Join(root, "02_PROOFGRAPH")); err == nil {
-		return true
-	}
-	return false
-}
-
 func hasConformanceSignature(root string) bool {
 	_, err := os.Stat(filepath.Join(root, "07_ATTESTATIONS", "conformance_report.sig"))
 	return err == nil
@@ -534,227 +446,8 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 	return append(flags, positional...), nil
 }
 
-type onlineProofResponse struct {
-	Verified            bool    `json:"verified"`
-	EnvelopeID          string  `json:"envelope_id,omitempty"`
-	SealedAt            string  `json:"sealed_at,omitempty"`
-	SignatureValidCount int     `json:"signature_valid_count,omitempty"`
-	SignatureTotalCount int     `json:"signature_total_count,omitempty"`
-	AnchorIndex         *uint64 `json:"anchor_index,omitempty"`
-	MerkleRoot          string  `json:"merkle_root,omitempty"`
-	Error               string  `json:"error,omitempty"`
-}
-
-func verifyOnlineProof(report *verifier.VerifyReport, ledgerURL string) (*onlineProofResponse, error) {
-	if ledgerURL == "" {
-		ledgerURL = os.Getenv("HELM_LEDGER_URL")
-	}
-	if ledgerURL == "" {
-		ledgerURL = "https://mindburn.org/api/proof/verify"
-	}
-
-	body, err := json.Marshal(map[string]any{
-		"envelope_id": report.EnvelopeID,
-		"sealed_at":   report.SealedAt,
-		"merkle_root": report.MerkleRoot,
-		"anchor_index": func() any {
-			if report.AnchorIndex == nil {
-				return nil
-			}
-			return *report.AnchorIndex
-		}(),
-		"offline_verified": report.Verified,
-	})
-	if err != nil {
-		return nil, err
-	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(ledgerURL, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("public proof API unavailable: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("public proof API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
-	}
-	var proof onlineProofResponse
-	if err := json.NewDecoder(resp.Body).Decode(&proof); err != nil {
-		return nil, fmt.Errorf("invalid public proof response: %w", err)
-	}
-	return &proof, nil
-}
-
-func mergeOnlineProof(report *verifier.VerifyReport, proof *onlineProofResponse) {
-	if proof.EnvelopeID != "" {
-		report.EnvelopeID = proof.EnvelopeID
-	}
-	if proof.SealedAt != "" {
-		report.SealedAt = proof.SealedAt
-	}
-	if proof.MerkleRoot != "" {
-		report.MerkleRoot = proof.MerkleRoot
-	}
-	if proof.SignatureTotalCount > 0 {
-		report.SignatureTotalCount = proof.SignatureTotalCount
-		report.SignatureValidCount = proof.SignatureValidCount
-	}
-	if proof.AnchorIndex != nil {
-		report.AnchorIndex = proof.AnchorIndex
-	}
-}
-
 func finalizeVerifyReport(report *verifier.VerifyReport) {
 	report.Finalize()
-}
-
-// checkEIDASAnchorMetadata inventories anchor records whose metadata declares
-// backend == "eidas-qtsp" and checks that integrated_time is parseable and no
-// older than maxAge. It does not parse or verify an RFC 3161 token, validate a
-// message imprint or signature, consult an EU Trusted List, establish receipt
-// coverage, or prove eIDAS/QTSP qualification.
-//
-// Anchor receipts are looked up under <bundle>/02_PROOFGRAPH/anchors/*.json
-// and as embedded shapes inside <bundle>/00_INDEX.json (key "anchor"). The
-// receipt JSON shape mirrors anchor.AnchorReceipt: {backend, log_id,
-// log_index, integrated_time, signature, request:{...}}.
-func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifier.CheckResult {
-	const eidasBackend = "eidas-qtsp"
-
-	results := make([]verifier.CheckResult, 0, 4)
-
-	// Inventory candidate anchors from the pack, read through an os.Root on
-	// its directory: a link out of the pack or a named pipe is refused.
-	pack, packErr := packfs.Open(bundleRoot)
-	if packErr != nil {
-		return append(results, verifier.CheckResult{
-			Name:   "eidas:read_anchor",
-			Pass:   false,
-			Reason: fmt.Sprintf("cannot open the pack: %v", packErr),
-		})
-	}
-	defer func() { _ = pack.Close() }()
-	const anchorsName = "02_PROOFGRAPH/anchors"
-	anchorsDir := filepath.Join(bundleRoot, "02_PROOFGRAPH", "anchors")
-	entries, err := pack.ReadDir(anchorsName)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		results = append(results, verifier.CheckResult{
-			Name:   "eidas:read_anchor",
-			Pass:   false,
-			Reason: fmt.Sprintf("cannot read %s: %v", anchorsName, err),
-		})
-	}
-
-	type anchorMeta struct {
-		Path           string
-		Backend        string
-		IntegratedRaw  string
-		IntegratedTime time.Time
-	}
-	var anchors []anchorMeta
-
-	for _, ent := range entries {
-		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(anchorsDir, ent.Name())
-		data, err := pack.ReadFile(anchorsName + "/" + ent.Name())
-		if err != nil {
-			results = append(results, verifier.CheckResult{
-				Name:   "eidas:read_anchor",
-				Pass:   false,
-				Reason: fmt.Sprintf("cannot read %s: %v", path, err),
-			})
-			continue
-		}
-		var doc map[string]any
-		if err := json.Unmarshal(data, &doc); err != nil {
-			results = append(results, verifier.CheckResult{
-				Name:   "eidas:parse_anchor",
-				Pass:   false,
-				Reason: fmt.Sprintf("cannot parse %s: %v", path, err),
-			})
-			continue
-		}
-		backend, _ := doc["backend"].(string)
-		ts, _ := doc["integrated_time"].(string)
-		parsed, _ := time.Parse(time.RFC3339, ts)
-		anchors = append(anchors, anchorMeta{Path: path, Backend: backend, IntegratedRaw: ts, IntegratedTime: parsed})
-	}
-
-	// Also check 00_INDEX.json's embedded anchor field, when present.
-	if data, err := pack.ReadFile("00_INDEX.json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		results = append(results, verifier.CheckResult{
-			Name:   "eidas:read_anchor",
-			Pass:   false,
-			Reason: fmt.Sprintf("cannot read 00_INDEX.json: %v", err),
-		})
-	} else if err == nil {
-		var doc map[string]any
-		if json.Unmarshal(data, &doc) == nil {
-			if a, ok := doc["anchor"].(map[string]any); ok {
-				backend, _ := a["backend"].(string)
-				ts, _ := a["integrated_time"].(string)
-				parsed, _ := time.Parse(time.RFC3339, ts)
-				anchors = append(anchors, anchorMeta{Path: "00_INDEX.json#anchor", Backend: backend, IntegratedRaw: ts, IntegratedTime: parsed})
-			}
-		}
-	}
-
-	if len(anchors) == 0 {
-		results = append(results, verifier.CheckResult{
-			Name:   "eidas:require",
-			Pass:   false,
-			Reason: "no anchor metadata found under 02_PROOFGRAPH/anchors/ or 00_INDEX.json#anchor; --require-eidas needs at least one record declaring backend=eidas-qtsp and does not establish eIDAS qualification",
-		})
-		return results
-	}
-
-	now := time.Now().UTC()
-	hasEIDAS := false
-	for _, a := range anchors {
-		if a.Backend != eidasBackend {
-			results = append(results, verifier.CheckResult{
-				Name:   "eidas:anchor_backend",
-				Pass:   false,
-				Reason: fmt.Sprintf("anchor %s has backend %q, not %q", a.Path, a.Backend, eidasBackend),
-			})
-			continue
-		}
-		hasEIDAS = true
-		if strings.TrimSpace(a.IntegratedRaw) == "" || a.IntegratedTime.IsZero() {
-			results = append(results, verifier.CheckResult{
-				Name:   "eidas:anchor_metadata",
-				Pass:   false,
-				Reason: fmt.Sprintf("anchor %s must declare integrated_time as RFC3339 metadata; no timestamp token or EU Trusted List verification was performed", a.Path),
-			})
-			continue
-		}
-		if maxAge > 0 && now.Sub(a.IntegratedTime) > maxAge {
-			results = append(results, verifier.CheckResult{
-				Name: "eidas:anchor_freshness",
-				Pass: false,
-				Reason: fmt.Sprintf("anchor %s integrated_time %s is older than --eidas-max-age-hours window of %s",
-					a.Path, a.IntegratedTime.Format(time.RFC3339), maxAge),
-			})
-			continue
-		}
-		results = append(results, verifier.CheckResult{
-			Name:   "eidas:anchor_metadata",
-			Pass:   true,
-			Detail: fmt.Sprintf("%s declares backend=%s and integrated_time=%s; metadata only, RFC 3161 token and EU Trusted List were not verified", a.Path, eidasBackend, a.IntegratedTime.Format(time.RFC3339)),
-		})
-	}
-
-	if !hasEIDAS {
-		results = append(results, verifier.CheckResult{
-			Name:   "eidas:require",
-			Pass:   false,
-			Reason: "no anchor with backend=eidas-qtsp found",
-		})
-	}
-
-	return results
 }
 
 // checkTEEAttestations enforces --require-tee on a verified bundle. The
@@ -765,10 +458,7 @@ func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifie
 //   - any: every receipt must carry some tee_attestation regardless of
 //     platform; useful for multi-platform fleets.
 //
-// helm-ai-kernel receipts grow a `tee_attestation` field as the kernel-side
-// receipt extension lands (Workstream A3). Until each receipt actually
-// carries one, this check fails closed - which is the right default for a
-// flag named `--require-`.
+// A receipt without an attestation for the requested platform fails the check.
 func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckResult {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	switch platform {

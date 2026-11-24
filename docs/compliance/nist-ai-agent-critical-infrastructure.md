@@ -12,10 +12,6 @@ authorization, certification, auditor acceptance, or proof of a deployed system.
 
 Security and compliance reviewers mapping HELM AI Kernel receipts and conformance evidence to NIST critical-infrastructure concerns.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `compliance/nist-ai-agent-critical-infrastructure`
@@ -23,39 +19,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of NIST AI Agent Critical Infrastructure Alignment in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["NIST AI Agent Critical Infrastructure Alignment"]
-        A["Source Status"]
-        B["Control Crosswalk"]
-        C["Reference Pack Semantics"]
-        D["Operator Notes"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-    C --> D
-
-    %% Premium Styling Rules
-```
-
 
 This page maps current NIST AI-agent and critical-infrastructure work to HELM AI Kernel controls.
 

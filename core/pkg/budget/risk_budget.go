@@ -45,7 +45,7 @@ type RiskDecision struct {
 	NewAutonomyLevel int     `json:"new_autonomy_level,omitempty"`
 }
 
-// RiskEnforcer manages risk-weighted budgets.
+// RiskEnforcer preserves the type of the retired risk enforcer.
 type RiskEnforcer struct {
 	mu      sync.Mutex
 	budgets map[string]*RiskBudget

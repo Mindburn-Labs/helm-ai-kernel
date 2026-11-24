@@ -163,15 +163,11 @@ func (e *ObligationEngine) Fail(obligationID string, failureErr error) error {
 		last.EndedAt = time.Now()
 	}
 
-	// Escalation Logic (Gap 9)
 	const MaxRetries = 3
 	if len(o.Attempts) < MaxRetries {
-		o.Status = StatusPending // Back to queue
-		// Exponential backoff could be stored in o.LeaseExpiry here?
-		// For now, immediate retry availability.
+		o.Status = StatusPending
 	} else {
-		o.Status = StatusEscalated // Escalate!
-		// Trigger notification/human loop here?
+		o.Status = StatusEscalated
 	}
 	o.UpdatedAt = time.Now()
 

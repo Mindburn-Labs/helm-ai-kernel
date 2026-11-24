@@ -13,7 +13,7 @@ type BlobStore interface {
 	Get(ctx context.Context, hash string) ([]byte, error)
 }
 
-// FileBlobStore is a filesystem-backed implementation of BlobStore.
+// FileBlobStore retains the local root of the former filesystem blob store.
 type FileBlobStore struct {
 	baseDir string
 	mu      sync.RWMutex

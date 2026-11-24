@@ -9,10 +9,6 @@ last_reviewed: 2026-08-10
 
 Security and compliance reviewers checking the current eIDAS/QTSP evidence mapping limits for HELM AI Kernel.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `architecture/eidas-qtsp`
@@ -20,8 +16,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
 HELM AI Kernel contains optional RFC 3161/eIDAS anchoring building blocks. It
 does not timestamp every EvidencePack, choose a Qualified Trust Service
@@ -138,13 +132,6 @@ advice.
 - [`core/pkg/proofgraph/anchor/eidas.go`](../../core/pkg/proofgraph/anchor/eidas.go) — implementation
 - [`core/pkg/trust/eu_trusted_list.go`](../../core/pkg/trust/eu_trusted_list.go) — LOTL validator
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
 ## Diagram
 
 ```mermaid
@@ -173,8 +160,6 @@ flowchart TD
     evidence --> auditor
     evidence --> qtsp
     qtsp --> legal
-
-    %% Premium Styling Rules
     style action fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff

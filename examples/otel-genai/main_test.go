@@ -6,14 +6,8 @@ import (
 	"testing"
 )
 
-// TestSmoke runs the example end-to-end and asserts that the printed output
-// contains every OTel GenAI key the plan requires, plus the helm.* keys, plus
-// the cross-reference statement showing helm correlation_id == gen_ai.tool.call.id.
-//
-// This is the C2 acceptance gate from is-helm-ai-kernel-state-robust-sloth.md:
-//
-//	"a receipt's correlation_id is recoverable from the matching OTel trace
-//	 via gen_ai.tool.call.id"
+// TestSmoke checks the span name, GenAI attributes, and HELM attributes
+// shown by the example.
 func TestSmoke(t *testing.T) {
 	var buf bytes.Buffer
 	if err := run(&buf); err != nil {

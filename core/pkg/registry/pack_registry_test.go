@@ -1,7 +1,5 @@
 package registry
 
-import ()
-
 // mockVerifier is a test verifier that always succeeds.
 type mockVerifier struct{}
 

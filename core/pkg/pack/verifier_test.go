@@ -1,7 +1,5 @@
 package pack
 
-import ()
-
 func makeTestPacks() []ResolvedPack {
 	return []ResolvedPack{
 		{

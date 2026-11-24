@@ -18,18 +18,15 @@ const (
 	NOT LogicOperator = "NOT"
 )
 
-// Requirement defines a logic condition.
-// For Node 8 (PRG), we upgrade this to support both legacy artifact checks AND CEL.
+// Requirement defines an artifact check or a CEL condition.
 type Requirement struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
 
-	// Legacy Artifact Check (Optional shortcut)
 	ArtifactType string `json:"artifact_type,omitempty"`
 	SignerID     string `json:"signer_id,omitempty"`
 
-	// CEL Expression (The Node 8 core feature)
-	// Input: "intent", "state", "artifacts" (list of artifacts)
+	// Expression is a CEL condition.
 	Expression string `json:"expression,omitempty"`
 }
 
@@ -104,10 +101,8 @@ func (g *Graph) ContentHash() (string, error) {
 	return hex.EncodeToString(h[:]), nil
 }
 
-// BindByCapability explicitly binds a policy to a verified capability ID (GAP-05).
+// BindByCapability stores the requirement set under the capability ID.
 func (g *Graph) BindByCapability(capabilityID string, set RequirementSet) error {
-	// For now, we reuse the Rules map where key is the resource/action identifier.
-	// In the future, we might have a separate map for Capabilities vs standard Actions.
 	g.Rules[capabilityID] = set
 	return nil
 }
@@ -121,9 +116,6 @@ func (g *Graph) AddRule(actionID string, set RequirementSet) error {
 func (g *Graph) Validate(actionID string, artifacts []*pkg_artifact.ArtifactEnvelope) (bool, string, error) {
 	rule, exists := g.Rules[actionID]
 	if !exists {
-		// Default Deny if no rule, or maybe Allow if implied?
-		// For high security, explicit allow is better.
-		// checks if action is "known" but has no reqs?
 		return false, "", fmt.Errorf("no policy defined for action %s", actionID)
 	}
 

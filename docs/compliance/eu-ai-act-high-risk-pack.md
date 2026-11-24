@@ -13,10 +13,6 @@ AI Act.
 
 Compliance reviewers using HELM AI Kernel evidence outputs to map, not certify, EU AI Act high-risk controls.
 
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
 ## Source Truth
 
 - Public route: `compliance/eu-ai-act-high-risk-pack`
@@ -24,37 +20,6 @@ After this page you should know what this surface is for, which source files own
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-This scheme maps the main sections of EU AI Act High-Risk Pack in reading order.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Page["EU AI Act High-Risk Pack"]
-        A["Source Status"]
-        B["Pack Coverage"]
-        C["Validation"]
-    end
-
-    %% Operational Flow Edges
-    Page --> A
-    A --> B
-    B --> C
-
-    %% Premium Styling Rules
-```
-
 
 The current HELM AI Kernel EU AI Act mapping is
 `reference_packs/eu_ai_act_high_risk.v2.json`. It contains no supported

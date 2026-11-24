@@ -21,8 +21,7 @@ type DelegationRevocationEntry struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"` // When entry can be pruned
 }
 
-// DelegationRevocationList maintains revoked delegations.
-// Per Section H.2: The kernel MUST maintain a revocation list.
+// DelegationRevocationList carries a version and revocation entries.
 type DelegationRevocationList struct {
 	mu      sync.RWMutex
 	Version string                                `json:"version"`

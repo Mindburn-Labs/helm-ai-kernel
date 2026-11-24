@@ -9,7 +9,6 @@ unknown so a throttled read never masquerades as a version mismatch.
 from __future__ import annotations
 
 import argparse
-import base64
 import binascii
 import hashlib
 import json
@@ -24,10 +23,22 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from version_drift_contract import (
+    SEMVER_RE,
+    SurfaceResult,
+    check_local as check_source_surfaces,
+    fmt,
+    is_blocking,
+    load_contract,
+    result_status,
+    semver_parts,
+    unique,
+)
+from version_drift_evidence import parse_sha256sums, slsa_subject_digests
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "release" / "version-surfaces.yaml"
@@ -42,8 +53,6 @@ PYPI_PROPAGATION_TIMEOUT_SECONDS = 0.0
 STATUS_UNKNOWN = "unknown"
 # EX_TEMPFAIL. Nothing drifted, but at least one surface could not be read.
 EXIT_UNKNOWN = 75
-SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
-SEMVER_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 REJECT_TOKEN_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.+-"
 GHCR_MANIFEST_ACCEPT = ", ".join(
     [
@@ -70,50 +79,6 @@ class SurfaceUnreadable(Exception):
         self.cause = cause
 
 
-@dataclass
-class SurfaceResult:
-    id: str
-    status: str
-    expected: Any
-    actual: Any
-    path: str | None = None
-    url: str | None = None
-    detail: str | None = None
-    blocking: bool = True
-
-    def as_dict(self) -> dict[str, Any]:
-        payload = {
-            "id": self.id,
-            "status": self.status,
-            "expected": self.expected,
-            "actual": self.actual,
-            "blocking": self.blocking,
-        }
-        if self.path:
-            payload["path"] = self.path
-        if self.url:
-            payload["url"] = self.url
-        if self.detail:
-            payload["detail"] = self.detail
-        return payload
-
-
-def load_contract(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        try:
-            import yaml  # type: ignore
-        except ImportError as exc:
-            raise SystemExit(f"{path} is not JSON-formatted YAML and PyYAML is unavailable") from exc
-        return yaml.safe_load(text)
-
-
-def fmt(value: str, version: str) -> str:
-    return value.replace("{version}", version).replace("{tag}", f"v{version}")
-
-
 def expected_version(contract: dict[str, Any], explicit: str | None) -> str:
     version = explicit
     if version is None:
@@ -130,105 +95,8 @@ def rel(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
-def unique(values: list[str]) -> list[str]:
-    return sorted(set(values))
-
-
-def is_blocking(surface: dict[str, Any]) -> bool:
-    return bool(surface.get("blocking", not surface.get("advisory", False)))
-
-
-def result_status(actual: Any, expected: Any) -> str:
-    return "pass" if actual == expected else "fail"
-
-
-def semver_parts(value: str, label: str) -> tuple[int, int, int]:
-    if not SEMVER_RE.fullmatch(value):
-        raise ValueError(f"{label} must be plain semver, got {value!r}")
-    return tuple(int(part) for part in value.split("."))  # type: ignore[return-value]
-
-
-def read_json_field(path: Path, field: str) -> Any:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    current: Any = payload
-    for part in field.split("."):
-        current = current[part]
-    return current
-
-
-def check_exact(surface: dict[str, Any], version: str) -> list[SurfaceResult]:
-    path = ROOT / surface["path"]
-    expected = fmt(surface.get("expected", "{version}"), version)
-    try:
-        actual = path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError as exc:
-        return [SurfaceResult(surface["id"], "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))]
-    return [SurfaceResult(surface["id"], result_status(actual, expected), expected, actual, path=rel(path), blocking=is_blocking(surface))]
-
-
-def check_json_surface(surface: dict[str, Any], version: str) -> list[SurfaceResult]:
-    path = ROOT / surface["path"]
-    expected = fmt(surface.get("expected", "{version}"), version)
-    try:
-        actual = read_json_field(path, surface["field"])
-    except (FileNotFoundError, KeyError, TypeError, json.JSONDecodeError) as exc:
-        return [SurfaceResult(surface["id"], "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))]
-    return [SurfaceResult(surface["id"], result_status(str(actual), expected), expected, actual, path=rel(path), blocking=is_blocking(surface))]
-
-
-def check_regex_on_path(surface: dict[str, Any], version: str, path: Path, result_id: str) -> SurfaceResult:
-    expected = fmt(surface.get("expected", "{version}"), version)
-    try:
-        text = path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        return SurfaceResult(result_id, "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))
-    pattern = re.compile(surface["pattern"], re.MULTILINE)
-    matches = list(pattern.finditer(text))
-    if not matches:
-        return SurfaceResult(result_id, "fail", expected, None, path=rel(path), detail="pattern did not match", blocking=is_blocking(surface))
-    actual = [match.group("version") if "version" in match.groupdict() else match.group(0) for match in matches]
-    actual_unique = unique(actual)
-    status = "pass" if actual_unique == [expected] else "fail"
-    return SurfaceResult(result_id, status, expected, actual_unique, path=rel(path), detail=f"{len(matches)} match(es)", blocking=is_blocking(surface))
-
-
-def check_regex_surface(surface: dict[str, Any], version: str) -> list[SurfaceResult]:
-    return [check_regex_on_path(surface, version, ROOT / surface["path"], surface["id"])]
-
-
-def check_tree_regex_surface(surface: dict[str, Any], version: str) -> list[SurfaceResult]:
-    base = ROOT / surface["path"]
-    results: list[SurfaceResult] = []
-    for path in sorted(base.glob(surface["glob"])):
-        if path.is_file():
-            results.append(check_regex_on_path(surface, version, path, f"{surface['id']}:{path.relative_to(base).as_posix()}"))
-    if not results:
-        results.append(SurfaceResult(surface["id"], "fail", version, None, path=rel(base), detail="glob did not match any files", blocking=is_blocking(surface)))
-    return results
-
-
 def check_local(contract: dict[str, Any], version: str, tag: str | None) -> list[SurfaceResult]:
-    results: list[SurfaceResult] = []
-    if tag is not None:
-        expected_tag = f"{contract.get('tag_prefix', 'v')}{version}"
-        if not SEMVER_TAG_RE.match(tag):
-            results.append(SurfaceResult("git-tag", "skipped", expected_tag, tag, detail="non-semver tag ignored by lockstep policy", blocking=False))
-        else:
-            results.append(SurfaceResult("git-tag", "pass" if tag == expected_tag else "fail", expected_tag, tag, detail="semver tag must match checked-in VERSION", blocking=True))
-
-    for surface in contract.get("local_surfaces", []):
-        kind = surface["kind"]
-        if kind == "exact":
-            results.extend(check_exact(surface, version))
-        elif kind == "json":
-            results.extend(check_json_surface(surface, version))
-        elif kind == "regex":
-            results.extend(check_regex_surface(surface, version))
-        elif kind == "tree_regex":
-            results.extend(check_tree_regex_surface(surface, version))
-        else:
-            results.append(SurfaceResult(surface["id"], "fail", version, None, path=surface.get("path"), detail=f"unsupported local surface kind: {kind}", blocking=is_blocking(surface)))
-    return results
+    return check_source_surfaces(ROOT, contract, version, tag)
 
 
 def http_headers(url: str, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -404,62 +272,6 @@ def check_github_release_assets(surface: dict[str, Any], version: str) -> Surfac
         url=fmt(surface["human_url"], version),
         detail="missing assets: " + ", ".join(missing) if missing else None,
     )
-
-
-def parse_sha256sums(data: bytes) -> dict[str, str]:
-    checksums: dict[str, str] = {}
-    for line in data.decode("utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^([0-9a-fA-F]{64}) [ *](.+)$", line)
-        if match is None:
-            raise ValueError(f"invalid SHA256SUMS line: {line!r}")
-        digest, name = match.groups()
-        checksums[name] = digest.lower()
-    if not checksums:
-        raise ValueError("SHA256SUMS has no entries")
-    return checksums
-
-
-def decode_dsse_payload(payload: str) -> dict[str, Any]:
-    padded = payload + ("=" * (-len(payload) % 4))
-    return json.loads(base64.b64decode(padded).decode("utf-8"))
-
-
-def slsa_statements_from_bundle(data: bytes) -> list[dict[str, Any]]:
-    statements: list[dict[str, Any]] = []
-    for line in data.decode("utf-8").splitlines() or [data.decode("utf-8")]:
-        if not line.strip():
-            continue
-        doc = json.loads(line)
-        if "subject" in doc:
-            statements.append(doc)
-            continue
-        envelope = doc.get("dsseEnvelope") or doc.get("envelope") or {}
-        payload = envelope.get("payload")
-        if payload:
-            statements.append(decode_dsse_payload(payload))
-    if not statements:
-        raise ValueError("SLSA bundle has no in-toto statements")
-    return statements
-
-
-def slsa_subject_digests(data: bytes) -> dict[str, str]:
-    subjects: dict[str, str] = {}
-    for statement in slsa_statements_from_bundle(data):
-        for subject in statement.get("subject", []):
-            name = Path(str(subject.get("name", ""))).name
-            digest = subject.get("digest", {}).get("sha256")
-            if not name or not digest:
-                continue
-            digest = str(digest).lower()
-            if name in subjects and subjects[name] != digest:
-                raise ValueError(f"conflicting SLSA subject digest for {name}")
-            subjects[name] = digest
-    if not subjects:
-        raise ValueError("SLSA bundle has no sha256 subjects")
-    return subjects
 
 
 def release_asset_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:

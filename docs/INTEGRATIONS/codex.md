@@ -80,6 +80,9 @@ Receipts signed with pre-v0.7.3 derivable seeds remain untrusted.
 - `core/cmd/helm-ai-kernel/setup_cmd.go`
 - `core/cmd/helm-ai-kernel/setup_cmd_test.go`
 - `core/cmd/helm-ai-kernel/hook_cmd.go`
+- `core/cmd/helm-ai-kernel/hook_classify_call.go`
+- `core/cmd/helm-ai-kernel/hook_decision.go`
+- `core/cmd/helm-ai-kernel/hook_client_output.go`
 - `core/cmd/helm-ai-kernel/mcp_cmd.go`
 - `core/cmd/helm-ai-kernel/workstation_m3_cmd.go`
 - `docs/QUICKSTART.md`

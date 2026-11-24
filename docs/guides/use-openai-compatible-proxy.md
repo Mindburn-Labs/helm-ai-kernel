@@ -76,6 +76,9 @@ denial responses include `X-Helm-Status: DENIED` and `X-Helm-Receipt-ID`.
 ## Source Truth
 
 - `core/cmd/helm-ai-kernel/proxy_cmd.go`
+- `core/cmd/helm-ai-kernel/proxy_request.go`
+- `core/cmd/helm-ai-kernel/proxy_response.go`
+- `core/cmd/helm-ai-kernel/proxy_session_limits.go`
 - `core/cmd/helm-ai-kernel/proxy_protocol.go`
 - `core/cmd/helm-ai-kernel/proxy_receipt_store.go`
 - `scripts/launch/demo-openai-proxy.sh`

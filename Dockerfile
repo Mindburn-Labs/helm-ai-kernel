@@ -1,6 +1,6 @@
 # ── Stage 1: Build ─────────────────────────────────────
 # SC-004: Base images pinned by digest for supply chain integrity
-FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 # Build metadata injected via ldflags into main.{version,commit,buildTime} and
